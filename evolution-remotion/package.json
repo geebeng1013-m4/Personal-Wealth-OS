@@ -1,0 +1,22 @@
+{
+  "name": "evolution-remotion",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render HumanEvolution renders/evolution-remotion.mp4",
+    "still": "remotion still HumanEvolution --frame=120 --scale=0.25"
+  },
+  "dependencies": {
+    "@remotion/media": "latest",
+    "remotion": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@remotion/cli": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "typescript": "latest"
+  }
+}

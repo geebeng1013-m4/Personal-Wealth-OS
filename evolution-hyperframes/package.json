@@ -1,0 +1,15 @@
+{
+  "name": "evolution-hyperframes",
+  "private": true,
+  "scripts": {
+    "preview": "hyperframes preview",
+    "lint": "hyperframes lint",
+    "inspect": "hyperframes inspect",
+    "render": "hyperframes render --output renders/evolution-hyperframes.mp4 --quality standard"
+  },
+  "devDependencies": {
+    "@ffprobe-installer/ffprobe": "^2.1.2",
+    "ffmpeg-static": "^5.3.0",
+    "hyperframes": "latest"
+  }
+}

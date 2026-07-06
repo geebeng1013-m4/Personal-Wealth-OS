@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "trades": [
+    { "id": "csv-001", "date": "2025-10-28", "platform": "moomoo", "ticker": "VOO", "type": "DCA", "amountMyr": 21.42, "amountUsd": 5.04, "priceUsd": 630.54, "feeMyr": 0.21 },
+    { "id": "csv-002", "date": "2026-04-06", "platform": "moomoo", "ticker": "VOO", "type": "DCA", "amountMyr": 199.75, "amountUsd": 47.00, "priceUsd": 604.11, "feeMyr": 1.99 },
+    { "id": "csv-003", "date": "2026-04-06", "platform": "moomoo", "ticker": "QQQM", "type": "DCA", "amountMyr": 69.36, "amountUsd": 16.32, "priceUsd": 241.73, "feeMyr": 0.68 },
+    { "id": "csv-004", "date": "2026-04-06", "platform": "moomoo", "ticker": "VOO", "type": "DCA", "amountMyr": 173.44, "amountUsd": 40.81, "priceUsd": 604.54, "feeMyr": 1.70 },
+    { "id": "csv-005", "date": "2026-04-06", "platform": "moomoo", "ticker": "QQQM", "type": "DCA", "amountMyr": 69.45, "amountUsd": 16.34, "priceUsd": 241.67, "feeMyr": 0.68 },
+    { "id": "csv-006", "date": "2026-04-06", "platform": "moomoo", "ticker": "VOO", "type": "Sell", "amountMyr": 193.89, "amountUsd": 45.62, "priceUsd": 604.28, "feeMyr": 1.91 },
+    { "id": "csv-007", "date": "2026-04-06", "platform": "moomoo", "ticker": "QQQM", "type": "Sell", "amountMyr": 69.45, "amountUsd": 16.34, "priceUsd": 241.75, "feeMyr": 0.68 },
+    { "id": "csv-008", "date": "2026-05-04", "platform": "moomoo", "ticker": "VOO", "type": "DCA", "amountMyr": 44.54, "amountUsd": 10.48, "priceUsd": 663.51, "feeMyr": 0.43 },
+    { "id": "csv-009", "date": "2026-05-05", "platform": "moomoo", "ticker": "VOO", "type": "DCA", "amountMyr": 193.80, "amountUsd": 45.60, "priceUsd": 664.69, "feeMyr": 1.90 },
+    { "id": "csv-010", "date": "2026-05-05", "platform": "moomoo", "ticker": "QQQM", "type": "DCA", "amountMyr": 96.31, "amountUsd": 22.66, "priceUsd": 280.16, "feeMyr": 0.94 },
+    { "id": "csv-011", "date": "2026-05-12", "platform": "moomoo", "ticker": "VOO", "type": "DCA", "amountMyr": 225.17, "amountUsd": 52.98, "priceUsd": 674.91, "feeMyr": 2.21 },
+    { "id": "csv-012", "date": "2026-05-12", "platform": "moomoo", "ticker": "QQQM", "type": "DCA", "amountMyr": 112.63, "amountUsd": 26.50, "priceUsd": 289.61, "feeMyr": 1.10 },
+    { "id": "csv-013", "date": "2026-05-28", "platform": "moomoo", "ticker": "VOO", "type": "DCA", "amountMyr": 59.67, "amountUsd": 14.04, "priceUsd": 691.52, "feeMyr": 0.59 },
+    { "id": "csv-014", "date": "2026-05-28", "platform": "moomoo", "ticker": "QQQM", "type": "DCA", "amountMyr": 23.08, "amountUsd": 5.43, "priceUsd": 301.60, "feeMyr": 0.21 },
+    { "id": "csv-015", "date": "2026-06-03", "platform": "moomoo", "ticker": "VOO", "type": "DCA", "amountMyr": 314.88, "amountUsd": 74.09, "priceUsd": 693.77, "feeMyr": 3.10 },
+    { "id": "csv-016", "date": "2026-06-05", "platform": "moomoo", "ticker": "VOO", "type": "DCA", "amountMyr": 143.23, "amountUsd": 33.70, "priceUsd": 685.00, "feeMyr": 1.40 },
+    { "id": "csv-017", "date": "2026-06-05", "platform": "moomoo", "ticker": "QQQM", "type": "DCA", "amountMyr": 63.28, "amountUsd": 14.89, "priceUsd": 296.00, "feeMyr": 0.64 },
+    { "id": "csv-018", "date": "2026-06-26", "platform": "moomoo", "ticker": "QQQM", "type": "DCA", "amountMyr": 0.26, "amountUsd": 0.06, "priceUsd": 290.95, "feeMyr": 0.04 }
+  ]
+}
