@@ -90,6 +90,7 @@ export const defaultState: WealthState = {
     { id: "csv-018", date: "2026-06-26", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 0.26, amountUsd: 0.06, priceUsd: 290.95, feeMyr: 0.04 },
   ],
   reviews: [],
+  customTickers: [],
 };
 
 export function createId(prefix: string): string {
@@ -98,6 +99,48 @@ export function createId(prefix: string): string {
 
 export function cloneDefaultState(): WealthState {
   return structuredClone(defaultState);
+}
+
+export function emptyState(): WealthState {
+  return {
+    version: CURRENT_VERSION,
+    profile: {
+      name: "",
+      age: 0,
+      stage: "",
+      riskTolerance: "Medium",
+      investmentHorizonYears: 0,
+      baseCurrency: "MYR",
+    },
+    cashflow: {
+      allowance: 0,
+      transport: 0,
+      food: 0,
+      otherFixed: 0,
+      irregularIncome: 0,
+    },
+    emergency: {
+      current: 0,
+      target: 0,
+      annualYield: 0,
+      monthlyTopUp: 0,
+    },
+    dca: {
+      monthly: 0,
+      targets: { VOO: 0, QQQM: 0 },
+    },
+    opportunity: {
+      total: 0,
+      used: 0,
+      allocation: { VOO: 0, QQQM: 0 },
+      tranches: [],
+    },
+    buckets: [],
+    goals: [],
+    trades: [],
+    reviews: [],
+    customTickers: [],
+  };
 }
 
 function migrateState(input: Partial<WealthState>): WealthState {
@@ -123,7 +166,7 @@ function migrateState(input: Partial<WealthState>): WealthState {
 
 export function loadState(uid?: string): WealthState {
   const key = getUserStorageKey(uid);
-  const raw = localStorage.getItem(key) ?? localStorage.getItem("personal-wealth-os-v1");
+  const raw = localStorage.getItem(key);
   if (!raw) return cloneDefaultState();
 
   try {
@@ -134,6 +177,7 @@ export function loadState(uid?: string): WealthState {
 }
 
 export function saveState(state: WealthState, uid?: string): void {
+  if (!uid) return; // Don't save to global key — prevents cross-user contamination
   const key = getUserStorageKey(uid);
   localStorage.setItem(key, JSON.stringify({ ...state, version: CURRENT_VERSION }));
   // Also sync to Firestore if logged in

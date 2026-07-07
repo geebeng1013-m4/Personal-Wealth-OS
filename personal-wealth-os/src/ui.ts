@@ -49,11 +49,14 @@ function getTheme(): string {
   return document.documentElement.getAttribute("data-theme") ?? "dark";
 }
 
-function shellTemplate(activePage: string, state: WealthState): string {
+function shellTemplate(activePage: string, state: WealthState, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }): string {
   const themeIcon = getTheme() === "dark" ? "☀️" : "🌙";
   const active = pages.find(([id]) => id === activePage);
+  const userBadge = user ? `<div class="user-badge"><img src="${user.photoURL || ""}" alt="" class="user-avatar" referrerpolicy="no-referrer"><span class="user-name">${user.displayName || user.email || "User"}</span><button class="secondary-button logout-btn" type="button">退出</button></div>` : "";
   return `
-    <aside class="sidebar">
+    <button class="hamburger" id="hamburgerBtn" type="button" aria-label="Menu">☰</button>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <aside class="sidebar" id="sidebar">
       <div class="brand">
         <div class="brand-mark">PW</div>
         <div>
@@ -67,19 +70,25 @@ function shellTemplate(activePage: string, state: WealthState): string {
         <strong>Age ${state.profile.age} · ${state.profile.riskTolerance} Growth</strong>
         <small>${state.profile.stage} · ${state.profile.investmentHorizonYears}+ year horizon</small>
       </div>
+      <div class="sidebar-actions">
+        ${userBadge}
+        <button class="secondary-button install-btn" id="installPwa" type="button" style="width:100%;font-size:12px;">📱 Add to Home Screen</button>
+        <div class="sidebar-actions-row">
+          <button class="theme-toggle" id="themeToggle" type="button" title="Toggle theme">${themeIcon}</button>
+          <button class="secondary-button" id="exportJson" type="button">Export</button>
+          <label class="file-button">Import<input id="importJson" type="file" accept=".json"></label>
+        </div>
+        <div class="sidebar-actions-row">
+          <button class="secondary-button" id="loadDefault" type="button">Load Default</button>
+          <button class="danger-button" id="resetData" type="button">Reset</button>
+        </div>
+      </div>
     </aside>
     <main class="main">
       <header class="topbar">
         <div>
           <span class="eyebrow">MYR BASED · USD PORTFOLIO · LOCAL STORAGE V2</span>
           <h2>${active?.[1] ?? "Overview"} <span>${active?.[2] ?? "总览"}</span></h2>
-        </div>
-        <div class="top-actions">
-          <button class="theme-toggle" id="themeToggle" type="button" title="Toggle theme">${themeIcon}</button>
-          <button class="secondary-button" id="exportJson" type="button">Export JSON</button>
-          <label class="file-button">Import JSON<input id="importJson" type="file" accept=".json"></label>
-          <button class="secondary-button" id="loadDefault" type="button">Load Default</button>
-          <button class="danger-button" id="resetData" type="button">Reset</button>
         </div>
       </header>
       <section id="pageMount"></section>
@@ -93,6 +102,10 @@ function dashboardTemplate(state: WealthState): string {
   const actions = nextActions(state);
   const surplus = monthlySurplus(state);
   const opportunity = state.opportunity.total - state.opportunity.used;
+
+  // Dynamic health scores (0-1)
+  const growthScore = state.dca.monthly > 0 && state.trades.length > 0 ? 1 : state.dca.monthly > 0 ? 0.5 : 0;
+  const disciplineScore = [state.goals.length > 0, state.buckets.length > 0, state.profile.name !== ""].filter(Boolean).length / 3;
 
   return `
     <div class="metric-grid">
@@ -127,11 +140,11 @@ function dashboardTemplate(state: WealthState): string {
         <div class="advice-list">${advisorMessages(state).slice(0, 4).map(adviceCard).join("")}</div>
       </article>
       <article class="card panel">
-        <div class="panel-head"><div><span class="eyebrow">Health Matrix</span><h3>财富状态</h3></div><strong style="color:var(--green);">${percent((emergency + 0.78 + 0.9) / 3)}</strong></div>
+        <div class="panel-head"><div><span class="eyebrow">Health Matrix</span><h3>财富状态</h3></div><strong style="color:var(--green);">${percent((emergency + growthScore + disciplineScore) / 3)}</strong></div>
         <div class="health-section">
           ${healthRow("Safety", emergency, monthsToEmergencyTarget(state) + " months to target")}
-          ${healthRow("Growth", 0.78, "DCA active")}
-          ${healthRow("Discipline", 0.9, "Rules documented")}
+          ${healthRow("Growth", growthScore, growthScore > 0 ? "DCA active" : "No DCA plan")}
+          ${healthRow("Discipline", disciplineScore, disciplineScore > 0 ? "Rules documented" : "Set up your goals")}
         </div>
         <div class="action-strip">${actions.map((action) => "<span>" + escapeHtml(action) + "</span>").join("")}</div>
       </article>
@@ -249,7 +262,8 @@ function portfolioTemplate(state: WealthState): string {
         <div class="panel-head"><div><span class="eyebrow">Trade Capture</span><h3>新增交易记录</h3></div><span style="color:var(--muted);font-size:12px;">Moomoo</span></div>
         <form id="tradeForm" class="form-grid">
           <label>Date<input name="date" type="date" required></label>
-          <label>Ticker<select name="ticker"><option>VOO</option><option>QQQM</option></select></label>
+          <label>Ticker<select name="ticker" id="tickerSelect"><option>VOO</option><option>QQQM</option>${state.customTickers.map((t) => '<option>' + escapeHtml(t) + '</option>').join('')}<option value="__custom__">+ Custom</option></select></label>
+          <div id="customTickerWrap" style="display:none;"><label>Custom Ticker<input name="customTicker" id="customTickerInput" type="text" placeholder="e.g. AAPL" style="text-transform:uppercase;"></label></div>
           <label>Type<select name="type"><option>DCA</option><option>Dip Buy</option><option>Manual Buy</option><option>Sell</option></select></label>
           ${numberInput("amountMyr", "Amount MYR")}
           ${numberInput("amountUsd", "Amount USD")}
@@ -307,43 +321,97 @@ function tradeTypeTextColor(type: string): string {
 
 function bucketsTemplate(state: WealthState): string {
   const surplus = Math.max(monthlySurplus(state), 1);
+  const bucketCards = state.buckets.map((bucket, index) => {
+    const base = bucket.id === "survival" ? state.cashflow.allowance : bucket.cadence === "one-time" ? bucket.amount : surplus;
+    const width = Math.min((bucket.amount / base) * 100, 100);
+    return '<article class="card data-card">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
+        '<span class="eyebrow">' + escapeHtml(bucket.name) + '</span>' +
+        '<button class="edit-bucket secondary-button" data-index="' + index + '" type="button" style="font-size:11px;padding:4px 8px;">Edit</button>' +
+      '</div>' +
+      '<h3>' + escapeHtml(bucket.label) + '</h3>' +
+      '<strong>' + money(bucket.amount) + '</strong>' +
+      '<div class="bar"><span style="width:' + width + '%"></span></div>' +
+      '<small style="color:var(--ink-3);">' + (bucket.cadence === "monthly" ? "Monthly" : "One-time") + ' · ' + escapeHtml(bucket.note) + '</small>' +
+      '<div class="bucket-edit-form" id="bucketEdit' + index + '" style="display:none;margin-top:12px;">' +
+        '<form class="form-grid bucketForm" data-index="' + index + '">' +
+          '<label>Name<input name="name" type="text" value="' + escapeHtml(bucket.name) + '"></label>' +
+          '<label>Label<input name="label" type="text" value="' + escapeHtml(bucket.label) + '"></label>' +
+          '<label>Cadence<select name="cadence"><option value="monthly"' + (bucket.cadence === "monthly" ? " selected" : "") + '>Monthly</option><option value="one-time"' + (bucket.cadence === "one-time" ? " selected" : "") + '>One-time</option></select></label>' +
+          numberInput("amount", "Amount MYR", String(bucket.amount), "1") +
+          '<label>Note<textarea name="note" rows="2">' + escapeHtml(bucket.note) + '</textarea></label>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button class="primary-button" type="submit">Save</button>' +
+            '<button class="secondary-button cancel-bucket-edit" type="button" data-index="' + index + '">Cancel</button>' +
+          '</div>' +
+        '</form>' +
+      '</div>' +
+      '</article>';
+  }).join("");
+
+  const addBucketCard = '<article class="card data-card" style="display:flex;align-items:center;justify-content:center;min-height:120px;border-style:dashed;cursor:pointer;" id="addBucketBtn">' +
+    '<div style="text-align:center;color:var(--ink-3);">' +
+      '<div style="font-size:24px;margin-bottom:4px;">+</div>' +
+      '<span>Add Bucket</span>' +
+    '</div>' +
+  '</article>';
+
   return `
     <div class="section-title"><span class="eyebrow">Capital Routing</span><h3>月度资金分配矩阵</h3><p>把每一块钱安排到明确职责，减少情绪化消费和投资冲动。</p></div>
     <div class="three-col-grid">
-      ${state.buckets.map((bucket) => {
-        const base = bucket.id === "survival" ? state.cashflow.allowance : bucket.cadence === "one-time" ? bucket.amount : surplus;
-        const width = Math.min((bucket.amount / base) * 100, 100);
-        return '<article class="card data-card">' +
-          '<span class="eyebrow">' + escapeHtml(bucket.name) + '</span>' +
-          '<h3>' + escapeHtml(bucket.label) + '</h3>' +
-          '<strong>' + money(bucket.amount) + '</strong>' +
-          '<div class="bar"><span style="width:' + width + '%"></span></div>' +
-          '<small style="color:var(--ink-3);">' + (bucket.cadence === "monthly" ? "Monthly" : "One-time") + ' · ' + escapeHtml(bucket.note) + '</small>' +
-          '</article>';
-      }).join("")}
+      ${bucketCards}
+      ${addBucketCard}
     </div>
   `;
 }
 
 function goalsTemplate(state: WealthState): string {
+  const goalCards = state.goals.map((goal, index) => {
+    const ratio = goal.target > 0 ? Math.min(goal.current / goal.target, 1) : 0;
+    const months = goal.monthlyContribution > 0 ? Math.ceil(Math.max(goal.target - goal.current, 0) / goal.monthlyContribution) : null;
+    const color = ratio >= 0.8 ? "var(--green)" : ratio >= 0.4 ? "var(--amber)" : "var(--ink)";
+    const barColor = ratio >= 0.8 ? "var(--green)" : ratio >= 0.4 ? "var(--amber)" : "var(--blue)";
+    const extra = months ? " · " + months + " months" : "";
+    return '<article class="card data-card">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
+        '<span class="eyebrow">' + escapeHtml(goal.name) + '</span>' +
+        '<button class="edit-goal secondary-button" data-index="' + index + '" type="button" style="font-size:11px;padding:4px 8px;">Edit</button>' +
+      '</div>' +
+      '<h3>' + escapeHtml(goal.label) + '</h3>' +
+      '<strong style="color:' + color + ';">' + percent(ratio) + '</strong>' +
+      '<div class="bar"><span style="width:' + Math.round(ratio * 100) + '%;background:' + barColor + ';"></span></div>' +
+      '<small style="color:var(--ink-3);">' + money(goal.current) + ' / ' + money(goal.target) + extra + '</small>' +
+      '<p>' + escapeHtml(goal.note) + '</p>' +
+      '<div class="goal-edit-form" id="goalEdit' + index + '" style="display:none;margin-top:12px;">' +
+        '<form class="form-grid goalForm" data-index="' + index + '">' +
+          '<label>Name<input name="name" type="text" value="' + escapeHtml(goal.name) + '"></label>' +
+          '<label>Label<input name="label" type="text" value="' + escapeHtml(goal.label) + '"></label>' +
+          numberInput("current", "Current MYR", String(goal.current), "1") +
+          numberInput("target", "Target MYR", String(goal.target), "1") +
+          numberInput("monthlyContribution", "Monthly MYR", String(goal.monthlyContribution), "1") +
+          '<label>Note<textarea name="note" rows="2">' + escapeHtml(goal.note) + '</textarea></label>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button class="primary-button" type="submit">Save</button>' +
+            '<button class="secondary-button cancel-goal-edit" type="button" data-index="' + index + '">Cancel</button>' +
+            '<button class="danger-button delete-goal" type="button" data-index="' + index + '">Delete</button>' +
+          '</div>' +
+        '</form>' +
+      '</div>' +
+      '</article>';
+  }).join("");
+
+  const addGoalCard = '<article class="card data-card" style="display:flex;align-items:center;justify-content:center;min-height:120px;border-style:dashed;cursor:pointer;" id="addGoalBtn">' +
+    '<div style="text-align:center;color:var(--ink-3);">' +
+      '<div style="font-size:24px;margin-bottom:4px;">+</div>' +
+      '<span>Add Goal</span>' +
+    '</div>' +
+  '</article>';
+
   return `
     <div class="section-title"><span class="eyebrow">Goal System</span><h3>目标与愿望清单</h3><p>目标不是为了限制生活，而是给每笔钱一个清楚的方向。</p></div>
     <div class="two-col-grid">
-      ${state.goals.map((goal) => {
-        const ratio = goal.target > 0 ? Math.min(goal.current / goal.target, 1) : 0;
-        const months = goal.monthlyContribution > 0 ? Math.ceil(Math.max(goal.target - goal.current, 0) / goal.monthlyContribution) : null;
-        const color = ratio >= 0.8 ? "var(--green)" : ratio >= 0.4 ? "var(--amber)" : "var(--ink)";
-        const barColor = ratio >= 0.8 ? "var(--green)" : ratio >= 0.4 ? "var(--amber)" : "var(--blue)";
-        const extra = months ? " · " + months + " months" : "";
-        return '<article class="card data-card">' +
-          '<span class="eyebrow">' + escapeHtml(goal.name) + '</span>' +
-          '<h3>' + escapeHtml(goal.label) + '</h3>' +
-          '<strong style="color:' + color + ';">' + percent(ratio) + '</strong>' +
-          '<div class="bar"><span style="width:' + Math.round(ratio * 100) + '%;background:' + barColor + ';"></span></div>' +
-          '<small style="color:var(--ink-3);">' + money(goal.current) + ' / ' + money(goal.target) + extra + '</small>' +
-          '<p>' + escapeHtml(goal.note) + '</p>' +
-          '</article>';
-      }).join("")}
+      ${goalCards}
+      ${addGoalCard}
     </div>
   `;
 }
@@ -522,6 +590,53 @@ function parseMoomooDate(raw: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+export function quickViewTemplate(state: WealthState): string {
+  const portfolio = portfolioSummary(state);
+  const emergency = emergencyRatio(state);
+  const surplus = monthlySurplus(state);
+  const investedMyr = portfolio.totalInvestedMyr;
+  const targetRows = state.goals.map((g) => {
+    const pct = g.target > 0 ? Math.min(Math.round(g.current / g.target * 100), 100) : 0;
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">' +
+      '<span style="font-size:13px;color:var(--ink-2);">' + escapeHtml(g.label) + '</span>' +
+      '<span style="font-size:13px;font-weight:600;color:' + (pct >= 80 ? 'var(--green)' : 'var(--ink)') + ';">' + pct + '%</span>' +
+    '</div>';
+  }).join('');
+
+  return `
+    <div style="max-width:400px;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:20px;">
+        <div class="brand-mark" style="width:48px;height:48px;margin:0 auto 8px;font-size:18px;">PW</div>
+        <h2 style="font-size:20px;margin:0;">Personal Wealth OS</h2>
+        <p style="font-size:12px;color:var(--ink-3);margin:4px 0 0;">Quick Overview</p>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+        <div style="background:var(--surface);border-radius:12px;padding:14px;text-align:center;">
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">INVESTED</div>
+          <div style="font-size:20px;font-weight:700;color:var(--green);">${money(investedMyr)}</div>
+        </div>
+        <div style="background:var(--surface);border-radius:12px;padding:14px;text-align:center;">
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">EMERGENCY</div>
+          <div style="font-size:20px;font-weight:700;color:${emergency >= 0.8 ? 'var(--green)' : 'var(--ink)'};">${percent(emergency)}</div>
+        </div>
+        <div style="background:var(--surface);border-radius:12px;padding:14px;text-align:center;">
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">MONTHLY SURPLUS</div>
+          <div style="font-size:20px;font-weight:700;">${money(surplus)}</div>
+        </div>
+        <div style="background:var(--surface);border-radius:12px;padding:14px;text-align:center;">
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">DCA / MONTH</div>
+          <div style="font-size:20px;font-weight:700;">${money(state.dca.monthly)}</div>
+        </div>
+      </div>
+
+      ${state.goals.length > 0 ? '<div style="background:var(--surface);border-radius:12px;padding:14px;margin-bottom:16px;"><div style="font-size:11px;color:var(--ink-3);margin-bottom:8px;">GOALS</div>' + targetRows + '</div>' : ''}
+
+      <button class="primary-button" id="openFullApp" type="button" style="width:100%;padding:14px;font-size:14px;">Open Full App</button>
+    </div>
+  `;
+}
+
 function recordsFromCsv(text: string): Trade[] {
   const [headers = [], ...rows] = parseCsv(text);
   const normalized = headers.map((h) => h.toLowerCase().replace(/\s+/g, " ").trim());
@@ -542,7 +657,7 @@ function recordsFromCsv(text: string): Trade[] {
       })
       .map((row): Trade | null => {
         const ticker = get(row, ["symbol"]).toUpperCase();
-        if (ticker !== "VOO" && ticker !== "QQQM") return null;
+        if (!ticker) return null;
 
         const side = get(row, ["side"]).toLowerCase();
         const fillAmountUsd = Number(get(row, ["fill amount"])) || Number(get(row, ["order amount"])) || 0;
@@ -574,7 +689,7 @@ function recordsFromCsv(text: string): Trade[] {
   return rows
     .map((row): Trade | null => {
       const ticker = get(row, ["ticker"]).toUpperCase();
-      if (ticker !== "VOO" && ticker !== "QQQM") return null;
+      if (!ticker) return null;
       return {
         id: createId("csv"),
         date: get(row, ["date"]),
@@ -590,9 +705,19 @@ function recordsFromCsv(text: string): Trade[] {
     .filter((trade): trade is Trade => trade !== null);
 }
 
-export function renderApp(root: HTMLElement, state: WealthState, setState: Setter, activePage = "dashboard", navigate?: Navigate): void {
+export function renderApp(root: HTMLElement, state: WealthState, setState: Setter, activePage = "dashboard", navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
+  // Quick view — no sidebar, just condensed data
+  if (activePage === "quick") {
+    root.className = "app-shell";
+    root.innerHTML = '<main class="main" style="padding:20px;">' + quickViewTemplate(state) + '</main>';
+    root.querySelector("#openFullApp")?.addEventListener("click", () => {
+      renderApp(root, state, setState, "dashboard", navigate, user, onLogout);
+    });
+    return;
+  }
+
   root.className = "app-shell";
-  root.innerHTML = shellTemplate(activePage, state);
+  root.innerHTML = shellTemplate(activePage, state, user);
   const mount = root.querySelector<HTMLElement>("#pageMount");
   if (!mount) return;
 
@@ -608,12 +733,13 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   };
   mount.innerHTML = templates[activePage] ?? templates.dashboard;
 
-  bindCommon(root, state, setState, navigate);
+  bindCommon(root, state, setState, navigate, user, onLogout);
   bindPage(root, state, setState, activePage, navigate);
 }
 
-function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
-  const doNavigate = navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate));
+function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
+  const activePage = activePageFromNav(root) ?? "dashboard";
+  const doNavigate = navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user));
 
   root.querySelectorAll<HTMLButtonElement>(".nav-item").forEach((button) => {
     button.addEventListener("click", () => doNavigate(button.dataset.page ?? "dashboard"));
@@ -622,7 +748,38 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
   root.querySelector<HTMLButtonElement>("#themeToggle")?.addEventListener("click", () => {
     const w = window as unknown as Record<string, Record<string, () => void>>;
     w.__pwo?.toggleTheme();
-    renderApp(root, state, setState, activePageFromNav(root) ?? "dashboard", navigate);
+    renderApp(root, state, setState, activePageFromNav(root) ?? "dashboard", navigate, user);
+  });
+
+  root.querySelector<HTMLButtonElement>(".logout-btn")?.addEventListener("click", () => {
+    onLogout?.();
+  });
+
+  // Install PWA button — hide if already standalone
+  const installBtn = root.querySelector<HTMLButtonElement>("#installPwa");
+  if (installBtn && (window.matchMedia("(display-mode: standalone)").matches || (window.navigator as unknown as { standalone?: boolean }).standalone === true)) {
+    installBtn.style.display = "none";
+  }
+  installBtn?.addEventListener("click", () => {
+    (window as unknown as Record<string, () => Promise<void>>).__pwoInstall?.();
+  });
+
+  // Hamburger menu toggle
+  const hamburger = root.querySelector<HTMLButtonElement>("#hamburgerBtn");
+  const sidebar = root.querySelector<HTMLElement>("#sidebar");
+  const overlay = root.querySelector<HTMLElement>("#sidebarOverlay");
+  const toggleSidebar = () => {
+    sidebar?.classList.toggle("open");
+    overlay?.classList.toggle("visible");
+  };
+  hamburger?.addEventListener("click", toggleSidebar);
+  overlay?.addEventListener("click", toggleSidebar);
+  // Close sidebar when nav item clicked on mobile
+  sidebar?.querySelectorAll<HTMLElement>(".nav-item").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      sidebar?.classList.remove("open");
+      overlay?.classList.remove("visible");
+    });
   });
 
   root.querySelector<HTMLButtonElement>("#exportJson")?.addEventListener("click", () => exportState(state));
@@ -660,20 +817,161 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
   if (activePage === "advisor") bindAdvisor(root, state);
   if (activePage === "review") bindReview(root, state, setState, navigate);
   if (activePage === "settings") bindSettings(root, state, setState, navigate);
+  if (activePage === "goals") bindGoals(root, state, setState, navigate);
+  if (activePage === "buckets") bindBuckets(root, state, setState, navigate);
+}
+
+function bindBuckets(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
+  const doNavigate = navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate));
+
+  root.querySelectorAll<HTMLButtonElement>(".edit-bucket").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = button.dataset.index;
+      const form = root.querySelector<HTMLElement>("#bucketEdit" + index);
+      if (form) form.style.display = form.style.display === "none" ? "block" : "none";
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>(".cancel-bucket-edit").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = button.dataset.index;
+      const form = root.querySelector<HTMLElement>("#bucketEdit" + index);
+      if (form) form.style.display = "none";
+    });
+  });
+
+  root.querySelectorAll<HTMLFormElement>(".bucketForm").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const index = Number(form.dataset.index);
+      const data = new FormData(form);
+      const buckets = [...state.buckets];
+      buckets[index] = {
+        ...buckets[index],
+        name: String(data.get("name") ?? buckets[index].name),
+        label: String(data.get("label") ?? buckets[index].label),
+        cadence: String(data.get("cadence") ?? buckets[index].cadence) as "monthly" | "one-time",
+        amount: Number(data.get("amount")) || 0,
+        note: String(data.get("note") ?? buckets[index].note),
+      };
+      const next = { ...state, buckets };
+      setState(next);
+      doNavigate("buckets");
+    });
+  });
+
+  // Add new bucket
+  root.querySelector<HTMLElement>("#addBucketBtn")?.addEventListener("click", () => {
+    const buckets = [...state.buckets, {
+      id: createId("bucket"),
+      name: "NEW BUCKET",
+      label: "New Bucket",
+      amount: 0,
+      cadence: "monthly" as const,
+      note: "",
+    }];
+    const next = { ...state, buckets };
+    setState(next);
+    doNavigate("buckets");
+  });
+}
+
+function bindGoals(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
+  const doNavigate = navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate));
+
+  // Edit button toggle
+  root.querySelectorAll<HTMLButtonElement>(".edit-goal").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = button.dataset.index;
+      const form = root.querySelector<HTMLElement>("#goalEdit" + index);
+      if (form) form.style.display = form.style.display === "none" ? "block" : "none";
+    });
+  });
+
+  // Cancel button
+  root.querySelectorAll<HTMLButtonElement>(".cancel-goal-edit").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = button.dataset.index;
+      const form = root.querySelector<HTMLElement>("#goalEdit" + index);
+      if (form) form.style.display = "none";
+    });
+  });
+
+  // Save goal form
+  root.querySelectorAll<HTMLFormElement>(".goalForm").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const index = Number(form.dataset.index);
+      const data = new FormData(form);
+      const goals = [...state.goals];
+      goals[index] = {
+        ...goals[index],
+        name: String(data.get("name") ?? goals[index].name),
+        label: String(data.get("label") ?? goals[index].label),
+        current: Number(data.get("current")) || 0,
+        target: Number(data.get("target")) || 0,
+        monthlyContribution: Number(data.get("monthlyContribution")) || 0,
+        note: String(data.get("note") ?? goals[index].note),
+      };
+      const next = { ...state, goals };
+      setState(next);
+      doNavigate("goals");
+    });
+  });
+
+  // Delete goal
+  root.querySelectorAll<HTMLButtonElement>(".delete-goal").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.dataset.index);
+      if (!confirm("Delete this goal?")) return;
+      const goals = state.goals.filter((_, i) => i !== index);
+      const next = { ...state, goals };
+      setState(next);
+      doNavigate("goals");
+    });
+  });
+
+  // Add new goal
+  root.querySelector<HTMLElement>("#addGoalBtn")?.addEventListener("click", () => {
+    const goals = [...state.goals, {
+      id: createId("goal"),
+      name: "NEW GOAL",
+      label: "New Goal",
+      current: 0,
+      target: 0,
+      monthlyContribution: 0,
+      note: "",
+    }];
+    const next = { ...state, goals };
+    setState(next);
+    doNavigate("goals");
+  });
 }
 
 function bindPortfolio(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
   const doNavigate = navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate));
 
+  // Toggle custom ticker input
+  const tickerSelect = root.querySelector<HTMLSelectElement>("#tickerSelect");
+  const customWrap = root.querySelector<HTMLElement>("#customTickerWrap");
+  tickerSelect?.addEventListener("change", () => {
+    if (customWrap) customWrap.style.display = tickerSelect.value === "__custom__" ? "block" : "none";
+  });
+
   root.querySelector<HTMLFormElement>("#tradeForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;
     const data = new FormData(form);
+    let ticker = String(data.get("ticker") ?? "");
+    if (ticker === "__custom__") {
+      ticker = String(data.get("customTicker") ?? "").toUpperCase().trim();
+      if (!ticker) return;
+    }
     const trade: Trade = {
       id: createId("trade"),
       date: String(data.get("date") ?? ""),
       platform: "moomoo",
-      ticker: String(data.get("ticker")) as Ticker,
+      ticker,
       type: String(data.get("type")) as TradeType,
       amountMyr: Number(data.get("amountMyr")) || 0,
       amountUsd: Number(data.get("amountUsd")) || 0,
@@ -681,7 +979,13 @@ function bindPortfolio(root: HTMLElement, state: WealthState, setState: Setter, 
       feeMyr: Number(data.get("feeMyr")) || 0,
       notes: String(data.get("notes") ?? ""),
     };
-    const next = { ...state, trades: [...state.trades, trade] };
+    // Save custom ticker to memory if new
+    const customTickers = state.customTickers.includes(ticker)
+      ? state.customTickers
+      : (ticker !== "VOO" && ticker !== "QQQM")
+        ? [...state.customTickers, ticker]
+        : state.customTickers;
+    const next = { ...state, trades: [...state.trades, trade], customTickers };
     setState(next);
     renderApp(root, next, setState, "portfolio", navigate);
   });

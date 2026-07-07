@@ -1,6 +1,6 @@
 export type Currency = "MYR" | "USD";
 
-export type Ticker = "VOO" | "QQQM";
+export type Ticker = string;
 
 export type TradeType = "DCA" | "Dip Buy" | "Manual Buy" | "Sell";
 
@@ -102,6 +102,7 @@ export interface WealthState {
   goals: Goal[];
   trades: Trade[];
   reviews: Review[];
+  customTickers: string[];
 }
 
 export interface PortfolioPosition {

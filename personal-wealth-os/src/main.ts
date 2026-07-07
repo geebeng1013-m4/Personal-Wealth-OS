@@ -1,9 +1,71 @@
 import "./styles.css";
 import type { WealthState } from "./models";
-import { loadState, saveState, loadStateFromCloud, syncLocalToCloud } from "./state";
-import { renderApp } from "./ui";
+import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState } from "./state";
+import { renderApp, quickViewTemplate } from "./ui";
 import { onAuth, signInWithGoogle, handleRedirectResult, logOut } from "./firebase";
 import type { User } from "firebase/auth";
+
+// PWA install prompt
+let deferredPrompt: BeforeInstallPromptEvent | null = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e as BeforeInstallPromptEvent;
+});
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: string }>;
+}
+
+function isIOS(): boolean {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+function isStandalone(): boolean {
+  return window.matchMedia("(display-mode: standalone)").matches || (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+}
+
+function showIOSInstructions(): void {
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;";
+  overlay.innerHTML = `
+    <div style="background:var(--surface-solid);border-radius:16px;padding:24px;max-width:320px;text-align:center;">
+      <h3 style="margin:0 0 16px;font-size:18px;">Install Wealth OS</h3>
+      <div style="text-align:left;font-size:14px;line-height:1.8;color:var(--ink-2);">
+        <p>1. Tap the <strong>Share</strong> button <span style="font-size:18px;">⬆️</span> at the bottom of Safari</p>
+        <p>2. Scroll down and tap <strong>"Add to Home Screen"</strong></p>
+        <p>3. Tap <strong>"Add"</strong> in the top right</p>
+      </div>
+      <button id="closeInstallGuide" style="margin-top:16px;padding:10px 24px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--ink);font-size:14px;cursor:pointer;">Got it</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#closeInstallGuide")?.addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+}
+
+async function handleInstall(): Promise<void> {
+  if (isStandalone()) {
+    alert("Already installed!");
+    return;
+  }
+  if (isIOS()) {
+    showIOSInstructions();
+    return;
+  }
+  if (deferredPrompt) {
+    await deferredPrompt.prompt();
+    const result = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    if (result.outcome === "accepted") {
+      console.log("[PWA] Installed");
+    }
+  } else {
+    alert("Install not available. Try opening in Chrome on Android, or use Safari on iOS.");
+  }
+}
+
+// Expose install handler globally
+(window as unknown as Record<string, unknown>).__pwoInstall = handleInstall;
 
 const root = document.querySelector<HTMLElement>("#app");
 
@@ -29,7 +91,7 @@ function applyTheme(theme: Theme): void {
 applyTheme(getStoredTheme());
 
 let state: WealthState = loadState(); // Initial load without UID (will be replaced on auth)
-let currentPage = "dashboard";
+let currentPage = window.location.pathname === "/quick" ? "quick" : "dashboard";
 let currentUser: User | null = null;
 let cloudSyncUnsub: (() => void) | null = null;
 
@@ -41,20 +103,27 @@ let cloudSyncUnsub: (() => void) | null = null;
   },
   navigate: (page: string) => {
     currentPage = page;
-    renderApp(root!, state, setState, page, navigate);
+    renderApp(root!, state, setState, page, navigate, currentUser ?? undefined, handleLogout);
   },
 };
 
 function setState(next: WealthState): void {
   state = next;
-  // Save with user-specific key if logged in
+  // Only persist if a user is logged in (prevent saving to global key)
   const user = currentUser;
-  saveState(next, user?.uid);
+  if (user) {
+    saveState(next, user.uid);
+  }
 }
 
 function navigate(page: string): void {
   currentPage = page;
-  renderApp(root!, state, setState, page, navigate);
+  renderApp(root!, state, setState, page, navigate, currentUser ?? undefined, handleLogout);
+}
+
+async function handleLogout(): Promise<void> {
+  if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
+  await logOut();
 }
 
 function renderLogin(): void {
@@ -97,50 +166,50 @@ async function handleAuth(user: User | null): Promise<void> {
   if (user) {
     currentUser = user;
     console.log(`[Auth] User signed in: ${user.uid} (${user.email})`);
-    // Load user-specific local state first
+
+    // Unsubscribe from previous cloud sync if any
+    if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
+
+    // Load user-specific local state (no fallback to global key)
     state = loadState(user.uid);
-    // Then try cloud state
+
+    // Try cloud state
+    let hasCloudData = false;
     try {
       const cloudState = await loadStateFromCloud();
       if (cloudState) {
         state = cloudState;
-      } else {
-        // Cloud returned null = document doesn't exist yet, push local state to cloud
-        console.log(`[Auth] No cloud data for ${user.uid}, pushing local state`);
-        await syncLocalToCloud(state);
+        hasCloudData = true;
       }
     } catch (err) {
-      // Cloud load failed (e.g., permission error) - don't overwrite cloud, just use local
       console.error("[Auth] Cloud load failed, using local state:", err);
     }
+
+    // Only push to cloud if user already has local data (sync up)
+    // For brand new users with no cloud and no local data, push fresh default
+    if (!hasCloudData) {
+      const userStorageKey = `personal-wealth-os-state-${user.uid}`;
+      const hasLocalData = localStorage.getItem(userStorageKey) !== null;
+      if (hasLocalData) {
+        // User has local data from before, sync it up
+        await syncLocalToCloud(state);
+      } else {
+        // Brand new user — push fresh empty state to cloud
+        state = emptyState();
+        await syncLocalToCloud(state);
+      }
+    }
+
     // Save to user-specific localStorage
     saveState(state, user.uid);
-    renderApp(root!, state, setState, currentPage, navigate);
-    addUserBadge(user);
+    renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
   } else {
     currentUser = null;
+    // Clear in-memory state to prevent leaking to next user
+    state = emptyState();
+    if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
     renderLogin();
   }
-}
-
-function addUserBadge(user: User): void {
-  const topActions = root!.querySelector<HTMLElement>(".top-actions");
-  if (!topActions) return;
-  const existing = topActions.querySelector(".user-badge");
-  if (existing) existing.remove();
-
-  const badge = document.createElement("div");
-  badge.className = "user-badge";
-  badge.innerHTML = `
-    <img src="${user.photoURL || ""}" alt="" class="user-avatar" referrerpolicy="no-referrer">
-    <span class="user-name">${user.displayName || user.email || "User"}</span>
-    <button class="secondary-button logout-btn" type="button">退出</button>
-  `;
-  topActions.prepend(badge);
-  badge.querySelector(".logout-btn")?.addEventListener("click", async () => {
-    if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
-    await logOut();
-  });
 }
 
 // Check for redirect result first, then start auth listener

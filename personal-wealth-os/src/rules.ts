@@ -5,6 +5,7 @@ export function money(value: number, currency = "MYR"): string {
 }
 
 export function percent(value: number, digits = 0): string {
+  if (!isFinite(value)) return "0%";
   return `${(value * 100).toFixed(digits)}%`;
 }
 
@@ -17,6 +18,7 @@ export function monthlySurplus(state: WealthState): number {
 }
 
 export function emergencyRatio(state: WealthState): number {
+  if (state.emergency.target <= 0) return 0;
   return Math.min(state.emergency.current / state.emergency.target, 1);
 }
 
@@ -37,16 +39,19 @@ export function tradeUnits(trade: Trade): number {
 }
 
 export function portfolioSummary(state: WealthState): PortfolioSummary {
-  const tickers: Ticker[] = ["VOO", "QQQM"];
-  const totals = tickers.reduce<Record<Ticker, { investedMyr: number; investedUsd: number; units: number }>>(
-    (acc, ticker) => {
-      acc[ticker] = { investedMyr: 0, investedUsd: 0, units: 0 };
-      return acc;
-    },
-    {} as Record<Ticker, { investedMyr: number; investedUsd: number; units: number }>,
-  );
+  // Collect all unique tickers from trades
+  const tickerSet = new Set<string>();
+  state.trades.forEach((t) => tickerSet.add(t.ticker));
+  const tickers = Array.from(tickerSet);
+  if (tickers.length === 0) tickers.push("VOO", "QQQM"); // fallback
+
+  const totals: Record<string, { investedMyr: number; investedUsd: number; units: number }> = {};
+  tickers.forEach((ticker) => {
+    totals[ticker] = { investedMyr: 0, investedUsd: 0, units: 0 };
+  });
 
   state.trades.forEach((trade) => {
+    if (!totals[trade.ticker]) totals[trade.ticker] = { investedMyr: 0, investedUsd: 0, units: 0 };
     const direction = trade.type === "Sell" ? -1 : 1;
     totals[trade.ticker].investedMyr += direction * (trade.amountMyr + trade.feeMyr);
     totals[trade.ticker].investedUsd += direction * trade.amountUsd;
@@ -57,7 +62,7 @@ export function portfolioSummary(state: WealthState): PortfolioSummary {
   const totalInvestedUsd = tickers.reduce((sum, ticker) => sum + totals[ticker].investedUsd, 0);
   const positions: PortfolioPosition[] = tickers.map((ticker) => {
     const actualAllocation = totalInvestedMyr > 0 ? totals[ticker].investedMyr / totalInvestedMyr : 0;
-    const targetAllocation = state.dca.targets[ticker];
+    const targetAllocation = state.dca.targets[ticker] ?? 0;
     const averageCostUsd = totals[ticker].units > 0 ? totals[ticker].investedUsd / totals[ticker].units : 0;
     return {
       ticker,
