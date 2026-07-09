@@ -30,13 +30,13 @@ export const defaultState: WealthState = {
     irregularIncome: 0,
   },
   emergency: {
-    current: 3600,
-    target: 4320,
+    current: 4000,
+    target: 4000,
     annualYield: 0.035,
-    monthlyTopUp: 40,
+    monthlyTopUp: 0,
   },
   dca: {
-    monthly: 80,
+    monthly: 100,
     targets: {
       VOO: 0.7,
       QQQM: 0.3,
@@ -57,16 +57,16 @@ export const defaultState: WealthState = {
   },
   buckets: [
     { id: "survival", name: "Survival", label: "生存桶", amount: 720, cadence: "monthly", note: "交通 + 吃饭，先保证现金流稳定。" },
-    { id: "safety", name: "Safety", label: "安全桶", amount: 40, cadence: "monthly", note: "补 Emergency Fund 到 MYR 4,320。" },
-    { id: "growth", name: "Growth", label: "成长桶", amount: 80, cadence: "monthly", note: "VOO 70% / QQQM 30% 自动 DCA。" },
-    { id: "freedom", name: "Freedom", label: "自由桶", amount: 30, cadence: "monthly", note: "旅行基金和愿望清单。" },
+    { id: "safety", name: "Safety", label: "安全桶", amount: 0, cadence: "monthly", note: "Emergency Fund 已达标！MYR 40 可重分配到成长桶或自由桶。" },
+    { id: "growth", name: "Growth", label: "成长桶", amount: 100, cadence: "monthly", note: "VOO 70% / QQQM 30% 自动 DCA。" },
+    { id: "freedom", name: "Freedom", label: "自由桶", amount: 50, cadence: "monthly", note: "旅行基金和愿望清单（含原 Safety 桶 MYR 20 重分配）。" },
     { id: "learning", name: "Learning", label: "学习桶", amount: 10, cadence: "monthly", note: "书、课程、工具和投资学习成本。" },
     { id: "opportunity", name: "Opportunity", label: "机会桶", amount: 400, cadence: "one-time", note: "一次性熊市补仓资金，只按规则部署。" },
   ],
   goals: [
-    { id: "emergency", name: "Emergency Fund", label: "6 个月安全垫", current: 3600, target: 4320, monthlyContribution: 40, note: "Money market fund，目标覆盖 6 个月基本支出。" },
+    { id: "emergency", name: "Emergency Fund", label: "5 个月安全垫 ✅", current: 4000, target: 4000, monthlyContribution: 0, note: "已达成 5 个月安全垫目标！MYR 4,000 存够。" },
     { id: "travel", name: "Travel Fund", label: "旅行基金", current: 0, target: 1000, monthlyContribution: 30, note: "先用系统建议目标，之后可调整。" },
-    { id: "wishlist", name: "Wishlist Fund", label: "愿望清单", current: 0, target: 500, monthlyContribution: 0, note: "等有明确物品后再具体化。" },
+    { id: "wishlist", name: "Wishlist Fund", label: "愿望清单", current: 0, target: 500, monthlyContribution: 20, note: "每月 MYR 20 从 Safety 桶重分配而来。" },
     { id: "learning", name: "Learning Fund", label: "学习基金", current: 0, target: 300, monthlyContribution: 10, note: "用于技能、课程、书籍、工具。" },
   ],
   trades: [
@@ -99,6 +99,31 @@ export function createId(prefix: string): string {
 
 export function cloneDefaultState(): WealthState {
   return structuredClone(defaultState);
+}
+
+const DEFAULT_TEMPLATE_KEY = "personal-wealth-os-default-template";
+
+function getTemplateKey(uid?: string): string {
+  return uid ? `${DEFAULT_TEMPLATE_KEY}-${uid}` : DEFAULT_TEMPLATE_KEY;
+}
+
+export function saveDefaultTemplate(state: WealthState, uid?: string): void {
+  const { trades, ...rest } = state;
+  const template = { ...rest, trades: [] };
+  const key = getTemplateKey(uid);
+  localStorage.setItem(key, JSON.stringify(template));
+}
+
+export function loadDefaultTemplate(uid?: string): WealthState {
+  const key = getTemplateKey(uid);
+  const raw = localStorage.getItem(key);
+  if (!raw) return cloneDefaultState();
+  try {
+    const parsed = JSON.parse(raw) as Partial<WealthState>;
+    return { ...cloneDefaultState(), ...parsed, trades: [] };
+  } catch {
+    return cloneDefaultState();
+  }
 }
 
 export function emptyState(): WealthState {
@@ -176,8 +201,21 @@ export function loadState(uid?: string): WealthState {
   }
 }
 
-export function saveState(state: WealthState, uid?: string): void {
+export function saveState(state: WealthState, uid?: string, changeLabel?: string): void {
   if (!uid) return; // Don't save to global key — prevents cross-user contamination
+
+  // Auto-save snapshot of previous state before overwriting
+  if (changeLabel) {
+    const key = getUserStorageKey(uid);
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      try {
+        const prevState = JSON.parse(raw) as WealthState;
+        saveSnapshot(prevState, changeLabel, uid);
+      } catch { /* ignore */ }
+    }
+  }
+
   const key = getUserStorageKey(uid);
   localStorage.setItem(key, JSON.stringify({ ...state, version: CURRENT_VERSION }));
   // Also sync to Firestore if logged in
@@ -209,6 +247,75 @@ export async function syncLocalToCloud(state: WealthState): Promise<void> {
   } catch (err) {
     console.error("Failed to sync to cloud:", err);
   }
+}
+
+// --- Version History (Snapshots) ---
+
+export interface Snapshot {
+  id: string;
+  timestamp: number;
+  label: string;
+  state: WealthState;
+}
+
+const SNAPSHOTS_KEY = "personal-wealth-os-snapshots";
+const MAX_SNAPSHOTS = 20;
+
+function getSnapshotsKey(uid?: string): string {
+  return uid ? `${SNAPSHOTS_KEY}-${uid}` : SNAPSHOTS_KEY;
+}
+
+export function saveSnapshot(prevState: WealthState, label: string, uid?: string): void {
+  const key = getSnapshotsKey(uid);
+  let snapshots: Snapshot[] = [];
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) snapshots = JSON.parse(raw);
+  } catch { /* ignore */ }
+
+  const snapshot: Snapshot = {
+    id: createId("snap"),
+    timestamp: Date.now(),
+    label,
+    state: structuredClone(prevState),
+  };
+
+  // Remove duplicate if last snapshot has identical timestamp (within 1 second)
+  if (snapshots.length > 0 && Math.abs(snapshots[0].timestamp - snapshot.timestamp) < 1000) {
+    snapshots.shift();
+  }
+
+  snapshots.unshift(snapshot);
+
+  // Trim to max
+  if (snapshots.length > MAX_SNAPSHOTS) {
+    snapshots = snapshots.slice(0, MAX_SNAPSHOTS);
+  }
+
+  localStorage.setItem(key, JSON.stringify(snapshots));
+}
+
+export function loadSnapshots(uid?: string): Snapshot[] {
+  const key = getSnapshotsKey(uid);
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    return JSON.parse(raw) as Snapshot[];
+  } catch {
+    return [];
+  }
+}
+
+export function restoreSnapshot(snapshotId: string, uid?: string): WealthState | null {
+  const snapshots = loadSnapshots(uid);
+  const found = snapshots.find((s) => s.id === snapshotId);
+  if (!found) return null;
+  return migrateState(found.state as Partial<WealthState>);
+}
+
+export function clearSnapshots(uid?: string): void {
+  const key = getSnapshotsKey(uid);
+  localStorage.removeItem(key);
 }
 
 export function exportState(state: WealthState): void {

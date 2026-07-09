@@ -105,11 +105,11 @@ export function advisorMessages(state: WealthState): AdvisorMessage[] {
   const messages: AdvisorMessage[] = [];
 
   messages.push({
-    title: emergency < 1 ? "Safety still needs funding" : "Safety bucket complete",
+    title: emergency < 1 ? "Safety still needs funding" : "Safety bucket complete ✅",
     body:
       emergency < 1
-        ? `Emergency Fund is ${percent(emergency)} complete. Keep MYR 40/month; estimated completion in ${months} months.`
-        : "Emergency Fund reached the 6-month target. Future MYR 40 can be redirected to Growth or Travel.",
+        ? `Emergency Fund is ${percent(emergency)} complete. Keep MYR ${state.emergency.monthlyTopUp}/month; estimated completion in ${months} months.`
+        : `Emergency Fund reached ${money(state.emergency.target)}! You're safe. Consider redirecting savings to Growth or Travel.`,
     severity: emergency < 1 ? "watch" : "positive",
   });
 
@@ -146,7 +146,9 @@ export function advisorMessages(state: WealthState): AdvisorMessage[] {
 export function nextActions(state: WealthState): string[] {
   const actions = [
     `DCA ${money(state.dca.monthly)} this month unless cashflow breaks.`,
-    `Top up Safety by ${money(state.emergency.monthlyTopUp)} until Emergency Fund reaches ${money(state.emergency.target)}.`,
+    state.emergency.monthlyTopUp > 0
+      ? `Top up Safety by ${money(state.emergency.monthlyTopUp)} until Emergency Fund reaches ${money(state.emergency.target)}.`
+      : `Emergency Fund is complete! Consider redirecting ${money(state.emergency.monthlyTopUp || 40)} to Growth or Travel bucket.`,
     "Review spending at month end and record whether DCA was executed.",
   ];
 

@@ -1,5 +1,6 @@
 import type { AdvisorMessage, Ticker, Trade, TradeType, WealthState } from "./models";
-import { createId, cloneDefaultState, exportState, importStateFromFile } from "./state";
+import type { Snapshot } from "./state";
+import { createId, cloneDefaultState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, saveState } from "./state";
 import {
   advisorMessages,
   emergencyRatio,
@@ -14,13 +15,15 @@ import {
   trancheStatus,
   tradeUnits,
 } from "./rules";
+import { fetchQuote, fetchMultipleQuotes, formatPrice, formatChange, formatVolume, type MarketQuote, calcPnLForTicker, type PortfolioPnL, buildTradeTimelineHtml } from "./market";
 
-type Setter = (state: WealthState) => void;
+type Setter = (state: WealthState, changeLabel?: string) => void;
 type Navigate = (page: string) => void;
 
 const pages = [
   ["dashboard", "Overview", "总览"],
   ["portfolio", "Portfolio", "投资组合"],
+  ["market", "Market", "行情"],
   ["buckets", "Buckets", "资金桶"],
   ["goals", "Goals", "目标"],
   ["advisor", "Advisor", "理财建议"],
@@ -49,6 +52,16 @@ function getTheme(): string {
   return document.documentElement.getAttribute("data-theme") ?? "dark";
 }
 
+// Map ticker to TradingView symbol format (EXCHANGE:SYMBOL)
+const TV_SYMBOL_MAP: Record<string, string> = {
+  VOO: "NYSEARCA:VOO",
+  QQQM: "NASDAQ:QQQM",
+};
+
+function toTVSymbol(ticker: string): string {
+  return TV_SYMBOL_MAP[ticker.toUpperCase()] ?? ticker;
+}
+
 function shellTemplate(activePage: string, state: WealthState, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }): string {
   const themeIcon = getTheme() === "dark" ? "☀️" : "🌙";
   const active = pages.find(([id]) => id === activePage);
@@ -64,11 +77,13 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
           <p>投资纪律 · 现金流 · 目标系统</p>
         </div>
       </div>
-      <nav class="nav" aria-label="Primary">${navTemplate(activePage)}</nav>
-      <div class="profile-card">
-        <span class="eyebrow">Investor Profile</span>
-        <strong>Age ${state.profile.age} · ${state.profile.riskTolerance} Growth</strong>
-        <small>${state.profile.stage} · ${state.profile.investmentHorizonYears}+ year horizon</small>
+      <div class="sidebar-scroll-area">
+        <nav class="nav" aria-label="Primary">${navTemplate(activePage)}</nav>
+        <div class="profile-card">
+          <span class="eyebrow">Investor Profile</span>
+          <strong>Age ${state.profile.age} · ${state.profile.riskTolerance} Growth</strong>
+          <small>${state.profile.stage} · ${state.profile.investmentHorizonYears}+ year horizon</small>
+        </div>
       </div>
       <div class="sidebar-actions">
         ${userBadge}
@@ -79,7 +94,7 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
           <label class="file-button">Import<input id="importJson" type="file" accept=".json"></label>
         </div>
         <div class="sidebar-actions-row">
-          <button class="secondary-button" id="loadDefault" type="button">Load Default</button>
+          <button class="secondary-button" id="versionHistory" type="button">📋 Version History</button>
           <button class="danger-button" id="resetData" type="button">Reset</button>
         </div>
       </div>
@@ -299,6 +314,370 @@ function portfolioTemplate(state: WealthState): string {
   `;
 }
 
+function marketTemplate(_state: WealthState): string {
+  const tickerCards = ["VOO", "QQQM"].map((sym) =>
+    '<article class="card market-ticker-card" id="ticker-' + sym + '" data-symbol="' + sym + '" style="cursor:pointer;">' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<div class="ticker-badge" style="font-size:14px;padding:4px 10px;">' + sym + '</div>' +
+        '<div style="flex:1;">' +
+          '<div class="market-price" id="price-' + sym + '" style="font-size:22px;font-weight:700;">--</div>' +
+          '<div class="market-change" id="change-' + sym + '" style="font-size:13px;font-weight:600;">--</div>' +
+        '</div>' +
+        '<div style="text-align:right;font-size:11px;color:var(--ink-3);">' +
+          '<div id="volume-' + sym + '">Vol: --</div>' +
+          '<div id="ohlc-' + sym + '">O/H/L/C: --</div>' +
+        '</div>' +
+      '</div>' +
+    '</article>'
+  ).join("");
+
+  return `
+    <div class="section-title">
+      <span class="eyebrow">Live Market Data · TradingView</span>
+      <h3>📊 行情追踪</h3>
+      <p>VOO / QQQM K线走势 · 点击卡片切换标的</p>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+      ${tickerCards}
+    </div>
+    <article class="card panel" style="margin-bottom:16px;padding:0;overflow:hidden;">
+      <div class="panel-head" style="padding:10px 14px;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="ticker-badge" id="chartBadge" style="font-size:16px;padding:6px 14px;font-weight:700;">VOO</span>
+          <div>
+            <h3 id="chartTitle" style="margin:0;font-size:16px;">VOO · TradingView</h3>
+            <div id="chartSubtitle" style="font-size:11px;color:var(--ink-3);">K线 · 技术指标 · 专业图表</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+          <select id="chartSymbol" style="background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12px;">
+            <option value="VOO">VOO</option>
+            <option value="QQQM">QQQM</option>
+          </select>
+          <button id="refreshQuotes" class="secondary-button" type="button" title="Refresh quotes now" style="padding:4px 10px;font-size:12px;">🔄</button>
+          <span id="quoteTimestamp" style="font-size:10px;color:var(--ink-3);min-width:80px;"></span>
+        </div>
+      </div>
+      <div id="tradingview_container" style="width:100%;height:520px;"></div>
+    </article>
+    <div id="tradeTimeline"></div>
+    <div id="pnlPanel" style="display:none;margin-bottom:16px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;">
+        <div class="card" style="padding:12px;text-align:center;">
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:2px;">💰 Invested USD</div>
+          <div id="pnl-invested" style="font-size:16px;font-weight:700;">--</div>
+        </div>
+        <div class="card" style="padding:12px;text-align:center;">
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:2px;">📊 Units</div>
+          <div id="pnl-units" style="font-size:16px;font-weight:700;">--</div>
+        </div>
+        <div class="card" style="padding:12px;text-align:center;">
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:2px;">💵 Avg Cost</div>
+          <div id="pnl-cost" style="font-size:16px;font-weight:700;">--</div>
+        </div>
+        <div class="card" style="padding:12px;text-align:center;">
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:2px;">📈 Market Value</div>
+          <div id="pnl-value" style="font-size:16px;font-weight:700;">--</div>
+        </div>
+        <div class="card" style="padding:12px;text-align:center;">
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:2px;">🟢🔴 P&L</div>
+          <div id="pnl-amount" style="font-size:16px;font-weight:700;">--</div>
+          <div id="pnl-pct" style="font-size:12px;font-weight:600;">--</div>
+        </div>
+        <div class="card" style="padding:12px;text-align:center;">
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:2px;">💸 Fees</div>
+          <div id="pnl-fees" style="font-size:16px;font-weight:700;">--</div>
+        </div>
+      </div>
+      <div id="pnl-trades-list" style="margin-top:10px;"></div>
+    </div>
+    <div id="marketError" style="display:none;background:var(--red-dim);color:var(--red);padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:12px;"></div>
+  `;
+}
+
+// Market state (module-level)
+let marketRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let tvWidgetRef: { remove: () => void } | null = null;
+
+function bindMarket(_root: HTMLElement, _state: WealthState, _setState: Setter, _navigate?: Navigate): void {
+  const tvContainer = _root.querySelector<HTMLElement>("#tradingview_container");
+  const badgeEl = _root.querySelector<HTMLElement>("#chartBadge");
+  const titleEl = _root.querySelector<HTMLElement>("#chartTitle");
+  const subtitleEl = _root.querySelector<HTMLElement>("#chartSubtitle");
+  const symbolSelect = _root.querySelector<HTMLSelectElement>("#chartSymbol");
+  const errorEl = _root.querySelector<HTMLElement>("#marketError");
+  const pnlPanel = _root.querySelector<HTMLElement>("#pnlPanel");
+  const timelineEl = _root.querySelector<HTMLElement>("#tradeTimeline");
+
+  let currentSymbol = "VOO";
+
+  function showError(msg: string) {
+    if (errorEl) { errorEl.textContent = msg; errorEl.style.display = "block"; }
+  }
+  function hideError() {
+    if (errorEl) errorEl.style.display = "none";
+  }
+
+  function highlightActiveSymbol(sym: string) {
+    _root.querySelectorAll<HTMLElement>(".market-ticker-card").forEach((card) => {
+      card.style.borderColor = card.dataset.symbol === sym ? "var(--green)" : "";
+      card.style.boxShadow = card.dataset.symbol === sym ? "0 0 0 1px var(--green)" : "";
+    });
+  }
+
+  function createTVWidget(symbol: string) {
+    if (!tvContainer) return;
+    // Clear container
+    tvContainer.innerHTML = "";
+
+    const isDark = getTheme() === "dark";
+    const tvSymbol = toTVSymbol(symbol);
+
+    // TradingView Advanced Chart Widget — use tv.js for full disabled_features support
+    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const widgetContainer = document.createElement("div");
+    widgetContainer.className = "tradingview-widget-container";
+    widgetContainer.style.height = "520px";
+    widgetContainer.innerHTML = `
+      <div class="tradingview-widget-container__widget" style="height:100%;width:100%;"></div>
+    `;
+    tvContainer.appendChild(widgetContainer);
+
+    const widgetConfig = {
+      autosize: true,
+      symbol: tvSymbol,
+      interval: "D",
+      timezone: localTz,
+      theme: isDark ? "dark" : "light",
+      style: "1",
+      locale: "en",
+      allow_symbol_change: false,
+      hide_volume: false,
+      withdateranges: true,
+      hide_side_toolbar: false,
+      details: true,
+      studies: ["STD;RSI", "STD;MACD"],
+      disabled_features: [
+        "header_symbol_search",
+        "symbol_search_hot_key",
+        "use_localstorage_for_settings",
+        "header_compare",
+        "compare_symbol",
+      ],
+      enabled_features: [],
+    };
+
+    // @ts-expect-error TradingView global
+    if (typeof window.TradingView !== "undefined" && window.TradingView.widget) {
+      // @ts-expect-error TradingView global
+      new window.TradingView.widget({
+        ...widgetConfig,
+        container_id: widgetContainer.querySelector(".tradingview-widget-container__widget"),
+      });
+    } else {
+      // Load TradingView widget library first, then create widget
+      const script = document.createElement("script");
+      script.src = "https://s3.tradingview.com/tv.js";
+      script.type = "text/javascript";
+      script.async = true;
+      script.onload = () => {
+        // @ts-expect-error TradingView global
+        new window.TradingView.widget({
+          ...widgetConfig,
+          container_id: widgetContainer.querySelector(".tradingview-widget-container__widget"),
+        });
+      };
+      document.head.appendChild(script);
+    }
+  }
+
+  function updatePnLPanel(currentPrice: number) {
+    if (!pnlPanel) return;
+    const hasTrades = _state.trades.some((t) => t.ticker === currentSymbol);
+    if (!hasTrades) {
+      pnlPanel.style.display = "none";
+      return;
+    }
+    pnlPanel.style.display = "";
+    const pnl = calcPnLForTicker(_state.trades, currentSymbol, currentPrice, 4.25);
+    const isProfit = pnl.unrealizedPnlUsd >= 0;
+    const color = isProfit ? "var(--green)" : "var(--red)";
+    const sign = isProfit ? "+" : "";
+
+    const el = (id: string) => _root.querySelector<HTMLElement>(id);
+    const setT = (id: string, v: string) => { const e = el(id); if (e) e.textContent = v; };
+    const setC = (id: string, c: string) => { const e = el(id); if (e) e.style.color = c; };
+
+    setT("#pnl-invested", "USD " + pnl.totalInvestedUsd.toFixed(2));
+    setT("#pnl-units", pnl.totalUnits.toFixed(4));
+    setT("#pnl-cost", "USD " + pnl.averageCostUsd.toFixed(2));
+    setT("#pnl-value", "USD " + pnl.currentValueUsd.toFixed(2));
+    setT("#pnl-amount", sign + "USD " + Math.abs(pnl.unrealizedPnlUsd).toFixed(2));
+    setC("#pnl-amount", color);
+    setT("#pnl-pct", sign + (pnl.unrealizedPnlPct * 100).toFixed(2) + "%");
+    setC("#pnl-pct", color);
+    setT("#pnl-fees", "MYR " + pnl.feeMyr.toFixed(2));
+
+    // Trade list with per-trade P&L
+    const tradeListEl = el("#pnl-trades-list");
+    if (tradeListEl) {
+      const tradesForTicker = _state.trades.filter((t) => t.ticker === currentSymbol);
+      const rows = tradesForTicker.map((t) => {
+        const isBuy = t.type !== "Sell";
+        const units = t.priceUsd > 0 ? (t.amountUsd / t.priceUsd).toFixed(4) : "0";
+        const tradePnl = isBuy ? (currentPrice - t.priceUsd) * (t.amountUsd / t.priceUsd) : 0;
+        const tradePnlPct = isBuy && t.priceUsd > 0 ? ((currentPrice - t.priceUsd) / t.priceUsd * 100) : 0;
+        const pColor = tradePnl >= 0 ? "var(--green)" : "var(--red)";
+        const pSign = tradePnl >= 0 ? "+" : "";
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface);border-radius:6px;margin-bottom:4px;font-size:12px;">' +
+          '<span style="display:flex;gap:8px;align-items:center;">' +
+            '<span style="color:' + (isBuy ? 'var(--green)' : 'var(--red)') + ';font-weight:700;width:20px;">' + (isBuy ? '↑' : '↓') + '</span>' +
+            '<span>' + escapeHtml(t.date) + '</span>' +
+            '<span style="color:var(--ink-3);">' + t.type + '</span>' +
+          '</span>' +
+          '<span style="display:flex;gap:12px;align-items:center;">' +
+            '<span>' + units + ' units @ $' + t.priceUsd.toFixed(2) + '</span>' +
+            (isBuy ? '<span style="color:' + pColor + ';font-weight:600;">' + pSign + 'USD ' + Math.abs(tradePnl).toFixed(2) + ' (' + pSign + tradePnlPct.toFixed(1) + '%)</span>' : '<span style="color:var(--red);">SELL</span>') +
+          '</span>' +
+        '</div>';
+      }).join("");
+      tradeListEl.innerHTML = rows ? '<div style="font-size:12px;color:var(--ink-3);margin-bottom:6px;font-weight:600;">Trade Details — ' + currentSymbol + '</div>' + rows : "";
+    }
+  }
+
+  function updateTimeline() {
+    if (!timelineEl) return;
+    const hasTrades = _state.trades.some((t) => t.ticker === currentSymbol);
+    if (!hasTrades) {
+      timelineEl.innerHTML = "";
+      return;
+    }
+    // Use last quote price for P&L (default to 0 if not yet fetched)
+    const priceEl = _root.querySelector<HTMLElement>("#price-" + currentSymbol);
+    const priceText = priceEl?.textContent?.replace(/[^0-9.]/g, "") ?? "0";
+    const currentPrice = parseFloat(priceText) || 0;
+    timelineEl.innerHTML = buildTradeTimelineHtml(_state.trades, currentSymbol, currentPrice);
+  }
+
+  async function updateQuoteCards() {
+    for (const sym of ["VOO", "QQQM"]) {
+      try {
+        const q = await fetchQuote(sym);
+        const priceEl = _root.querySelector<HTMLElement>("#price-" + sym);
+        const changeEl = _root.querySelector<HTMLElement>("#change-" + sym);
+        const volEl = _root.querySelector<HTMLElement>("#volume-" + sym);
+        const ohlcCard = _root.querySelector<HTMLElement>("#ohlc-" + sym);
+
+        if (priceEl) priceEl.textContent = formatPrice(q.price, q.currency);
+        if (changeEl) {
+          changeEl.textContent = formatChange(q.change, q.changePercent);
+          changeEl.style.color = q.change >= 0 ? "var(--green)" : "var(--red)";
+        }
+        if (volEl) volEl.textContent = "Vol: " + formatVolume(q.volume);
+        if (ohlcCard) ohlcCard.textContent = "O:" + q.open.toFixed(1) + " H:" + q.high.toFixed(1) + " L:" + q.low.toFixed(1) + " C:" + q.prevClose.toFixed(1);
+      } catch { /* ignore per-symbol errors */ }
+    }
+  }
+
+  function switchSymbol(sym: string) {
+    currentSymbol = sym;
+    if (badgeEl) badgeEl.textContent = sym;
+    if (titleEl) titleEl.textContent = sym + " · TradingView";
+    const hasTrades = _state.trades.some((t) => t.ticker === sym);
+    if (subtitleEl) subtitleEl.textContent = "K线 · 技术指标 · 专业图表" + (hasTrades ? " · 📊 Trades linked" : "");
+    highlightActiveSymbol(sym);
+    createTVWidget(sym);
+    updateTimeline();
+    // Update P&L with last known price
+    updateQuoteCards().then(() => {
+      const priceEl = _root.querySelector<HTMLElement>("#price-" + sym);
+      const priceText = priceEl?.textContent?.replace(/[^0-9.]/g, "") ?? "0";
+      const currentPrice = parseFloat(priceText) || 0;
+      updatePnLPanel(currentPrice);
+      // Refresh timeline with actual price
+      if (timelineEl) {
+        timelineEl.innerHTML = buildTradeTimelineHtml(_state.trades, sym, currentPrice);
+      }
+    });
+  }
+
+  // Symbol select dropdown
+  symbolSelect?.addEventListener("change", () => {
+    switchSymbol(symbolSelect.value);
+  });
+
+  // Click ticker card to switch symbol
+  _root.querySelectorAll<HTMLElement>(".market-ticker-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const sym = card.dataset.symbol;
+      if (sym && sym !== currentSymbol) {
+        if (symbolSelect) symbolSelect.value = sym;
+        switchSymbol(sym);
+      }
+    });
+  });
+
+  // Manual refresh button — force fresh quotes
+  _root.querySelector<HTMLElement>("#refreshQuotes")?.addEventListener("click", () => {
+    // Clear localStorage cache to force fresh fetch
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("pwo_market_cache_")) localStorage.removeItem(key);
+      }
+    } catch { /* ignore */ }
+    updateQuoteCards().then(() => {
+      const priceEl = _root.querySelector<HTMLElement>("#price-" + currentSymbol);
+      const priceText = priceEl?.textContent?.replace(/[^0-9.]/g, "") ?? "0";
+      const currentPrice = parseFloat(priceText) || 0;
+      updatePnLPanel(currentPrice);
+      updateTimeline();
+      const ts = _root.querySelector<HTMLElement>("#quoteTimestamp");
+      if (ts) ts.textContent = "Updated " + new Date().toLocaleTimeString();
+    });
+  });
+
+  highlightActiveSymbol(currentSymbol);
+
+  // Initial load
+  createTVWidget(currentSymbol);
+  updateQuoteCards().then(() => {
+    // After quotes load, update P&L panel
+    const priceEl = _root.querySelector<HTMLElement>("#price-" + currentSymbol);
+    const priceText = priceEl?.textContent?.replace(/[^0-9.]/g, "") ?? "0";
+    const currentPrice = parseFloat(priceText) || 0;
+    updatePnLPanel(currentPrice);
+    updateTimeline();
+    const ts = _root.querySelector<HTMLElement>("#quoteTimestamp");
+    if (ts) ts.textContent = "Updated " + new Date().toLocaleTimeString();
+  });
+
+  // Auto-refresh quote cards & P&L every 30 seconds
+  if (marketRefreshTimer) clearInterval(marketRefreshTimer);
+  marketRefreshTimer = setInterval(() => {
+    updateQuoteCards().then(() => {
+      const priceEl = _root.querySelector<HTMLElement>("#price-" + currentSymbol);
+      const priceText = priceEl?.textContent?.replace(/[^0-9.]/g, "") ?? "0";
+      const currentPrice = parseFloat(priceText) || 0;
+      updatePnLPanel(currentPrice);
+      updateTimeline();
+      // Update last-refreshed timestamp
+      const ts = _root.querySelector<HTMLElement>("#quoteTimestamp");
+      if (ts) ts.textContent = "Updated " + new Date().toLocaleTimeString();
+    });
+  }, 30_000);
+
+  // Cleanup on navigation away
+  const observer = new MutationObserver(() => {
+    if (!document.contains(tvContainer)) {
+      if (marketRefreshTimer) clearInterval(marketRefreshTimer);
+      marketRefreshTimer = null;
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
 function tradeTypeColor(type: string): string {
   switch (type) {
     case "DCA": return "var(--green-dim)";
@@ -340,9 +719,10 @@ function bucketsTemplate(state: WealthState): string {
           '<label>Cadence<select name="cadence"><option value="monthly"' + (bucket.cadence === "monthly" ? " selected" : "") + '>Monthly</option><option value="one-time"' + (bucket.cadence === "one-time" ? " selected" : "") + '>One-time</option></select></label>' +
           numberInput("amount", "Amount MYR", String(bucket.amount), "1") +
           '<label>Note<textarea name="note" rows="2">' + escapeHtml(bucket.note) + '</textarea></label>' +
-          '<div style="display:flex;gap:8px;">' +
-            '<button class="primary-button" type="submit">Save</button>' +
-            '<button class="secondary-button cancel-bucket-edit" type="button" data-index="' + index + '">Cancel</button>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+            '<button class="primary-button" type="submit" style="font-size:12px;padding:5px 10px;">Save</button>' +
+            '<button class="secondary-button cancel-bucket-edit" type="button" data-index="' + index + '" style="font-size:12px;padding:5px 10px;">Cancel</button>' +
+            '<button class="danger-button delete-bucket" type="button" data-index="' + index + '" style="font-size:12px;padding:5px 10px;">Delete</button>' +
           '</div>' +
         '</form>' +
       '</div>' +
@@ -417,13 +797,13 @@ function goalsTemplate(state: WealthState): string {
 }
 
 function advisorPageTemplate(state: WealthState): string {
-  const trancheRows = trancheStatus(state, 0).map((tranche) => {
+  const trancheRows = state.opportunity.tranches.map((tranche) => {
     return '<tr>' +
       '<td>-' + tranche.drawdown + '%</td>' +
       '<td>' + percent(tranche.percent) + '</td>' +
       '<td>' + money(tranche.amount) + '</td>' +
-      '<td>' + money(tranche.suggestedVoo) + ' / ' + money(tranche.suggestedQqqm) + '</td>' +
-      '<td>' + escapeHtml(tranche.status) + '</td>' +
+      '<td>' + money(tranche.amount / 2) + ' / ' + money(tranche.amount / 2) + '</td>' +
+      '<td class="tranche-status">—</td>' +
       '</tr>';
   }).join("");
 
@@ -435,6 +815,21 @@ function advisorPageTemplate(state: WealthState): string {
       </article>
       <article class="card panel">
         <div class="panel-head"><div><span class="eyebrow">Scenario Check</span><h3>补仓触发器</h3></div><span style="color:var(--muted);font-size:12px;">Bear Market Plan</span></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+          <div style="flex:1;min-width:140px;background:var(--surface);border-radius:8px;padding:10px 12px;">
+            <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">🎯 Opportunity Reserve</div>
+            <div style="font-size:16px;font-weight:700;color:var(--green);">${money(state.opportunity.total)}</div>
+            <div style="font-size:11px;color:var(--ink-3);">Used: ${money(state.opportunity.used)} · Remaining: ${money(state.opportunity.total - state.opportunity.used)}</div>
+          </div>
+          <div style="flex:1;min-width:140px;background:var(--surface);border-radius:8px;padding:10px 12px;">
+            <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">📊 VOO Allocation</div>
+            <div style="font-size:16px;font-weight:700;">${money(state.opportunity.allocation.VOO)}</div>
+          </div>
+          <div style="flex:1;min-width:140px;background:var(--surface);border-radius:8px;padding:10px 12px;">
+            <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">📊 QQQM Allocation</div>
+            <div style="font-size:16px;font-weight:700;">${money(state.opportunity.allocation.QQQM)}</div>
+          </div>
+        </div>
         <form id="drawdownForm" class="scenario-form">
           <label>Market Drawdown %<input id="drawdownInput" type="number" min="0" max="80" step="1" value="0"></label>
           <button class="primary-button" type="submit">Check Rule</button>
@@ -469,7 +864,7 @@ function rulesTemplate(state: WealthState): string {
 
 function reviewTemplate(state: WealthState): string {
   const reviewRows = state.reviews.map((review) => {
-    return '<article class="review-item"><strong>' + escapeHtml(review.month) + '</strong><span>Income ' +
+    return '<article class="review-item"><div style="display:flex;justify-content:space-between;align-items:flex-start;"><strong>' + escapeHtml(review.month) + '</strong><button class="icon-button danger delete-review" data-id="' + review.id + '" title="Delete review">🗑️</button></div><span>Income ' +
       money(review.income) + ' · Spending ' + money(review.spending) + ' · Score ' +
       review.disciplineScore + '/100</span><p>' + escapeHtml(review.notes || "No notes") + '</p></article>';
   }).join("");
@@ -724,6 +1119,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   const templates: Record<string, string> = {
     dashboard: dashboardTemplate(state),
     portfolio: portfolioTemplate(state),
+    market: marketTemplate(state),
     buckets: bucketsTemplate(state),
     goals: goalsTemplate(state),
     advisor: advisorPageTemplate(state),
@@ -792,10 +1188,9 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     doNavigate("dashboard");
   });
 
-  root.querySelector<HTMLButtonElement>("#loadDefault")?.addEventListener("click", () => {
-    const next = cloneDefaultState();
-    setState(next);
-    doNavigate("dashboard");
+  root.querySelector<HTMLButtonElement>("#versionHistory")?.addEventListener("click", () => {
+    const snapshots = loadSnapshots(user?.email ?? undefined);
+    renderVersionHistoryModal(root, state, setState, snapshots, navigate, user, onLogout);
   });
 
   root.querySelector<HTMLButtonElement>("#resetData")?.addEventListener("click", () => {
@@ -804,6 +1199,79 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     localStorage.clear();
     setState(next);
     doNavigate("dashboard");
+  });
+}
+
+function renderVersionHistoryModal(root: HTMLElement, state: WealthState, setState: Setter, snapshots: Snapshot[], navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
+  // Remove existing modal if any
+  root.querySelector("#versionHistoryModal")?.remove();
+
+  const uid = user?.email ?? undefined;
+
+  function formatTime(ts: number): string {
+    return new Date(ts).toLocaleString("en-MY", {
+      month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true
+    });
+  }
+
+  const listHtml = snapshots.length === 0
+    ? '<div style="text-align:center;padding:40px 20px;color:var(--ink-3);"><div style="font-size:32px;margin-bottom:8px;">📋</div><p>No version history yet.</p><small>Changes are automatically saved when you modify data.</small></div>'
+    : snapshots.map((snap, i) =>
+      '<div class="history-item" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);' + (i === 0 ? 'background:var(--surface);' : '') + '">' +
+        '<div style="flex:1;">' +
+          '<div style="font-size:13px;font-weight:600;">' + escapeHtml(snap.label) + '</div>' +
+          '<div style="font-size:11px;color:var(--ink-3);">' + formatTime(snap.timestamp) + '</div>' +
+        '</div>' +
+        '<button class="secondary-button restore-snap" data-id="' + snap.id + '" style="font-size:11px;padding:4px 12px;white-space:nowrap;">Restore</button>' +
+      '</div>'
+    ).join("");
+
+  const modal = document.createElement("div");
+  modal.id = "versionHistoryModal";
+  modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);";
+  modal.innerHTML =
+    '<div style="background:var(--surface-2);border:1px solid var(--line);border-radius:16px;width:90%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line);">' +
+        '<div>' +
+          '<div style="font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.5px;">Version History</div>' +
+          '<div style="font-size:16px;font-weight:700;">📋 版本历史</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;align-items:center;">' +
+          (snapshots.length > 0 ? '<button class="danger-button" id="clearAllSnapshots" style="font-size:11px;padding:4px 10px;">Clear All</button>' : '') +
+          '<button class="secondary-button" id="closeHistoryModal" style="font-size:18px;padding:2px 8px;line-height:1;">✕</button>' +
+        '</div>' +
+      '</div>' +
+      '<div style="flex:1;overflow-y:auto;">' + listHtml + '</div>' +
+      '<div style="padding:10px 20px;border-top:1px solid var(--line);font-size:11px;color:var(--ink-3);text-align:center;">' +
+        'Auto-saved on every change · Max 20 versions' +
+      '</div>' +
+    '</div>';
+
+  root.appendChild(modal);
+
+  // Close
+  modal.querySelector("#closeHistoryModal")?.addEventListener("click", () => modal.remove());
+  modal.addEventListener("click", (e) => { if (e.target === modal) modal.remove(); });
+
+  // Clear all
+  modal.querySelector("#clearAllSnapshots")?.addEventListener("click", () => {
+    if (!confirm("Clear all version history? This cannot be undone.")) return;
+    clearSnapshots(uid);
+    modal.remove();
+  });
+
+  // Restore
+  modal.querySelectorAll<HTMLButtonElement>(".restore-snap").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const snapId = btn.dataset.id;
+      if (!snapId) return;
+      if (!confirm("Restore this version? Your current state will be saved as a snapshot first.")) return;
+      const restored = restoreSnapshot(snapId, uid);
+      if (!restored) { alert("Snapshot not found."); return; }
+      setState(restored);
+      modal.remove();
+      renderApp(root, restored, setState, activePageFromNav(root) ?? "dashboard", navigate, user, onLogout);
+    });
   });
 }
 
@@ -818,6 +1286,7 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
   if (activePage === "review") bindReview(root, state, setState, navigate);
   if (activePage === "settings") bindSettings(root, state, setState, navigate);
   if (activePage === "goals") bindGoals(root, state, setState, navigate);
+  if (activePage === "market") bindMarket(root, state, setState, navigate);
   if (activePage === "buckets") bindBuckets(root, state, setState, navigate);
 }
 
@@ -854,6 +1323,18 @@ function bindBuckets(root: HTMLElement, state: WealthState, setState: Setter, na
         amount: Number(data.get("amount")) || 0,
         note: String(data.get("note") ?? buckets[index].note),
       };
+      const next = { ...state, buckets };
+      setState(next);
+      doNavigate("buckets");
+    });
+  });
+
+  // Delete bucket
+  root.querySelectorAll<HTMLButtonElement>(".delete-bucket").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.dataset.index);
+      if (!confirm("Delete this bucket?")) return;
+      const buckets = state.buckets.filter((_, i) => i !== index);
       const next = { ...state, buckets };
       setState(next);
       doNavigate("buckets");
@@ -1015,17 +1496,53 @@ function bindAdvisor(root: HTMLElement, state: WealthState): void {
   root.querySelector<HTMLFormElement>("#drawdownForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const drawdown = Number(root.querySelector<HTMLInputElement>("#drawdownInput")?.value) || 0;
-    const triggered = trancheStatus(state, drawdown).filter((tranche) => drawdown >= tranche.drawdown);
+    const allTranches = trancheStatus(state, drawdown);
+    const triggered = allTranches.filter((tranche) => drawdown >= tranche.drawdown);
     const result = root.querySelector<HTMLElement>("#drawdownResult");
+
+    // Update tranche status column in the table
+    const statusCells = root.querySelectorAll<HTMLElement>(".tranche-status");
+    allTranches.forEach((tranche, i) => {
+      if (statusCells[i]) {
+        const statusColor = tranche.deployed ? "var(--ink-3)" : drawdown >= tranche.drawdown ? "var(--green)" : "var(--ink-3)";
+        statusCells[i].textContent = tranche.status;
+        statusCells[i].style.color = statusColor;
+      }
+    });
+
     if (!result) return;
     if (triggered.length === 0) {
-      result.textContent = "No tranche triggered. Continue DCA and preserve the Opportunity Reserve.";
+      const remaining = state.opportunity.total - state.opportunity.used;
+      result.innerHTML = '<div style="margin-bottom:8px;">No tranche triggered at -' + drawdown + '%.</div>' +
+        '<div style="font-size:12px;color:var(--ink-3);">Continue DCA and preserve the Opportunity Reserve of ' + money(remaining) + '.</div>';
       return;
     }
-    const latest = triggered.at(-1);
-    if (latest) {
-      result.textContent = "Triggered -" + latest.drawdown + "% tranche: deploy " + money(latest.amount) + " total, split " + money(latest.suggestedVoo) + " VOO / " + money(latest.suggestedQqqm) + " QQQM.";
-    }
+    const totalDeploy = triggered.reduce((sum, t) => sum + t.amount, 0);
+    const totalVoo = triggered.reduce((sum, t) => sum + t.suggestedVoo, 0);
+    const totalQqqm = triggered.reduce((sum, t) => sum + t.suggestedQqqm, 0);
+    const latest = triggered.at(-1)!;
+    result.innerHTML = '<div style="font-size:14px;font-weight:700;color:var(--amber);margin-bottom:8px;">🐻 -' + drawdown + '% Drawdown: Deploy ' + money(totalDeploy) + '</div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
+        '<div style="flex:1;background:var(--surface);border-radius:6px;padding:8px;text-align:center;">' +
+          '<div style="font-size:11px;color:var(--ink-3);">VOO</div>' +
+          '<div style="font-size:14px;font-weight:700;color:var(--blue);">' + money(totalVoo) + '</div>' +
+        '</div>' +
+        '<div style="flex:1;background:var(--surface);border-radius:6px;padding:8px;text-align:center;">' +
+          '<div style="font-size:11px;color:var(--ink-3);">QQQM</div>' +
+          '<div style="font-size:14px;font-weight:700;color:var(--purple);">' + money(totalQqqm) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="font-size:12px;">' +
+        '<div style="font-weight:600;margin-bottom:4px;">Deployment Rules:</div>' +
+        allTranches.map((t) => {
+          const isTriggered = drawdown >= t.drawdown;
+          const icon = t.deployed ? '✅' : isTriggered ? '🟢' : '⬜';
+          const color = t.deployed ? 'var(--ink-3)' : isTriggered ? 'var(--green)' : 'var(--ink-3)';
+          return '<div style="display:flex;justify-content:space-between;padding:4px 0;color:' + color + ';">' +
+            '<span>' + icon + ' -' + t.drawdown + '% → ' + money(t.amount) + ' (VOO ' + money(t.suggestedVoo) + ' / QQQM ' + money(t.suggestedQqqm) + ')</span>' +
+            '<span>' + t.status + '</span></div>';
+        }).join('') +
+      '</div>';
   });
 }
 
@@ -1051,6 +1568,17 @@ function bindReview(root: HTMLElement, state: WealthState, setState: Setter, nav
     };
     setState(next);
     renderApp(root, next, setState, "review", navigate);
+  });
+
+  // Delete review
+  root.querySelectorAll<HTMLButtonElement>(".delete-review").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.id;
+      if (!id || !confirm("Delete this review?")) return;
+      const next = { ...state, reviews: state.reviews.filter((r) => r.id !== id) };
+      setState(next);
+      renderApp(root, next, setState, "review", navigate);
+    });
   });
 }
 

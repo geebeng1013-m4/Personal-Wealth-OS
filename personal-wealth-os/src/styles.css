@@ -128,8 +128,17 @@ a { color: var(--green); text-decoration: none; }
   padding: 20px 16px;
   background: var(--nav);
   color: var(--ink);
-  display: flex; flex-direction: column; gap: 20px;
+  display: flex; flex-direction: column;
   border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+.sidebar-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
 }
 .brand {
   display: grid;
@@ -1088,4 +1097,43 @@ canvas {
   .login-brand { padding: 28px 20px 18px; }
   .login-body { padding: 24px 20px; }
   .user-name { display: none; }
+}
+
+/* ===== Market Page ===== */
+.market-ticker-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.market-ticker-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.market-price {
+  color: var(--ink);
+}
+.market-change {
+  font-weight: 600;
+}
+.range-btn.active {
+  background: var(--blue) !important;
+  color: #fff !important;
+  border-color: var(--blue) !important;
+}
+#chartContainer {
+  border-radius: 8px;
+  overflow: hidden;
+}
+#chartContainer canvas {
+  border-radius: 8px;
+}
+@media (max-width: 768px) {
+  .market-ticker-card .ticker-badge {
+    font-size: 12px !important;
+    padding: 3px 8px !important;
+  }
+  .market-price {
+    font-size: 18px !important;
+  }
+  #chartContainer {
+    height: 280px !important;
+  }
 }

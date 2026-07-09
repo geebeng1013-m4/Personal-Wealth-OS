@@ -107,12 +107,12 @@ let cloudSyncUnsub: (() => void) | null = null;
   },
 };
 
-function setState(next: WealthState): void {
+function setState(next: WealthState, changeLabel?: string): void {
   state = next;
   // Only persist if a user is logged in (prevent saving to global key)
   const user = currentUser;
   if (user) {
-    saveState(next, user.uid);
+    saveState(next, user.uid, changeLabel);
   }
 }
 
