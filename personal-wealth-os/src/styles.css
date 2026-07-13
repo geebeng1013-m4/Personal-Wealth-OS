@@ -645,6 +645,54 @@ textarea { resize: vertical; }
 }
 .import-box small { color: var(--ink-3); font-size: 11px; }
 
+/* ---- Market Tabs ---- */
+.market-tab-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.market-tab-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.market-tab-btn.active {
+  background: var(--green-dim);
+  border-color: var(--green);
+  color: var(--green);
+  font-weight: 600;
+}
+.market-tab-content {
+  display: none;
+}
+.market-tab-content.active {
+  display: block;
+}
+.interval-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.interval-btn:hover {
+  background: var(--surface-2);
+}
+.interval-btn.active {
+  border-color: var(--green);
+  background: var(--green-dim);
+  color: var(--green);
+}
+
 /* ---- Scenario ---- */
 .scenario-form {
   display: grid;

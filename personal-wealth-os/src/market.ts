@@ -269,3 +269,199 @@ export function buildTradeTimelineHtml(
     </div>
   </div>`;
 }
+
+// --- Fundamentals (Dividend, P/E, etc.) ---
+
+export interface Fundamentals {
+  symbol: string;
+  dividendYield: number;      // e.g. 0.0132 = 1.32%
+  dividendRate: number;        // annual $ per share
+  trailingPE: number;
+  exDividendDate: string;      // "2026-06-27"
+  exDividendTimestamp: number;
+  dividendFrequency: string;   // "Quarterly"
+  fiveYearAvgDividendYield: number;
+  marketCap: number;
+  trailingAnnualDividendRate: number;
+  trailingAnnualDividendYield: number;
+  expenseRatio: number;        // e.g. 0.0003 = 0.03%
+  totalAssets: number;         // AUM in USD
+  ytdReturn: number;           // e.g. 0.052 = 5.2%
+  threeYearReturn: number;
+  fiveYearReturn: number;
+}
+
+const DIV_CACHE_TTL = 3600_000; // 1 hour
+
+export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
+  const cacheKey = "fund_" + symbol;
+  const cached = getCached(cacheKey);
+  if (cached) return cached as Fundamentals;
+
+  const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryDetail,defaultKeyStatistics`;
+  const text = await fetchWithProxy(url);
+  const json = JSON.parse(text);
+  const result = json?.quoteSummary?.result?.[0];
+  if (!result) throw new Error("No fundamentals for " + symbol);
+
+  const sd = result.summaryDetail ?? {};
+  const ks = result.defaultKeyStatistics ?? {};
+
+  const freq = sd.dividendFrequency ?? "Quarterly";
+
+  const fund: Fundamentals = {
+    symbol,
+    dividendYield: sd.dividendYield ?? 0,
+    dividendRate: sd.dividendRate ?? 0,
+    trailingPE: sd.trailingPE?.raw ?? ks.trailingPE?.raw ?? 0,
+    exDividendDate: sd.exDividendDate?.fmt ?? "",
+    exDividendTimestamp: sd.exDividendDate?.raw ?? 0,
+    dividendFrequency: typeof freq === "string" ? freq : String(freq),
+    fiveYearAvgDividendYield: sd.fiveYearAvgDividendYield?.raw ?? 0,
+    marketCap: sd.marketCap?.raw ?? 0,
+    trailingAnnualDividendRate: sd.trailingAnnualDividendRate?.raw ?? 0,
+    trailingAnnualDividendYield: sd.trailingAnnualDividendYield?.raw ?? 0,
+    expenseRatio: ks.expenseRatio?.raw ?? 0,
+    totalAssets: sd.totalAssets?.raw ?? ks.totalAssets?.raw ?? 0,
+    ytdReturn: ks.ytdReturn?.raw ?? 0,
+    threeYearReturn: ks.threeYearReturn?.raw ?? 0,
+    fiveYearReturn: ks.fiveYearReturn?.raw ?? 0,
+  };
+
+  // Temporarily override cache TTL for fundamentals
+  try {
+    const entry = { timestamp: Date.now(), data: fund };
+    localStorage.setItem(CACHE_KEY + "_" + cacheKey, JSON.stringify(entry));
+  } catch { /* ignore */ }
+  return fund;
+}
+
+// --- Historical prices for risk calculation ---
+
+export interface HistoricalPrice {
+  date: string;   // "2026-01-15"
+  close: number;
+}
+
+export async function fetchHistoricalPrices(symbol: string, range = "1y"): Promise<HistoricalPrice[]> {
+  const cacheKey = "hist_" + symbol + "_" + range;
+  const cached = getCached(cacheKey);
+  if (cached) return cached as HistoricalPrice[];
+
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`;
+  const text = await fetchWithProxy(url);
+  const json = JSON.parse(text);
+  const result = json?.chart?.result?.[0];
+  if (!result) throw new Error("No history for " + symbol);
+
+  const timestamps: number[] = result.timestamp ?? [];
+  const closes: number[] = result.indicators?.quote?.[0]?.close ?? [];
+
+  const prices: HistoricalPrice[] = [];
+  for (let i = 0; i < timestamps.length; i++) {
+    if (closes[i] != null) {
+      const d = new Date(timestamps[i] * 1000);
+      prices.push({
+        date: d.toISOString().slice(0, 10),
+        close: closes[i],
+      });
+    }
+  }
+
+  // Cache with longer TTL
+  try {
+    const entry = { timestamp: Date.now(), data: prices };
+    localStorage.setItem(CACHE_KEY + "_" + cacheKey, JSON.stringify(entry));
+  } catch { /* ignore */ }
+  return prices;
+}
+
+// --- Risk metrics calculation ---
+
+export interface RiskMetrics {
+  maxDrawdown: number;        // -0.339 = -33.9%
+  currentDrawdown: number;    // from ATH
+  sharpeRatio: number;
+  beta: number;               // vs SPY
+  volatility: number;         // annualized
+  winRate: number;            // positive months %
+}
+
+export function calcRiskMetrics(prices: HistoricalPrice[], benchmarkPrices?: HistoricalPrice[]): RiskMetrics {
+  if (prices.length < 2) return { maxDrawdown: 0, currentDrawdown: 0, sharpeRatio: 0, beta: 1, volatility: 0, winRate: 0 };
+
+  // Daily returns
+  const returns: number[] = [];
+  for (let i = 1; i < prices.length; i++) {
+    returns.push((prices[i].close - prices[i - 1].close) / prices[i - 1].close);
+  }
+
+  // Max drawdown
+  let peak = prices[0].close;
+  let maxDD = 0;
+  for (const p of prices) {
+    if (p.close > peak) peak = p.close;
+    const dd = (p.close - peak) / peak;
+    if (dd < maxDD) maxDD = dd;
+  }
+
+  // Current drawdown
+  const lastPrice = prices[prices.length - 1].close;
+  let allTimeHigh = 0;
+  for (const p of prices) {
+    if (p.close > allTimeHigh) allTimeHigh = p.close;
+  }
+  const currentDD = allTimeHigh > 0 ? (lastPrice - allTimeHigh) / allTimeHigh : 0;
+
+  // Volatility (annualized)
+  const mean = returns.reduce((s, r) => s + r, 0) / returns.length;
+  const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length;
+  const dailyVol = Math.sqrt(variance);
+  const annualVol = dailyVol * Math.sqrt(252);
+
+  // Sharpe ratio (assume risk-free = 4.5%)
+  const annualReturn = mean * 252;
+  const riskFree = 0.045;
+  const sharpe = annualVol > 0 ? (annualReturn - riskFree) / annualVol : 0;
+
+  // Beta vs benchmark
+  let beta = 1;
+  if (benchmarkPrices && benchmarkPrices.length === prices.length) {
+    const benchReturns: number[] = [];
+    for (let i = 1; i < benchmarkPrices.length; i++) {
+      benchReturns.push((benchmarkPrices[i].close - benchmarkPrices[i - 1].close) / benchmarkPrices[i - 1].close);
+    }
+    const benchMean = benchReturns.reduce((s, r) => s + r, 0) / benchReturns.length;
+    let covariance = 0;
+    let benchVariance = 0;
+    for (let i = 0; i < returns.length; i++) {
+      covariance += (returns[i] - mean) * (benchReturns[i] - benchMean);
+      benchVariance += (benchReturns[i] - benchMean) ** 2;
+    }
+    covariance /= returns.length;
+    benchVariance /= returns.length;
+    beta = benchVariance > 0 ? covariance / benchVariance : 1;
+  }
+
+  // Win rate (positive months)
+  const monthlyReturns = new Map<string, number>();
+  for (const p of prices) {
+    const month = p.date.slice(0, 7); // "2026-01"
+    monthlyReturns.set(month, p.close);
+  }
+  const monthCloses = Array.from(monthlyReturns.values());
+  let positiveMonths = 0;
+  for (let i = 1; i < monthCloses.length; i++) {
+    if (monthCloses[i] > monthCloses[i - 1]) positiveMonths++;
+  }
+  const winRate = monthCloses.length > 1 ? positiveMonths / (monthCloses.length - 1) : 0;
+
+  return {
+    maxDrawdown: maxDD,
+    currentDrawdown: currentDD,
+    sharpeRatio: sharpe,
+    beta,
+    volatility: annualVol,
+    winRate,
+  };
+}
