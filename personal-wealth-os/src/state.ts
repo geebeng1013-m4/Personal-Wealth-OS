@@ -1,4 +1,4 @@
-import type { WealthState } from "./models";
+import type { LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, WealthState } from "./models";
 import {
   saveToFirestore,
   loadFromFirestore,
@@ -6,7 +6,30 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 2;
+export const CURRENT_VERSION = 8;
+
+const RULE_CARD_IDS = new Set<RuleCardId>([
+  "monthly-cashflow",
+  "dca-mandate",
+  "emergency-fund",
+  "opportunity-reserve",
+  "bear-market-deployment",
+  "age-stage-policy",
+  "data-safety",
+]);
+
+const DEFAULT_LEDGER_CATEGORIES: LedgerCategory[] = [
+  { id: "expense-food", label: "Food", icon: "🍜", type: "expense" },
+  { id: "expense-transport", label: "Transport", icon: "🚌", type: "expense" },
+  { id: "expense-shopping", label: "Shopping", icon: "🛍️", type: "expense" },
+  { id: "expense-bills", label: "Bills", icon: "🧾", type: "expense" },
+  { id: "expense-health", label: "Health", icon: "💊", type: "expense" },
+  { id: "expense-other", label: "Other", icon: "📦", type: "expense" },
+  { id: "income-salary", label: "Salary", icon: "💼", type: "income" },
+  { id: "income-allowance", label: "Allowance", icon: "💵", type: "income" },
+  { id: "income-bonus", label: "Bonus", icon: "🎁", type: "income" },
+  { id: "income-other", label: "Other", icon: "✨", type: "income" },
+];
 
 function getUserStorageKey(uid?: string): string {
   return uid ? `${STORAGE_KEY}-${uid}` : STORAGE_KEY;
@@ -56,18 +79,18 @@ export const defaultState: WealthState = {
     ],
   },
   buckets: [
-    { id: "survival", name: "Survival", label: "生存桶", amount: 720, cadence: "monthly", note: "交通 + 吃饭，先保证现金流稳定。" },
-    { id: "safety", name: "Safety", label: "安全桶", amount: 0, cadence: "monthly", note: "Emergency Fund 已达标！MYR 40 可重分配到成长桶或自由桶。" },
-    { id: "growth", name: "Growth", label: "成长桶", amount: 100, cadence: "monthly", note: "VOO 70% / QQQM 30% 自动 DCA。" },
-    { id: "freedom", name: "Freedom", label: "自由桶", amount: 50, cadence: "monthly", note: "旅行基金和愿望清单（含原 Safety 桶 MYR 20 重分配）。" },
-    { id: "learning", name: "Learning", label: "学习桶", amount: 10, cadence: "monthly", note: "书、课程、工具和投资学习成本。" },
-    { id: "opportunity", name: "Opportunity", label: "机会桶", amount: 400, cadence: "one-time", note: "一次性熊市补仓资金，只按规则部署。" },
+    { id: "survival", name: "Survival", label: "Survival Bucket", amount: 720, cadence: "monthly", note: "Transport and food come first to keep cash flow stable." },
+    { id: "safety", name: "Safety", label: "Safety Bucket", amount: 0, cadence: "monthly", note: "The Emergency Fund is complete. MYR 40 can be redirected to Growth or Freedom." },
+    { id: "growth", name: "Growth", label: "Growth Bucket", amount: 100, cadence: "monthly", note: "Automated DCA split: 70% VOO and 30% QQQM." },
+    { id: "freedom", name: "Freedom", label: "Freedom Bucket", amount: 50, cadence: "monthly", note: "Travel and wishlist funding, including MYR 20 redirected from Safety." },
+    { id: "learning", name: "Learning", label: "Learning Bucket", amount: 10, cadence: "monthly", note: "Books, courses, tools, and investment education." },
+    { id: "opportunity", name: "Opportunity", label: "Opportunity Bucket", amount: 400, cadence: "one-time", note: "One-time bear-market reserve deployed only according to the rules." },
   ],
   goals: [
-    { id: "emergency", name: "Emergency Fund", label: "5 个月安全垫 ✅", current: 4000, target: 4000, monthlyContribution: 0, note: "已达成 5 个月安全垫目标！MYR 4,000 存够。" },
-    { id: "travel", name: "Travel Fund", label: "旅行基金", current: 0, target: 1000, monthlyContribution: 30, note: "先用系统建议目标，之后可调整。" },
-    { id: "wishlist", name: "Wishlist Fund", label: "愿望清单", current: 0, target: 500, monthlyContribution: 20, note: "每月 MYR 20 从 Safety 桶重分配而来。" },
-    { id: "learning", name: "Learning Fund", label: "学习基金", current: 0, target: 300, monthlyContribution: 10, note: "用于技能、课程、书籍、工具。" },
+    { id: "emergency", name: "Emergency Fund", label: "5-Month Safety Buffer ✅", current: 4000, target: 4000, monthlyContribution: 0, note: "The five-month safety-buffer goal is complete at MYR 4,000." },
+    { id: "travel", name: "Travel Fund", label: "Travel Fund", current: 0, target: 1000, monthlyContribution: 30, note: "Start with the suggested target and adjust it later if needed." },
+    { id: "wishlist", name: "Wishlist Fund", label: "Wishlist", current: 0, target: 500, monthlyContribution: 20, note: "MYR 20 is redirected from the Safety Bucket each month." },
+    { id: "learning", name: "Learning Fund", label: "Learning Fund", current: 0, target: 300, monthlyContribution: 10, note: "For skills, courses, books, and tools." },
   ],
   trades: [
     { id: "csv-001", date: "2025-10-28", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 21.42, amountUsd: 5.04, priceUsd: 630.54, feeMyr: 0.21 },
@@ -91,6 +114,12 @@ export const defaultState: WealthState = {
   ],
   reviews: [],
   customTickers: [],
+  ledgerCategories: DEFAULT_LEDGER_CATEGORIES,
+  ledgerTransactions: [],
+  ruleCardOverrides: {},
+  ruleNoteTitle: "",
+  ruleNotes: "",
+  hiddenRuleIds: [],
 };
 
 export function createId(prefix: string): string {
@@ -120,7 +149,7 @@ export function loadDefaultTemplate(uid?: string): WealthState {
   if (!raw) return cloneDefaultState();
   try {
     const parsed = JSON.parse(raw) as Partial<WealthState>;
-    return { ...cloneDefaultState(), ...parsed, trades: [] };
+    return { ...migrateState(parsed), trades: [] };
   } catch {
     return cloneDefaultState();
   }
@@ -165,7 +194,56 @@ export function emptyState(): WealthState {
     trades: [],
     reviews: [],
     customTickers: [],
+    ledgerCategories: structuredClone(DEFAULT_LEDGER_CATEGORIES),
+    ledgerTransactions: [],
+    ruleCardOverrides: {},
+    ruleNoteTitle: "",
+    ruleNotes: "",
+    hiddenRuleIds: [],
   };
+}
+
+function isLedgerType(value: unknown): value is LedgerTransactionType {
+  return value === "income" || value === "expense";
+}
+
+function validLedgerCategories(value: unknown): LedgerCategory[] {
+  if (!Array.isArray(value)) return structuredClone(DEFAULT_LEDGER_CATEGORIES);
+  const categories = value.flatMap((candidate): LedgerCategory[] => {
+    if (!candidate || typeof candidate !== "object") return [];
+    const item = candidate as Record<string, unknown>;
+    if (typeof item.id !== "string" || !item.id.trim() || typeof item.label !== "string" || !item.label.trim() || typeof item.icon !== "string" || !isLedgerType(item.type)) return [];
+    return [{ id: item.id, label: item.label.trim().slice(0, 40), icon: item.icon.trim().slice(0, 12) || "•", type: item.type }];
+  });
+  return categories.length > 0 ? categories : structuredClone(DEFAULT_LEDGER_CATEGORIES);
+}
+
+function validLedgerTransactions(value: unknown, categories: LedgerCategory[]): LedgerTransaction[] {
+  if (!Array.isArray(value)) return [];
+  const categoryTypes = new Map(categories.map((category) => [category.id, category.type]));
+  return value.flatMap((candidate): LedgerTransaction[] => {
+    if (!candidate || typeof candidate !== "object") return [];
+    const item = candidate as Record<string, unknown>;
+    const amount = typeof item.amount === "number" ? item.amount : Number(item.amount);
+    const timestamp = typeof item.date === "string" ? new Date(item.date).getTime() : NaN;
+    if (typeof item.id !== "string" || !item.id || !Number.isFinite(amount) || amount <= 0 || !isLedgerType(item.type) || typeof item.categoryId !== "string" || categoryTypes.get(item.categoryId) !== item.type || !Number.isFinite(timestamp)) return [];
+    const note = typeof item.note === "string" ? item.note.trim().slice(0, 500) : undefined;
+    return [{ id: item.id, amount: Math.round((amount + Number.EPSILON) * 100) / 100, type: item.type, categoryId: item.categoryId, date: new Date(timestamp).toISOString(), ...(note ? { note } : {}) }];
+  });
+}
+
+function validRuleCardOverrides(value: unknown): Partial<Record<RuleCardId, RuleCardContent>> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Partial<Record<RuleCardId, RuleCardContent>> = {};
+  Object.entries(value).forEach(([id, candidate]) => {
+    if (!RULE_CARD_IDS.has(id as RuleCardId) || !candidate || typeof candidate !== "object" || Array.isArray(candidate)) return;
+    const item = candidate as Record<string, unknown>;
+    if (typeof item.title !== "string" || typeof item.body !== "string") return;
+    const title = item.title.trim().slice(0, 80);
+    const body = item.body.trim().slice(0, 2000);
+    if (title && body) result[id as RuleCardId] = { title, body };
+  });
+  return result;
 }
 
 function migrateState(input: Partial<WealthState>): WealthState {
@@ -185,6 +263,42 @@ function migrateState(input: Partial<WealthState>): WealthState {
     allocation: { ...defaultState.opportunity.allocation, ...input.opportunity?.allocation },
     tranches: input.opportunity?.tranches ?? defaultState.opportunity.tranches,
   };
+  merged.ledgerCategories = validLedgerCategories(input.ledgerCategories);
+  merged.ledgerTransactions = validLedgerTransactions(input.ledgerTransactions, merged.ledgerCategories);
+  merged.ruleCardOverrides = validRuleCardOverrides(input.ruleCardOverrides);
+  merged.ruleNoteTitle = typeof input.ruleNoteTitle === "string" ? input.ruleNoteTitle.trim().slice(0, 80) : "";
+  merged.ruleNotes = typeof input.ruleNotes === "string" ? input.ruleNotes.slice(0, 5000) : "";
+  merged.hiddenRuleIds = Array.isArray(input.hiddenRuleIds)
+    ? [...new Set(input.hiddenRuleIds.filter((id): id is RuleCardId => typeof id === "string" && RULE_CARD_IDS.has(id as RuleCardId)))]
+    : [];
+
+  if ((input.version ?? 0) < 3) {
+    const legacyTextTranslations: Record<string, string> = {
+      "生存桶": "Survival Bucket",
+      "交通 + 吃饭，先保证现金流稳定。": "Transport and food come first to keep cash flow stable.",
+      "安全桶": "Safety Bucket",
+      "Emergency Fund 已达标！MYR 40 可重分配到成长桶或自由桶。": "The Emergency Fund is complete. MYR 40 can be redirected to Growth or Freedom.",
+      "成长桶": "Growth Bucket",
+      "VOO 70% / QQQM 30% 自动 DCA。": "Automated DCA split: 70% VOO and 30% QQQM.",
+      "自由桶": "Freedom Bucket",
+      "旅行基金和愿望清单（含原 Safety 桶 MYR 20 重分配）。": "Travel and wishlist funding, including MYR 20 redirected from Safety.",
+      "学习桶": "Learning Bucket",
+      "书、课程、工具和投资学习成本。": "Books, courses, tools, and investment education.",
+      "机会桶": "Opportunity Bucket",
+      "一次性熊市补仓资金，只按规则部署。": "One-time bear-market reserve deployed only according to the rules.",
+      "5 个月安全垫 ✅": "5-Month Safety Buffer ✅",
+      "已达成 5 个月安全垫目标！MYR 4,000 存够。": "The five-month safety-buffer goal is complete at MYR 4,000.",
+      "旅行基金": "Travel Fund",
+      "先用系统建议目标，之后可调整。": "Start with the suggested target and adjust it later if needed.",
+      "愿望清单": "Wishlist",
+      "每月 MYR 20 从 Safety 桶重分配而来。": "MYR 20 is redirected from the Safety Bucket each month.",
+      "学习基金": "Learning Fund",
+      "用于技能、课程、书籍、工具。": "For skills, courses, books, and tools.",
+    };
+    const translate = (value: string): string => legacyTextTranslations[value] ?? value;
+    merged.buckets = merged.buckets.map((bucket) => ({ ...bucket, label: translate(bucket.label), note: translate(bucket.note) }));
+    merged.goals = merged.goals.map((goal) => ({ ...goal, label: translate(goal.label), note: translate(goal.note) }));
+  }
 
   return merged;
 }

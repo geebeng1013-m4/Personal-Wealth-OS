@@ -1,7 +1,7 @@
 {
   "name": "Personal Wealth OS",
   "short_name": "Wealth OS",
-  "description": "投资纪律 · 现金流 · 目标系统",
+  "description": "Investment discipline, cash flow, and goal tracking",
   "start_url": "/quick",
   "scope": "/",
   "display": "standalone",

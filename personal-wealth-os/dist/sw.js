@@ -1,4 +1,4 @@
-const CACHE_NAME = "wealth-os-v4";
+const CACHE_NAME = "wealth-os-v7";
 const PRECACHE = [
   "/",
   "/index.html",
@@ -22,14 +22,33 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Fetch — network-first for API/assets, cache-first for app shell
+// Fetch — always check the network for navigation so a new deployment cannot
+// remain pinned to an old index.html and its old hashed asset references.
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
   // Skip non-GET and cross-origin (Firebase, Google fonts, etc.)
   if (event.request.method !== "GET") return;
 
-  // App shell & local assets — stale-while-revalidate
+  if (url.origin === location.origin && event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", copy));
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+          return (await cache.match("/index.html")) || Response.error();
+        })
+    );
+    return;
+  }
+
+  // Versioned local assets can render immediately while refreshing in the background.
   if (url.origin === location.origin) {
     event.respondWith(
       caches.open(CACHE_NAME).then((cache) =>

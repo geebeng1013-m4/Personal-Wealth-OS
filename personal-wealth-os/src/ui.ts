@@ -1,4 +1,4 @@
-import type { AdvisorMessage, Ticker, Trade, TradeType, WealthState } from "./models";
+import type { AdvisorMessage, LedgerTransaction, LedgerTransactionType, RuleCardId, Ticker, Trade, TradeType, WealthState } from "./models";
 import { createId, cloneDefaultState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, type Snapshot } from "./state";
 import {
   advisorMessages,
@@ -15,21 +15,43 @@ import {
   tradeUnits,
 } from "./rules";
 import { fetchQuote, fetchMultipleQuotes, formatPrice, formatChange, formatVolume, type MarketQuote, calcPnLForTicker, type PortfolioPnL, buildTradeTimelineHtml, fetchFundamentals, type Fundamentals, fetchHistoricalPrices, calcRiskMetrics } from "./market";
+import { categoryTotals, filterLedgerTransactions, ledgerTotals, monthlyLedgerTotals, normalizeLedgerAmount, type LedgerFilters } from "./ledger";
+import { mountSideRays } from "./sideRays";
 
 type Setter = (state: WealthState, changeLabel?: string) => void;
 type Navigate = (page: string) => void;
 
-const pages = [
-  ["dashboard", "Overview", "总览"],
-  ["portfolio", "Portfolio", "投资组合"],
-  ["market", "Market", "行情"],
-  ["buckets", "Buckets", "资金桶"],
-  ["goals", "Goals", "目标"],
-  ["advisor", "Advisor", "理财建议"],
-  ["rules", "Rules", "财富规则"],
-  ["review", "Review", "月度复盘"],
-  ["settings", "Settings", "设置"],
-] as const;
+const sideRaysCleanup = new WeakMap<HTMLElement, () => void>();
+const calculatorCleanup = new WeakMap<HTMLElement, () => void>();
+
+type Page = readonly [id: string, english: string, subtitle: string];
+type PageGroup = readonly [title: string, pages: readonly Page[]];
+
+const pageGroups = [
+  ["Today", [
+    ["dashboard", "Overview", "Your next move"],
+    ["advisor", "Coach", "Guidance & scenarios"],
+  ]],
+  ["Plan", [
+    ["buckets", "Money Plan", "Fund allocation"],
+    ["goals", "Goals", "Progress & targets"],
+    ["rules", "Rules", "Decision framework"],
+  ]],
+  ["Grow", [
+    ["portfolio", "Investments", "Portfolio & activity"],
+    ["market", "Market", "Research when needed"],
+    ["calculator", "Scenarios", "Growth calculator"],
+  ]],
+  ["Reflect", [
+    ["ledger", "Activity", "Income & expenses"],
+    ["review", "Review", "Monthly check-in"],
+  ]],
+  ["System", [
+    ["settings", "Settings", "Configuration"],
+  ]],
+] as const satisfies readonly PageGroup[];
+
+const pages: Page[] = pageGroups.flatMap<Page>(([, groupPages]) => [...groupPages]);
 
 function escapeHtml(value: string): string {
   const el = document.createElement("span");
@@ -42,8 +64,15 @@ function numberInput(name: string, label: string, value = "", step = "0.01"): st
 }
 
 function navTemplate(activePage: string): string {
-  return pages
-    .map(([id, english, chinese]) => `<button class="nav-item ${id === activePage ? "active" : ""}" data-page="${id}" type="button"><span>${english}</span><small>${chinese}</small></button>`)
+  let pageIndex = 0;
+  return pageGroups
+    .map(([groupTitle, groupPages]) => {
+      const items = groupPages.map(([id, english, chinese]) => {
+        const index = pageIndex++;
+        return `<button class="nav-item ${id === activePage ? "active" : ""}" data-page="${id}" type="button" style="--nav-index:${index}"${id === activePage ? ' aria-current="page"' : ""}><i class="nav-node" aria-hidden="true"></i><span class="nav-label"><strong>${english}</strong><small>${chinese}</small></span></button>`;
+      }).join("");
+      return `<div class="nav-group"><div class="nav-group-title">${groupTitle}</div><div class="nav-group-items">${items}</div></div>`;
+    })
     .join("");
 }
 
@@ -64,45 +93,47 @@ function toTVSymbol(ticker: string): string {
 function shellTemplate(activePage: string, state: WealthState, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }): string {
   const themeIcon = getTheme() === "dark" ? "☀️" : "🌙";
   const active = pages.find(([id]) => id === activePage);
-  const userBadge = user ? `<div class="user-badge"><img src="${user.photoURL || ""}" alt="" class="user-avatar" referrerpolicy="no-referrer"><span class="user-name">${user.displayName || user.email || "User"}</span><button class="secondary-button logout-btn" type="button">退出</button></div>` : "";
+  const userBadge = user ? `<div class="user-badge"><img src="${escapeHtml(user.photoURL || "")}" alt="" class="user-avatar" referrerpolicy="no-referrer"><span class="user-name">${escapeHtml(user.displayName || user.email || "User")}</span><button class="secondary-button logout-btn" type="button">Sign Out</button></div>` : "";
   return `
-    <button class="hamburger" id="hamburgerBtn" type="button" aria-label="Menu">☰</button>
+    <button class="hamburger" id="sidebarToggle" type="button" aria-label="Open navigation" aria-expanded="false">☰</button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
     <aside class="sidebar" id="sidebar">
-      <div class="brand">
-        <div class="brand-mark">PW</div>
-        <div>
-          <h1>Personal Wealth OS</h1>
-          <p>投资纪律 · 现金流 · 目标系统</p>
-        </div>
-      </div>
       <div class="sidebar-scroll-area">
-        <nav class="nav" aria-label="Primary">${navTemplate(activePage)}</nav>
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">PW</div>
+          <div><h1>Personal Wealth OS</h1><p>Personal CFO System</p></div>
+        </div>
+        <nav class="nav line-sidebar" aria-label="Primary navigation">
+          ${navTemplate(activePage)}
+        </nav>
         <div class="profile-card">
-          <span class="eyebrow">Investor Profile</span>
-          <strong>Age ${state.profile.age} · ${state.profile.riskTolerance} Growth</strong>
-          <small>${state.profile.stage} · ${state.profile.investmentHorizonYears}+ year horizon</small>
+          <span class="eyebrow">Wealth Mandate</span>
+          <strong>${escapeHtml(state.profile.riskTolerance)} risk · ${state.profile.investmentHorizonYears}+ years</strong>
+          <small>${escapeHtml(state.profile.stage)} · MYR base currency</small>
         </div>
       </div>
       <div class="sidebar-actions">
         ${userBadge}
-        <button class="secondary-button install-btn" id="installPwa" type="button" style="width:100%;font-size:12px;">📱 Add to Home Screen</button>
+        <button class="secondary-button install-btn" id="installPwa" type="button">Add to Home Screen</button>
         <div class="sidebar-actions-row">
-          <button class="theme-toggle" id="themeToggle" type="button" title="Toggle theme">${themeIcon}</button>
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme" title="Toggle theme">${themeIcon}</button>
           <button class="secondary-button" id="exportJson" type="button">Export</button>
-          <label class="file-button">Import<input id="importJson" type="file" accept=".json"></label>
+          <label class="file-button">Import<input id="importJson" type="file" accept="application/json"></label>
         </div>
         <div class="sidebar-actions-row">
-          <button class="secondary-button" id="versionHistory" type="button">📋 Version History</button>
+          <button class="secondary-button" id="versionHistory" type="button">Version History</button>
           <button class="danger-button" id="resetData" type="button">Reset</button>
         </div>
       </div>
     </aside>
     <main class="main">
+      <div class="side-rays" aria-hidden="true">
+        <div class="side-rays-container" id="sideRays"></div>
+      </div>
       <header class="topbar">
         <div>
-          <span class="eyebrow">MYR BASED · USD PORTFOLIO · LOCAL STORAGE V2</span>
-          <h2>${active?.[1] ?? "Overview"} <span>${active?.[2] ?? "总览"}</span></h2>
+          <span class="eyebrow">Personal CFO Operating System</span>
+          <h2>${active?.[1] ?? "Overview"}<span>${active?.[2] ?? "Dashboard"}</span></h2>
         </div>
       </header>
       <section id="pageMount"></section>
@@ -114,62 +145,83 @@ function dashboardTemplate(state: WealthState): string {
   const portfolio = portfolioSummary(state);
   const emergency = emergencyRatio(state);
   const actions = nextActions(state);
-  const surplus = monthlySurplus(state);
   const opportunity = state.opportunity.total - state.opportunity.used;
-
-  // Dynamic health scores (0-1)
-  const growthScore = state.dca.monthly > 0 && state.trades.length > 0 ? 1 : state.dca.monthly > 0 ? 0.5 : 0;
-  const disciplineScore = [state.goals.length > 0, state.buckets.length > 0, state.profile.name !== ""].filter(Boolean).length / 3;
+  const trackedCapital = portfolio.totalInvestedMyr + state.emergency.current + opportunity;
+  const currentMonthTransactions = filterLedgerTransactions(state.ledgerTransactions, {
+    preset: "month",
+    startDate: "",
+    endDate: "",
+    type: "all",
+    categoryId: "",
+    query: "",
+  });
+  const currentMonthLedger = ledgerTotals(currentMonthTransactions);
+  const previousMonth = new Date();
+  previousMonth.setMonth(previousMonth.getMonth() - 1);
+  const previousMonthTransactions = state.ledgerTransactions.filter((transaction) => {
+    const date = new Date(transaction.date);
+    return date.getFullYear() === previousMonth.getFullYear() && date.getMonth() === previousMonth.getMonth();
+  });
+  const previousMonthLedger = ledgerTotals(previousMonthTransactions);
+  const expenseChange = previousMonthLedger.expense > 0
+    ? (currentMonthLedger.expense - previousMonthLedger.expense) / previousMonthLedger.expense
+    : null;
+  const nextGoal = goalsWithIncompleteFirst(state).find(({ goal }) => goal.target > 0 && goal.current < goal.target)?.goal;
+  const nextGoalRatio = nextGoal && nextGoal.target > 0 ? Math.min(nextGoal.current / nextGoal.target, 1) : 0;
+  const coachMessages = advisorMessages(state);
+  const primaryCoach = coachMessages.find((message) => message.severity === "action")
+    ?? coachMessages.find((message) => message.severity === "watch")
+    ?? coachMessages[0];
+  const emergencyMonths = monthsToEmergencyTarget(state);
+  const trackedBase = Math.max(trackedCapital, 1);
+  const investedShare = Math.min(portfolio.totalInvestedMyr / trackedBase, 1);
+  const safetyShare = Math.min(state.emergency.current / trackedBase, 1);
+  const reserveShare = Math.min(opportunity / trackedBase, 1);
+  const planOnTrack = monthlySurplus(state) >= state.dca.monthly;
 
   return `
-    <div class="metric-grid">
-      <article class="card metric metric-hero">
-        <div class="metric-icon green">💰</div>
-        <span>Net Invested Capital</span>
-        <strong>${money(portfolio.totalInvestedMyr)}</strong>
-        <small>Portfolio principal from transaction log</small>
-      </article>
-      <article class="card metric">
-        <div class="metric-icon blue">🛡️</div>
-        <span>Emergency Fund</span>
-        <strong>${percent(emergency)}</strong>
-        <small>${money(state.emergency.current)} / ${money(state.emergency.target)}</small>
-      </article>
-      <article class="card metric">
-        <div class="metric-icon amber">📊</div>
-        <span>Monthly Surplus</span>
-        <strong>${money(surplus)}</strong>
-        <small>${money(monthlyBasicExpense(state))} basic spending</small>
-      </article>
-      <article class="card metric">
-        <div class="metric-icon cyan">🎯</div>
-        <span>Opportunity Reserve</span>
-        <strong>${money(opportunity)}</strong>
-        <small>Bear market deployment pool</small>
-      </article>
-    </div>
-    <div class="terminal-grid">
-      <article class="card panel advisor-panel">
-        <div class="panel-head"><div><span class="eyebrow">Planner Brief</span><h3>本月理财行动</h3></div><strong style="color:var(--green);">Priority</strong></div>
-        <div class="advice-list">${advisorMessages(state).slice(0, 4).map(adviceCard).join("")}</div>
-      </article>
-      <article class="card panel">
-        <div class="panel-head"><div><span class="eyebrow">Health Matrix</span><h3>财富状态</h3></div><strong style="color:var(--green);">${percent((emergency + growthScore + disciplineScore) / 3)}</strong></div>
-        <div class="health-section">
-          ${healthRow("Safety", emergency, monthsToEmergencyTarget(state) + " months to target")}
-          ${healthRow("Growth", growthScore, growthScore > 0 ? "DCA active" : "No DCA plan")}
-          ${healthRow("Discipline", disciplineScore, disciplineScore > 0 ? "Rules documented" : "Set up your goals")}
+    <section class="wealth-hero card">
+      <div class="wealth-hero-copy">
+        <div class="wealth-hero-topline"><span class="eyebrow">Tracked Wealth Base</span><span class="status-pill ${planOnTrack ? "positive" : "attention"}">${planOnTrack ? "Plan on track" : "Review required"}</span></div>
+        <strong class="wealth-total">${trackedCapital > 0 ? money(trackedCapital) : "Not established"}</strong>
+        <p>Investment cost, safety cash and undeployed opportunity reserve. This is a planning base, not a complete net-worth valuation.</p>
+        <div class="wealth-hero-actions"><button class="primary-button dashboard-nav" data-page="portfolio" type="button">Review portfolio</button><button class="secondary-button dashboard-nav" data-page="ledger" type="button">Open cash flow</button></div>
+      </div>
+      <div class="wealth-allocation" aria-label="Tracked wealth allocation">
+        <div class="allocation-ring" style="--invested:${Math.round(investedShare * 100)}%;--safety:${Math.round((investedShare + safetyShare) * 100)}%;"><span><small>Allocated</small><strong>${percent(investedShare + safetyShare + reserveShare)}</strong></span></div>
+        <div class="allocation-legend">
+          <div><i class="invested"></i><span>Investments</span><strong>${money(portfolio.totalInvestedMyr)}</strong></div>
+          <div><i class="safety"></i><span>Safety</span><strong>${money(state.emergency.current)}</strong></div>
+          <div><i class="reserve"></i><span>Reserve</span><strong>${money(opportunity)}</strong></div>
         </div>
-        <div class="action-strip">${actions.map((action) => "<span>" + escapeHtml(action) + "</span>").join("")}</div>
+      </div>
+    </section>
+    <div class="metric-grid wealth-metrics">
+      <article class="card metric"><span>Monthly cash flow</span><strong class="${currentMonthLedger.balance >= 0 ? "income" : "expense"}">${currentMonthLedger.balance >= 0 ? "+" : "−"}${money(Math.abs(currentMonthLedger.balance))}</strong><small>${currentMonthTransactions.length ? `${money(currentMonthLedger.income)} in · ${money(currentMonthLedger.expense)} out` : "No activity recorded this month"}</small></article>
+      <article class="card metric"><span>Safety reserve</span><strong>${percent(emergency)}</strong><div class="bar"><span style="width:${Math.min(Math.round(emergency * 100), 100)}%"></span></div><small>${money(state.emergency.current)} of ${money(state.emergency.target)}${Number.isFinite(emergencyMonths) ? ` · ${emergencyMonths} months to target` : ""}</small></article>
+      <article class="card metric"><span>Monthly investment mandate</span><strong>${money(state.dca.monthly)}</strong><small>${state.trades.length} contributions recorded · long-term allocation plan</small></article>
+    </div>
+    <div class="cfo-grid">
+      <article class="card panel cfo-briefing">
+        <div class="panel-head"><div><span class="eyebrow">Personal CFO Briefing</span><h3>${primaryCoach ? escapeHtml(primaryCoach.title) : "Continue the plan"}</h3></div><span class="gold-marker">Priority</span></div>
+        <p class="mission-explanation">${primaryCoach ? escapeHtml(primaryCoach.body) : "Your plan has no urgent exceptions. Stay consistent with the next scheduled contribution."}</p>
+        <ol class="weekly-actions">${actions.slice(0, 3).map((action, index) => `<li><b>${String(index + 1).padStart(2, "0")}</b><span>${escapeHtml(action)}</span></li>`).join("")}</ol>
+        <button class="text-button dashboard-nav" data-page="advisor" type="button">View full guidance <span aria-hidden="true">→</span></button>
+      </article>
+      <article class="card panel monthly-review-card">
+        <div class="panel-head"><div><span class="eyebrow">Monthly Position</span><h3>Cash-flow discipline</h3></div><button class="text-button dashboard-nav" data-page="ledger" type="button">Activity →</button></div>
+        <div class="change-list">
+          <div><span>Recorded spending</span><strong>${money(currentMonthLedger.expense)}</strong><small>${expenseChange === null ? "A second month unlocks trend comparison." : `${expenseChange <= 0 ? "Lower" : "Higher"} by ${percent(Math.abs(expenseChange), 0)} month over month.`}</small></div>
+          <div><span>Assignable surplus</span><strong>${money(monthlySurplus(state))}</strong><small>${planOnTrack ? "Current DCA mandate is covered." : `DCA funding gap: ${money(state.dca.monthly - monthlySurplus(state))}.`}</small></div>
+          <div><span>Opportunity liquidity</span><strong>${money(opportunity)}</strong><small>${state.opportunity.used > 0 ? `${money(state.opportunity.used)} deployed under your rules.` : "Held for predefined deployment conditions."}</small></div>
+        </div>
       </article>
     </div>
-    ${portfolioChartSection(state)}
+    <article class="card panel wealth-journey">
+      <div class="panel-head"><div><span class="eyebrow">Wealth Journey</span><h3>${nextGoal ? escapeHtml(nextGoal.name) : "Define your next milestone"}</h3></div><button class="text-button dashboard-nav" data-page="goals" type="button">All goals →</button></div>
+      ${nextGoal ? `<div class="journey-layout"><div class="goal-ring" style="--progress:${Math.round(nextGoalRatio * 360)}deg"><span><strong>${percent(nextGoalRatio)}</strong><small>funded</small></span></div><div><strong class="journey-amount">${money(nextGoal.current)}</strong><p>toward ${money(nextGoal.target)}. ${nextGoal.monthlyContribution > 0 ? `At ${money(nextGoal.monthlyContribution)} monthly, the current plan has approximately ${Math.ceil(Math.max(nextGoal.target - nextGoal.current, 0) / nextGoal.monthlyContribution)} months remaining.` : "Add a monthly contribution to establish a projected timeline."}</p><div class="milestone-line"><i></i><span>Today</span><i></i><span>Next milestone</span><i class="gold"></i><span>Target</span></div></div></div>` : '<p class="empty-state">Create a goal to turn long-term wealth building into a visible, measurable journey.</p>'}
+    </article>
   `;
-}
-
-function healthRow(name: string, value: number, note: string): string {
-  const pct = Math.round(value * 100);
-  return '<div class="health-row"><div class="h-label"><strong>' + name + '</strong><small>' + note + '</small></div><div class="bar"><span style="width:' + pct + '%"></span></div><div class="h-value">' + pct + '%</div></div>';
 }
 
 function portfolioChartSection(state: WealthState): string {
@@ -186,7 +238,7 @@ function portfolioChartSection(state: WealthState): string {
 
   return `
     <article class="card panel">
-      <div class="panel-head"><div><span class="eyebrow">Asset Allocation</span><h3>投资配置图</h3></div><strong style="color:var(--green);">${totalMoney}</strong></div>
+      <div class="panel-head"><div><span class="eyebrow">Asset Allocation</span><h3>Portfolio Allocation</h3></div><strong style="color:var(--green);">${totalMoney}</strong></div>
       <div class="chart-grid">
         <div>
           ${chartData.map((d) => {
@@ -270,10 +322,19 @@ function portfolioTemplate(state: WealthState): string {
         '</tr>';
     }).join("");
 
+  const allocationHealth = portfolio.maxAbsoluteDrift <= 0.05 ? "Aligned" : portfolio.maxAbsoluteDrift <= 0.1 ? "Monitor" : "Rebalance";
   return `
-    <div class="terminal-grid">
-      <article class="card panel">
-        <div class="panel-head"><div><span class="eyebrow">Trade Capture</span><h3>新增交易记录</h3></div><span style="color:var(--muted);font-size:12px;">Moomoo</span></div>
+    <section class="portfolio-hero card">
+      <div><span class="eyebrow">Long-term Investment Portfolio</span><strong>${money(portfolio.totalInvestedMyr)}</strong><p>Capital contributed across ${portfolio.positions.length} holdings · USD ${portfolio.totalInvestedUsd.toFixed(2)} cost basis</p></div>
+      <div class="portfolio-health"><span>Allocation health</span><strong>${allocationHealth}</strong><small>Largest drift ${percent(portfolio.maxAbsoluteDrift, 1)}</small></div>
+    </section>
+    <div class="portfolio-command-grid">
+      <article class="card panel portfolio-allocation-panel">
+        <div class="panel-head"><div><span class="eyebrow">Strategic Allocation</span><h3>Portfolio structure</h3></div><span class="status-pill ${portfolio.maxAbsoluteDrift <= 0.08 ? "positive" : "attention"}">${allocationHealth}</span></div>
+        ${portfolio.positions.length ? `<div class="portfolio-positions">${portfolio.positions.map((position, index) => `<div class="position-card"><div class="position-identity"><span class="position-index">${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(position.ticker)}</strong><small>${position.ticker === "VOO" ? "Core market exposure" : position.ticker === "QQQM" ? "Growth allocation" : "Portfolio holding"}</small></div></div><div class="position-value"><strong>${money(position.investedMyr)}</strong><small>${percent(position.actualAllocation)} of portfolio</small></div><div class="allocation-track"><span style="width:${Math.min(position.actualAllocation * 100, 100)}%"></span><i style="left:${Math.min(position.targetAllocation * 100, 100)}%" title="Target ${percent(position.targetAllocation)}"></i></div><div class="position-meta"><span>Target ${percent(position.targetAllocation)}</span><span class="${Math.abs(position.drift) > 0.08 ? "negative" : "positive"}">${position.drift >= 0 ? "+" : ""}${percent(position.drift, 1)} drift</span></div></div>`).join("")}</div>` : '<p class="empty-state">No portfolio positions yet. Record a contribution to establish your long-term allocation.</p>'}
+      </article>
+      <article class="card panel contribution-panel">
+        <div class="panel-head"><div><span class="eyebrow">Contribution Record</span><h3>Add investment activity</h3></div><span class="panel-note">Cost basis</span></div>
         <form id="tradeForm" class="form-grid">
           <label>Date<input name="date" type="date" required></label>
           <label>Ticker<select name="ticker" id="tickerSelect"><option>VOO</option><option>QQQM</option>${state.customTickers.map((t) => '<option>' + escapeHtml(t) + '</option>').join('')}<option value="__custom__">+ Custom</option></select></label>
@@ -284,29 +345,31 @@ function portfolioTemplate(state: WealthState): string {
           ${numberInput("priceUsd", "Price / Unit USD")}
           ${numberInput("feeMyr", "Fee MYR", "0")}
           <label>Notes<input name="notes" type="text" placeholder="Optional"></label>
-          <button class="primary-button" type="submit">Add Record</button>
+          <button class="primary-button" type="submit">Record contribution</button>
         </form>
         <div class="import-box">
-          <label class="file-button">Import CSV (Moomoo / Excel)<input id="csvInput" type="file" accept=".csv"></label>
-          <small>Supports Moomoo Universal Account export & custom CSV (Date, Ticker, Amount, Price, Type).</small>
+          <label class="file-button">Import broker CSV<input id="csvInput" type="file" accept=".csv"></label>
+          <small>Moomoo and custom transaction exports are supported.</small>
         </div>
       </article>
-      <article class="card panel">
-        <div class="panel-head"><div><span class="eyebrow">Allocation Desk</span><h3>组合配置</h3></div><strong style="color:var(--green);">${money(portfolio.totalInvestedMyr)}</strong></div>
+    </div>
+    <details class="card panel portfolio-details">
+      <summary><div><span class="eyebrow">Position Detail</span><h3>Cost basis and allocation data</h3></div><span>${portfolio.positions.length} holdings</span></summary>
+      <div class="portfolio-details-content">
         <div class="table-wrap compact-table">
           <table>
             <thead><tr><th>Ticker</th><th>Invested MYR</th><th>Invested USD</th><th>Units</th><th>Avg Cost</th><th>Actual / Target</th><th>Drift</th></tr></thead>
             <tbody>${positionRows}</tbody>
           </table>
         </div>
-      </article>
-    </div>
-    <article class="card panel">
-      <div class="panel-head"><div><span class="eyebrow">Investment Ledger</span><h3>交易流水</h3></div><span style="color:var(--muted);font-size:12px;">${state.trades.length} records</span></div>
+      </div>
+    </details>
+    <article class="card panel portfolio-activity">
+      <div class="panel-head"><div><span class="eyebrow">Portfolio Activity</span><h3>Contribution history</h3></div><span class="panel-note">${state.trades.length} records</span></div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Date</th><th>Platform</th><th>Ticker</th><th>Type</th><th>Amount MYR</th><th>Amount USD</th><th>Price USD</th><th>Units</th><th></th></tr></thead>
-          <tbody>${tradeRows || '<tr><td colspan="9" class="empty-state">还没有交易记录。添加第一笔交易开始追踪。</td></tr>'}</tbody>
+          <tbody>${tradeRows || '<tr><td colspan="9" class="empty-state">No transactions yet. Add your first transaction to begin tracking.</td></tr>'}</tbody>
         </table>
       </div>
     </article>
@@ -315,13 +378,13 @@ function portfolioTemplate(state: WealthState): string {
 
 function marketTemplate(_state: WealthState): string {
   const tabs = [
-    { id: "chart", label: "📊 Chart", icon: "" },
-    { id: "pnl", label: "💰 P&L", icon: "" },
-    { id: "risk", label: "📈 Risk", icon: "" },
-    { id: "dividends", label: "💵 Dividends", icon: "" },
-    { id: "sectors", label: "🏭 Sectors", icon: "" },
-    { id: "compare", label: "⚖️ Compare", icon: "" },
-    { id: "calendar", label: "📅 Calendar", icon: "" },
+    { id: "chart", label: "Long-term view", icon: "" },
+    { id: "pnl", label: "Your position", icon: "" },
+    { id: "risk", label: "Risk", icon: "" },
+    { id: "dividends", label: "Income", icon: "" },
+    { id: "sectors", label: "Composition", icon: "" },
+    { id: "compare", label: "Compare", icon: "" },
+    { id: "calendar", label: "Context", icon: "" },
   ];
 
   const tabButtons = tabs.map((t, i) =>
@@ -329,38 +392,34 @@ function marketTemplate(_state: WealthState): string {
   ).join("");
 
   return `
-    <div class="section-title">
-      <span class="eyebrow">TradingView · Professional Charts</span>
-      <h3>📊 行情追踪</h3>
-      <p>VOO / QQQM K线走势 · 技术指标 · 十字光标</p>
+    <section class="market-hero card">
+      <div><span class="eyebrow">Investment Intelligence</span><h3>Research with a long-term lens</h3><p>Use market information to understand ownership, risk and valuation—not to react to daily noise.</p></div>
+      <div class="market-principle"><span>Current principle</span><strong>Context before action</strong><small>Review the mandate before changing allocation.</small></div>
+    </section>
+
+    <div class="market-toolbar">
+      <div class="market-symbols" role="group" aria-label="Select investment">
+        <button class="market-symbol-btn active" data-symbol="VOO" type="button"><strong>VOO</strong><small>Core market</small></button>
+        <button class="market-symbol-btn" data-symbol="QQQM" type="button"><strong>QQQM</strong><small>Growth allocation</small></button>
+      </div>
+      <span class="market-data-note">Market data may be delayed</span>
     </div>
 
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-      <button class="market-symbol-btn active" data-symbol="VOO" type="button"
-        style="padding:10px 20px;border-radius:10px;border:2px solid var(--green);background:var(--green-dim);color:var(--green);font-weight:700;font-size:14px;cursor:pointer;transition:all 0.2s;">
-        VOO
-      </button>
-      <button class="market-symbol-btn" data-symbol="QQQM" type="button"
-        style="padding:10px 20px;border-radius:10px;border:2px solid var(--line);background:var(--surface);color:var(--ink);font-weight:700;font-size:14px;cursor:pointer;transition:all 0.2s;">
-        QQQM
-      </button>
-    </div>
-
-    <div class="market-tabs" style="display:flex;gap:4px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px;">
+    <div class="market-tabs" role="tablist" aria-label="Market research views">
       ${tabButtons}
     </div>
 
     <!-- Chart Tab -->
     <div class="market-tab-content active" data-tab-content="chart">
-      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
-        <button class="interval-btn active" data-interval="D" type="button">1D</button>
+      <div class="market-view-head"><div><span class="eyebrow">Price Context</span><h3>Historical perspective</h3></div><div class="market-intervals" role="group" aria-label="Chart period">
+        <button class="interval-btn" data-interval="D" type="button">1D</button>
         <button class="interval-btn" data-interval="W" type="button">1W</button>
         <button class="interval-btn" data-interval="M" type="button">1M</button>
         <button class="interval-btn" data-interval="5" type="button">YTD</button>
-        <button class="interval-btn" data-interval="12M" type="button">1Y</button>
+        <button class="interval-btn active" data-interval="12M" type="button">1Y</button>
         <button class="interval-btn" data-interval="60M" type="button">5Y</button>
-      </div>
-      <article class="card panel" style="padding:0;overflow:hidden;">
+      </div></div>
+      <article class="card market-chart-card">
         <div id="tradingview_container" style="width:100%;height:520px;"></div>
       </article>
     </div>
@@ -523,7 +582,7 @@ function marketTemplate(_state: WealthState): string {
 
 function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
   let currentSymbol = "VOO";
-  let currentInterval = "D";
+  let currentInterval = "12M";
 
   function createWidget(symbol: string, interval: string) {
     const container = root.querySelector<HTMLElement>("#tradingview_container");
@@ -543,12 +602,12 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
       theme: isDark ? "dark" : "light",
       style: "1",
       locale: "en",
-      hide_volume: false,
+      hide_volume: true,
       allow_symbol_change: true,
-      hide_side_toolbar: false,
+      hide_side_toolbar: true,
       withdateranges: true,
-      details: true,
-      studies: ["STD;RSI", "STD;MACD"],
+      details: false,
+      studies: [],
       container_id: "tradingview_container",
     };
 
@@ -1045,6 +1104,60 @@ function tradeTypeTextColor(type: string): string {
   }
 }
 
+let ledgerFilters: LedgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "" };
+let ledgerEditingId = "";
+let ledgerHistoryOpen = false;
+let ledgerCategoriesOpen = false;
+
+function localDateValue(iso?: string): string {
+  const date = iso ? new Date(iso) : new Date();
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function ledgerTemplate(state: WealthState): string {
+  const filtered = filterLedgerTransactions(state.ledgerTransactions, ledgerFilters);
+  const totals = ledgerTotals(filtered);
+  const editing = state.ledgerTransactions.find((transaction) => transaction.id === ledgerEditingId);
+  const entryType = editing?.type ?? "expense";
+  const entryCategories = state.ledgerCategories.filter((category) => category.type === entryType);
+  const expenses = categoryTotals(filtered, state.ledgerCategories, "expense");
+  const palette = ["#ef6461", "#f59e0b", "#8b5cf6", "#3b82f6", "#14b8a6", "#ec4899", "#84cc16"];
+  let angle = 0;
+  const donut = expenses.length ? expenses.map((item, index) => {
+    const start = angle;
+    angle += item.share * 360;
+    return `${palette[index % palette.length]} ${start.toFixed(1)}deg ${angle.toFixed(1)}deg`;
+  }).join(",") : "var(--surface-2) 0deg 360deg";
+  const maxCategory = Math.max(...expenses.map((item) => item.amount), 1);
+  const monthly = monthlyLedgerTotals(state.ledgerTransactions, new Date().getFullYear());
+  const monthlyMax = Math.max(...monthly.flatMap((item) => [item.income, item.expense]), 1);
+  const categoryOptions = state.ledgerCategories.map((category) => `<option value="${escapeHtml(category.id)}"${ledgerFilters.categoryId === category.id ? " selected" : ""}>${escapeHtml(category.icon + " " + category.label)}</option>`).join("");
+  const transactionRows = filtered.map((transaction) => {
+    const category = state.ledgerCategories.find((item) => item.id === transaction.categoryId);
+    return `<article class="ledger-row"><div class="ledger-row-icon">${escapeHtml(category?.icon ?? "•")}</div><div class="ledger-row-copy"><strong>${escapeHtml(category?.label ?? "Unknown category")}</strong><small>${new Date(transaction.date).toLocaleDateString()}${transaction.note ? " · " + escapeHtml(transaction.note) : ""}</small></div><strong class="ledger-amount ${transaction.type}">${transaction.type === "income" ? "+" : "−"}${money(transaction.amount)}</strong><div class="ledger-row-actions"><button class="icon-button edit-ledger" data-id="${escapeHtml(transaction.id)}" aria-label="Edit transaction">✎</button><button class="icon-button danger delete-ledger" data-id="${escapeHtml(transaction.id)}" aria-label="Delete transaction">✕</button></div></article>`;
+  }).join("");
+
+  return `<div class="section-title"><span class="eyebrow">Everyday Money</span><h3>Ledger / 记账</h3><p>Capture income and expenses quickly, then understand where your money goes.</p></div>
+    <div class="ledger-layout">
+      <article class="card panel ledger-entry"><div class="panel-head"><div><span class="eyebrow">Quick Entry</span><h3>${editing ? "Edit Transaction" : "Add Transaction"}</h3></div>${editing ? '<button id="cancelLedgerEdit" class="secondary-button" type="button">Cancel</button>' : ""}</div>
+        <form id="ledgerForm"><input name="id" type="hidden" value="${escapeHtml(editing?.id ?? "")}"><div class="ledger-type-toggle" role="group" aria-label="Transaction type"><button type="button" data-ledger-type="expense" class="${entryType === "expense" ? "active expense" : ""}">− Expense</button><button type="button" data-ledger-type="income" class="${entryType === "income" ? "active income" : ""}">+ Income</button></div><input name="type" type="hidden" value="${entryType}">
+          <label class="ledger-amount-input"><span>Amount (MYR)</span><input id="ledgerAmount" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required value="${editing?.amount ?? ""}" placeholder="0.00"></label>
+          <fieldset class="category-picker"><legend>Category</legend>${entryCategories.map((category, index) => `<label><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === editing?.categoryId || (!editing && index === 0) ? " checked" : ""}><span><b>${escapeHtml(category.icon)}</b>${escapeHtml(category.label)}</span></label>`).join("")}</fieldset>
+          <details class="ledger-more"${editing ? " open" : ""}><summary>Date & note</summary><div class="form-grid"><label>Date<input name="date" type="date" required value="${localDateValue(editing?.date)}"></label><label>Note<input name="note" maxlength="500" value="${escapeHtml(editing?.note ?? "")}" placeholder="Optional"></label></div></details><p id="ledgerFormError" class="form-error" role="alert"></p><button class="primary-button ledger-save" type="submit">${editing ? "Save Changes" : "Save Transaction"}</button>
+        </form>
+      </article>
+      <div class="ledger-main">
+        <div class="ledger-summary"><article class="card"><span>Income / 收入</span><strong class="income">+${money(totals.income)}</strong></article><article class="card"><span>Expenses / 支出</span><strong class="expense">−${money(totals.expense)}</strong></article><article class="card"><span>Net / 净额</span><strong class="${totals.balance >= 0 ? "income" : "expense"}">${totals.balance >= 0 ? "+" : "−"}${money(Math.abs(totals.balance))}</strong></article></div>
+        <article class="card panel ledger-filters"><form id="ledgerFilterForm"><div class="filter-presets">${(["week", "month", "year", "custom"] as const).map((preset) => `<button type="button" data-preset="${preset}" class="${ledgerFilters.preset === preset ? "active" : ""}">${preset === "week" ? "This week" : preset === "month" ? "This month" : preset === "year" ? "This year" : "Custom"}</button>`).join("")}</div><div class="ledger-filter-fields ${ledgerFilters.preset === "custom" ? "show-custom" : ""}"><label class="custom-date">From<input name="startDate" type="date" value="${ledgerFilters.startDate}"></label><label class="custom-date">To<input name="endDate" type="date" value="${ledgerFilters.endDate}"></label><label>Type<select name="type"><option value="all">All types</option><option value="expense"${ledgerFilters.type === "expense" ? " selected" : ""}>Expense</option><option value="income"${ledgerFilters.type === "income" ? " selected" : ""}>Income</option></select></label><label>Category<select name="categoryId"><option value="">All categories</option>${categoryOptions}</select></label><label>Search note<input name="query" type="search" value="${escapeHtml(ledgerFilters.query)}" placeholder="Keyword"></label><button class="secondary-button" id="resetLedgerFilters" type="button">Reset</button></div></form></article>
+        <div class="ledger-report-grid"><article class="card panel"><div class="panel-head"><div><span class="eyebrow">Expense Mix</span><h3>Category Share</h3></div></div>${expenses.length ? `<div class="ledger-donut-wrap"><div class="ledger-donut" style="background:conic-gradient(${donut})"><span>${money(totals.expense)}</span></div><div class="ledger-legend">${expenses.map((item, index) => `<div><i style="background:${palette[index % palette.length]}"></i><span>${escapeHtml(item.category.icon + " " + item.category.label)}</span><strong>${percent(item.share, 1)}</strong></div>`).join("")}</div></div><div class="ledger-bars">${expenses.map((item, index) => `<div><span>${escapeHtml(item.category.label)}</span><div><i style="width:${(item.amount / maxCategory) * 100}%;background:${palette[index % palette.length]}"></i></div><strong>${money(item.amount)}</strong></div>`).join("")}</div>` : '<p class="empty-state">No expense data in this period.</p>'}</article>
+          <article class="card panel"><div class="panel-head"><div><span class="eyebrow">Annual Overview</span><h3>Monthly Income vs Expense</h3></div></div><div class="monthly-chart">${monthly.map((item) => `<div class="month-column"><div class="month-bars"><i class="income" style="height:${Math.max(item.income / monthlyMax * 100, item.income ? 3 : 0)}%" title="Income ${money(item.income)}"></i><i class="expense" style="height:${Math.max(item.expense / monthlyMax * 100, item.expense ? 3 : 0)}%" title="Expense ${money(item.expense)}"></i></div><small>${new Date(2000, item.month).toLocaleString("en", { month: "short" }).slice(0, 1)}</small></div>`).join("")}</div><div class="chart-key"><span><i class="income"></i>Income</span><span><i class="expense"></i>Expense</span></div></article></div>
+        <details id="ledgerHistoryPanel" class="card panel ledger-collapsible"${ledgerHistoryOpen ? " open" : ""}><summary><div><span class="eyebrow">Transactions</span><h3>History</h3></div><span class="ledger-collapsible-meta">${filtered.length} records</span></summary><div class="ledger-collapsible-content"><div class="ledger-list">${transactionRows || '<p class="empty-state">No transactions match this view. Add your first record above.</p>'}</div></div></details>
+        <details id="ledgerCategoriesPanel" class="card panel ledger-collapsible"${ledgerCategoriesOpen ? " open" : ""}><summary><div><span class="eyebrow">Custom Labels</span><h3>Category Manager</h3></div><span class="ledger-collapsible-meta">${state.ledgerCategories.length} categories</span></summary><div class="ledger-collapsible-content"><form id="ledgerCategoryForm" class="category-form"><label>Icon<input name="icon" maxlength="12" value="✨" required></label><label>Label<input name="label" maxlength="40" placeholder="Category name" required></label><label>Type<select name="type"><option value="expense">Expense</option><option value="income">Income</option></select></label><button class="primary-button" type="submit">Add Category</button></form><div class="category-manager">${state.ledgerCategories.map((category) => `<div><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)} <small>${category.type}</small></span><button class="secondary-button edit-category" data-id="${escapeHtml(category.id)}" type="button">Edit</button><button class="icon-button danger delete-category" data-id="${escapeHtml(category.id)}" aria-label="Delete ${escapeHtml(category.label)}">✕</button></div>`).join("")}</div></div></details>
+      </div>
+    </div>`;
+}
+
 function bucketsTemplate(state: WealthState): string {
   const surplus = Math.max(monthlySurplus(state), 1);
   const bucketCards = state.buckets.map((bucket, index) => {
@@ -1084,7 +1197,7 @@ function bucketsTemplate(state: WealthState): string {
   '</article>';
 
   return `
-    <div class="section-title"><span class="eyebrow">Capital Routing</span><h3>月度资金分配矩阵</h3><p>把每一块钱安排到明确职责，减少情绪化消费和投资冲动。</p></div>
+    <div class="section-title"><span class="eyebrow">Capital Routing</span><h3>Monthly Fund Allocation Matrix</h3><p>Give every ringgit a clear purpose to reduce emotional spending and impulsive investing.</p></div>
     <div class="three-col-grid">
       ${bucketCards}
       ${addBucketCard}
@@ -1092,8 +1205,18 @@ function bucketsTemplate(state: WealthState): string {
   `;
 }
 
+function goalsWithIncompleteFirst(state: WealthState): Array<{ goal: WealthState["goals"][number]; originalIndex: number }> {
+  return state.goals
+    .map((goal, originalIndex) => ({ goal, originalIndex }))
+    .sort((a, b) => {
+      const aComplete = a.goal.target > 0 && a.goal.current >= a.goal.target;
+      const bComplete = b.goal.target > 0 && b.goal.current >= b.goal.target;
+      return Number(aComplete) - Number(bComplete);
+    });
+}
+
 function goalsTemplate(state: WealthState): string {
-  const goalCards = state.goals.map((goal, index) => {
+  const goalCards = goalsWithIncompleteFirst(state).map(({ goal, originalIndex }) => {
     const ratio = goal.target > 0 ? Math.min(goal.current / goal.target, 1) : 0;
     const months = goal.monthlyContribution > 0 ? Math.ceil(Math.max(goal.target - goal.current, 0) / goal.monthlyContribution) : null;
     const color = ratio >= 0.8 ? "var(--green)" : ratio >= 0.4 ? "var(--amber)" : "var(--ink)";
@@ -1102,15 +1225,15 @@ function goalsTemplate(state: WealthState): string {
     return '<article class="card data-card">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
         '<span class="eyebrow">' + escapeHtml(goal.name) + '</span>' +
-        '<button class="edit-goal secondary-button" data-index="' + index + '" type="button" style="font-size:11px;padding:4px 8px;">Edit</button>' +
+        '<button class="edit-goal secondary-button" data-index="' + originalIndex + '" type="button" style="font-size:11px;padding:4px 8px;">Edit</button>' +
       '</div>' +
       '<h3>' + escapeHtml(goal.label) + '</h3>' +
       '<strong style="color:' + color + ';">' + percent(ratio) + '</strong>' +
       '<div class="bar"><span style="width:' + Math.round(ratio * 100) + '%;background:' + barColor + ';"></span></div>' +
       '<small style="color:var(--ink-3);">' + money(goal.current) + ' / ' + money(goal.target) + extra + '</small>' +
       '<p>' + escapeHtml(goal.note) + '</p>' +
-      '<div class="goal-edit-form" id="goalEdit' + index + '" style="display:none;margin-top:12px;">' +
-        '<form class="form-grid goalForm" data-index="' + index + '">' +
+      '<div class="goal-edit-form" id="goalEdit' + originalIndex + '" style="display:none;margin-top:12px;">' +
+        '<form class="form-grid goalForm" data-index="' + originalIndex + '">' +
           '<label>Name<input name="name" type="text" value="' + escapeHtml(goal.name) + '"></label>' +
           '<label>Label<input name="label" type="text" value="' + escapeHtml(goal.label) + '"></label>' +
           numberInput("current", "Current MYR", String(goal.current), "1") +
@@ -1119,8 +1242,8 @@ function goalsTemplate(state: WealthState): string {
           '<label>Note<textarea name="note" rows="2">' + escapeHtml(goal.note) + '</textarea></label>' +
           '<div style="display:flex;gap:8px;">' +
             '<button class="primary-button" type="submit">Save</button>' +
-            '<button class="secondary-button cancel-goal-edit" type="button" data-index="' + index + '">Cancel</button>' +
-            '<button class="danger-button delete-goal" type="button" data-index="' + index + '">Delete</button>' +
+            '<button class="secondary-button cancel-goal-edit" type="button" data-index="' + originalIndex + '">Cancel</button>' +
+            '<button class="danger-button delete-goal" type="button" data-index="' + originalIndex + '">Delete</button>' +
           '</div>' +
         '</form>' +
       '</div>' +
@@ -1135,7 +1258,7 @@ function goalsTemplate(state: WealthState): string {
   '</article>';
 
   return `
-    <div class="section-title"><span class="eyebrow">Goal System</span><h3>目标与愿望清单</h3><p>目标不是为了限制生活，而是给每笔钱一个清楚的方向。</p></div>
+    <div class="section-title"><span class="eyebrow">Goal System</span><h3>Goals and Wishlist</h3><p>Goals do not restrict your life; they give every ringgit a clear direction.</p></div>
     <div class="two-col-grid">
       ${goalCards}
       ${addGoalCard}
@@ -1157,11 +1280,11 @@ function advisorPageTemplate(state: WealthState): string {
   return `
     <div class="terminal-grid">
       <article class="card panel advisor-panel">
-        <div class="panel-head"><div><span class="eyebrow">Advisor Engine</span><h3>理财规划师建议</h3></div><span style="color:var(--muted);font-size:12px;">Rules-based</span></div>
+        <div class="panel-head"><div><span class="eyebrow">Advisor Engine</span><h3>Financial Planning Guidance</h3></div><span style="color:var(--muted);font-size:12px;">Rules-based</span></div>
         <div class="advice-list">${advisorMessages(state).map(adviceCard).join("")}</div>
       </article>
       <article class="card panel">
-        <div class="panel-head"><div><span class="eyebrow">Scenario Check</span><h3>补仓触发器</h3></div><span style="color:var(--muted);font-size:12px;">Bear Market Plan</span></div>
+        <div class="panel-head"><div><span class="eyebrow">Scenario Check</span><h3>Dip-Buy Trigger</h3></div><span style="color:var(--muted);font-size:12px;">Bear Market Plan</span></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
           <div style="flex:1;min-width:140px;background:var(--surface);border-radius:8px;padding:10px 12px;">
             <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">🎯 Opportunity Reserve</div>
@@ -1181,7 +1304,7 @@ function advisorPageTemplate(state: WealthState): string {
           <label>Market Drawdown %<input id="drawdownInput" type="number" min="0" max="80" step="1" value="0"></label>
           <button class="primary-button" type="submit">Check Rule</button>
         </form>
-        <div id="drawdownResult" class="scenario-result">输入市场从高点回撤幅度，系统会判断是否触发补仓资金。</div>
+        <div id="drawdownResult" class="scenario-result">Enter the market drawdown from its peak to check whether reserve deployment is triggered.</div>
         <div class="table-wrap compact-table">
           <table><thead><tr><th>Trigger</th><th>Reserve %</th><th>Amount</th><th>VOO / QQQM</th><th>Status</th></tr></thead><tbody>${trancheRows}</tbody></table>
         </div>
@@ -1195,18 +1318,36 @@ function adviceCard(msg: AdvisorMessage): string {
 }
 
 function rulesTemplate(state: WealthState): string {
-  const items = [
-    ["Monthly Cashflow", "💰 " + money(state.cashflow.allowance) + " allowance, " + money(monthlyBasicExpense(state)) + " basic spending, " + money(monthlySurplus(state)) + " assignable surplus."],
-    ["DCA Mandate", "📈 " + money(state.dca.monthly) + " per month. VOO " + percent(state.dca.targets.VOO) + " / QQQM " + percent(state.dca.targets.QQQM) + "."],
-    ["Emergency Fund", "🛡️ " + money(state.emergency.current) + " / " + money(state.emergency.target) + ". Estimated annual yield: " + money(projectedAnnualEmergencyYield(state)) + "."],
-    ["Opportunity Reserve", "🎯 " + money(state.opportunity.total) + " one-time reserve. Split " + money(state.opportunity.allocation.VOO) + " VOO / " + money(state.opportunity.allocation.QQQM) + " QQQM."],
-    ["Bear Market Deployment", "🐻 -10% deploy MYR 80, -15% deploy MYR 120, -20% deploy MYR 200."],
-    ["Age-stage Policy", "👤 At " + state.profile.age + ", growth assets may dominate only while emergency and cashflow rules remain intact."],
-    ["Data Safety", "💾 All data is stored locally in this browser. Export JSON before switching browsers or devices."],
+  const defaultItems: Array<{ id: RuleCardId; title: string; body: string }> = [
+    { id: "monthly-cashflow", title: "Monthly Cashflow", body: "💰 " + money(state.cashflow.allowance) + " allowance, " + money(monthlyBasicExpense(state)) + " basic spending, " + money(monthlySurplus(state)) + " assignable surplus." },
+    { id: "dca-mandate", title: "DCA Mandate", body: "📈 " + money(state.dca.monthly) + " per month. VOO " + percent(state.dca.targets.VOO) + " / QQQM " + percent(state.dca.targets.QQQM) + "." },
+    { id: "emergency-fund", title: "Emergency Fund", body: "🛡️ " + money(state.emergency.current) + " / " + money(state.emergency.target) + ". Estimated annual yield: " + money(projectedAnnualEmergencyYield(state)) + "." },
+    { id: "opportunity-reserve", title: "Opportunity Reserve", body: "🎯 " + money(state.opportunity.total) + " one-time reserve. Split " + money(state.opportunity.allocation.VOO) + " VOO / " + money(state.opportunity.allocation.QQQM) + " QQQM." },
+    { id: "bear-market-deployment", title: "Bear Market Deployment", body: "🐻 -10% deploy MYR 80, -15% deploy MYR 120, -20% deploy MYR 200." },
+    { id: "age-stage-policy", title: "Age-stage Policy", body: "👤 At " + state.profile.age + ", growth assets may dominate only while emergency and cashflow rules remain intact." },
+    { id: "data-safety", title: "Data Safety", body: "💾 All data is stored locally in this browser. Export JSON before switching browsers or devices." },
   ];
-  return '<div class="three-col-grid">' + items.map(([title, body]) => {
-    return '<article class="card data-card"><span class="eyebrow">' + title + '</span><p>' + body + '</p></article>';
-  }).join("") + '</div>';
+  const items = defaultItems.map((item) => ({ ...item, ...state.ruleCardOverrides[item.id] }));
+  const cards = items
+    .filter((item) => !state.hiddenRuleIds.includes(item.id))
+    .map((item) => '<article class="card data-card rule-card"><div class="rule-card-head"><span class="eyebrow">' + escapeHtml(item.title) + '</span><div class="rule-card-actions"><button class="secondary-button edit-rule" data-rule-id="' + item.id + '" type="button" aria-label="Edit ' + escapeHtml(item.title) + ' rule">Edit</button><button class="icon-button danger delete-rule" data-rule-id="' + item.id + '" type="button" aria-label="Delete ' + escapeHtml(item.title) + ' rule" title="Delete rule">X</button></div></div><p style="white-space:pre-wrap;">' + escapeHtml(item.body) + '</p><form class="rule-edit-form" data-rule-id="' + item.id + '" hidden><label>Title<input name="title" maxlength="80" required value="' + escapeHtml(item.title) + '"></label><label>Content<textarea name="body" maxlength="2000" rows="5" required>' + escapeHtml(item.body) + '</textarea></label><p class="form-error" role="alert"></p><div class="rule-form-actions"><button class="primary-button" type="submit">Save</button><button class="secondary-button cancel-rule-edit" type="button">Cancel</button></div></form></article>');
+  if (state.ruleNotes.trim()) {
+    cards.push('<article class="card data-card rule-card"><div class="rule-card-head"><span class="eyebrow">' + escapeHtml(state.ruleNoteTitle || "Personal Rule Notes") + '</span><div class="rule-card-actions"><button class="secondary-button edit-rule-notes" type="button" aria-label="Edit personal rule notes">Edit</button><button class="icon-button danger delete-rule-notes" type="button" aria-label="Delete personal rule notes" title="Delete rule">X</button></div></div><p style="white-space:pre-wrap;">' + escapeHtml(state.ruleNotes.trim()) + '</p></article>');
+  }
+  return '<div class="three-col-grid">' + (cards.join("") || '<p class="empty-state">No rule cards remain. Add personal notes below to create a new rule.</p>') + '</div>' +
+    '<article class="card panel" style="margin-top:16px;">' +
+      '<div class="panel-head"><div><span class="eyebrow">Custom Rules</span><h3>Rule Notes</h3></div><span style="color:var(--muted);font-size:12px;">Up to 5,000 characters</span></div>' +
+      '<form id="ruleNotesForm">' +
+        '<label for="ruleNoteTitle">Title</label>' +
+        '<input id="ruleNoteTitle" name="ruleNoteTitle" maxlength="80" value="" placeholder="e.g. Monthly Cashflow">' +
+        '<label for="ruleNotes">Add reminders, principles, or action items to your rules</label>' +
+        '<textarea id="ruleNotes" name="ruleNotes" maxlength="5000" rows="8" placeholder="Write your personal rules here..."></textarea>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-top:10px;">' +
+          '<button class="primary-button" type="submit">Save Notes</button>' +
+          '<span id="ruleNotesStatus" role="status" style="color:var(--green);font-size:12px;"></span>' +
+        '</div>' +
+      '</form>' +
+    '</article>';
 }
 
 function reviewTemplate(state: WealthState): string {
@@ -1219,20 +1360,20 @@ function reviewTemplate(state: WealthState): string {
   return `
     <div class="terminal-grid">
       <article class="card panel">
-        <div class="panel-head"><div><span class="eyebrow">Monthly Close</span><h3>月度复盘</h3></div><span style="color:var(--muted);font-size:12px;">Discipline</span></div>
+        <div class="panel-head"><div><span class="eyebrow">Monthly Close</span><h3>Monthly Review</h3></div><span style="color:var(--muted);font-size:12px;">Discipline</span></div>
         <form id="reviewForm" class="form-grid">
           <label>Month<input name="month" type="month" required></label>
           ${numberInput("income", "Income MYR", String(state.cashflow.allowance), "1")}
           ${numberInput("spending", "Spending MYR", String(monthlyBasicExpense(state)), "1")}
           <label>DCA Done?<select name="dcaDone"><option value="true">Yes</option><option value="false">No</option></select></label>
           ${numberInput("disciplineScore", "Discipline Score", "85", "1")}
-          <label class="wide-field">Notes<textarea name="notes" rows="4" placeholder="本月现金流、投资纪律、下月行动"></textarea></label>
+          <label class="wide-field">Notes<textarea name="notes" rows="4" placeholder="This month's cash flow, investment discipline, and next month's actions"></textarea></label>
           <button class="primary-button" type="submit">Save Review</button>
         </form>
       </article>
       <article class="card panel">
-        <div class="panel-head"><div><span class="eyebrow">Review Log</span><h3>历史记录</h3></div><span style="color:var(--muted);font-size:12px;">${state.reviews.length} months</span></div>
-        <div class="review-list">${reviewRows || '<p class="empty-state">还没有复盘记录。</p>'}</div>
+        <div class="panel-head"><div><span class="eyebrow">Review Log</span><h3>Review History</h3></div><span style="color:var(--muted);font-size:12px;">${state.reviews.length} months</span></div>
+        <div class="review-list">${reviewRows || '<p class="empty-state">No monthly reviews yet.</p>'}</div>
       </article>
     </div>
   `;
@@ -1240,7 +1381,7 @@ function reviewTemplate(state: WealthState): string {
 
 function settingsTemplate(state: WealthState): string {
   return `
-    <div class="section-title"><span class="eyebrow">Configuration</span><h3>个人资料与参数</h3><p>调整你的投资者资料、现金流和投资参数。</p></div>
+    <div class="section-title"><span class="eyebrow">Configuration</span><h3>Profile and Parameters</h3><p>Adjust your investor profile, cash flow, and investment parameters.</p></div>
     <div class="settings-grid">
       <article class="card settings-section">
         <h3>👤 Investor Profile</h3>
@@ -1337,7 +1478,7 @@ export function quickViewTemplate(state: WealthState): string {
   const emergency = emergencyRatio(state);
   const surplus = monthlySurplus(state);
   const investedMyr = portfolio.totalInvestedMyr;
-  const targetRows = state.goals.map((g) => {
+  const targetRows = goalsWithIncompleteFirst(state).map(({ goal: g }) => {
     const pct = g.target > 0 ? Math.min(Math.round(g.current / g.target * 100), 100) : 0;
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">' +
       '<span style="font-size:13px;color:var(--ink-2);">' + escapeHtml(g.label) + '</span>' +
@@ -1448,6 +1589,11 @@ function recordsFromCsv(text: string): Trade[] {
 }
 
 export function renderApp(root: HTMLElement, state: WealthState, setState: Setter, activePage = "dashboard", navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
+  calculatorCleanup.get(root)?.();
+  calculatorCleanup.delete(root);
+  sideRaysCleanup.get(root)?.();
+  sideRaysCleanup.delete(root);
+
   // Quick view — no sidebar, just condensed data
   if (activePage === "quick") {
     root.className = "app-shell";
@@ -1460,6 +1606,24 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
 
   root.className = "app-shell";
   root.innerHTML = shellTemplate(activePage, state, user);
+  keepActiveNavigationVisible(root);
+  const sideRays = root.querySelector<HTMLElement>("#sideRays");
+  if (sideRays) {
+    const cleanup = mountSideRays(sideRays, {
+      speed: 2.5,
+      rayColor1: "#EAB308",
+      rayColor2: "#96c8ff",
+      intensity: 2,
+      spread: 2,
+      origin: "top-right",
+      tilt: 0,
+      saturation: 1.5,
+      blend: 0.75,
+      falloff: 1.6,
+      opacity: 1,
+    });
+    sideRaysCleanup.set(root, cleanup);
+  }
   const mount = root.querySelector<HTMLElement>("#pageMount");
   if (!mount) return;
 
@@ -1467,8 +1631,10 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
     dashboard: dashboardTemplate(state),
     portfolio: portfolioTemplate(state),
     market: marketTemplate(state),
+    ledger: ledgerTemplate(state),
     buckets: bucketsTemplate(state),
     goals: goalsTemplate(state),
+    calculator: '<div id="investmentGrowthCalculator"></div>',
     advisor: advisorPageTemplate(state),
     rules: rulesTemplate(state),
     review: reviewTemplate(state),
@@ -1480,12 +1646,29 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   bindPage(root, state, setState, activePage, navigate);
 }
 
+function keepActiveNavigationVisible(root: HTMLElement): void {
+  const scrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
+  const activeItem = scrollArea?.querySelector<HTMLElement>(".nav-item.active");
+  if (!scrollArea || !activeItem) return;
+
+  const areaRect = scrollArea.getBoundingClientRect();
+  const itemRect = activeItem.getBoundingClientRect();
+  if (itemRect.top < areaRect.top) {
+    scrollArea.scrollTop -= areaRect.top - itemRect.top;
+  } else if (itemRect.bottom > areaRect.bottom) {
+    scrollArea.scrollTop += itemRect.bottom - areaRect.bottom;
+  }
+}
+
 function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
   const activePage = activePageFromNav(root) ?? "dashboard";
   const doNavigate = navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user));
 
   root.querySelectorAll<HTMLButtonElement>(".nav-item").forEach((button) => {
-    button.addEventListener("click", () => doNavigate(button.dataset.page ?? "dashboard"));
+    button.addEventListener("click", () => {
+      closeSidebar(root);
+      doNavigate(button.dataset.page ?? "dashboard");
+    });
   });
 
   root.querySelector<HTMLButtonElement>("#themeToggle")?.addEventListener("click", () => {
@@ -1507,23 +1690,7 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     (window as unknown as Record<string, () => Promise<void>>).__pwoInstall?.();
   });
 
-  // Hamburger menu toggle
-  const hamburger = root.querySelector<HTMLButtonElement>("#hamburgerBtn");
-  const sidebar = root.querySelector<HTMLElement>("#sidebar");
-  const overlay = root.querySelector<HTMLElement>("#sidebarOverlay");
-  const toggleSidebar = () => {
-    sidebar?.classList.toggle("open");
-    overlay?.classList.toggle("visible");
-  };
-  hamburger?.addEventListener("click", toggleSidebar);
-  overlay?.addEventListener("click", toggleSidebar);
-  // Close sidebar when nav item clicked on mobile
-  sidebar?.querySelectorAll<HTMLElement>(".nav-item").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      sidebar?.classList.remove("open");
-      overlay?.classList.remove("visible");
-    });
-  });
+  bindSidebar(root);
 
   root.querySelector<HTMLButtonElement>("#exportJson")?.addEventListener("click", () => exportState(state));
   root.querySelector<HTMLInputElement>("#importJson")?.addEventListener("change", async (event) => {
@@ -1546,6 +1713,36 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     localStorage.clear();
     setState(next);
     doNavigate("dashboard");
+  });
+}
+
+function closeSidebar(root: HTMLElement): void {
+  root.querySelector<HTMLElement>("#sidebar")?.classList.remove("open");
+  root.querySelector<HTMLElement>("#sidebarOverlay")?.classList.remove("visible");
+  root.querySelector<HTMLButtonElement>("#sidebarToggle")?.setAttribute("aria-expanded", "false");
+}
+
+function bindSidebar(root: HTMLElement): void {
+  const sidebar = root.querySelector<HTMLElement>("#sidebar");
+  const overlay = root.querySelector<HTMLElement>("#sidebarOverlay");
+  const toggle = root.querySelector<HTMLButtonElement>("#sidebarToggle");
+  if (!sidebar || !overlay || !toggle) return;
+
+  const openSidebar = (): void => {
+    sidebar.classList.add("open");
+    overlay.classList.add("visible");
+    toggle.setAttribute("aria-expanded", "true");
+  };
+
+  toggle.addEventListener("click", () => {
+    if (sidebar.classList.contains("open")) closeSidebar(root);
+    else openSidebar();
+  });
+  overlay.addEventListener("click", () => closeSidebar(root));
+  root.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !sidebar.classList.contains("open")) return;
+    closeSidebar(root);
+    toggle.focus();
   });
 }
 
@@ -1581,7 +1778,7 @@ function renderVersionHistoryModal(root: HTMLElement, state: WealthState, setSta
       '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line);">' +
         '<div>' +
           '<div style="font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.5px;">Version History</div>' +
-          '<div style="font-size:16px;font-weight:700;">📋 版本历史</div>' +
+          '<div style="font-size:16px;font-weight:700;">📋 Version History</div>' +
         '</div>' +
         '<div style="display:flex;gap:8px;align-items:center;">' +
           (snapshots.length > 0 ? '<button class="danger-button" id="clearAllSnapshots" style="font-size:11px;padding:4px 10px;">Clear All</button>' : '') +
@@ -1628,13 +1825,223 @@ function activePageFromNav(root: HTMLElement): string | undefined {
 }
 
 function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activePage: string, navigate?: Navigate): void {
+  root.querySelectorAll<HTMLButtonElement>(".dashboard-nav").forEach((button) => {
+    button.addEventListener("click", () => navigate?.(button.dataset.page ?? "dashboard"));
+  });
+  if (activePage === "calculator") {
+    const mount = root.querySelector<HTMLElement>("#investmentGrowthCalculator");
+    if (mount) {
+      let cancelled = false;
+      calculatorCleanup.set(root, () => {
+        cancelled = true;
+      });
+      import("./calculator/mountCalculator")
+        .then(({ mountCalculator }) => {
+          if (cancelled || !mount.isConnected) return;
+          const unmount = mountCalculator(mount);
+          calculatorCleanup.set(root, () => {
+            cancelled = true;
+            unmount();
+          });
+        })
+        .catch((error: unknown) => {
+          console.error("[Calculator] Failed to load", error);
+          if (!cancelled && mount.isConnected) {
+            mount.innerHTML = '<article class="card panel"><p class="form-error" role="alert">Calculator could not be loaded. Please refresh and try again.</p></article>';
+          }
+        });
+    }
+  }
   if (activePage === "portfolio") bindPortfolio(root, state, setState, navigate);
   if (activePage === "advisor") bindAdvisor(root, state);
   if (activePage === "review") bindReview(root, state, setState, navigate);
   if (activePage === "settings") bindSettings(root, state, setState, navigate);
   if (activePage === "goals") bindGoals(root, state, setState, navigate);
   if (activePage === "market") bindMarket(root, state, setState, navigate);
+  if (activePage === "ledger") bindLedger(root, state, setState, navigate);
   if (activePage === "buckets") bindBuckets(root, state, setState, navigate);
+  if (activePage === "rules") bindRules(root, state, setState, navigate);
+}
+
+function bindRules(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
+  const showRules = (next: WealthState, label: string): void => {
+    setState(next, label);
+    if (navigate) navigate("rules");
+    else renderApp(root, next, setState, "rules");
+  };
+
+  root.querySelectorAll<HTMLButtonElement>(".edit-rule").forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = button.closest<HTMLElement>(".rule-card")?.querySelector<HTMLFormElement>(".rule-edit-form");
+      if (!form) return;
+      form.hidden = false;
+      button.closest<HTMLElement>(".rule-card")?.classList.add("editing");
+      form.querySelector<HTMLInputElement>('input[name="title"]')?.focus();
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>(".cancel-rule-edit").forEach((button) => {
+    button.addEventListener("click", () => {
+      const card = button.closest<HTMLElement>(".rule-card");
+      const form = button.closest<HTMLFormElement>(".rule-edit-form");
+      if (form) form.hidden = true;
+      card?.classList.remove("editing");
+    });
+  });
+
+  root.querySelectorAll<HTMLFormElement>(".rule-edit-form").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const ruleId = form.dataset.ruleId as RuleCardId | undefined;
+      const error = form.querySelector<HTMLElement>(".form-error");
+      const data = new FormData(form);
+      const title = String(data.get("title") ?? "").trim().slice(0, 80);
+      const body = String(data.get("body") ?? "").trim().slice(0, 2000);
+      if (!ruleId || !title || !body) {
+        if (error) error.textContent = "Title and content are required.";
+        return;
+      }
+      showRules({ ...state, ruleCardOverrides: { ...state.ruleCardOverrides, [ruleId]: { title, body } } }, "Edit rule card");
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>(".delete-rule").forEach((button) => {
+    button.addEventListener("click", () => {
+      const ruleId = button.dataset.ruleId as RuleCardId | undefined;
+      if (!ruleId || state.hiddenRuleIds.includes(ruleId) || !confirm("Delete this rule card? A snapshot will be saved first.")) return;
+      showRules({ ...state, hiddenRuleIds: [...state.hiddenRuleIds, ruleId] }, "Delete rule card");
+    });
+  });
+
+  root.querySelector<HTMLButtonElement>(".delete-rule-notes")?.addEventListener("click", () => {
+    if (!confirm("Delete your personal rule notes? A snapshot will be saved first.")) return;
+    showRules({ ...state, ruleNoteTitle: "", ruleNotes: "" }, "Delete rule notes");
+  });
+
+  root.querySelector<HTMLButtonElement>(".edit-rule-notes")?.addEventListener("click", () => {
+    const titleInput = root.querySelector<HTMLInputElement>("#ruleNoteTitle");
+    const notesInput = root.querySelector<HTMLTextAreaElement>("#ruleNotes");
+    if (titleInput) titleInput.value = state.ruleNoteTitle;
+    if (notesInput) notesInput.value = state.ruleNotes;
+    titleInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+    titleInput?.focus({ preventScroll: true });
+  });
+
+  root.querySelector<HTMLFormElement>("#ruleNotesForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    const data = new FormData(form);
+    const ruleNoteTitle = String(data.get("ruleNoteTitle") ?? "").trim().slice(0, 80);
+    const ruleNotes = String(data.get("ruleNotes") ?? "").slice(0, 5000);
+    const next = { ...state, ruleNoteTitle, ruleNotes };
+    setState(next, "Update rules notes");
+    if (navigate) navigate("rules");
+    else renderApp(root, next, setState, "rules");
+  });
+}
+
+function bindLedger(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
+  const refresh = (next = state, label?: string) => {
+    if (next !== state) setState(next, label);
+    renderApp(root, next, setState, "ledger", navigate);
+  };
+
+  root.querySelector<HTMLDetailsElement>("#ledgerHistoryPanel")?.addEventListener("toggle", (event) => {
+    ledgerHistoryOpen = (event.currentTarget as HTMLDetailsElement).open;
+  });
+  root.querySelector<HTMLDetailsElement>("#ledgerCategoriesPanel")?.addEventListener("toggle", (event) => {
+    ledgerCategoriesOpen = (event.currentTarget as HTMLDetailsElement).open;
+  });
+
+  root.querySelector<HTMLInputElement>("#ledgerAmount")?.focus();
+  root.querySelectorAll<HTMLButtonElement>("[data-ledger-type]").forEach((button) => button.addEventListener("click", () => {
+    const type = button.dataset.ledgerType as LedgerTransactionType;
+    const form = root.querySelector<HTMLFormElement>("#ledgerForm");
+    const typeInput = form?.elements.namedItem("type") as HTMLInputElement | null;
+    const amount = (form?.elements.namedItem("amount") as HTMLInputElement | null)?.value ?? "";
+    const date = (form?.elements.namedItem("date") as HTMLInputElement | null)?.value ?? "";
+    const note = (form?.elements.namedItem("note") as HTMLInputElement | null)?.value ?? "";
+    ledgerEditingId = "";
+    const temporary = { ...state, ledgerTransactions: state.ledgerTransactions };
+    if (typeInput) typeInput.value = type;
+    renderApp(root, temporary, setState, "ledger", navigate);
+    const nextForm = root.querySelector<HTMLFormElement>("#ledgerForm");
+    const fields = { amount: nextForm?.elements.namedItem("amount"), date: nextForm?.elements.namedItem("date"), note: nextForm?.elements.namedItem("note"), type: nextForm?.elements.namedItem("type") };
+    if (fields.amount instanceof HTMLInputElement) fields.amount.value = amount;
+    if (fields.date instanceof HTMLInputElement) fields.date.value = date;
+    if (fields.note instanceof HTMLInputElement) fields.note.value = note;
+    if (fields.type instanceof HTMLInputElement) fields.type.value = type;
+    root.querySelectorAll<HTMLButtonElement>("[data-ledger-type]").forEach((item) => item.className = item.dataset.ledgerType === type ? `active ${type}` : "");
+    const picker = root.querySelector<HTMLElement>(".category-picker");
+    if (picker) picker.innerHTML = `<legend>Category</legend>${state.ledgerCategories.filter((category) => category.type === type).map((category, index) => `<label><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${index === 0 ? " checked" : ""}><span><b>${escapeHtml(category.icon)}</b>${escapeHtml(category.label)}</span></label>`).join("")}`;
+  }));
+
+  root.querySelector<HTMLFormElement>("#ledgerForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget as HTMLFormElement);
+    const amount = normalizeLedgerAmount(String(data.get("amount") ?? ""));
+    const type = String(data.get("type")) as LedgerTransactionType;
+    const categoryId = String(data.get("categoryId") ?? "");
+    const dateValue = String(data.get("date") ?? "");
+    const date = new Date(`${dateValue}T00:00:00`);
+    const error = root.querySelector<HTMLElement>("#ledgerFormError");
+    if (!amount || !["income", "expense"].includes(type) || !state.ledgerCategories.some((category) => category.id === categoryId && category.type === type) || !Number.isFinite(date.getTime())) {
+      if (error) error.textContent = "Enter a positive amount, valid date, and matching category.";
+      return;
+    }
+    const id = String(data.get("id") || createId("ledger"));
+    const note = String(data.get("note") ?? "").trim().slice(0, 500);
+    const transaction: LedgerTransaction = { id, amount, type, categoryId, date: date.toISOString(), ...(note ? { note } : {}) };
+    const exists = state.ledgerTransactions.some((item) => item.id === id);
+    const ledgerTransactions = exists ? state.ledgerTransactions.map((item) => item.id === id ? transaction : item) : [...state.ledgerTransactions, transaction];
+    ledgerEditingId = "";
+    refresh({ ...state, ledgerTransactions }, exists ? "Edit ledger transaction" : "Add ledger transaction");
+  });
+
+  root.querySelectorAll<HTMLButtonElement>(".edit-ledger").forEach((button) => button.addEventListener("click", () => { ledgerEditingId = button.dataset.id ?? ""; refresh(); }));
+  root.querySelector<HTMLButtonElement>("#cancelLedgerEdit")?.addEventListener("click", () => { ledgerEditingId = ""; refresh(); });
+  root.querySelectorAll<HTMLButtonElement>(".delete-ledger").forEach((button) => button.addEventListener("click", () => {
+    const id = button.dataset.id;
+    if (!id || !confirm("Delete this transaction? A snapshot will be saved first.")) return;
+    refresh({ ...state, ledgerTransactions: state.ledgerTransactions.filter((item) => item.id !== id) }, "Delete ledger transaction");
+  }));
+
+  const applyFilters = () => {
+    const form = root.querySelector<HTMLFormElement>("#ledgerFilterForm");
+    if (!form) return;
+    const data = new FormData(form);
+    ledgerFilters = { ...ledgerFilters, startDate: String(data.get("startDate") ?? ""), endDate: String(data.get("endDate") ?? ""), type: String(data.get("type")) as LedgerFilters["type"], categoryId: String(data.get("categoryId") ?? ""), query: String(data.get("query") ?? "") };
+    refresh();
+  };
+  root.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((button) => button.addEventListener("click", () => { ledgerFilters.preset = button.dataset.preset as LedgerFilters["preset"]; applyFilters(); }));
+  root.querySelectorAll<HTMLInputElement | HTMLSelectElement>("#ledgerFilterForm input, #ledgerFilterForm select").forEach((field) => field.addEventListener("change", applyFilters));
+  root.querySelector<HTMLInputElement>('#ledgerFilterForm input[name="query"]')?.addEventListener("search", applyFilters);
+  root.querySelector<HTMLButtonElement>("#resetLedgerFilters")?.addEventListener("click", () => { ledgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "" }; refresh(); });
+
+  root.querySelector<HTMLFormElement>("#ledgerCategoryForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget as HTMLFormElement);
+    const label = String(data.get("label") ?? "").trim().slice(0, 40);
+    const icon = String(data.get("icon") ?? "").trim().slice(0, 12) || "•";
+    const type = String(data.get("type")) as LedgerTransactionType;
+    if (!label || !["income", "expense"].includes(type)) return;
+    refresh({ ...state, ledgerCategories: [...state.ledgerCategories, { id: createId("category"), label, icon, type }] }, "Add ledger category");
+  });
+  root.querySelectorAll<HTMLButtonElement>(".edit-category").forEach((button) => button.addEventListener("click", () => {
+    const category = state.ledgerCategories.find((item) => item.id === button.dataset.id);
+    if (!category) return;
+    const label = prompt("Category label", category.label)?.trim();
+    if (!label) return;
+    const icon = prompt("Category icon", category.icon)?.trim() || "•";
+    refresh({ ...state, ledgerCategories: state.ledgerCategories.map((item) => item.id === category.id ? { ...item, label: label.slice(0, 40), icon: icon.slice(0, 12) } : item) }, "Edit ledger category");
+  }));
+  root.querySelectorAll<HTMLButtonElement>(".delete-category").forEach((button) => button.addEventListener("click", () => {
+    const id = button.dataset.id;
+    if (!id) return;
+    if (state.ledgerTransactions.some((transaction) => transaction.categoryId === id)) { alert("This category is used by existing transactions. Reassign or delete those transactions first."); return; }
+    if (!confirm("Delete this unused category?")) return;
+    refresh({ ...state, ledgerCategories: state.ledgerCategories.filter((category) => category.id !== id) }, "Delete ledger category");
+  }));
 }
 
 function bindBuckets(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {

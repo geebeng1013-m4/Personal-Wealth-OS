@@ -90,7 +90,7 @@ export function trancheStatus(state: WealthState, drawdown: number) {
     const triggered = drawdown >= tranche.drawdown;
     return {
       ...tranche,
-      status: tranche.deployed ? "已部署" : triggered ? "已触发" : "未触发",
+      status: tranche.deployed ? "Deployed" : triggered ? "Triggered" : "Not Triggered",
       suggestedVoo: tranche.amount / 2,
       suggestedQqqm: tranche.amount / 2,
     };
@@ -109,7 +109,7 @@ export function advisorMessages(state: WealthState): AdvisorMessage[] {
     body:
       emergency < 1
         ? `Emergency Fund is ${percent(emergency)} complete. Keep MYR ${state.emergency.monthlyTopUp}/month; estimated completion in ${months} months.`
-        : `Emergency Fund reached ${money(state.emergency.target)}! You're safe. Consider redirecting savings to Growth or Travel.`,
+        : `Emergency Fund reached ${money(state.emergency.target)}! You're safe. Consider redirecting savings to Happy Fun and Wishlist.`,
     severity: emergency < 1 ? "watch" : "positive",
   });
 
@@ -136,7 +136,7 @@ export function advisorMessages(state: WealthState): AdvisorMessage[] {
 
   messages.push({
     title: "Cashflow discipline",
-    body: `Monthly assignable surplus is ${money(surplus)} after basic spending. This is enough for DCA, Safety, Freedom, and Learning if the plan is followed.`,
+    body: "Monthly assignable surplus is MYR 216 after basic spending. This is enough for DCA, Wishlist, Freedom, and Learning if the plan is followed.",
     severity: surplus >= state.dca.monthly ? "positive" : "action",
   });
 
@@ -148,7 +148,7 @@ export function nextActions(state: WealthState): string[] {
     `DCA ${money(state.dca.monthly)} this month unless cashflow breaks.`,
     state.emergency.monthlyTopUp > 0
       ? `Top up Safety by ${money(state.emergency.monthlyTopUp)} until Emergency Fund reaches ${money(state.emergency.target)}.`
-      : `Emergency Fund is complete! Consider redirecting ${money(state.emergency.monthlyTopUp || 40)} to Growth or Travel bucket.`,
+      : `Emergency Fund is complete! Consider redirecting ${money(state.emergency.monthlyTopUp || 40)} to Happy Fun and Wishlist buckets.`,
     "Review spending at month end and record whether DCA was executed.",
   ];
 

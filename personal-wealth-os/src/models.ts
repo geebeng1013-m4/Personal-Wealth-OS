@@ -91,6 +91,38 @@ export interface Review {
   notes: string;
 }
 
+export type LedgerTransactionType = "income" | "expense";
+
+export interface LedgerCategory {
+  id: string;
+  label: string;
+  icon: string;
+  type: LedgerTransactionType;
+}
+
+export interface LedgerTransaction {
+  id: string;
+  amount: number;
+  type: LedgerTransactionType;
+  categoryId: string;
+  date: string;
+  note?: string;
+}
+
+export type RuleCardId =
+  | "monthly-cashflow"
+  | "dca-mandate"
+  | "emergency-fund"
+  | "opportunity-reserve"
+  | "bear-market-deployment"
+  | "age-stage-policy"
+  | "data-safety";
+
+export interface RuleCardContent {
+  title: string;
+  body: string;
+}
+
 export interface WealthState {
   version: number;
   profile: Profile;
@@ -103,6 +135,12 @@ export interface WealthState {
   trades: Trade[];
   reviews: Review[];
   customTickers: string[];
+  ledgerCategories: LedgerCategory[];
+  ledgerTransactions: LedgerTransaction[];
+  ruleCardOverrides: Partial<Record<RuleCardId, RuleCardContent>>;
+  ruleNoteTitle: string;
+  ruleNotes: string;
+  hiddenRuleIds: RuleCardId[];
 }
 
 export interface PortfolioPosition {

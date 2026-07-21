@@ -14,15 +14,32 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <title>Personal Wealth OS</title>
-    <script type="module" crossorigin src="/assets/index-CFtZkVr7.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-5DbKJVen.css">
+    <script type="module" crossorigin src="/assets/index-DkWxonc3.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Q3twpOtN.css">
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app"></div>
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        window.addEventListener('load', async () => {
+          const isLocalDevelopment = ['localhost', '127.0.0.1'].includes(location.hostname);
+
+          if (isLocalDevelopment) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+
+            if ('caches' in window) {
+              const cacheNames = await caches.keys();
+              await Promise.all(
+                cacheNames
+                  .filter((cacheName) => cacheName.startsWith('wealth-os-'))
+                  .map((cacheName) => caches.delete(cacheName)),
+              );
+            }
+            return;
+          }
+
+          navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
         });
       }
     </script>
