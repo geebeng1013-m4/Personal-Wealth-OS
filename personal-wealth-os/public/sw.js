@@ -1,18 +1,48 @@
-const CACHE_NAME = "wealth-os-v7";
+const CACHE_NAME = "wealth-os-v11";
 const PRECACHE = [
   "/",
   "/index.html",
+  "/manifest.json",
+  "/favicon.png",
+  "/brand/wealth-mark.svg",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
 ];
 
-// Install — precache shell
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE))
+async function precacheAppShell() {
+  const cache = await caches.open(CACHE_NAME);
+  await cache.addAll(PRECACHE);
+
+  // Vite emits hashed filenames. Discover them from the built HTML so the
+  // first installed launch works offline before runtime caching has occurred.
+  const indexResponse = await fetch("/index.html", { cache: "no-store" });
+  if (!indexResponse.ok) return;
+
+  const html = await indexResponse.clone().text();
+  const assetPaths = Array.from(
+    html.matchAll(/(?:src|href)=["'](\/assets\/[^"']+)["']/g),
+    (match) => match[1],
   );
+
+  await cache.put("/index.html", indexResponse);
+  await Promise.all(
+    [...new Set(assetPaths)].map(async (path) => {
+      try {
+        await cache.add(path);
+      } catch {
+        // One optional chunk must not prevent the service worker installing.
+      }
+    }),
+  );
+}
+
+// Install - precache the complete application shell.
+self.addEventListener("install", (event) => {
+  event.waitUntil(precacheAppShell());
   self.skipWaiting();
 });
 
-// Activate — clean old caches
+// Activate - clean old caches.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -22,7 +52,7 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Fetch — always check the network for navigation so a new deployment cannot
+// Fetch - always check the network for navigation so a new deployment cannot
 // remain pinned to an old index.html and its old hashed asset references.
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);

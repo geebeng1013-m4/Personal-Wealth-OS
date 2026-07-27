@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Personal Wealth OS mark</title>
+  <desc id="desc">A bold metallic gold W with three rising wealth bars on black.</desc>
+  <defs>
+    <linearGradient id="wGold" x1="0.08" y1="0.02" x2="0.82" y2="0.98">
+      <stop offset="0" stop-color="#ffe58c"/>
+      <stop offset="0.22" stop-color="#f6c957"/>
+      <stop offset="0.52" stop-color="#c88b20"/>
+      <stop offset="0.76" stop-color="#8b590c"/>
+      <stop offset="1" stop-color="#e7ad32"/>
+    </linearGradient>
+    <linearGradient id="barGold" x1="0.18" y1="0" x2="0.82" y2="1">
+      <stop offset="0" stop-color="#ffe487"/>
+      <stop offset="0.35" stop-color="#eab13a"/>
+      <stop offset="0.72" stop-color="#a66d12"/>
+      <stop offset="1" stop-color="#d99b25"/>
+    </linearGradient>
+    <linearGradient id="edgeGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff0aa"/>
+      <stop offset="0.45" stop-color="#f5c34c"/>
+      <stop offset="1" stop-color="#9d6812"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="#000"/>
+  <path d="M204 221H230V256L217 280L204 256Z" fill="url(#barGold)" stroke="url(#edgeGold)" stroke-width="1.2"/>
+  <path d="M239 193H266V252L251 234L239 251Z" fill="url(#barGold)" stroke="url(#edgeGold)" stroke-width="1.2"/>
+  <path d="M275 162H301V265L285 280L275 264Z" fill="url(#barGold)" stroke="url(#edgeGold)" stroke-width="1.2"/>
+  <path d="M100 154H141L217 297L251 241L285 297L361 154H401L290 356L251 285L212 356Z" fill="url(#wGold)" stroke="url(#edgeGold)" stroke-width="1.8" stroke-linejoin="miter"/>
+</svg>

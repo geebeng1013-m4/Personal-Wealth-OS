@@ -291,6 +291,220 @@ export interface Fundamentals {
   fiveYearReturn: number;
 }
 
+export interface StockComparisonData {
+  symbol: string;
+  companyName: string;
+  currency: string;
+  sector: string | null;
+  industry: string | null;
+  businessSummary: string | null;
+  businessModel: string | null;
+  valuation: {
+    peRatio: number | null;
+    priceToBook: number | null;
+    priceToSales: number | null;
+  };
+  growth: {
+    returnOnEquity: number | null;
+    revenueGrowth: number | null;
+    earningsGrowth: number | null;
+  };
+  financialHealth: {
+    debtToAssets: number | null;
+    freeCashFlow: number | null;
+  };
+  marketPerformance: {
+    marketCap: number | null;
+    averageDailyValue: number | null;
+    beta: number | null;
+  };
+  updatedAt: number;
+}
+
+function finiteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value && typeof value === "object" && "raw" in value) {
+    const raw = (value as { raw?: unknown }).raw;
+    return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  }
+  return null;
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function inferBusinessModel(summary: string | null, industry: string | null): string | null {
+  const text = `${industry ?? ""} ${summary ?? ""}`.toLowerCase();
+  if (!text.trim()) return null;
+  if (/exchange traded fund|index fund|etf/.test(text)) return "Index-tracking fund";
+  if (/subscription|software as a service|saas/.test(text)) return "Subscription software";
+  if (/advertis/.test(text)) return "Advertising-led platform";
+  if (/marketplace|e-commerce|ecommerce/.test(text)) return "Marketplace / commerce";
+  if (/bank|lending|loans|credit/.test(text)) return "Interest and fee income";
+  if (/semiconductor|chip/.test(text)) return "Semiconductor products";
+  if (/manufactur/.test(text)) return "Product manufacturing";
+  if (/retail|stores/.test(text)) return "Retail sales";
+  return "Operating business";
+}
+
+const TRADINGVIEW_SCANNER_URL = "https://scanner.tradingview.com/america/scan";
+const TRADINGVIEW_COLUMNS = [
+  "name",
+  "description",
+  "close",
+  "market_cap_basic",
+  "price_earnings_ttm",
+  "price_book_fq",
+  "price_sales_current",
+  "return_on_equity",
+  "revenue_growth_yoy",
+  "net_income_growth_yoy",
+  "total_liabilities_fq",
+  "total_assets_fq",
+  "free_cash_flow_ttm",
+  "average_volume_30d_calc",
+  "beta_1_year",
+  "sector",
+  "industry",
+  "currency",
+] as const;
+
+interface TradingViewScanRow {
+  s?: unknown;
+  d?: unknown;
+}
+
+function ratioFromPercent(value: unknown): number | null {
+  const number = finiteNumber(value);
+  return number === null ? null : number / 100;
+}
+
+function scannerRowToComparison(row: TradingViewScanRow, requestedSymbol: string): StockComparisonData | null {
+  if (!Array.isArray(row.d)) return null;
+  const values = row.d;
+  const price = finiteNumber(values[2]);
+  const averageVolume = finiteNumber(values[13]);
+  const totalLiabilities = finiteNumber(values[10]);
+  const totalAssets = finiteNumber(values[11]);
+  const industry = nonEmptyString(values[16]);
+  const sector = nonEmptyString(values[15]);
+  const companyName = nonEmptyString(values[1]) ?? requestedSymbol;
+  const debtToAssets = totalAssets !== null && totalAssets > 0 && totalLiabilities !== null
+    ? totalLiabilities / totalAssets
+    : null;
+
+  return {
+    symbol: requestedSymbol,
+    companyName,
+    currency: nonEmptyString(values[17]) ?? "USD",
+    sector,
+    industry,
+    businessSummary: null,
+    businessModel: inferBusinessModel(companyName, industry),
+    valuation: {
+      peRatio: finiteNumber(values[4]),
+      priceToBook: finiteNumber(values[5]),
+      priceToSales: finiteNumber(values[6]),
+    },
+    growth: {
+      returnOnEquity: ratioFromPercent(values[7]),
+      revenueGrowth: ratioFromPercent(values[8]),
+      earningsGrowth: ratioFromPercent(values[9]),
+    },
+    financialHealth: {
+      debtToAssets,
+      freeCashFlow: finiteNumber(values[12]),
+    },
+    marketPerformance: {
+      marketCap: finiteNumber(values[3]),
+      averageDailyValue: price !== null && averageVolume !== null ? price * averageVolume : null,
+      beta: finiteNumber(values[14]),
+    },
+    updatedAt: Date.now(),
+  };
+}
+
+function tickerPart(symbol: string): string {
+  const separator = symbol.lastIndexOf(":");
+  return separator >= 0 ? symbol.slice(separator + 1) : symbol;
+}
+
+function selectScannerRow(rows: TradingViewScanRow[], requestedSymbol: string): TradingViewScanRow | undefined {
+  const explicitExchange = requestedSymbol.includes(":");
+  if (explicitExchange) {
+    return rows.find((row) => typeof row.s === "string" && row.s.toUpperCase() === requestedSymbol);
+  }
+  const ticker = tickerPart(requestedSymbol);
+  const matches = rows.filter((row) => {
+    if (!Array.isArray(row.d)) return false;
+    return nonEmptyString(row.d[0])?.toUpperCase() === ticker;
+  });
+  const exchangeOrder = ["NASDAQ:", "NYSE:", "AMEX:"];
+  return matches.sort((a, b) => {
+    const aSymbol = typeof a.s === "string" ? a.s.toUpperCase() : "";
+    const bSymbol = typeof b.s === "string" ? b.s.toUpperCase() : "";
+    const aRank = exchangeOrder.findIndex((exchange) => aSymbol.startsWith(exchange));
+    const bRank = exchangeOrder.findIndex((exchange) => bSymbol.startsWith(exchange));
+    return (aRank < 0 ? exchangeOrder.length : aRank) - (bRank < 0 ? exchangeOrder.length : bRank);
+  })[0];
+}
+
+async function fetchScannerComparisons(symbols: string[]): Promise<StockComparisonData[]> {
+  const tickerNames = Array.from(new Set(symbols.map(tickerPart)));
+  const response = await fetch(TRADINGVIEW_SCANNER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      filter: [{ left: "name", operation: "in_range", right: tickerNames }],
+      symbols: { query: { types: [] } },
+      columns: TRADINGVIEW_COLUMNS,
+    }),
+    signal: AbortSignal.timeout(12_000),
+  });
+  if (!response.ok) throw new Error("Market comparison provider returned HTTP " + response.status);
+
+  const payload: unknown = await response.json();
+  const rows = payload && typeof payload === "object" && "data" in payload && Array.isArray(payload.data)
+    ? payload.data.filter((row): row is TradingViewScanRow => Boolean(row) && typeof row === "object")
+    : [];
+
+  return symbols.flatMap((symbol) => {
+    const row = selectScannerRow(rows, symbol);
+    const comparison = row ? scannerRowToComparison(row, symbol) : null;
+    if (!comparison) return [];
+    setCache("comparison_" + symbol, comparison);
+    return [comparison];
+  });
+}
+
+export async function fetchStockComparison(symbol: string): Promise<StockComparisonData> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const cached = getCached("comparison_" + normalizedSymbol);
+  if (cached) return cached as StockComparisonData;
+  const comparison = (await fetchScannerComparisons([normalizedSymbol]))[0];
+  if (!comparison) throw new Error("No comparison data for " + normalizedSymbol);
+  return comparison;
+}
+
+export async function fetchStockComparisons(symbols: string[]): Promise<StockComparisonData[]> {
+  const uniqueSymbols = Array.from(new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean)));
+  const cached = new Map<string, StockComparisonData>();
+  const missing: string[] = [];
+  for (const symbol of uniqueSymbols) {
+    const value = getCached("comparison_" + symbol);
+    if (value) cached.set(symbol, value as StockComparisonData);
+    else missing.push(symbol);
+  }
+
+  const fetched = missing.length ? await fetchScannerComparisons(missing) : [];
+  for (const comparison of fetched) cached.set(comparison.symbol, comparison);
+  return uniqueSymbols.flatMap((symbol) => {
+    const comparison = cached.get(symbol);
+    return comparison ? [comparison] : [];
+  });
+}
+
 const DIV_CACHE_TTL = 3600_000; // 1 hour
 
 export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {

@@ -1,4 +1,4 @@
-import type { AdvisorMessage, LedgerTransaction, LedgerTransactionType, RuleCardId, Ticker, Trade, TradeType, WealthState } from "./models";
+import type { AdvisorMessage, LedgerAccountType, LedgerTransaction, LedgerTransactionType, RuleCardId, Ticker, Trade, TradeType, WealthState } from "./models";
 import { createId, cloneDefaultState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, type Snapshot } from "./state";
 import {
   advisorMessages,
@@ -14,8 +14,8 @@ import {
   trancheStatus,
   tradeUnits,
 } from "./rules";
-import { fetchQuote, fetchMultipleQuotes, formatPrice, formatChange, formatVolume, type MarketQuote, calcPnLForTicker, type PortfolioPnL, buildTradeTimelineHtml, fetchFundamentals, type Fundamentals, fetchHistoricalPrices, calcRiskMetrics } from "./market";
-import { categoryTotals, filterLedgerTransactions, ledgerTotals, monthlyLedgerTotals, normalizeLedgerAmount, type LedgerFilters } from "./ledger";
+import { fetchQuote, fetchMultipleQuotes, formatPrice, formatChange, formatVolume, type MarketQuote, calcPnLForTicker, type PortfolioPnL, buildTradeTimelineHtml, fetchFundamentals, type Fundamentals, fetchHistoricalPrices, calcRiskMetrics, fetchStockComparison } from "./market";
+import { accountBalances, categoryTotals, currentNetAssets, filterLedgerTransactions, ledgerTotals, monthlyLedgerTotals, normalizeLedgerAmount, openingFunds, type AccountBalance, type LedgerFilters } from "./ledger";
 import { mountSideRays } from "./sideRays";
 
 type Setter = (state: WealthState, changeLabel?: string) => void;
@@ -23,6 +23,7 @@ type Navigate = (page: string) => void;
 
 const sideRaysCleanup = new WeakMap<HTMLElement, () => void>();
 const calculatorCleanup = new WeakMap<HTMLElement, () => void>();
+const sidebarScrollPositions = new WeakMap<HTMLElement, number>();
 
 type Page = readonly [id: string, english: string, subtitle: string];
 type PageGroup = readonly [title: string, pages: readonly Page[]];
@@ -100,7 +101,7 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-scroll-area">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">PW</div>
+          <div class="brand-mark" aria-hidden="true"><img src="/brand/wealth-mark.svg" alt=""></div>
           <div><h1>Personal Wealth OS</h1><p>Personal CFO System</p></div>
         </div>
         <nav class="nav line-sidebar" aria-label="Primary navigation">
@@ -376,7 +377,97 @@ function portfolioTemplate(state: WealthState): string {
   `;
 }
 
-function marketTemplate(_state: WealthState): string {
+type EtfHolding = {
+  symbol: string;
+  name: string;
+  weight: number;
+};
+
+type EtfHoldingsProfile = {
+  updateDate: string;
+  topHoldingsTotalPercent: string;
+  holdings: EtfHolding[];
+};
+
+const ETF_TOP_HOLDINGS = {
+  VOO: {
+    updateDate: "Jun 30, 2026",
+    topHoldingsTotalPercent: "36.33%",
+    holdings: [
+      { symbol: "NVDA", name: "NVIDIA", weight: 7.5 },
+      { symbol: "AAPL", name: "Apple", weight: 6.58 },
+      { symbol: "MSFT", name: "Microsoft", weight: 4.29 },
+      { symbol: "AMZN", name: "Amazon", weight: 3.61 },
+      { symbol: "GOOGL", name: "Alphabet-A", weight: 3.24 },
+      { symbol: "AVGO", name: "Broadcom", weight: 2.77 },
+      { symbol: "GOOG", name: "Alphabet-C", weight: 2.58 },
+      { symbol: "MU", name: "Micron Technology", weight: 2.02 },
+      { symbol: "META", name: "Meta Platforms", weight: 1.91 },
+      { symbol: "TSLA", name: "Tesla", weight: 1.83 },
+    ],
+  },
+  QQQM: {
+    updateDate: "Jun 30, 2026",
+    topHoldingsTotalPercent: "48.50%",
+    holdings: [
+      { symbol: "AAPL", name: "Apple", weight: 8.9 },
+      { symbol: "MSFT", name: "Microsoft", weight: 8.5 },
+      { symbol: "NVDA", name: "NVIDIA", weight: 7.8 },
+      { symbol: "AMZN", name: "Amazon", weight: 5.2 },
+      { symbol: "META", name: "Meta Platforms", weight: 4.6 },
+      { symbol: "AVGO", name: "Broadcom", weight: 4.1 },
+      { symbol: "TSLA", name: "Tesla", weight: 3.2 },
+      { symbol: "GOOGL", name: "Alphabet-A", weight: 3.0 },
+      { symbol: "COST", name: "Costco Wholesale", weight: 1.6 },
+      { symbol: "NFLX", name: "Netflix", weight: 1.6 },
+    ],
+  },
+  VXUS: {
+    updateDate: "Jun 30, 2026",
+    topHoldingsTotalPercent: "10.20%",
+    holdings: [
+      { symbol: "TSMC", name: "Taiwan Semiconductor", weight: 1.85 },
+      { symbol: "ASML", name: "ASML Holding", weight: 1.15 },
+      { symbol: "NESN", name: "Nestle", weight: 1.05 },
+      { symbol: "SHEL", name: "Shell", weight: 0.98 },
+      { symbol: "AZN", name: "AstraZeneca", weight: 0.95 },
+      { symbol: "RMS", name: "Hermes International", weight: 0.88 },
+      { symbol: "TOYOTA", name: "Toyota Motor", weight: 0.85 },
+      { symbol: "NVO", name: "Novo Nordisk", weight: 0.84 },
+      { symbol: "SAP", name: "SAP SE", weight: 0.83 },
+      { symbol: "ROG", name: "Roche Holding", weight: 0.8 },
+    ],
+  },
+} satisfies Record<string, EtfHoldingsProfile>;
+
+type EtfHoldingsSymbol = keyof typeof ETF_TOP_HOLDINGS;
+
+function etfHoldingsRowsTemplate(profile: EtfHoldingsProfile): string {
+  const maxWeight = Math.max(...profile.holdings.map((holding) => holding.weight), 1);
+  return profile.holdings.map((holding, index) => {
+    const barWidth = Math.max((holding.weight / maxWeight) * 100, 2);
+    return `<li class="etf-holding-row">
+      <div class="etf-holding-copy"><span class="etf-holding-rank">${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(holding.symbol)}</strong><span>${escapeHtml(holding.name)}</span><b>${holding.weight.toFixed(2)}%</b></div>
+      <div class="etf-holding-track" role="meter" aria-label="${escapeHtml(holding.symbol)} portfolio weight" aria-valuemin="0" aria-valuemax="${maxWeight}" aria-valuenow="${holding.weight}"><i style="width:${barWidth.toFixed(2)}%"></i></div>
+    </li>`;
+  }).join("");
+}
+
+function etfTopHoldingsTemplate(selected: EtfHoldingsSymbol = "VOO"): string {
+  const profile = ETF_TOP_HOLDINGS[selected];
+  return `<section class="etf-holdings-panel" aria-labelledby="etfHoldingsTitle">
+    <header class="etf-holdings-head">
+      <div><span class="eyebrow">Fund Composition</span><h3 id="etfHoldingsTitle">Top Holdings</h3></div>
+      <div class="etf-holdings-tabs" role="tablist" aria-label="Select ETF holdings">
+        ${(Object.keys(ETF_TOP_HOLDINGS) as EtfHoldingsSymbol[]).map((symbol) => `<button class="etf-holdings-tab${symbol === selected ? " active" : ""}" data-etf-holdings="${symbol}" type="button" role="tab" aria-selected="${symbol === selected}">${symbol}</button>`).join("")}
+      </div>
+    </header>
+    <div class="etf-holdings-summary" aria-live="polite"><span><strong id="etfHoldingsSymbol">${selected}</strong> · Top Holdings <b id="etfHoldingsTotal">${profile.topHoldingsTotalPercent}</b></span><small>Updated: <time id="etfHoldingsDate">${profile.updateDate}</time></small></div>
+    <ol id="etfHoldingsList" class="etf-holdings-list">${etfHoldingsRowsTemplate(profile)}</ol>
+  </section>`;
+}
+
+function marketTemplate(state: WealthState): string {
   const tabs = [
     { id: "chart", label: "Long-term view", icon: "" },
     { id: "pnl", label: "Your position", icon: "" },
@@ -401,7 +492,9 @@ function marketTemplate(_state: WealthState): string {
       <div class="market-symbols" role="group" aria-label="Select investment">
         <button class="market-symbol-btn active" data-symbol="VOO" type="button"><strong>VOO</strong><small>Core market</small></button>
         <button class="market-symbol-btn" data-symbol="QQQM" type="button"><strong>QQQM</strong><small>Growth allocation</small></button>
+        ${state.customTickers.map((ticker) => '<div class="market-custom-symbol" data-symbol="' + escapeHtml(ticker) + '"><button class="market-symbol-btn" data-symbol="' + escapeHtml(ticker) + '" type="button"><strong>' + escapeHtml(ticker) + '</strong><small>Custom watchlist</small></button><button class="market-symbol-remove" data-remove-symbol="' + escapeHtml(ticker) + '" type="button" aria-label="Remove ' + escapeHtml(ticker) + '">×</button></div>').join("")}
       </div>
+      <form id="customSymbolForm" class="market-custom-form"><label for="customSymbolInput">Add symbol</label><div><input id="customSymbolInput" name="symbol" type="text" maxlength="20" placeholder="e.g. AAPL" autocomplete="off" spellcheck="false"><button class="secondary-button" type="submit">Add</button></div><small id="customSymbolMessage" class="market-custom-message" aria-live="polite"></small></form>
       <span class="market-data-note">Market data may be delayed</span>
     </div>
 
@@ -531,40 +624,22 @@ function marketTemplate(_state: WealthState): string {
           <div style="font-size:13px;font-weight:600;margin-bottom:12px;">🏭 Sector Allocation</div>
           <div id="sector-bars"></div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
-          <div class="card" style="padding:16px;">
-            <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Top 10 Holdings</div>
-            <div id="top-holdings"></div>
-          </div>
+        <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px;">
           <div class="card" style="padding:16px;">
             <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Key Metrics</div>
             <div id="key-metrics"></div>
           </div>
         </div>
+        ${etfTopHoldingsTemplate()}
       </div>
     </div>
 
     <!-- Compare Tab -->
     <div class="market-tab-content" data-tab-content="compare">
-      <div id="compareContent">
-        <div class="card" style="padding:16px;">
-          <div style="font-size:13px;font-weight:600;margin-bottom:12px;">⚖️ Performance Comparison (YTD)</div>
-          <div id="compare-bars"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:12px;">
-          <div class="card" style="padding:16px;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">VOO vs QQQM Correlation</div>
-            <div id="compare-correlation" style="font-size:24px;font-weight:700;">--</div>
-          </div>
-          <div class="card" style="padding:16px;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">VOO Expense Ratio</div>
-            <div id="compare-expense-voo" style="font-size:24px;font-weight:700;">0.03%</div>
-          </div>
-          <div class="card" style="padding:16px;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">QQQM Expense Ratio</div>
-            <div id="compare-expense-qqqm" style="font-size:24px;font-weight:700;">0.15%</div>
-          </div>
-        </div>
+      <div id="compareContent" class="stock-compare">
+        <div class="compare-intro"><span class="eyebrow">Asset Comparison</span><h3>Four reference assets, one consistent view</h3><p>Compare broad US exposure, growth concentration, international diversification, and a single-company position without relying on a live market-data request.</p></div>
+        <div id="compareProfiles"></div>
+        <div id="compareMatrix"></div>
       </div>
     </div>
 
@@ -583,6 +658,95 @@ function marketTemplate(_state: WealthState): string {
 function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
   let currentSymbol = "VOO";
   let currentInterval = "12M";
+  let customTickers = [...state.customTickers];
+  let compositionRequestId = 0;
+
+  function setCustomSymbolMessage(message: string, isError = false): void {
+    const messageEl = root.querySelector<HTMLElement>("#customSymbolMessage");
+    if (messageEl) {
+      messageEl.textContent = message;
+      messageEl.classList.toggle("error", isError);
+    }
+  }
+
+  function selectEtfHoldings(symbol: EtfHoldingsSymbol): void {
+    const profile = ETF_TOP_HOLDINGS[symbol];
+    const list = root.querySelector<HTMLOListElement>("#etfHoldingsList");
+    const symbolEl = root.querySelector<HTMLElement>("#etfHoldingsSymbol");
+    const totalEl = root.querySelector<HTMLElement>("#etfHoldingsTotal");
+    const dateEl = root.querySelector<HTMLTimeElement>("#etfHoldingsDate");
+    if (!list || !symbolEl || !totalEl || !dateEl) return;
+
+    root.querySelectorAll<HTMLButtonElement>(".etf-holdings-tab").forEach((button) => {
+      const active = button.dataset.etfHoldings === symbol;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    symbolEl.textContent = symbol;
+    totalEl.textContent = profile.topHoldingsTotalPercent;
+    dateEl.textContent = profile.updateDate;
+    list.innerHTML = etfHoldingsRowsTemplate(profile);
+  }
+
+  function selectSymbol(btn: HTMLButtonElement): void {
+    currentSymbol = btn.dataset.symbol || "VOO";
+    root.querySelectorAll<HTMLButtonElement>(".market-symbol-btn").forEach((button) => {
+      const active = button === btn;
+      button.classList.toggle("active", active);
+      button.style.borderColor = active ? "var(--green)" : "var(--line)";
+      button.style.background = active ? "var(--green-dim)" : "var(--surface)";
+      button.style.color = active ? "var(--green)" : "var(--ink)";
+    });
+    createWidget(currentSymbol, currentInterval);
+    updatePnL(currentSymbol);
+    updateTimeline(currentSymbol);
+    updateStaticForSymbol(currentSymbol);
+    void loadComposition(currentSymbol);
+    loadDividends(currentSymbol);
+    loadRisk(currentSymbol);
+    loadSectors(currentSymbol);
+  }
+
+  function createCustomSymbolElement(symbol: string): HTMLDivElement {
+    const item = document.createElement("div");
+    item.className = "market-custom-symbol";
+    item.dataset.symbol = symbol;
+
+    const symbolButton = document.createElement("button");
+    symbolButton.className = "market-symbol-btn";
+    symbolButton.dataset.symbol = symbol;
+    symbolButton.type = "button";
+
+    const symbolName = document.createElement("strong");
+    symbolName.textContent = symbol;
+    const symbolDescription = document.createElement("small");
+    symbolDescription.textContent = "Custom watchlist";
+    symbolButton.append(symbolName, symbolDescription);
+    symbolButton.addEventListener("click", () => selectSymbol(symbolButton));
+
+    const removeButton = document.createElement("button");
+    removeButton.className = "market-symbol-remove";
+    removeButton.dataset.removeSymbol = symbol;
+    removeButton.type = "button";
+    removeButton.setAttribute("aria-label", "Remove " + symbol);
+    removeButton.textContent = "×";
+    removeButton.addEventListener("click", () => removeCustomSymbol(symbol, item));
+
+    item.append(symbolButton, removeButton);
+    return item;
+  }
+
+  function removeCustomSymbol(symbol: string, item: HTMLElement): void {
+    customTickers = customTickers.filter((ticker) => ticker !== symbol);
+    setState({ ...state, customTickers }, "Remove market symbol");
+    item.remove();
+
+    if (currentSymbol === symbol) {
+      const fallbackButton = root.querySelector<HTMLButtonElement>('.market-symbol-btn[data-symbol="VOO"]');
+      if (fallbackButton) selectSymbol(fallbackButton);
+    }
+    setCustomSymbolMessage(symbol + " removed.");
+  }
 
   function createWidget(symbol: string, interval: string) {
     const container = root.querySelector<HTMLElement>("#tradingview_container");
@@ -747,36 +911,6 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
       ],
     };
 
-    const holdings: Record<string, { name: string; pct: number }[]> = {
-      VOO: [
-        { name: "Apple", pct: 7.1 },
-        { name: "Microsoft", pct: 6.8 },
-        { name: "NVIDIA", pct: 6.2 },
-        { name: "Amazon", pct: 3.8 },
-        { name: "Meta", pct: 2.9 },
-        { name: "Alphabet A", pct: 2.1 },
-        { name: "Alphabet C", pct: 1.8 },
-        { name: "Berkshire B", pct: 1.7 },
-        { name: "Broadcom", pct: 1.5 },
-        { name: "JPMorgan", pct: 1.4 },
-      ],
-      QQQM: [
-        { name: "Apple", pct: 8.9 },
-        { name: "Microsoft", pct: 8.5 },
-        { name: "NVIDIA", pct: 7.8 },
-        { name: "Amazon", pct: 5.2 },
-        { name: "Meta", pct: 4.5 },
-        { name: "Alphabet A", pct: 3.2 },
-        { name: "Alphabet C", pct: 2.8 },
-        { name: "Broadcom", pct: 2.5 },
-        { name: "Tesla", pct: 2.1 },
-        { name: "Costco", pct: 1.8 },
-      ],
-    };
-
-    // Compare tab
-    const compareData = { voo: "+5.2%", qqqm: "+8.7%", spy: "+5.1%", qqq: "+8.5%", correlation: "0.92" };
-
     // Calendar tab
     const calendarEvents = [
       { date: "Jul 15", event: "CPI (Inflation)", impact: "High" },
@@ -817,8 +951,8 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
       // Sectors
       const sectorEl = root.querySelector<HTMLElement>("#sector-bars");
       if (sectorEl) {
-        const sd = sectorData[sym] || sectorData.VOO;
-        sectorEl.innerHTML = sd.map((s) =>
+        const sd = sectorData[sym];
+        sectorEl.innerHTML = sd ? sd.map((s) =>
           '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
             '<span style="width:140px;font-size:12px;color:var(--ink-2);">' + s.name + '</span>' +
             '<div style="flex:1;height:20px;background:var(--surface);border-radius:4px;overflow:hidden;">' +
@@ -826,41 +960,10 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
             '</div>' +
             '<span style="width:50px;text-align:right;font-size:12px;font-weight:600;">' + s.pct + '%</span>' +
           '</div>'
-        ).join("");
+        ).join("") : '<div class="empty-state">Loading composition for ' + escapeHtml(sym) + '...</div>';
       }
 
-      const holdingsEl = root.querySelector<HTMLElement>("#top-holdings");
-      if (holdingsEl) {
-        const hd = holdings[sym] || holdings.VOO;
-        holdingsEl.innerHTML = hd.map((h) =>
-          '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px;">' +
-            '<span>' + h.name + '</span><span style="font-weight:600;">' + h.pct + '%</span></div>'
-        ).join("");
-      }
     }
-
-    // Compare tab (static)
-    const compareBarsEl = root.querySelector<HTMLElement>("#compare-bars");
-    if (compareBarsEl) {
-      const bars = [
-        { label: "VOO", value: 5.2, color: "var(--green)" },
-        { label: "QQQM", value: 8.7, color: "var(--blue)" },
-        { label: "SPY", value: 5.1, color: "var(--amber)" },
-        { label: "QQQ", value: 8.5, color: "var(--purple)" },
-      ];
-      compareBarsEl.innerHTML = bars.map((b) =>
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
-          '<span style="width:60px;font-size:12px;font-weight:600;">' + b.label + '</span>' +
-          '<div style="flex:1;height:24px;background:var(--surface);border-radius:4px;overflow:hidden;">' +
-            '<div style="width:' + (b.value * 5) + '%;height:100%;background:' + b.color + ';border-radius:4px;display:flex;align-items:center;padding-left:8px;">' +
-              '<span style="font-size:11px;font-weight:600;color:#fff;">+' + b.value + '%</span>' +
-            '</div>' +
-          '</div>' +
-        '</div>'
-      ).join("");
-    }
-    const corrEl = root.querySelector<HTMLElement>("#compare-correlation");
-    if (corrEl) corrEl.textContent = compareData.correlation;
 
     // Calendar tab (static)
     const calEl = root.querySelector<HTMLElement>("#calendar-events");
@@ -879,6 +982,81 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
   }
 
   const updateStaticForSymbol = populateStaticData();
+  async function loadComposition(symbol: string): Promise<void> {
+    const requestId = ++compositionRequestId;
+    const sectorEl = root.querySelector<HTMLElement>("#sector-bars");
+    if (symbol === "VOO" || symbol === "QQQM") return;
+    if (sectorEl) sectorEl.innerHTML = '<div class="empty-state">Loading composition for ' + escapeHtml(symbol) + '...</div>';
+
+    try {
+      const profile = await fetchStockComparison(symbol);
+      if (requestId !== compositionRequestId || symbol !== currentSymbol) return;
+      const labels = [profile.sector, profile.industry].filter((value): value is string => Boolean(value));
+      if (sectorEl) {
+        sectorEl.innerHTML = labels.length
+          ? labels.map((label, index) => {
+              const pct = index === 0 ? 100 : 0;
+              return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
+                '<span style="width:140px;font-size:12px;color:var(--ink-2);">' + escapeHtml(label) + '</span>' +
+                '<div style="flex:1;height:20px;background:var(--surface);border-radius:4px;overflow:hidden;">' +
+                  '<div style="width:' + pct + '%;height:100%;background:var(--green);border-radius:4px;"></div>' +
+                '</div>' +
+                '<span style="width:50px;text-align:right;font-size:12px;font-weight:600;">' + (index === 0 ? "100%" : "Detail") + '</span>' +
+              '</div>';
+            }).join("")
+          : '<div class="empty-state">Composition data is unavailable for ' + escapeHtml(symbol) + '.</div>';
+      }
+    } catch (error) {
+      if (requestId !== compositionRequestId || symbol !== currentSymbol) return;
+      console.warn("[Market] Failed to load composition for " + symbol, error);
+      if (sectorEl) sectorEl.innerHTML = '<div class="empty-state">Composition data could not be loaded. Try again later.</div>';
+    }
+  }
+
+  type StaticComparisonAsset = {
+    symbol: string;
+    name: string;
+    category: string;
+    exposure: string;
+    role: string;
+    risk: string;
+    fee: string;
+    diversification: string;
+    income: string;
+    fit: string;
+    accent: string;
+    referenceSnapshot?: string;
+  };
+
+  const comparisonAssets: StaticComparisonAsset[] = [
+    { symbol: "VOO", name: "Vanguard S&P 500 ETF", category: "US large-cap index ETF", exposure: "About 500 leading US companies across all major sectors.", role: "Core US equity holding", risk: "Market-level", fee: "0.03%", diversification: "Broad across sectors", income: "Quarterly dividends", fit: "Simple, low-cost US core", accent: "green" },
+    { symbol: "QQQM", name: "Invesco NASDAQ 100 ETF", category: "US growth index ETF", exposure: "100 large non-financial Nasdaq companies with a technology tilt.", role: "Growth satellite", risk: "Above market", fee: "0.15%", diversification: "Concentrated in mega-cap growth", income: "Quarterly dividends", fit: "Higher-growth allocation", accent: "blue" },
+    { symbol: "VXUS", name: "Vanguard Total International Stock ETF", category: "Global ex-US equity ETF", exposure: "Developed and emerging-market equities outside the United States.", role: "International diversifier", risk: "Market, currency and emerging-market exposure", fee: "0.07%", diversification: "Broad developed and emerging ex-US markets", income: "Quarterly dividends; yield about 3.0%", fit: "Reduce reliance on a single US equity market", accent: "gold", referenceSnapshot: "P/E 14.5 · P/B 1.7 · High liquidity · Moderate-to-low growth with valuation-recovery potential" },
+    { symbol: "AAPL", name: "Apple Inc.", category: "Single US company", exposure: "Consumer devices, services and a global hardware ecosystem.", role: "Concentrated satellite", risk: "Company-specific", fee: "No fund expense ratio", diversification: "Single issuer", income: "Quarterly dividends", fit: "High-conviction position", accent: "red" },
+  ];
+
+  function renderStaticComparison(): void {
+    const profiles = root.querySelector<HTMLElement>("#compareProfiles");
+    const matrix = root.querySelector<HTMLElement>("#compareMatrix");
+    if (!profiles || !matrix) return;
+    profiles.innerHTML = '<div class="compare-profiles">' + comparisonAssets.map((asset) =>
+      '<article class="compare-profile compare-profile-' + asset.accent + '"><div class="compare-profile-head"><span class="compare-symbol">' + asset.symbol + '</span><span class="compare-category">' + asset.category + '</span></div><h4>' + asset.name + '</h4><p>' + asset.exposure + '</p><dl><div><dt>Portfolio role</dt><dd>' + asset.role + '</dd></div><div><dt>Best suited to</dt><dd>' + asset.fit + '</dd></div>' + (asset.referenceSnapshot ? '<div><dt>Reference snapshot</dt><dd>' + asset.referenceSnapshot + '</dd></div>' : '') + '</dl></article>'
+    ).join("") + '</div>';
+
+    const rows: Array<{ label: string; description: string; value: (asset: StaticComparisonAsset) => string }> = [
+      { label: "Structure", description: "What you own", value: (asset) => asset.category },
+      { label: "Primary exposure", description: "Main source of return", value: (asset) => asset.exposure },
+      { label: "Portfolio role", description: "How it can be used", value: (asset) => asset.role },
+      { label: "Risk profile", description: "Main concentration trade-off", value: (asset) => asset.risk },
+      { label: "Ongoing fund fee", description: "Published expense ratio where applicable", value: (asset) => asset.fee },
+      { label: "Diversification", description: "Breadth of holdings", value: (asset) => asset.diversification },
+      { label: "Income treatment", description: "How distributions are handled", value: (asset) => asset.income },
+      { label: "Typical fit", description: "Most natural use case", value: (asset) => asset.fit },
+    ];
+    const headers = comparisonAssets.map((asset) => '<th scope="col"><strong>' + asset.symbol + '</strong><span>' + asset.name + '</span></th>').join("");
+    const body = rows.map((row) => '<tr><th scope="row"><strong>' + row.label + '</strong><span>' + row.description + '</span></th>' + comparisonAssets.map((asset) => '<td>' + row.value(asset) + '</td>').join("") + '</tr>').join("");
+    matrix.innerHTML = '<div class="compare-context"><strong>Different instruments, different jobs</strong><span>ETF fees and structural descriptions are fixed reference data. Any valuation figures shown are reference snapshots, not live market data.</span></div><div class="table-wrap compare-table-wrap"><table class="compare-table"><thead><tr><th scope="col">Comparison lens</th>' + headers + '</tr></thead><tbody>' + body + '</tbody></table></div><p class="compare-footnote">Reference information only. VXUS is a US-listed distributing ETF focused on developed and emerging markets outside the United States; broker, tax and currency treatment depend on your jurisdiction and account.</p>';
+  }
 
   // Real risk metrics from Yahoo Finance historical prices
   async function loadRisk(symbol: string) {
@@ -964,7 +1142,11 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
         '</div>';
     } catch (err) {
       console.warn("[Market] API failed, using static data for " + symbol, err);
-      const sd = staticData[symbol] || staticData.VOO;
+      const sd = staticData[symbol];
+      if (!sd) {
+        metricsEl.innerHTML = '<div class="empty-state">Key metrics are unavailable for ' + escapeHtml(symbol) + '.</div>';
+        return;
+      }
       metricsEl.innerHTML =
         '<div style="font-size:12px;line-height:2;">' +
           '<div style="display:flex;justify-content:space-between;"><span>Expense Ratio</span><span style="font-weight:600;">' + sd.expenseRatio + '</span></div>' +
@@ -1013,7 +1195,16 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
       }
     } catch (err) {
       console.warn("[Market] API failed, using static dividend data for " + symbol, err);
-      const sd = staticDiv[symbol] || staticDiv.VOO;
+      const sd = staticDiv[symbol];
+      if (!sd) {
+        setT("#div-yield", "N/A");
+        setT("#div-frequency", "N/A");
+        setT("#div-annual", "N/A");
+        setT("#div-pe", "N/A");
+        const historyEl = root.querySelector<HTMLElement>("#div-history");
+        if (historyEl) historyEl.innerHTML = '<div class="empty-state">Dividend data is unavailable for ' + escapeHtml(symbol) + '.</div>';
+        return;
+      }
       setT("#div-yield", sd.yield);
       setT("#div-frequency", sd.freq);
       setT("#div-annual", sd.annual);
@@ -1043,23 +1234,54 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
     });
   });
 
+  root.querySelectorAll<HTMLButtonElement>(".etf-holdings-tab").forEach((button) => {
+    button.addEventListener("click", () => {
+      const symbol = button.dataset.etfHoldings;
+      if (!symbol || !(symbol in ETF_TOP_HOLDINGS)) return;
+      selectEtfHoldings(symbol as EtfHoldingsSymbol);
+    });
+  });
+
   // Symbol buttons
   root.querySelectorAll<HTMLButtonElement>(".market-symbol-btn").forEach((btn) => {
+    btn.addEventListener("click", () => selectSymbol(btn));
+  });
+
+  root.querySelectorAll<HTMLButtonElement>(".market-symbol-remove").forEach((btn) => {
     btn.addEventListener("click", () => {
-      currentSymbol = btn.dataset.symbol || "VOO";
-      root.querySelectorAll<HTMLButtonElement>(".market-symbol-btn").forEach((b) => {
-        b.style.borderColor = b === btn ? "var(--green)" : "var(--line)";
-        b.style.background = b === btn ? "var(--green-dim)" : "var(--surface)";
-        b.style.color = b === btn ? "var(--green)" : "var(--ink)";
-      });
-      createWidget(currentSymbol, currentInterval);
-      updatePnL(currentSymbol);
-      updateTimeline(currentSymbol);
-      updateStaticForSymbol(currentSymbol);
-      loadDividends(currentSymbol);
-      loadRisk(currentSymbol);
-      loadSectors(currentSymbol);
+      const symbol = btn.dataset.removeSymbol;
+      const item = btn.closest<HTMLElement>(".market-custom-symbol");
+      if (!symbol || !item) return;
+      removeCustomSymbol(symbol, item);
     });
+  });
+
+  root.querySelector<HTMLFormElement>("#customSymbolForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = root.querySelector<HTMLInputElement>("#customSymbolInput");
+    const symbol = input?.value.trim().toUpperCase() ?? "";
+    if (!/^[A-Z0-9._^:-]{1,20}$/.test(symbol)) {
+      setCustomSymbolMessage("Use a valid symbol, such as AAPL or BTC-USD.", true);
+      return;
+    }
+    if (symbol === "VOO" || symbol === "QQQM" || customTickers.includes(symbol)) {
+      setCustomSymbolMessage(symbol + " is already on the list.", true);
+      return;
+    }
+    if (customTickers.length >= 30) {
+      setCustomSymbolMessage("You can save up to 30 custom symbols.", true);
+      return;
+    }
+    customTickers = [...customTickers, symbol];
+    setState({ ...state, customTickers }, "Add market symbol");
+
+    const symbols = root.querySelector<HTMLElement>(".market-symbols");
+    const item = createCustomSymbolElement(symbol);
+    symbols?.appendChild(item);
+    if (input) input.value = "";
+    setCustomSymbolMessage(symbol + " added.");
+    const symbolButton = item.querySelector<HTMLButtonElement>(".market-symbol-btn");
+    if (symbolButton) selectSymbol(symbolButton);
   });
 
   // Interval buttons
@@ -1079,9 +1301,11 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
   updatePnL(currentSymbol);
   updateTimeline(currentSymbol);
   updateStaticForSymbol(currentSymbol);
+  void loadComposition(currentSymbol);
   loadDividends(currentSymbol);
   loadRisk(currentSymbol);
   loadSectors(currentSymbol);
+  renderStaticComparison();
 }
 
 function tradeTypeColor(type: string): string {
@@ -1106,8 +1330,31 @@ function tradeTypeTextColor(type: string): string {
 
 let ledgerFilters: LedgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "" };
 let ledgerEditingId = "";
+let ledgerEntryType: LedgerTransactionType = "expense";
+let ledgerEntryDraft = {
+  amount: "",
+  accountId: "",
+  fromAccountId: "",
+  toAccountId: "",
+  date: "",
+  note: "",
+};
 let ledgerHistoryOpen = false;
 let ledgerCategoriesOpen = false;
+let ledgerAccountsOpen = false;
+
+function resetLedgerEntry(): void {
+  ledgerEditingId = "";
+  ledgerEntryType = "expense";
+  ledgerEntryDraft = {
+    amount: "",
+    accountId: "",
+    fromAccountId: "",
+    toAccountId: "",
+    date: "",
+    note: "",
+  };
+}
 
 function localDateValue(iso?: string): string {
   const date = iso ? new Date(iso) : new Date();
@@ -1116,11 +1363,35 @@ function localDateValue(iso?: string): string {
 }
 
 function ledgerTemplate(state: WealthState): string {
-  const filtered = filterLedgerTransactions(state.ledgerTransactions, ledgerFilters);
+  const filtered = filterLedgerTransactions(state.ledgerTransactions, ledgerFilters, new Date(), state.ledgerCategories, state.ledgerAccounts);
   const totals = ledgerTotals(filtered);
+  const totalOpeningFunds = openingFunds(state.ledgerAccounts);
+  const netAssets = currentNetAssets(state.ledgerTransactions, state.ledgerAccounts);
   const editing = state.ledgerTransactions.find((transaction) => transaction.id === ledgerEditingId);
-  const entryType = editing?.type ?? "expense";
+  const entryType = editing?.type ?? ledgerEntryType;
   const entryCategories = state.ledgerCategories.filter((category) => category.type === entryType);
+  const balances = accountBalances(state.ledgerTransactions, state.ledgerAccounts);
+  const accountGroup = (type: LedgerAccountType, title: string, icon: string): string => {
+    const groupBalances = balances.filter(({ account }) => account.type === type);
+    const subtotal = groupBalances.reduce((sum, { balance }) => sum + balance, 0);
+    const rows = groupBalances.map(({ account, balance }: AccountBalance) => `<div class="ledger-account-row"><div class="ledger-account-copy"><span class="ledger-account-icon" aria-hidden="true">${escapeHtml(account.icon ?? icon)}</span><div><strong>${escapeHtml(account.name)}</strong><small>${type === "bank" ? "Bank account" : "E-wallet"}</small></div></div><strong class="ledger-account-balance ${balance >= 0 ? "income" : "expense"}">${balance < 0 ? "−" : ""}${money(Math.abs(balance))}</strong></div>`).join("");
+    return `<section class="ledger-account-group"><header><div><span class="ledger-account-group-icon" aria-hidden="true">${icon}</span><div><h4>${title}</h4><small>${groupBalances.length} ${groupBalances.length === 1 ? "account" : "accounts"}</small></div></div><strong class="${subtotal >= 0 ? "income" : "expense"}">${subtotal < 0 ? "−" : ""}${money(Math.abs(subtotal))}</strong></header><div class="ledger-account-list">${rows || `<p class="empty-state">No ${type === "bank" ? "bank accounts" : "e-wallets"} added.</p>`}</div></section>`;
+  };
+  const accountName = (id?: string): string => state.ledgerAccounts.find((account) => account.id === id)?.name ?? "Unknown account";
+  const accountOptions = (selected?: string): string => state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}"${account.id === selected ? " selected" : ""}>${escapeHtml((account.icon ?? (account.type === "bank" ? "🏦" : "👛")) + " " + account.name)}</option>`).join("");
+  const accountIds = new Set(state.ledgerAccounts.map((account) => account.id));
+  const defaultAccountId = state.ledgerAccounts[0]?.id ?? "";
+  const selectedAccountId = accountIds.has(editing?.accountId ?? ledgerEntryDraft.accountId) ? editing?.accountId ?? ledgerEntryDraft.accountId : defaultAccountId;
+  const requestedFromAccountId = editing?.fromAccountId ?? ledgerEntryDraft.fromAccountId;
+  const selectedFromAccountId = accountIds.has(requestedFromAccountId) ? requestedFromAccountId : defaultAccountId;
+  const requestedToAccountId = editing?.toAccountId ?? ledgerEntryDraft.toAccountId;
+  const selectedToAccountId = accountIds.has(requestedToAccountId) && requestedToAccountId !== selectedFromAccountId
+    ? requestedToAccountId
+    : state.ledgerAccounts.find((account) => account.id !== selectedFromAccountId)?.id ?? "";
+  const transferUnavailable = entryType === "transfer" && state.ledgerAccounts.length < 2;
+  const entryAmount = editing ? String(editing.amount) : ledgerEntryDraft.amount;
+  const entryDate = editing?.date ? localDateValue(editing.date) : ledgerEntryDraft.date || localDateValue();
+  const entryNote = editing?.note ?? ledgerEntryDraft.note;
   const expenses = categoryTotals(filtered, state.ledgerCategories, "expense");
   const palette = ["#ef6461", "#f59e0b", "#8b5cf6", "#3b82f6", "#14b8a6", "#ec4899", "#84cc16"];
   let angle = 0;
@@ -1135,25 +1406,31 @@ function ledgerTemplate(state: WealthState): string {
   const categoryOptions = state.ledgerCategories.map((category) => `<option value="${escapeHtml(category.id)}"${ledgerFilters.categoryId === category.id ? " selected" : ""}>${escapeHtml(category.icon + " " + category.label)}</option>`).join("");
   const transactionRows = filtered.map((transaction) => {
     const category = state.ledgerCategories.find((item) => item.id === transaction.categoryId);
-    return `<article class="ledger-row"><div class="ledger-row-icon">${escapeHtml(category?.icon ?? "•")}</div><div class="ledger-row-copy"><strong>${escapeHtml(category?.label ?? "Unknown category")}</strong><small>${new Date(transaction.date).toLocaleDateString()}${transaction.note ? " · " + escapeHtml(transaction.note) : ""}</small></div><strong class="ledger-amount ${transaction.type}">${transaction.type === "income" ? "+" : "−"}${money(transaction.amount)}</strong><div class="ledger-row-actions"><button class="icon-button edit-ledger" data-id="${escapeHtml(transaction.id)}" aria-label="Edit transaction">✎</button><button class="icon-button danger delete-ledger" data-id="${escapeHtml(transaction.id)}" aria-label="Delete transaction">✕</button></div></article>`;
+    const title = transaction.type === "transfer" ? `${accountName(transaction.fromAccountId)} → ${accountName(transaction.toAccountId)}` : category?.label ?? "Unknown category";
+    const accountMeta = transaction.type === "transfer" ? "Transfer / 转账" : accountName(transaction.accountId);
+    const icon = transaction.type === "transfer" ? "↔" : category?.icon ?? "•";
+    const amountPrefix = transaction.type === "income" ? "+" : transaction.type === "expense" ? "−" : "↔ ";
+    return `<article class="ledger-row"><div class="ledger-row-icon">${escapeHtml(icon)}</div><div class="ledger-row-copy"><strong>${escapeHtml(title)}</strong><small>${new Date(transaction.date).toLocaleDateString()} · ${escapeHtml(accountMeta)}${transaction.note ? " · " + escapeHtml(transaction.note) : ""}</small></div><strong class="ledger-amount ${transaction.type}">${amountPrefix}${money(transaction.amount)}</strong><div class="ledger-row-actions"><button class="icon-button edit-ledger" data-id="${escapeHtml(transaction.id)}" aria-label="Edit transaction">✎</button><button class="icon-button danger delete-ledger" data-id="${escapeHtml(transaction.id)}" aria-label="Delete transaction">✕</button></div></article>`;
   }).join("");
 
-  return `<div class="section-title"><span class="eyebrow">Everyday Money</span><h3>Ledger / 记账</h3><p>Capture income and expenses quickly, then understand where your money goes.</p></div>
+  return `<div class="section-title"><span class="eyebrow">Everyday Money</span><h3>Ledger</h3><p>Capture income, expenses, and account transfers, then understand where your money goes.</p></div>
     <div class="ledger-layout">
       <article class="card panel ledger-entry"><div class="panel-head"><div><span class="eyebrow">Quick Entry</span><h3>${editing ? "Edit Transaction" : "Add Transaction"}</h3></div>${editing ? '<button id="cancelLedgerEdit" class="secondary-button" type="button">Cancel</button>' : ""}</div>
-        <form id="ledgerForm"><input name="id" type="hidden" value="${escapeHtml(editing?.id ?? "")}"><div class="ledger-type-toggle" role="group" aria-label="Transaction type"><button type="button" data-ledger-type="expense" class="${entryType === "expense" ? "active expense" : ""}">− Expense</button><button type="button" data-ledger-type="income" class="${entryType === "income" ? "active income" : ""}">+ Income</button></div><input name="type" type="hidden" value="${entryType}">
-          <label class="ledger-amount-input"><span>Amount (MYR)</span><input id="ledgerAmount" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required value="${editing?.amount ?? ""}" placeholder="0.00"></label>
-          <fieldset class="category-picker"><legend>Category</legend>${entryCategories.map((category, index) => `<label><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === editing?.categoryId || (!editing && index === 0) ? " checked" : ""}><span><b>${escapeHtml(category.icon)}</b>${escapeHtml(category.label)}</span></label>`).join("")}</fieldset>
-          <details class="ledger-more"${editing ? " open" : ""}><summary>Date & note</summary><div class="form-grid"><label>Date<input name="date" type="date" required value="${localDateValue(editing?.date)}"></label><label>Note<input name="note" maxlength="500" value="${escapeHtml(editing?.note ?? "")}" placeholder="Optional"></label></div></details><p id="ledgerFormError" class="form-error" role="alert"></p><button class="primary-button ledger-save" type="submit">${editing ? "Save Changes" : "Save Transaction"}</button>
+        <form id="ledgerForm"><input name="id" type="hidden" value="${escapeHtml(editing?.id ?? "")}"><div class="ledger-type-toggle" role="group" aria-label="Transaction type"><button type="button" data-ledger-type="expense" class="${entryType === "expense" ? "active expense" : ""}">− Expense</button><button type="button" data-ledger-type="income" class="${entryType === "income" ? "active income" : ""}">+ Income</button><button type="button" data-ledger-type="transfer" class="${entryType === "transfer" ? "active transfer" : ""}">↔ Transfer</button></div><input name="type" type="hidden" value="${entryType}">
+          <label class="ledger-amount-input"><span>Amount (MYR)</span><input id="ledgerAmount" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required value="${escapeHtml(entryAmount)}" placeholder="0.00"></label>
+          ${entryType === "transfer" ? `<div class="ledger-account-fields"><label>From account<select name="fromAccountId" required>${accountOptions(selectedFromAccountId)}</select></label><label>To account<select name="toAccountId" required>${accountOptions(selectedToAccountId)}</select></label></div>` : `<label class="ledger-account-select">Account<select name="accountId" required>${accountOptions(selectedAccountId)}</select></label><fieldset class="category-picker"><legend>Category</legend>${entryCategories.map((category, index) => `<label><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === editing?.categoryId || (!editing && index === 0) ? " checked" : ""}><span><b>${escapeHtml(category.icon)}</b>${escapeHtml(category.label)}</span></label>`).join("")}</fieldset>`}
+          <details class="ledger-more"${editing ? " open" : ""}><summary>Date & note</summary><div class="form-grid"><label>Date<input name="date" type="date" required value="${entryDate}"></label><label>Note<input name="note" maxlength="500" value="${escapeHtml(entryNote)}" placeholder="Optional"></label></div></details><p id="ledgerFormError" class="form-error" role="alert">${transferUnavailable ? "Add at least two accounts before recording a transfer." : ""}</p><button class="primary-button ledger-save" type="submit"${transferUnavailable ? " disabled" : ""}>${editing ? "Save Changes" : "Save Transaction"}</button>
         </form>
       </article>
       <div class="ledger-main">
-        <div class="ledger-summary"><article class="card"><span>Income / 收入</span><strong class="income">+${money(totals.income)}</strong></article><article class="card"><span>Expenses / 支出</span><strong class="expense">−${money(totals.expense)}</strong></article><article class="card"><span>Net / 净额</span><strong class="${totals.balance >= 0 ? "income" : "expense"}">${totals.balance >= 0 ? "+" : "−"}${money(Math.abs(totals.balance))}</strong></article></div>
-        <article class="card panel ledger-filters"><form id="ledgerFilterForm"><div class="filter-presets">${(["week", "month", "year", "custom"] as const).map((preset) => `<button type="button" data-preset="${preset}" class="${ledgerFilters.preset === preset ? "active" : ""}">${preset === "week" ? "This week" : preset === "month" ? "This month" : preset === "year" ? "This year" : "Custom"}</button>`).join("")}</div><div class="ledger-filter-fields ${ledgerFilters.preset === "custom" ? "show-custom" : ""}"><label class="custom-date">From<input name="startDate" type="date" value="${ledgerFilters.startDate}"></label><label class="custom-date">To<input name="endDate" type="date" value="${ledgerFilters.endDate}"></label><label>Type<select name="type"><option value="all">All types</option><option value="expense"${ledgerFilters.type === "expense" ? " selected" : ""}>Expense</option><option value="income"${ledgerFilters.type === "income" ? " selected" : ""}>Income</option></select></label><label>Category<select name="categoryId"><option value="">All categories</option>${categoryOptions}</select></label><label>Search note<input name="query" type="search" value="${escapeHtml(ledgerFilters.query)}" placeholder="Keyword"></label><button class="secondary-button" id="resetLedgerFilters" type="button">Reset</button></div></form></article>
+        <div class="ledger-summary"><article class="card"><span>Opening Funds / 期初资金</span><strong>${money(totalOpeningFunds)}</strong><small>Starting balance across all accounts</small></article><article class="card"><span>Income / 期间收入</span><strong class="income">+${money(totals.income)}</strong><small>Income in the selected period</small></article><article class="card"><span>Expenses / 期间支出</span><strong class="expense">−${money(totals.expense)}</strong><small>Expenses in the selected period</small></article><article class="card"><span>Net Assets / 当前净额</span><strong class="${netAssets >= 0 ? "income" : "expense"}">${netAssets < 0 ? "−" : ""}${money(Math.abs(netAssets))}</strong><small>Opening funds adjusted by all transactions</small></article></div>
+        <article class="card ledger-account-summary"><div class="ledger-account-summary-head"><div><span class="eyebrow">Cash Locations</span><h3>Account Balances</h3><p>Opening balances adjusted by income, expenses, and transfers.</p></div><div><small>Total available</small><strong class="${netAssets >= 0 ? "income" : "expense"}">${netAssets < 0 ? "−" : ""}${money(Math.abs(netAssets))}</strong></div></div><div class="ledger-account-columns">${accountGroup("bank", "Bank", "🏦")}${accountGroup("wallet", "E-wallet", "👛")}</div></article>
+        <article class="card panel ledger-filters"><form id="ledgerFilterForm"><div class="filter-presets">${(["week", "month", "year", "custom"] as const).map((preset) => `<button type="button" data-preset="${preset}" class="${ledgerFilters.preset === preset ? "active" : ""}">${preset === "week" ? "This week" : preset === "month" ? "This month" : preset === "year" ? "This year" : "Custom"}</button>`).join("")}</div><div class="ledger-filter-fields ${ledgerFilters.preset === "custom" ? "show-custom" : ""}"><label class="custom-date">From<input name="startDate" type="date" value="${ledgerFilters.startDate}"></label><label class="custom-date">To<input name="endDate" type="date" value="${ledgerFilters.endDate}"></label><label>Type<select name="type"><option value="all">All types</option><option value="expense"${ledgerFilters.type === "expense" ? " selected" : ""}>Expense</option><option value="income"${ledgerFilters.type === "income" ? " selected" : ""}>Income</option><option value="transfer"${ledgerFilters.type === "transfer" ? " selected" : ""}>Transfer</option></select></label><label>Category<select name="categoryId"><option value="">All categories</option>${categoryOptions}</select></label><label>Search<input name="query" type="search" value="${escapeHtml(ledgerFilters.query)}" placeholder="Note, category, account"></label><button class="secondary-button" id="resetLedgerFilters" type="button">Reset</button></div></form></article>
         <div class="ledger-report-grid"><article class="card panel"><div class="panel-head"><div><span class="eyebrow">Expense Mix</span><h3>Category Share</h3></div></div>${expenses.length ? `<div class="ledger-donut-wrap"><div class="ledger-donut" style="background:conic-gradient(${donut})"><span>${money(totals.expense)}</span></div><div class="ledger-legend">${expenses.map((item, index) => `<div><i style="background:${palette[index % palette.length]}"></i><span>${escapeHtml(item.category.icon + " " + item.category.label)}</span><strong>${percent(item.share, 1)}</strong></div>`).join("")}</div></div><div class="ledger-bars">${expenses.map((item, index) => `<div><span>${escapeHtml(item.category.label)}</span><div><i style="width:${(item.amount / maxCategory) * 100}%;background:${palette[index % palette.length]}"></i></div><strong>${money(item.amount)}</strong></div>`).join("")}</div>` : '<p class="empty-state">No expense data in this period.</p>'}</article>
           <article class="card panel"><div class="panel-head"><div><span class="eyebrow">Annual Overview</span><h3>Monthly Income vs Expense</h3></div></div><div class="monthly-chart">${monthly.map((item) => `<div class="month-column"><div class="month-bars"><i class="income" style="height:${Math.max(item.income / monthlyMax * 100, item.income ? 3 : 0)}%" title="Income ${money(item.income)}"></i><i class="expense" style="height:${Math.max(item.expense / monthlyMax * 100, item.expense ? 3 : 0)}%" title="Expense ${money(item.expense)}"></i></div><small>${new Date(2000, item.month).toLocaleString("en", { month: "short" }).slice(0, 1)}</small></div>`).join("")}</div><div class="chart-key"><span><i class="income"></i>Income</span><span><i class="expense"></i>Expense</span></div></article></div>
         <details id="ledgerHistoryPanel" class="card panel ledger-collapsible"${ledgerHistoryOpen ? " open" : ""}><summary><div><span class="eyebrow">Transactions</span><h3>History</h3></div><span class="ledger-collapsible-meta">${filtered.length} records</span></summary><div class="ledger-collapsible-content"><div class="ledger-list">${transactionRows || '<p class="empty-state">No transactions match this view. Add your first record above.</p>'}</div></div></details>
         <details id="ledgerCategoriesPanel" class="card panel ledger-collapsible"${ledgerCategoriesOpen ? " open" : ""}><summary><div><span class="eyebrow">Custom Labels</span><h3>Category Manager</h3></div><span class="ledger-collapsible-meta">${state.ledgerCategories.length} categories</span></summary><div class="ledger-collapsible-content"><form id="ledgerCategoryForm" class="category-form"><label>Icon<input name="icon" maxlength="12" value="✨" required></label><label>Label<input name="label" maxlength="40" placeholder="Category name" required></label><label>Type<select name="type"><option value="expense">Expense</option><option value="income">Income</option></select></label><button class="primary-button" type="submit">Add Category</button></form><div class="category-manager">${state.ledgerCategories.map((category) => `<div><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)} <small>${category.type}</small></span><button class="secondary-button edit-category" data-id="${escapeHtml(category.id)}" type="button">Edit</button><button class="icon-button danger delete-category" data-id="${escapeHtml(category.id)}" aria-label="Delete ${escapeHtml(category.label)}">✕</button></div>`).join("")}</div></div></details>
+        <details id="ledgerAccountsPanel" class="card panel ledger-collapsible"${ledgerAccountsOpen ? " open" : ""}><summary><div><span class="eyebrow">Cash Locations</span><h3>Account Manager</h3></div><span class="ledger-collapsible-meta">${state.ledgerAccounts.length} accounts</span></summary><div class="ledger-collapsible-content"><form id="ledgerAccountForm" class="category-form"><label>Icon<input name="icon" maxlength="12" value="🏦" required></label><label>Name<input name="name" maxlength="40" placeholder="Account name" required></label><label>Type<select name="type"><option value="bank">Bank</option><option value="wallet">Wallet</option></select></label><label>Opening balance (MYR)<input name="openingBalance" type="number" min="0" step="0.01" value="0" required></label><button class="primary-button" type="submit">Add Account</button></form><p id="ledgerAccountError" class="form-error" role="alert"></p><div class="ledger-account-manager">${balances.map(({ account, balance }) => `<article class="ledger-managed-account"><header><div class="ledger-managed-account-title"><span class="ledger-managed-account-icon" aria-hidden="true">${escapeHtml(account.icon ?? "•")}</span><div><strong>${escapeHtml(account.name)}</strong><small>${account.type === "bank" ? "Bank account" : "E-wallet"}</small></div></div><div class="ledger-managed-account-actions"><button class="secondary-button edit-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Edit ${escapeHtml(account.name)}">Edit</button><button class="icon-button danger delete-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Delete ${escapeHtml(account.name)}">✕</button></div></header><div class="ledger-managed-account-balances"><div><small>Opening balance</small><strong>${money(account.openingBalance)}</strong></div><div><small>Current balance</small><strong class="${balance >= 0 ? "income" : "expense"}">${balance < 0 ? "−" : ""}${money(Math.abs(balance))}</strong></div></div></article>`).join("")}</div></div></details>
       </div>
     </div>`;
 }
@@ -1489,7 +1766,7 @@ export function quickViewTemplate(state: WealthState): string {
   return `
     <div style="max-width:400px;margin:0 auto;">
       <div style="text-align:center;margin-bottom:20px;">
-        <div class="brand-mark" style="width:48px;height:48px;margin:0 auto 8px;font-size:18px;">PW</div>
+        <div class="brand-mark" style="width:48px;height:48px;margin:0 auto 8px;"><img src="/brand/wealth-mark.svg" alt=""></div>
         <h2 style="font-size:20px;margin:0;">Personal Wealth OS</h2>
         <p style="font-size:12px;color:var(--ink-3);margin:4px 0 0;">Quick Overview</p>
       </div>
@@ -1589,6 +1866,12 @@ function recordsFromCsv(text: string): Trade[] {
 }
 
 export function renderApp(root: HTMLElement, state: WealthState, setState: Setter, activePage = "dashboard", navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
+  const currentSidebarScrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
+  if (currentSidebarScrollArea) {
+    sidebarScrollPositions.set(root, currentSidebarScrollArea.scrollTop);
+  }
+  const preservedSidebarScrollTop = sidebarScrollPositions.get(root);
+  document.body.classList.remove("sidebar-menu-open");
   calculatorCleanup.get(root)?.();
   calculatorCleanup.delete(root);
   sideRaysCleanup.get(root)?.();
@@ -1606,7 +1889,14 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
 
   root.className = "app-shell";
   root.innerHTML = shellTemplate(activePage, state, user);
-  keepActiveNavigationVisible(root);
+  const sidebarScrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
+  if (sidebarScrollArea) {
+    if (preservedSidebarScrollTop !== undefined) {
+      sidebarScrollArea.scrollTop = preservedSidebarScrollTop;
+    } else {
+      keepActiveNavigationVisible(root);
+    }
+  }
   const sideRays = root.querySelector<HTMLElement>("#sideRays");
   if (sideRays) {
     const cleanup = mountSideRays(sideRays, {
@@ -1666,6 +1956,8 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
 
   root.querySelectorAll<HTMLButtonElement>(".nav-item").forEach((button) => {
     button.addEventListener("click", () => {
+      const scrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
+      if (scrollArea) sidebarScrollPositions.set(root, scrollArea.scrollTop);
       closeSidebar(root);
       doNavigate(button.dataset.page ?? "dashboard");
     });
@@ -1720,6 +2012,7 @@ function closeSidebar(root: HTMLElement): void {
   root.querySelector<HTMLElement>("#sidebar")?.classList.remove("open");
   root.querySelector<HTMLElement>("#sidebarOverlay")?.classList.remove("visible");
   root.querySelector<HTMLButtonElement>("#sidebarToggle")?.setAttribute("aria-expanded", "false");
+  document.body.classList.remove("sidebar-menu-open");
 }
 
 function bindSidebar(root: HTMLElement): void {
@@ -1732,6 +2025,9 @@ function bindSidebar(root: HTMLElement): void {
     sidebar.classList.add("open");
     overlay.classList.add("visible");
     toggle.setAttribute("aria-expanded", "true");
+    if (window.matchMedia("(max-width: 720px)").matches) {
+      document.body.classList.add("sidebar-menu-open");
+    }
   };
 
   toggle.addEventListener("click", () => {
@@ -1952,28 +2248,25 @@ function bindLedger(root: HTMLElement, state: WealthState, setState: Setter, nav
   root.querySelector<HTMLDetailsElement>("#ledgerCategoriesPanel")?.addEventListener("toggle", (event) => {
     ledgerCategoriesOpen = (event.currentTarget as HTMLDetailsElement).open;
   });
+  root.querySelector<HTMLDetailsElement>("#ledgerAccountsPanel")?.addEventListener("toggle", (event) => {
+    ledgerAccountsOpen = (event.currentTarget as HTMLDetailsElement).open;
+  });
 
   root.querySelector<HTMLInputElement>("#ledgerAmount")?.focus();
   root.querySelectorAll<HTMLButtonElement>("[data-ledger-type]").forEach((button) => button.addEventListener("click", () => {
     const type = button.dataset.ledgerType as LedgerTransactionType;
     const form = root.querySelector<HTMLFormElement>("#ledgerForm");
-    const typeInput = form?.elements.namedItem("type") as HTMLInputElement | null;
-    const amount = (form?.elements.namedItem("amount") as HTMLInputElement | null)?.value ?? "";
-    const date = (form?.elements.namedItem("date") as HTMLInputElement | null)?.value ?? "";
-    const note = (form?.elements.namedItem("note") as HTMLInputElement | null)?.value ?? "";
+    ledgerEntryDraft = {
+      amount: (form?.elements.namedItem("amount") as HTMLInputElement | null)?.value ?? "",
+      accountId: (form?.elements.namedItem("accountId") as HTMLSelectElement | null)?.value ?? ledgerEntryDraft.accountId,
+      fromAccountId: (form?.elements.namedItem("fromAccountId") as HTMLSelectElement | null)?.value ?? ledgerEntryDraft.fromAccountId,
+      toAccountId: (form?.elements.namedItem("toAccountId") as HTMLSelectElement | null)?.value ?? ledgerEntryDraft.toAccountId,
+      date: (form?.elements.namedItem("date") as HTMLInputElement | null)?.value ?? "",
+      note: (form?.elements.namedItem("note") as HTMLInputElement | null)?.value ?? "",
+    };
     ledgerEditingId = "";
-    const temporary = { ...state, ledgerTransactions: state.ledgerTransactions };
-    if (typeInput) typeInput.value = type;
-    renderApp(root, temporary, setState, "ledger", navigate);
-    const nextForm = root.querySelector<HTMLFormElement>("#ledgerForm");
-    const fields = { amount: nextForm?.elements.namedItem("amount"), date: nextForm?.elements.namedItem("date"), note: nextForm?.elements.namedItem("note"), type: nextForm?.elements.namedItem("type") };
-    if (fields.amount instanceof HTMLInputElement) fields.amount.value = amount;
-    if (fields.date instanceof HTMLInputElement) fields.date.value = date;
-    if (fields.note instanceof HTMLInputElement) fields.note.value = note;
-    if (fields.type instanceof HTMLInputElement) fields.type.value = type;
-    root.querySelectorAll<HTMLButtonElement>("[data-ledger-type]").forEach((item) => item.className = item.dataset.ledgerType === type ? `active ${type}` : "");
-    const picker = root.querySelector<HTMLElement>(".category-picker");
-    if (picker) picker.innerHTML = `<legend>Category</legend>${state.ledgerCategories.filter((category) => category.type === type).map((category, index) => `<label><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${index === 0 ? " checked" : ""}><span><b>${escapeHtml(category.icon)}</b>${escapeHtml(category.label)}</span></label>`).join("")}`;
+    ledgerEntryType = type;
+    renderApp(root, { ...state, ledgerTransactions: state.ledgerTransactions }, setState, "ledger", navigate);
   }));
 
   root.querySelector<HTMLFormElement>("#ledgerForm")?.addEventListener("submit", (event) => {
@@ -1982,24 +2275,44 @@ function bindLedger(root: HTMLElement, state: WealthState, setState: Setter, nav
     const amount = normalizeLedgerAmount(String(data.get("amount") ?? ""));
     const type = String(data.get("type")) as LedgerTransactionType;
     const categoryId = String(data.get("categoryId") ?? "");
+    const accountId = String(data.get("accountId") ?? "");
+    const fromAccountId = String(data.get("fromAccountId") ?? "");
+    const toAccountId = String(data.get("toAccountId") ?? "");
     const dateValue = String(data.get("date") ?? "");
     const date = new Date(`${dateValue}T00:00:00`);
     const error = root.querySelector<HTMLElement>("#ledgerFormError");
-    if (!amount || !["income", "expense"].includes(type) || !state.ledgerCategories.some((category) => category.id === categoryId && category.type === type) || !Number.isFinite(date.getTime())) {
-      if (error) error.textContent = "Enter a positive amount, valid date, and matching category.";
+    const accountIds = new Set(state.ledgerAccounts.map((account) => account.id));
+    const categoryValid = type === "transfer" || state.ledgerCategories.some((category) => category.id === categoryId && category.type === type);
+    const accountValid = type === "transfer" ? accountIds.has(fromAccountId) && accountIds.has(toAccountId) && fromAccountId !== toAccountId : accountIds.has(accountId);
+    if (!amount || !["income", "expense", "transfer"].includes(type) || !categoryValid || !accountValid || !Number.isFinite(date.getTime())) {
+      if (error) {
+        error.textContent = type === "transfer" && state.ledgerAccounts.length < 2
+          ? "Add at least two accounts before recording a transfer."
+          : type === "transfer" && fromAccountId === toAccountId
+            ? "Choose two different accounts for a transfer."
+            : "Enter a positive amount, valid date, and valid account details.";
+      }
       return;
     }
     const id = String(data.get("id") || createId("ledger"));
     const note = String(data.get("note") ?? "").trim().slice(0, 500);
-    const transaction: LedgerTransaction = { id, amount, type, categoryId, date: date.toISOString(), ...(note ? { note } : {}) };
+    const transaction: LedgerTransaction = type === "transfer"
+      ? { id, amount, type, fromAccountId, toAccountId, date: date.toISOString(), ...(note ? { note } : {}) }
+      : { id, amount, type, categoryId, accountId, date: date.toISOString(), ...(note ? { note } : {}) };
     const exists = state.ledgerTransactions.some((item) => item.id === id);
     const ledgerTransactions = exists ? state.ledgerTransactions.map((item) => item.id === id ? transaction : item) : [...state.ledgerTransactions, transaction];
-    ledgerEditingId = "";
+    resetLedgerEntry();
     refresh({ ...state, ledgerTransactions }, exists ? "Edit ledger transaction" : "Add ledger transaction");
   });
 
-  root.querySelectorAll<HTMLButtonElement>(".edit-ledger").forEach((button) => button.addEventListener("click", () => { ledgerEditingId = button.dataset.id ?? ""; refresh(); }));
-  root.querySelector<HTMLButtonElement>("#cancelLedgerEdit")?.addEventListener("click", () => { ledgerEditingId = ""; refresh(); });
+  root.querySelectorAll<HTMLButtonElement>(".edit-ledger").forEach((button) => button.addEventListener("click", () => {
+    ledgerEditingId = button.dataset.id ?? "";
+    refresh();
+  }));
+  root.querySelector<HTMLButtonElement>("#cancelLedgerEdit")?.addEventListener("click", () => {
+    resetLedgerEntry();
+    refresh();
+  });
   root.querySelectorAll<HTMLButtonElement>(".delete-ledger").forEach((button) => button.addEventListener("click", () => {
     const id = button.dataset.id;
     if (!id || !confirm("Delete this transaction? A snapshot will be saved first.")) return;
@@ -2041,6 +2354,42 @@ function bindLedger(root: HTMLElement, state: WealthState, setState: Setter, nav
     if (state.ledgerTransactions.some((transaction) => transaction.categoryId === id)) { alert("This category is used by existing transactions. Reassign or delete those transactions first."); return; }
     if (!confirm("Delete this unused category?")) return;
     refresh({ ...state, ledgerCategories: state.ledgerCategories.filter((category) => category.id !== id) }, "Delete ledger category");
+  }));
+
+  root.querySelector<HTMLFormElement>("#ledgerAccountForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget as HTMLFormElement);
+    const name = String(data.get("name") ?? "").trim().slice(0, 40);
+    const icon = String(data.get("icon") ?? "").trim().slice(0, 12) || "•";
+    const type = String(data.get("type")) as LedgerAccountType;
+    const openingBalance = Number(data.get("openingBalance"));
+    const error = root.querySelector<HTMLElement>("#ledgerAccountError");
+    if (!name || !["bank", "wallet"].includes(type) || !Number.isFinite(openingBalance) || openingBalance < 0) {
+      if (error) error.textContent = "Enter a name, valid type, and non-negative opening balance.";
+      return;
+    }
+    refresh({ ...state, ledgerAccounts: [...state.ledgerAccounts, { id: createId("account"), name, icon, type, openingBalance: Math.round((openingBalance + Number.EPSILON) * 100) / 100 }] }, "Add ledger account");
+  });
+  root.querySelectorAll<HTMLButtonElement>(".edit-account").forEach((button) => button.addEventListener("click", () => {
+    const account = state.ledgerAccounts.find((item) => item.id === button.dataset.id);
+    if (!account) return;
+    const name = prompt("Account name", account.name)?.trim();
+    if (!name) return;
+    const icon = prompt("Account icon", account.icon ?? (account.type === "bank" ? "🏦" : "👛"))?.trim() || "•";
+    const openingInput = prompt("Opening balance (MYR)", String(account.openingBalance));
+    if (openingInput === null) return;
+    const openingBalance = Number(openingInput);
+    if (!Number.isFinite(openingBalance) || openingBalance < 0) { alert("Opening balance must be a non-negative number."); return; }
+    refresh({ ...state, ledgerAccounts: state.ledgerAccounts.map((item) => item.id === account.id ? { ...item, name: name.slice(0, 40), icon: icon.slice(0, 12), openingBalance: Math.round((openingBalance + Number.EPSILON) * 100) / 100 } : item) }, "Edit ledger account");
+  }));
+  root.querySelectorAll<HTMLButtonElement>(".delete-account").forEach((button) => button.addEventListener("click", () => {
+    const id = button.dataset.id;
+    if (!id) return;
+    const referenced = state.ledgerTransactions.some((transaction) => transaction.accountId === id || transaction.fromAccountId === id || transaction.toAccountId === id);
+    if (referenced) { alert("This account is used by existing transactions. Reassign or delete those transactions first."); return; }
+    if (state.ledgerAccounts.length <= 1) { alert("Keep at least one account so income and expenses have a valid destination."); return; }
+    if (!confirm("Delete this unused account?")) return;
+    refresh({ ...state, ledgerAccounts: state.ledgerAccounts.filter((account) => account.id !== id) }, "Delete ledger account");
   }));
 }
 

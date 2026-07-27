@@ -1,4 +1,4 @@
-import type { LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, WealthState } from "./models";
+import type { LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, WealthState } from "./models";
 import {
   saveToFirestore,
   loadFromFirestore,
@@ -6,7 +6,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 8;
+export const CURRENT_VERSION = 10;
 
 const RULE_CARD_IDS = new Set<RuleCardId>([
   "monthly-cashflow",
@@ -29,6 +29,11 @@ const DEFAULT_LEDGER_CATEGORIES: LedgerCategory[] = [
   { id: "income-allowance", label: "Allowance", icon: "💵", type: "income" },
   { id: "income-bonus", label: "Bonus", icon: "🎁", type: "income" },
   { id: "income-other", label: "Other", icon: "✨", type: "income" },
+];
+
+const DEFAULT_LEDGER_ACCOUNTS: LedgerAccount[] = [
+  { id: "account-bank", name: "Bank", type: "bank", openingBalance: 0, icon: "🏦" },
+  { id: "account-wallet", name: "Wallet", type: "wallet", openingBalance: 0, icon: "👛" },
 ];
 
 function getUserStorageKey(uid?: string): string {
@@ -115,6 +120,7 @@ export const defaultState: WealthState = {
   reviews: [],
   customTickers: [],
   ledgerCategories: DEFAULT_LEDGER_CATEGORIES,
+  ledgerAccounts: DEFAULT_LEDGER_ACCOUNTS,
   ledgerTransactions: [],
   ruleCardOverrides: {},
   ruleNoteTitle: "",
@@ -195,6 +201,7 @@ export function emptyState(): WealthState {
     reviews: [],
     customTickers: [],
     ledgerCategories: structuredClone(DEFAULT_LEDGER_CATEGORIES),
+    ledgerAccounts: structuredClone(DEFAULT_LEDGER_ACCOUNTS),
     ledgerTransactions: [],
     ruleCardOverrides: {},
     ruleNoteTitle: "",
@@ -204,7 +211,25 @@ export function emptyState(): WealthState {
 }
 
 function isLedgerType(value: unknown): value is LedgerTransactionType {
-  return value === "income" || value === "expense";
+  return value === "income" || value === "expense" || value === "transfer";
+}
+
+function isLedgerAccountType(value: unknown): value is LedgerAccountType {
+  return value === "bank" || value === "wallet";
+}
+
+function validLedgerAccounts(value: unknown): LedgerAccount[] {
+  if (!Array.isArray(value)) return structuredClone(DEFAULT_LEDGER_ACCOUNTS);
+  const accounts = value.flatMap((candidate): LedgerAccount[] => {
+    if (!candidate || typeof candidate !== "object") return [];
+    const item = candidate as Record<string, unknown>;
+    if (typeof item.id !== "string" || !item.id.trim() || typeof item.name !== "string" || !item.name.trim() || !isLedgerAccountType(item.type)) return [];
+    const openingBalance = typeof item.openingBalance === "number" ? item.openingBalance : Number(item.openingBalance ?? 0);
+    if (!Number.isFinite(openingBalance) || openingBalance < 0) return [];
+    const icon = typeof item.icon === "string" ? item.icon.trim().slice(0, 12) : "";
+    return [{ id: item.id, name: item.name.trim().slice(0, 40), type: item.type, openingBalance: Math.round((openingBalance + Number.EPSILON) * 100) / 100, ...(icon ? { icon } : {}) }];
+  });
+  return accounts.length > 0 ? accounts : structuredClone(DEFAULT_LEDGER_ACCOUNTS);
 }
 
 function validLedgerCategories(value: unknown): LedgerCategory[] {
@@ -218,17 +243,34 @@ function validLedgerCategories(value: unknown): LedgerCategory[] {
   return categories.length > 0 ? categories : structuredClone(DEFAULT_LEDGER_CATEGORIES);
 }
 
-function validLedgerTransactions(value: unknown, categories: LedgerCategory[]): LedgerTransaction[] {
-  if (!Array.isArray(value)) return [];
+function ledgerCandidateItems(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return [];
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.transactions)) return record.transactions;
+  if (Array.isArray(record.entries)) return record.entries;
+  return [];
+}
+
+function validLedgerTransactions(value: unknown, categories: LedgerCategory[], accounts: LedgerAccount[]): LedgerTransaction[] {
+  const candidates = ledgerCandidateItems(value);
   const categoryTypes = new Map(categories.map((category) => [category.id, category.type]));
-  return value.flatMap((candidate): LedgerTransaction[] => {
+  const accountIds = new Set(accounts.map((account) => account.id));
+  const fallbackAccountId = accounts[0]?.id ?? "";
+  return candidates.flatMap((candidate): LedgerTransaction[] => {
     if (!candidate || typeof candidate !== "object") return [];
     const item = candidate as Record<string, unknown>;
     const amount = typeof item.amount === "number" ? item.amount : Number(item.amount);
     const timestamp = typeof item.date === "string" ? new Date(item.date).getTime() : NaN;
-    if (typeof item.id !== "string" || !item.id || !Number.isFinite(amount) || amount <= 0 || !isLedgerType(item.type) || typeof item.categoryId !== "string" || categoryTypes.get(item.categoryId) !== item.type || !Number.isFinite(timestamp)) return [];
+    const type = item.type;
+    const categoryValid = type === "transfer" ? !item.categoryId || typeof item.categoryId === "string" : typeof item.categoryId === "string" && categoryTypes.get(item.categoryId) === type;
+    const accountId = typeof item.accountId === "string" && accountIds.has(item.accountId) ? item.accountId : fallbackAccountId;
+    const accountValid = type === "transfer"
+      ? typeof item.fromAccountId === "string" && accountIds.has(item.fromAccountId) && typeof item.toAccountId === "string" && accountIds.has(item.toAccountId) && item.fromAccountId !== item.toAccountId
+      : Boolean(accountId);
+    if (typeof item.id !== "string" || !item.id || !Number.isFinite(amount) || amount <= 0 || !isLedgerType(type) || !categoryValid || !accountValid || !Number.isFinite(timestamp)) return [];
     const note = typeof item.note === "string" ? item.note.trim().slice(0, 500) : undefined;
-    return [{ id: item.id, amount: Math.round((amount + Number.EPSILON) * 100) / 100, type: item.type, categoryId: item.categoryId, date: new Date(timestamp).toISOString(), ...(note ? { note } : {}) }];
+    return [{ id: item.id, amount: Math.round((amount + Number.EPSILON) * 100) / 100, type, ...(type !== "transfer" && typeof item.categoryId === "string" ? { categoryId: item.categoryId } : {}), ...(type !== "transfer" ? { accountId } : {}), ...(type === "transfer" && typeof item.fromAccountId === "string" ? { fromAccountId: item.fromAccountId } : {}), ...(type === "transfer" && typeof item.toAccountId === "string" ? { toAccountId: item.toAccountId } : {}), date: new Date(timestamp).toISOString(), ...(note ? { note } : {}) }];
   });
 }
 
@@ -247,6 +289,7 @@ function validRuleCardOverrides(value: unknown): Partial<Record<RuleCardId, Rule
 }
 
 function migrateState(input: Partial<WealthState>): WealthState {
+  const candidate = input as Partial<WealthState> & Record<string, unknown>;
   const merged = {
     ...cloneDefaultState(),
     ...input,
@@ -263,8 +306,26 @@ function migrateState(input: Partial<WealthState>): WealthState {
     allocation: { ...defaultState.opportunity.allocation, ...input.opportunity?.allocation },
     tranches: input.opportunity?.tranches ?? defaultState.opportunity.tranches,
   };
-  merged.ledgerCategories = validLedgerCategories(input.ledgerCategories);
-  merged.ledgerTransactions = validLedgerTransactions(input.ledgerTransactions, merged.ledgerCategories);
+  merged.customTickers = Array.isArray(input.customTickers)
+    ? [...new Set(input.customTickers
+      .filter((ticker): ticker is string => typeof ticker === "string")
+      .map((ticker) => ticker.trim().toUpperCase())
+      .filter((ticker) => /^[A-Z0-9._^:-]{1,20}$/.test(ticker) && ticker !== "VOO" && ticker !== "QQQM"))]
+      .slice(0, 30)
+    : [];
+  const legacyLedger = candidate.ledger && typeof candidate.ledger === "object" ? candidate.ledger as Record<string, unknown> : undefined;
+  const ledgerCategories = validLedgerCategories(candidate.ledgerCategories ?? legacyLedger?.categories);
+  const ledgerAccounts = validLedgerAccounts(input.ledgerAccounts);
+  const transactionSource = candidate.ledgerTransactions ?? candidate.transactions ?? candidate.ledgerEntries ?? legacyLedger?.transactions ?? legacyLedger?.entries;
+  const ledgerTransactions = validLedgerTransactions(transactionSource, ledgerCategories, ledgerAccounts);
+  merged.ledgerCategories = ledgerCategories;
+  merged.ledgerAccounts = ledgerAccounts;
+  merged.ledgerTransactions = ledgerTransactions.filter((transaction) => {
+    const accounts = new Set(merged.ledgerAccounts.map((account) => account.id));
+    return transaction.type === "transfer"
+      ? accounts.has(transaction.fromAccountId ?? "") && accounts.has(transaction.toAccountId ?? "")
+      : accounts.has(transaction.accountId ?? "");
+  });
   merged.ruleCardOverrides = validRuleCardOverrides(input.ruleCardOverrides);
   merged.ruleNoteTitle = typeof input.ruleNoteTitle === "string" ? input.ruleNoteTitle.trim().slice(0, 80) : "";
   merged.ruleNotes = typeof input.ruleNotes === "string" ? input.ruleNotes.slice(0, 5000) : "";

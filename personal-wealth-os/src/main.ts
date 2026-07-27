@@ -108,6 +108,7 @@ const appPages = new Set([
 function pageFromLocation(): string {
   if (window.location.pathname === "/quick") return "quick";
   const hashPage = window.location.hash.slice(1);
+  if (hashPage === "quick") return "quick";
   return appPages.has(hashPage) ? hashPage : "dashboard";
 }
 
@@ -160,7 +161,7 @@ function renderLogin(): void {
     <div class="login-container">
       <div class="login-card">
         <div class="login-brand">
-          <div class="brand-mark-lg">PW</div>
+          <div class="brand-mark-lg"><img src="/brand/wealth-mark.svg" alt="Personal Wealth OS"></div>
           <h1>Personal Wealth OS</h1>
           <p>Investment Discipline · Cash Flow · Goals</p>
         </div>

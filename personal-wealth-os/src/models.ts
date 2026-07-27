@@ -91,7 +91,18 @@ export interface Review {
   notes: string;
 }
 
-export type LedgerTransactionType = "income" | "expense";
+export type LedgerTransactionType = "income" | "expense" | "transfer";
+
+export type LedgerAccountType = "bank" | "wallet";
+
+export interface LedgerAccount {
+  id: string;
+  name: string;
+  type: LedgerAccountType;
+  openingBalance: number;
+  icon?: string;
+  color?: string;
+}
 
 export interface LedgerCategory {
   id: string;
@@ -104,7 +115,10 @@ export interface LedgerTransaction {
   id: string;
   amount: number;
   type: LedgerTransactionType;
-  categoryId: string;
+  categoryId?: string;
+  accountId?: string;
+  fromAccountId?: string;
+  toAccountId?: string;
   date: string;
   note?: string;
 }
@@ -136,6 +150,7 @@ export interface WealthState {
   reviews: Review[];
   customTickers: string[];
   ledgerCategories: LedgerCategory[];
+  ledgerAccounts: LedgerAccount[];
   ledgerTransactions: LedgerTransaction[];
   ruleCardOverrides: Partial<Record<RuleCardId, RuleCardContent>>;
   ruleNoteTitle: string;

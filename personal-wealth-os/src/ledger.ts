@@ -1,4 +1,4 @@
-import type { LedgerCategory, LedgerTransaction, LedgerTransactionType } from "./models";
+import type { LedgerAccount, LedgerCategory, LedgerTransaction, LedgerTransactionType } from "./models";
 
 export type LedgerRangePreset = "week" | "month" | "year" | "custom";
 
@@ -14,6 +14,12 @@ export interface LedgerFilters {
 export interface LedgerTotals {
   income: number;
   expense: number;
+  balance: number;
+  transfer: number;
+}
+
+export interface AccountBalance {
+  account: LedgerAccount;
   balance: number;
 }
 
@@ -52,32 +58,45 @@ export function ledgerRange(preset: LedgerRangePreset, now = new Date(), customS
   return { start: new Date(now.getFullYear(), now.getMonth(), 1), end };
 }
 
-export function filterLedgerTransactions(transactions: LedgerTransaction[], filters: LedgerFilters, now = new Date()): LedgerTransaction[] {
+export function filterLedgerTransactions(transactions: LedgerTransaction[], filters: LedgerFilters, now = new Date(), categories: LedgerCategory[] = [], accounts: LedgerAccount[] = []): LedgerTransaction[] {
   const { start, end } = ledgerRange(filters.preset, now, filters.startDate, filters.endDate);
   const query = filters.query.trim().toLocaleLowerCase();
+  const categoryNames = new Map(categories.map((category) => [category.id, category.label.toLocaleLowerCase()]));
+  const accountNames = new Map(accounts.map((account) => [account.id, account.name.toLocaleLowerCase()]));
   return transactions
     .filter((transaction) => {
       const timestamp = new Date(transaction.date).getTime();
       if (!Number.isFinite(timestamp) || (start && timestamp < start.getTime()) || (end && timestamp > end.getTime())) return false;
       if (filters.type !== "all" && transaction.type !== filters.type) return false;
       if (filters.categoryId && transaction.categoryId !== filters.categoryId) return false;
-      return !query || (transaction.note ?? "").toLocaleLowerCase().includes(query);
+      const searchable = [transaction.note ?? "", categoryNames.get(transaction.categoryId ?? "") ?? "", accountNames.get(transaction.accountId ?? "") ?? "", accountNames.get(transaction.fromAccountId ?? "") ?? "", accountNames.get(transaction.toAccountId ?? "") ?? ""].join(" ").toLocaleLowerCase();
+      return !query || searchable.includes(query);
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
 
 export function ledgerTotals(transactions: LedgerTransaction[]): LedgerTotals {
   const totals = transactions.reduce((result, transaction) => {
-    result[transaction.type] += transaction.amount;
+    if (transaction.type === "income") result.income += transaction.amount;
+    if (transaction.type === "expense") result.expense += transaction.amount;
+    if (transaction.type === "transfer") result.transfer += transaction.amount;
     return result;
-  }, { income: 0, expense: 0 });
+  }, { income: 0, expense: 0, transfer: 0 });
   return { ...totals, balance: totals.income - totals.expense };
+}
+
+export function openingFunds(accounts: LedgerAccount[]): number {
+  return accounts.reduce((total, account) => total + account.openingBalance, 0);
+}
+
+export function currentNetAssets(transactions: LedgerTransaction[], accounts: LedgerAccount[]): number {
+  return openingFunds(accounts) + ledgerTotals(transactions).balance;
 }
 
 export function categoryTotals(transactions: LedgerTransaction[], categories: LedgerCategory[], type: LedgerTransactionType): CategoryTotal[] {
   const amounts = new Map<string, number>();
   for (const transaction of transactions) {
-    if (transaction.type === type) amounts.set(transaction.categoryId, (amounts.get(transaction.categoryId) ?? 0) + transaction.amount);
+    if (transaction.type === type && transaction.categoryId) amounts.set(transaction.categoryId, (amounts.get(transaction.categoryId) ?? 0) + transaction.amount);
   }
   const total = [...amounts.values()].reduce((sum, amount) => sum + amount, 0);
   return categories
@@ -86,11 +105,24 @@ export function categoryTotals(transactions: LedgerTransaction[], categories: Le
     .sort((a, b) => b.amount - a.amount);
 }
 
+export function accountBalances(transactions: LedgerTransaction[], accounts: LedgerAccount[]): AccountBalance[] {
+  const balances = new Map(accounts.map((account) => [account.id, account.openingBalance]));
+  for (const transaction of transactions) {
+    if (transaction.type === "income" && transaction.accountId) balances.set(transaction.accountId, (balances.get(transaction.accountId) ?? 0) + transaction.amount);
+    if (transaction.type === "expense" && transaction.accountId) balances.set(transaction.accountId, (balances.get(transaction.accountId) ?? 0) - transaction.amount);
+    if (transaction.type === "transfer") {
+      if (transaction.fromAccountId) balances.set(transaction.fromAccountId, (balances.get(transaction.fromAccountId) ?? 0) - transaction.amount);
+      if (transaction.toAccountId) balances.set(transaction.toAccountId, (balances.get(transaction.toAccountId) ?? 0) + transaction.amount);
+    }
+  }
+  return accounts.map((account) => ({ account, balance: balances.get(account.id) ?? 0 }));
+}
+
 export function monthlyLedgerTotals(transactions: LedgerTransaction[], year: number): Array<{ month: number; income: number; expense: number }> {
   const months = Array.from({ length: 12 }, (_, month) => ({ month, income: 0, expense: 0 }));
   for (const transaction of transactions) {
     const date = new Date(transaction.date);
-    if (Number.isFinite(date.getTime()) && date.getFullYear() === year) months[date.getMonth()][transaction.type] += transaction.amount;
+    if (Number.isFinite(date.getTime()) && date.getFullYear() === year && transaction.type !== "transfer") months[date.getMonth()][transaction.type] += transaction.amount;
   }
   return months;
 }
