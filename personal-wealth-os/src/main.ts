@@ -3,6 +3,7 @@ import type { WealthState } from "./models";
 import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState } from "./state";
 import { renderApp, quickViewTemplate } from "./ui";
 import { onAuth, signInWithGoogle, handleRedirectResult, logOut } from "./firebase";
+import { fetchUsdToMyr } from "./market";
 import type { User } from "firebase/auth";
 
 // PWA install prompt
@@ -123,6 +124,7 @@ function rememberPage(page: string): void {
 let currentPage = pageFromLocation();
 let currentUser: User | null = null;
 let cloudSyncUnsub: (() => void) | null = null;
+let authRequestId = 0;
 
 // Expose theme toggle and page nav globally
 (window as unknown as Record<string, unknown>).__pwo = {
@@ -156,14 +158,19 @@ async function handleLogout(): Promise<void> {
 }
 
 function renderLogin(): void {
+  document.body.classList.toggle("mask-financial-amounts", state.privacy.maskAmounts);
   root!.className = "login-shell";
   root!.innerHTML = `
     <div class="login-container">
       <div class="login-card">
         <div class="login-brand">
-          <div class="brand-mark-lg"><img src="/brand/wealth-mark.svg" alt="Personal Wealth OS"></div>
-          <h1>Personal Wealth OS</h1>
-          <p>Investment Discipline · Cash Flow · Goals</p>
+          <div class="login-logo-frame">
+            <img class="brand-logo-login" src="/brand/wealth-mark.png" alt="WealthUp">
+          </div>
+          <div class="login-brand-copy">
+            <h1>WealthUp</h1>
+          </div>
+          <p class="login-tagline">Track <span aria-hidden="true">•</span> Grow <span aria-hidden="true">•</span> Compound</p>
         </div>
         <div class="login-body">
           <p class="login-desc">Sign in to sync your data securely across devices.</p>
@@ -176,7 +183,11 @@ function renderLogin(): void {
     </div>
   `;
 
-  root!.querySelector<HTMLButtonElement>("#googleSignIn")?.addEventListener("click", async () => {
+  root!.querySelector<HTMLButtonElement>("#googleSignIn")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+
     try {
       const user = await signInWithGoogle();
       if (user) {
@@ -187,11 +198,15 @@ function renderLogin(): void {
     } catch (err) {
       console.error("Sign-in failed:", err);
       alert("Sign-in failed. Please try again.");
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
     }
   });
 }
 
 async function handleAuth(user: User | null): Promise<void> {
+  const requestId = ++authRequestId;
+
   if (user) {
     currentUser = user;
     console.log(`[Auth] User signed in: ${user.uid} (${user.email})`);
@@ -199,39 +214,41 @@ async function handleAuth(user: User | null): Promise<void> {
     // Unsubscribe from previous cloud sync if any
     if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
 
-    // Load user-specific local state (no fallback to global key)
-    state = loadState(user.uid);
+    const userStorageKey = `personal-wealth-os-state-${user.uid}`;
+    const hasLocalData = localStorage.getItem(userStorageKey) !== null;
 
-    // Try cloud state
-    let hasCloudData = false;
+    // Show the user-specific local state immediately. Cloud access can be slow,
+    // unavailable offline, or denied without preventing access to saved data.
+    state = loadState(user.uid);
+    renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
+
+    // Warm exchange rate cache early so dashboard renders with current rates.
+    void fetchUsdToMyr().catch(() => {});
+
     try {
       const cloudState = await loadStateFromCloud();
+      if (requestId !== authRequestId || currentUser?.uid !== user.uid) return;
+
       if (cloudState) {
         state = cloudState;
-        hasCloudData = true;
-      }
-    } catch (err) {
-      console.error("[Auth] Cloud load failed, using local state:", err);
-    }
-
-    // Only push to cloud if user already has local data (sync up)
-    // For brand new users with no cloud and no local data, push fresh default
-    if (!hasCloudData) {
-      const userStorageKey = `personal-wealth-os-state-${user.uid}`;
-      const hasLocalData = localStorage.getItem(userStorageKey) !== null;
-      if (hasLocalData) {
+        renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
+      } else if (hasLocalData) {
         // User has local data from before, sync it up
         await syncLocalToCloud(state);
       } else {
         // Brand new user — push fresh empty state to cloud
         state = emptyState();
+        saveState(state, user.uid);
         await syncLocalToCloud(state);
+        if (requestId !== authRequestId || currentUser?.uid !== user.uid) return;
+        renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
       }
+    } catch (err) {
+      // A failed read is not the same as an empty cloud document. Keep the local
+      // state and never overwrite cloud data when connectivity or permissions fail.
+      console.error("[Auth] Cloud load failed, continuing with local state:", err);
     }
 
-    // Save to user-specific localStorage
-    saveState(state, user.uid);
-    renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
   } else {
     currentUser = null;
     // Clear in-memory state to prevent leaking to next user
@@ -241,11 +258,21 @@ async function handleAuth(user: User | null): Promise<void> {
   }
 }
 
-// Check for redirect result first, then start auth listener
-handleRedirectResult().then((redirectUser) => {
-  if (redirectUser) {
-    console.log("[Auth] Sign-in successful via redirect:", redirectUser.email);
-  }
-  // Start auth listener (will fire with current user state)
-  onAuth(handleAuth);
+// Render immediately so a slow redirect check cannot leave the application blank.
+renderLogin();
+onAuth((user) => {
+  void handleAuth(user).catch((error: unknown) => {
+    console.error("[Auth] Failed to initialize signed-in session:", error);
+    if (!user) renderLogin();
+  });
 });
+
+handleRedirectResult()
+  .then((redirectUser) => {
+    if (redirectUser) {
+      console.log("[Auth] Sign-in successful via redirect:", redirectUser.email);
+    }
+  })
+  .catch((error: unknown) => {
+    console.error("[Auth] Redirect sign-in check failed:", error);
+  });

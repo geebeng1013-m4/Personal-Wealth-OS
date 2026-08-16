@@ -14,9 +14,10 @@ import {
   trancheStatus,
   tradeUnits,
 } from "./rules";
-import { fetchQuote, fetchMultipleQuotes, formatPrice, formatChange, formatVolume, type MarketQuote, calcPnLForTicker, type PortfolioPnL, buildTradeTimelineHtml, fetchFundamentals, type Fundamentals, fetchHistoricalPrices, calcRiskMetrics, fetchStockComparison } from "./market";
-import { accountBalances, categoryTotals, currentNetAssets, filterLedgerTransactions, ledgerTotals, monthlyLedgerTotals, normalizeLedgerAmount, openingFunds, type AccountBalance, type LedgerFilters } from "./ledger";
+import { fetchQuote, fetchMultipleQuotes, formatPrice, formatChange, formatVolume, type MarketQuote, calcPnLForTicker, type PortfolioPnL, buildTradeTimelineHtml, fetchFundamentals, type Fundamentals, fetchHistoricalPrices, calcRiskMetrics, getUsdToMyr, fetchUsdToMyr } from "./market";
+import { accountBalances, accountTypeBalance, categoryTotals, filterLedgerTransactions, investmentAssetShare, ledgerTotals, monthlyLedgerTotals, normalizeLedgerAmount, openingFunds, type AccountBalance, type LedgerFilters } from "./ledger";
 import { mountSideRays } from "./sideRays";
+import { forecastRecurring, linkedGoalCurrent, monthlyClose, netWorth, rebalanceContributions, tradeExchangeRate } from "./financialHealth";
 
 type Setter = (state: WealthState, changeLabel?: string) => void;
 type Navigate = (page: string) => void;
@@ -101,8 +102,11 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-scroll-area">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true"><img src="/brand/wealth-mark.svg" alt=""></div>
-          <div><h1>Personal Wealth OS</h1><p>Personal CFO System</p></div>
+          <span class="brand-mark"><img src="/brand/wealth-mark.png" alt=""></span>
+          <span class="brand-copy">
+            <h1>WealthUp</h1>
+            <p>Personal Wealth OS</p>
+          </span>
         </div>
         <nav class="nav line-sidebar" aria-label="Primary navigation">
           ${navTemplate(activePage)}
@@ -146,6 +150,8 @@ function dashboardTemplate(state: WealthState): string {
   const portfolio = portfolioSummary(state);
   const emergency = emergencyRatio(state);
   const actions = nextActions(state);
+  const assetShare = investmentAssetShare(state.ledgerTransactions, state.ledgerAccounts);
+  const investmentShareWidth = assetShare.ratio === null ? 0 : Math.min(Math.round(assetShare.ratio * 100), 100);
   const opportunity = state.opportunity.total - state.opportunity.used;
   const trackedCapital = portfolio.totalInvestedMyr + state.emergency.current + opportunity;
   const currentMonthTransactions = filterLedgerTransactions(state.ledgerTransactions, {
@@ -167,8 +173,14 @@ function dashboardTemplate(state: WealthState): string {
   const expenseChange = previousMonthLedger.expense > 0
     ? (currentMonthLedger.expense - previousMonthLedger.expense) / previousMonthLedger.expense
     : null;
-  const nextGoal = goalsWithIncompleteFirst(state).find(({ goal }) => goal.target > 0 && goal.current < goal.target)?.goal;
-  const nextGoalRatio = nextGoal && nextGoal.target > 0 ? Math.min(nextGoal.current / nextGoal.target, 1) : 0;
+  const nextGoal = state.goals.find((goal) => goal.id === state.overviewGoalId)
+    ?? goalsWithIncompleteFirst(state).find(({ goal }) => goal.target > 0 && goal.current < goal.target)?.goal
+    ?? state.goals[0];
+  const nextGoalCurrent = nextGoal ? linkedGoalCurrent(nextGoal, state) : 0;
+  const nextGoalRatio = nextGoal && nextGoal.target > 0 ? Math.min(nextGoalCurrent / nextGoal.target, 1) : 0;
+  const overviewGoalOptions = state.goals
+    .map((goal) => `<option value="${escapeHtml(goal.id)}"${goal.id === nextGoal?.id ? " selected" : ""}>${escapeHtml(goal.name)}</option>`)
+    .join("");
   const coachMessages = advisorMessages(state);
   const primaryCoach = coachMessages.find((message) => message.severity === "action")
     ?? coachMessages.find((message) => message.severity === "watch")
@@ -179,6 +191,8 @@ function dashboardTemplate(state: WealthState): string {
   const safetyShare = Math.min(state.emergency.current / trackedBase, 1);
   const reserveShare = Math.min(opportunity / trackedBase, 1);
   const planOnTrack = monthlySurplus(state) >= state.dca.monthly;
+  const worth = netWorth(state.ledgerTransactions, state.ledgerAccounts, state.liabilities);
+  const forecast = forecastRecurring(state.recurringTransactions);
 
   return `
     <section class="wealth-hero card">
@@ -198,9 +212,17 @@ function dashboardTemplate(state: WealthState): string {
       </div>
     </section>
     <div class="metric-grid wealth-metrics">
+      <article class="card metric"><span>Net worth</span><strong class="${worth.net >= 0 ? "income" : "expense"}">${money(worth.net)}</strong><small>${money(worth.assets)} assets · ${money(worth.liabilities)} liabilities</small></article>
+      <article class="card metric"><span>Recurring forecast</span><strong class="${forecast.surplus >= 0 ? "income" : "expense"}">${money(forecast.surplus)}</strong><small>${money(forecast.income)} scheduled in · ${money(forecast.expense)} scheduled out</small></article>
       <article class="card metric"><span>Monthly cash flow</span><strong class="${currentMonthLedger.balance >= 0 ? "income" : "expense"}">${currentMonthLedger.balance >= 0 ? "+" : "−"}${money(Math.abs(currentMonthLedger.balance))}</strong><small>${currentMonthTransactions.length ? `${money(currentMonthLedger.income)} in · ${money(currentMonthLedger.expense)} out` : "No activity recorded this month"}</small></article>
       <article class="card metric"><span>Safety reserve</span><strong>${percent(emergency)}</strong><div class="bar"><span style="width:${Math.min(Math.round(emergency * 100), 100)}%"></span></div><small>${money(state.emergency.current)} of ${money(state.emergency.target)}${Number.isFinite(emergencyMonths) ? ` · ${emergencyMonths} months to target` : ""}</small></article>
       <article class="card metric"><span>Monthly investment mandate</span><strong>${money(state.dca.monthly)}</strong><small>${state.trades.length} contributions recorded · long-term allocation plan</small></article>
+      <button class="card metric metric-action dashboard-nav" data-page="ledger" type="button" aria-label="Open cash flow account balances to review investment share">
+        <span>Investment share of total assets</span>
+        <strong>${assetShare.ratio === null ? "Not available" : percent(assetShare.ratio)}</strong>
+        <div class="bar" aria-hidden="true"><span style="width:${investmentShareWidth}%"></span></div>
+        <small>${assetShare.ratio === null ? `Total account assets are ${money(assetShare.totalAssets)}. Add a positive balance to calculate this ratio.` : `${money(assetShare.investmentAssets)} invested (excluding MMF) of ${money(assetShare.totalAssets)} total account assets.`}</small>
+      </button>
     </div>
     <div class="cfo-grid">
       <article class="card panel cfo-briefing">
@@ -219,8 +241,8 @@ function dashboardTemplate(state: WealthState): string {
       </article>
     </div>
     <article class="card panel wealth-journey">
-      <div class="panel-head"><div><span class="eyebrow">Wealth Journey</span><h3>${nextGoal ? escapeHtml(nextGoal.name) : "Define your next milestone"}</h3></div><button class="text-button dashboard-nav" data-page="goals" type="button">All goals →</button></div>
-      ${nextGoal ? `<div class="journey-layout"><div class="goal-ring" style="--progress:${Math.round(nextGoalRatio * 360)}deg"><span><strong>${percent(nextGoalRatio)}</strong><small>funded</small></span></div><div><strong class="journey-amount">${money(nextGoal.current)}</strong><p>toward ${money(nextGoal.target)}. ${nextGoal.monthlyContribution > 0 ? `At ${money(nextGoal.monthlyContribution)} monthly, the current plan has approximately ${Math.ceil(Math.max(nextGoal.target - nextGoal.current, 0) / nextGoal.monthlyContribution)} months remaining.` : "Add a monthly contribution to establish a projected timeline."}</p><div class="milestone-line"><i></i><span>Today</span><i></i><span>Next milestone</span><i class="gold"></i><span>Target</span></div></div></div>` : '<p class="empty-state">Create a goal to turn long-term wealth building into a visible, measurable journey.</p>'}
+      <div class="panel-head"><div><span class="eyebrow">Wealth Journey</span><h3>${nextGoal ? escapeHtml(nextGoal.name) : "Define your next milestone"}</h3></div><div class="journey-head-actions">${state.goals.length > 0 ? `<label class="journey-goal-picker"><span>Featured goal</span><select id="overviewGoalSelect" aria-label="Choose the goal shown in Wealth Journey">${overviewGoalOptions}</select></label>` : ""}<button class="text-button dashboard-nav" data-page="goals" type="button">All goals →</button></div></div>
+      ${nextGoal ? `<div class="journey-layout"><div class="goal-ring" style="--progress:${Math.round(nextGoalRatio * 360)}deg"><span><strong>${percent(nextGoalRatio)}</strong><small>funded</small></span></div><div><strong class="journey-amount">${money(nextGoalCurrent)}</strong><p>toward ${money(nextGoal.target)}. ${nextGoal.monthlyContribution > 0 ? `At ${money(nextGoal.monthlyContribution)} monthly, the current plan has approximately ${Math.ceil(Math.max(nextGoal.target - nextGoalCurrent, 0) / nextGoal.monthlyContribution)} months remaining.` : "Add a monthly contribution to establish a projected timeline."}</p><div class="milestone-line"><i></i><span>Today</span><i></i><span>Next milestone</span><i class="gold"></i><span>Target</span></div></div></div>` : '<p class="empty-state">Create a goal to turn long-term wealth building into a visible, measurable journey.</p>'}
     </article>
   `;
 }
@@ -318,17 +340,20 @@ function portfolioTemplate(state: WealthState): string {
         '<td>' + money(trade.amountMyr) + '</td>' +
         '<td>USD ' + trade.amountUsd.toFixed(2) + '</td>' +
         '<td>USD ' + trade.priceUsd.toFixed(2) + '</td>' +
+        '<td>' + tradeExchangeRate(trade).toFixed(4) + '</td>' +
         '<td>' + tradeUnits(trade).toFixed(5) + '</td>' +
         '<td><button class="icon-button danger delete-trade" data-id="' + trade.id + '" title="Delete trade">✕</button></td>' +
         '</tr>';
     }).join("");
 
   const allocationHealth = portfolio.maxAbsoluteDrift <= 0.05 ? "Aligned" : portfolio.maxAbsoluteDrift <= 0.1 ? "Monitor" : "Rebalance";
+  const contributionPlan = rebalanceContributions(state);
   return `
     <section class="portfolio-hero card">
       <div><span class="eyebrow">Long-term Investment Portfolio</span><strong>${money(portfolio.totalInvestedMyr)}</strong><p>Capital contributed across ${portfolio.positions.length} holdings · USD ${portfolio.totalInvestedUsd.toFixed(2)} cost basis</p></div>
       <div class="portfolio-health"><span>Allocation health</span><strong>${allocationHealth}</strong><small>Largest drift ${percent(portfolio.maxAbsoluteDrift, 1)}</small></div>
     </section>
+    <article class="card panel"><div class="panel-head"><div><span class="eyebrow">Next Contribution</span><h3>Rebalance with new money</h3></div><span class="panel-note">No selling required</span></div><div class="rebalance-plan">${contributionPlan.map((item) => `<div><strong>${escapeHtml(item.ticker)}</strong><span>${money(item.amount)}</span></div>`).join("")}</div></article>
     <div class="portfolio-command-grid">
       <article class="card panel portfolio-allocation-panel">
         <div class="panel-head"><div><span class="eyebrow">Strategic Allocation</span><h3>Portfolio structure</h3></div><span class="status-pill ${portfolio.maxAbsoluteDrift <= 0.08 ? "positive" : "attention"}">${allocationHealth}</span></div>
@@ -357,7 +382,7 @@ function portfolioTemplate(state: WealthState): string {
     <details class="card panel portfolio-details">
       <summary><div><span class="eyebrow">Position Detail</span><h3>Cost basis and allocation data</h3></div><span>${portfolio.positions.length} holdings</span></summary>
       <div class="portfolio-details-content">
-        <div class="table-wrap compact-table">
+        <div class="table-wrap compact-table financial-table">
           <table>
             <thead><tr><th>Ticker</th><th>Invested MYR</th><th>Invested USD</th><th>Units</th><th>Avg Cost</th><th>Actual / Target</th><th>Drift</th></tr></thead>
             <tbody>${positionRows}</tbody>
@@ -367,10 +392,10 @@ function portfolioTemplate(state: WealthState): string {
     </details>
     <article class="card panel portfolio-activity">
       <div class="panel-head"><div><span class="eyebrow">Portfolio Activity</span><h3>Contribution history</h3></div><span class="panel-note">${state.trades.length} records</span></div>
-      <div class="table-wrap">
+      <div class="table-wrap financial-table">
         <table>
-          <thead><tr><th>Date</th><th>Platform</th><th>Ticker</th><th>Type</th><th>Amount MYR</th><th>Amount USD</th><th>Price USD</th><th>Units</th><th></th></tr></thead>
-          <tbody>${tradeRows || '<tr><td colspan="9" class="empty-state">No transactions yet. Add your first transaction to begin tracking.</td></tr>'}</tbody>
+          <thead><tr><th>Date</th><th>Platform</th><th>Ticker</th><th>Type</th><th>Amount MYR</th><th>Amount USD</th><th>Price USD</th><th>FX</th><th>Units</th><th></th></tr></thead>
+          <tbody>${tradeRows || '<tr><td colspan="10" class="empty-state">No transactions yet. Add your first transaction to begin tracking.</td></tr>'}</tbody>
         </table>
       </div>
     </article>
@@ -620,16 +645,6 @@ function marketTemplate(state: WealthState): string {
     <!-- Sectors Tab -->
     <div class="market-tab-content" data-tab-content="sectors">
       <div id="sectorsContent">
-        <div class="card" style="padding:16px;">
-          <div style="font-size:13px;font-weight:600;margin-bottom:12px;">🏭 Sector Allocation</div>
-          <div id="sector-bars"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px;">
-          <div class="card" style="padding:16px;">
-            <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Key Metrics</div>
-            <div id="key-metrics"></div>
-          </div>
-        </div>
         ${etfTopHoldingsTemplate()}
       </div>
     </div>
@@ -659,7 +674,6 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
   let currentSymbol = "VOO";
   let currentInterval = "12M";
   let customTickers = [...state.customTickers];
-  let compositionRequestId = 0;
 
   function setCustomSymbolMessage(message: string, isError = false): void {
     const messageEl = root.querySelector<HTMLElement>("#customSymbolMessage");
@@ -701,10 +715,8 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
     updatePnL(currentSymbol);
     updateTimeline(currentSymbol);
     updateStaticForSymbol(currentSymbol);
-    void loadComposition(currentSymbol);
     loadDividends(currentSymbol);
     loadRisk(currentSymbol);
-    loadSectors(currentSymbol);
   }
 
   function createCustomSymbolElement(symbol: string): HTMLDivElement {
@@ -804,7 +816,7 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
     if (pnlPanel) pnlPanel.style.display = "";
     if (pnlEmpty) pnlEmpty.style.display = "none";
 
-    const pnl = calcPnLForTicker(state.trades, symbol, 0, 4.25);
+    const pnl = calcPnLForTicker(state.trades, symbol, 0, getUsdToMyr());
     const isProfit = pnl.unrealizedPnlUsd >= 0;
     const color = isProfit ? "var(--green)" : "var(--red)";
     const sign = isProfit ? "+" : "";
@@ -883,34 +895,6 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
       ],
     };
 
-    // Sectors tab
-    const sectorData: Record<string, { name: string; pct: number }[]> = {
-      VOO: [
-        { name: "Technology", pct: 31.2 },
-        { name: "Healthcare", pct: 12.8 },
-        { name: "Financials", pct: 12.5 },
-        { name: "Consumer Discretionary", pct: 10.8 },
-        { name: "Industrials", pct: 8.9 },
-        { name: "Communication", pct: 8.7 },
-        { name: "Consumer Staples", pct: 6.2 },
-        { name: "Energy", pct: 3.8 },
-        { name: "Utilities", pct: 2.5 },
-        { name: "Real Estate", pct: 2.4 },
-      ],
-      QQQM: [
-        { name: "Technology", pct: 51.8 },
-        { name: "Communication", pct: 16.2 },
-        { name: "Consumer Discretionary", pct: 14.5 },
-        { name: "Healthcare", pct: 6.8 },
-        { name: "Industrials", pct: 4.2 },
-        { name: "Consumer Staples", pct: 3.1 },
-        { name: "Utilities", pct: 1.5 },
-        { name: "Energy", pct: 0.8 },
-        { name: "Financials", pct: 0.7 },
-        { name: "Real Estate", pct: 0.4 },
-      ],
-    };
-
     // Calendar tab
     const calendarEvents = [
       { date: "Jul 15", event: "CPI (Inflation)", impact: "High" },
@@ -948,21 +932,6 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
         ).join("");
       }
 
-      // Sectors
-      const sectorEl = root.querySelector<HTMLElement>("#sector-bars");
-      if (sectorEl) {
-        const sd = sectorData[sym];
-        sectorEl.innerHTML = sd ? sd.map((s) =>
-          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
-            '<span style="width:140px;font-size:12px;color:var(--ink-2);">' + s.name + '</span>' +
-            '<div style="flex:1;height:20px;background:var(--surface);border-radius:4px;overflow:hidden;">' +
-              '<div style="width:' + s.pct + '%;height:100%;background:linear-gradient(90deg,var(--green),var(--blue));border-radius:4px;"></div>' +
-            '</div>' +
-            '<span style="width:50px;text-align:right;font-size:12px;font-weight:600;">' + s.pct + '%</span>' +
-          '</div>'
-        ).join("") : '<div class="empty-state">Loading composition for ' + escapeHtml(sym) + '...</div>';
-      }
-
     }
 
     // Calendar tab (static)
@@ -982,37 +951,6 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
   }
 
   const updateStaticForSymbol = populateStaticData();
-  async function loadComposition(symbol: string): Promise<void> {
-    const requestId = ++compositionRequestId;
-    const sectorEl = root.querySelector<HTMLElement>("#sector-bars");
-    if (symbol === "VOO" || symbol === "QQQM") return;
-    if (sectorEl) sectorEl.innerHTML = '<div class="empty-state">Loading composition for ' + escapeHtml(symbol) + '...</div>';
-
-    try {
-      const profile = await fetchStockComparison(symbol);
-      if (requestId !== compositionRequestId || symbol !== currentSymbol) return;
-      const labels = [profile.sector, profile.industry].filter((value): value is string => Boolean(value));
-      if (sectorEl) {
-        sectorEl.innerHTML = labels.length
-          ? labels.map((label, index) => {
-              const pct = index === 0 ? 100 : 0;
-              return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
-                '<span style="width:140px;font-size:12px;color:var(--ink-2);">' + escapeHtml(label) + '</span>' +
-                '<div style="flex:1;height:20px;background:var(--surface);border-radius:4px;overflow:hidden;">' +
-                  '<div style="width:' + pct + '%;height:100%;background:var(--green);border-radius:4px;"></div>' +
-                '</div>' +
-                '<span style="width:50px;text-align:right;font-size:12px;font-weight:600;">' + (index === 0 ? "100%" : "Detail") + '</span>' +
-              '</div>';
-            }).join("")
-          : '<div class="empty-state">Composition data is unavailable for ' + escapeHtml(symbol) + '.</div>';
-      }
-    } catch (error) {
-      if (requestId !== compositionRequestId || symbol !== currentSymbol) return;
-      console.warn("[Market] Failed to load composition for " + symbol, error);
-      if (sectorEl) sectorEl.innerHTML = '<div class="empty-state">Composition data could not be loaded. Try again later.</div>';
-    }
-  }
-
   type StaticComparisonAsset = {
     symbol: string;
     name: string;
@@ -1105,58 +1043,6 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
 
     } catch (err) {
       console.warn("[Market] Failed to load risk metrics for " + symbol, err);
-    }
-  }
-
-  // Real Sectors key metrics from Yahoo Finance
-  async function loadSectors(symbol: string) {
-    const metricsEl = root.querySelector<HTMLElement>("#key-metrics");
-    if (!metricsEl) return;
-
-    // Show loading state
-    metricsEl.innerHTML = '<div style="font-size:12px;color:var(--ink-3);padding:8px;">Loading metrics...</div>';
-
-    // Static fallback data for VOO/QQQM (updated quarterly)
-    const staticData: Record<string, { expenseRatio: string; aum: string; divYield: string; pe: string; ytd: string; threeY: string; fiveY: string }> = {
-      VOO: { expenseRatio: "0.03%", aum: "$1.3T", divYield: "1.32%", pe: "24.5", ytd: "+5.2%", threeY: "+9.8%", fiveY: "+14.2%" },
-      QQQM: { expenseRatio: "0.15%", aum: "$25B", divYield: "0.58%", pe: "32.1", ytd: "+8.7%", threeY: "+12.5%", fiveY: "+18.1%" },
-    };
-
-    try {
-      const fund = await fetchFundamentals(symbol);
-      const formatAUM = (v: number) => {
-        if (v >= 1e12) return "$" + (v / 1e12).toFixed(1) + "T";
-        if (v >= 1e9) return "$" + (v / 1e9).toFixed(1) + "B";
-        if (v >= 1e6) return "$" + (v / 1e6).toFixed(0) + "M";
-        return "$" + v.toLocaleString();
-      };
-      metricsEl.innerHTML =
-        '<div style="font-size:12px;line-height:2;">' +
-          '<div style="display:flex;justify-content:space-between;"><span>Expense Ratio</span><span style="font-weight:600;">' + (fund.expenseRatio > 0 ? (fund.expenseRatio * 100).toFixed(2) + "%" : "N/A") + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;"><span>AUM</span><span style="font-weight:600;">' + (fund.totalAssets > 0 ? formatAUM(fund.totalAssets) : "N/A") + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;"><span>Dividend Yield</span><span style="font-weight:600;">' + (fund.dividendYield > 0 ? (fund.dividendYield * 100).toFixed(2) + "%" : "N/A") + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;"><span>P/E Ratio</span><span style="font-weight:600;">' + (fund.trailingPE > 0 ? fund.trailingPE.toFixed(1) : "N/A") + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;"><span>YTD Return</span><span style="font-weight:600;color:' + (fund.ytdReturn >= 0 ? "var(--green)" : "var(--red)") + ';">' + (fund.ytdReturn !== 0 ? (fund.ytdReturn * 100).toFixed(1) + "%" : "N/A") + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;"><span>3Y Return</span><span style="font-weight:600;color:' + (fund.threeYearReturn >= 0 ? "var(--green)" : "var(--red)") + ';">' + (fund.threeYearReturn !== 0 ? (fund.threeYearReturn * 100).toFixed(1) + "%" : "N/A") + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;"><span>5Y Return</span><span style="font-weight:600;color:' + (fund.fiveYearReturn >= 0 ? "var(--green)" : "var(--red)") + ';">' + (fund.fiveYearReturn !== 0 ? (fund.fiveYearReturn * 100).toFixed(1) + "%" : "N/A") + '</span></div>' +
-        '</div>';
-    } catch (err) {
-      console.warn("[Market] API failed, using static data for " + symbol, err);
-      const sd = staticData[symbol];
-      if (!sd) {
-        metricsEl.innerHTML = '<div class="empty-state">Key metrics are unavailable for ' + escapeHtml(symbol) + '.</div>';
-        return;
-      }
-      metricsEl.innerHTML =
-        '<div style="font-size:12px;line-height:2;">' +
-          '<div style="display:flex;justify-content:space-between;"><span>Expense Ratio</span><span style="font-weight:600;">' + sd.expenseRatio + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;"><span>AUM</span><span style="font-weight:600;">' + sd.aum + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;"><span>Dividend Yield</span><span style="font-weight:600;">' + sd.divYield + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;"><span>P/E Ratio</span><span style="font-weight:600;">' + sd.pe + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;"><span>YTD Return</span><span style="font-weight:600;">' + sd.ytd + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;"><span>3Y Return</span><span style="font-weight:600;">' + sd.threeY + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;"><span>5Y Return</span><span style="font-weight:600;">' + sd.fiveY + '</span></div>' +
-        '</div>';
     }
   }
 
@@ -1301,10 +1187,8 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
   updatePnL(currentSymbol);
   updateTimeline(currentSymbol);
   updateStaticForSymbol(currentSymbol);
-  void loadComposition(currentSymbol);
   loadDividends(currentSymbol);
   loadRisk(currentSymbol);
-  loadSectors(currentSymbol);
   renderStaticComparison();
 }
 
@@ -1331,6 +1215,7 @@ function tradeTypeTextColor(type: string): string {
 let ledgerFilters: LedgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "" };
 let ledgerEditingId = "";
 let ledgerEntryType: LedgerTransactionType = "expense";
+let suppressLedgerAmountFocus = false;
 let ledgerEntryDraft = {
   amount: "",
   accountId: "",
@@ -1342,6 +1227,11 @@ let ledgerEntryDraft = {
 let ledgerHistoryOpen = false;
 let ledgerCategoriesOpen = false;
 let ledgerAccountsOpen = false;
+const ledgerAccountGroupsOpen: Record<LedgerAccountType, boolean> = {
+  bank: true,
+  wallet: true,
+  investment: true,
+};
 
 function resetLedgerEntry(): void {
   ledgerEditingId = "";
@@ -1366,19 +1256,29 @@ function ledgerTemplate(state: WealthState): string {
   const filtered = filterLedgerTransactions(state.ledgerTransactions, ledgerFilters, new Date(), state.ledgerCategories, state.ledgerAccounts);
   const totals = ledgerTotals(filtered);
   const totalOpeningFunds = openingFunds(state.ledgerAccounts);
-  const netAssets = currentNetAssets(state.ledgerTransactions, state.ledgerAccounts);
+  const totalNetAssets = accountTypeBalance(state.ledgerTransactions, state.ledgerAccounts, "bank")
+    + accountTypeBalance(state.ledgerTransactions, state.ledgerAccounts, "wallet")
+    + accountTypeBalance(state.ledgerTransactions, state.ledgerAccounts, "investment");
+  const liquidNetAssets = accountTypeBalance(state.ledgerTransactions, state.ledgerAccounts, "bank")
+    + accountTypeBalance(state.ledgerTransactions, state.ledgerAccounts, "wallet");
   const editing = state.ledgerTransactions.find((transaction) => transaction.id === ledgerEditingId);
   const entryType = editing?.type ?? ledgerEntryType;
   const entryCategories = state.ledgerCategories.filter((category) => category.type === entryType);
   const balances = accountBalances(state.ledgerTransactions, state.ledgerAccounts);
+  const accountTypeMeta = (type: LedgerAccountType): { label: string; emptyLabel: string; icon: string } => {
+    if (type === "bank") return { label: "Bank account", emptyLabel: "bank accounts", icon: "🏦" };
+    if (type === "wallet") return { label: "E-wallet", emptyLabel: "e-wallets", icon: "👛" };
+    return { label: "Investment account", emptyLabel: "investment accounts", icon: "📈" };
+  };
   const accountGroup = (type: LedgerAccountType, title: string, icon: string): string => {
     const groupBalances = balances.filter(({ account }) => account.type === type);
     const subtotal = groupBalances.reduce((sum, { balance }) => sum + balance, 0);
-    const rows = groupBalances.map(({ account, balance }: AccountBalance) => `<div class="ledger-account-row"><div class="ledger-account-copy"><span class="ledger-account-icon" aria-hidden="true">${escapeHtml(account.icon ?? icon)}</span><div><strong>${escapeHtml(account.name)}</strong><small>${type === "bank" ? "Bank account" : "E-wallet"}</small></div></div><strong class="ledger-account-balance ${balance >= 0 ? "income" : "expense"}">${balance < 0 ? "−" : ""}${money(Math.abs(balance))}</strong></div>`).join("");
-    return `<section class="ledger-account-group"><header><div><span class="ledger-account-group-icon" aria-hidden="true">${icon}</span><div><h4>${title}</h4><small>${groupBalances.length} ${groupBalances.length === 1 ? "account" : "accounts"}</small></div></div><strong class="${subtotal >= 0 ? "income" : "expense"}">${subtotal < 0 ? "−" : ""}${money(Math.abs(subtotal))}</strong></header><div class="ledger-account-list">${rows || `<p class="empty-state">No ${type === "bank" ? "bank accounts" : "e-wallets"} added.</p>`}</div></section>`;
+    const meta = accountTypeMeta(type);
+    const rows = groupBalances.map(({ account, balance }: AccountBalance) => `<div class="ledger-account-row"><div class="ledger-account-copy"><span class="ledger-account-icon" aria-hidden="true">${escapeHtml(account.icon ?? icon)}</span><div><strong>${escapeHtml(account.name)}</strong><small>${meta.label}</small></div></div><strong class="ledger-account-balance ${balance >= 0 ? "income" : "expense"}">${balance < 0 ? "−" : ""}${money(Math.abs(balance))}</strong></div>`).join("");
+    return `<details class="ledger-account-group ledger-account-group-${type}" data-ledger-account-group="${type}"${ledgerAccountGroupsOpen[type] ? " open" : ""}><summary><div class="ledger-account-group-title"><span class="ledger-account-group-icon" aria-hidden="true">${icon}</span><div><h4>${title}</h4><small>${groupBalances.length} ${groupBalances.length === 1 ? "account" : "accounts"}</small></div></div><div class="ledger-account-group-total"><strong class="${subtotal >= 0 ? "income" : "expense"}">${subtotal < 0 ? "−" : ""}${money(Math.abs(subtotal))}</strong><span class="ledger-account-group-switch" aria-hidden="true"><svg viewBox="0 0 16 16" focusable="false"><path d="m4 6 4 4 4-4" /></svg></span></div></summary><div class="ledger-account-list">${rows || `<p class="empty-state">No ${meta.emptyLabel} added.</p>`}</div></details>`;
   };
   const accountName = (id?: string): string => state.ledgerAccounts.find((account) => account.id === id)?.name ?? "Unknown account";
-  const accountOptions = (selected?: string): string => state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}"${account.id === selected ? " selected" : ""}>${escapeHtml((account.icon ?? (account.type === "bank" ? "🏦" : "👛")) + " " + account.name)}</option>`).join("");
+  const accountOptions = (selected?: string): string => state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}"${account.id === selected ? " selected" : ""}>${escapeHtml((account.icon ?? accountTypeMeta(account.type).icon) + " " + account.name)}</option>`).join("");
   const accountIds = new Set(state.ledgerAccounts.map((account) => account.id));
   const defaultAccountId = state.ledgerAccounts[0]?.id ?? "";
   const selectedAccountId = accountIds.has(editing?.accountId ?? ledgerEntryDraft.accountId) ? editing?.accountId ?? ledgerEntryDraft.accountId : defaultAccountId;
@@ -1407,7 +1307,7 @@ function ledgerTemplate(state: WealthState): string {
   const transactionRows = filtered.map((transaction) => {
     const category = state.ledgerCategories.find((item) => item.id === transaction.categoryId);
     const title = transaction.type === "transfer" ? `${accountName(transaction.fromAccountId)} → ${accountName(transaction.toAccountId)}` : category?.label ?? "Unknown category";
-    const accountMeta = transaction.type === "transfer" ? "Transfer / 转账" : accountName(transaction.accountId);
+    const accountMeta = transaction.type === "transfer" ? "Transfer" : accountName(transaction.accountId);
     const icon = transaction.type === "transfer" ? "↔" : category?.icon ?? "•";
     const amountPrefix = transaction.type === "income" ? "+" : transaction.type === "expense" ? "−" : "↔ ";
     return `<article class="ledger-row"><div class="ledger-row-icon">${escapeHtml(icon)}</div><div class="ledger-row-copy"><strong>${escapeHtml(title)}</strong><small>${new Date(transaction.date).toLocaleDateString()} · ${escapeHtml(accountMeta)}${transaction.note ? " · " + escapeHtml(transaction.note) : ""}</small></div><strong class="ledger-amount ${transaction.type}">${amountPrefix}${money(transaction.amount)}</strong><div class="ledger-row-actions"><button class="icon-button edit-ledger" data-id="${escapeHtml(transaction.id)}" aria-label="Edit transaction">✎</button><button class="icon-button danger delete-ledger" data-id="${escapeHtml(transaction.id)}" aria-label="Delete transaction">✕</button></div></article>`;
@@ -1423,14 +1323,14 @@ function ledgerTemplate(state: WealthState): string {
         </form>
       </article>
       <div class="ledger-main">
-        <div class="ledger-summary"><article class="card"><span>Opening Funds / 期初资金</span><strong>${money(totalOpeningFunds)}</strong><small>Starting balance across all accounts</small></article><article class="card"><span>Income / 期间收入</span><strong class="income">+${money(totals.income)}</strong><small>Income in the selected period</small></article><article class="card"><span>Expenses / 期间支出</span><strong class="expense">−${money(totals.expense)}</strong><small>Expenses in the selected period</small></article><article class="card"><span>Net Assets / 当前净额</span><strong class="${netAssets >= 0 ? "income" : "expense"}">${netAssets < 0 ? "−" : ""}${money(Math.abs(netAssets))}</strong><small>Opening funds adjusted by all transactions</small></article></div>
-        <article class="card ledger-account-summary"><div class="ledger-account-summary-head"><div><span class="eyebrow">Cash Locations</span><h3>Account Balances</h3><p>Opening balances adjusted by income, expenses, and transfers.</p></div><div><small>Total available</small><strong class="${netAssets >= 0 ? "income" : "expense"}">${netAssets < 0 ? "−" : ""}${money(Math.abs(netAssets))}</strong></div></div><div class="ledger-account-columns">${accountGroup("bank", "Bank", "🏦")}${accountGroup("wallet", "E-wallet", "👛")}</div></article>
+        <div class="ledger-summary"><article class="card"><span>Opening Funds</span><strong>${money(totalOpeningFunds)}</strong><small>Starting balance across all accounts</small></article><article class="card"><span>Income</span><strong class="income">+${money(totals.income)}</strong><small>Income in the selected period</small></article><article class="card"><span>Expenses</span><strong class="expense">−${money(totals.expense)}</strong><small>Expenses in the selected period</small></article><article class="card"><span>Total Net Assets</span><strong class="${totalNetAssets >= 0 ? "income" : "expense"}">${totalNetAssets < 0 ? "−" : ""}${money(Math.abs(totalNetAssets))}</strong><small>Bank + E-wallet + Investment</small></article><article class="card"><span>Liquid Net Assets</span><strong class="${liquidNetAssets >= 0 ? "income" : "expense"}">${liquidNetAssets < 0 ? "−" : ""}${money(Math.abs(liquidNetAssets))}</strong><small>Bank + E-wallet · Investment excluded</small></article></div>
+        <article class="card ledger-account-summary"><div class="ledger-account-summary-head"><div><span class="eyebrow">Cash Locations</span><h3>Account Balances</h3><p>Opening balances adjusted by income, expenses, and transfers.</p></div><div><small>Total Net Assets</small><strong class="${totalNetAssets >= 0 ? "income" : "expense"}">${totalNetAssets < 0 ? "−" : ""}${money(Math.abs(totalNetAssets))}</strong></div></div><div class="ledger-account-columns">${accountGroup("bank", "Bank", "🏦")}${accountGroup("wallet", "E-wallet", "👛")}${accountGroup("investment", "Investment", "📈")}</div></article>
         <article class="card panel ledger-filters"><form id="ledgerFilterForm"><div class="filter-presets">${(["week", "month", "year", "custom"] as const).map((preset) => `<button type="button" data-preset="${preset}" class="${ledgerFilters.preset === preset ? "active" : ""}">${preset === "week" ? "This week" : preset === "month" ? "This month" : preset === "year" ? "This year" : "Custom"}</button>`).join("")}</div><div class="ledger-filter-fields ${ledgerFilters.preset === "custom" ? "show-custom" : ""}"><label class="custom-date">From<input name="startDate" type="date" value="${ledgerFilters.startDate}"></label><label class="custom-date">To<input name="endDate" type="date" value="${ledgerFilters.endDate}"></label><label>Type<select name="type"><option value="all">All types</option><option value="expense"${ledgerFilters.type === "expense" ? " selected" : ""}>Expense</option><option value="income"${ledgerFilters.type === "income" ? " selected" : ""}>Income</option><option value="transfer"${ledgerFilters.type === "transfer" ? " selected" : ""}>Transfer</option></select></label><label>Category<select name="categoryId"><option value="">All categories</option>${categoryOptions}</select></label><label>Search<input name="query" type="search" value="${escapeHtml(ledgerFilters.query)}" placeholder="Note, category, account"></label><button class="secondary-button" id="resetLedgerFilters" type="button">Reset</button></div></form></article>
         <div class="ledger-report-grid"><article class="card panel"><div class="panel-head"><div><span class="eyebrow">Expense Mix</span><h3>Category Share</h3></div></div>${expenses.length ? `<div class="ledger-donut-wrap"><div class="ledger-donut" style="background:conic-gradient(${donut})"><span>${money(totals.expense)}</span></div><div class="ledger-legend">${expenses.map((item, index) => `<div><i style="background:${palette[index % palette.length]}"></i><span>${escapeHtml(item.category.icon + " " + item.category.label)}</span><strong>${percent(item.share, 1)}</strong></div>`).join("")}</div></div><div class="ledger-bars">${expenses.map((item, index) => `<div><span>${escapeHtml(item.category.label)}</span><div><i style="width:${(item.amount / maxCategory) * 100}%;background:${palette[index % palette.length]}"></i></div><strong>${money(item.amount)}</strong></div>`).join("")}</div>` : '<p class="empty-state">No expense data in this period.</p>'}</article>
           <article class="card panel"><div class="panel-head"><div><span class="eyebrow">Annual Overview</span><h3>Monthly Income vs Expense</h3></div></div><div class="monthly-chart">${monthly.map((item) => `<div class="month-column"><div class="month-bars"><i class="income" style="height:${Math.max(item.income / monthlyMax * 100, item.income ? 3 : 0)}%" title="Income ${money(item.income)}"></i><i class="expense" style="height:${Math.max(item.expense / monthlyMax * 100, item.expense ? 3 : 0)}%" title="Expense ${money(item.expense)}"></i></div><small>${new Date(2000, item.month).toLocaleString("en", { month: "short" }).slice(0, 1)}</small></div>`).join("")}</div><div class="chart-key"><span><i class="income"></i>Income</span><span><i class="expense"></i>Expense</span></div></article></div>
         <details id="ledgerHistoryPanel" class="card panel ledger-collapsible"${ledgerHistoryOpen ? " open" : ""}><summary><div><span class="eyebrow">Transactions</span><h3>History</h3></div><span class="ledger-collapsible-meta">${filtered.length} records</span></summary><div class="ledger-collapsible-content"><div class="ledger-list">${transactionRows || '<p class="empty-state">No transactions match this view. Add your first record above.</p>'}</div></div></details>
         <details id="ledgerCategoriesPanel" class="card panel ledger-collapsible"${ledgerCategoriesOpen ? " open" : ""}><summary><div><span class="eyebrow">Custom Labels</span><h3>Category Manager</h3></div><span class="ledger-collapsible-meta">${state.ledgerCategories.length} categories</span></summary><div class="ledger-collapsible-content"><form id="ledgerCategoryForm" class="category-form"><label>Icon<input name="icon" maxlength="12" value="✨" required></label><label>Label<input name="label" maxlength="40" placeholder="Category name" required></label><label>Type<select name="type"><option value="expense">Expense</option><option value="income">Income</option></select></label><button class="primary-button" type="submit">Add Category</button></form><div class="category-manager">${state.ledgerCategories.map((category) => `<div><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)} <small>${category.type}</small></span><button class="secondary-button edit-category" data-id="${escapeHtml(category.id)}" type="button">Edit</button><button class="icon-button danger delete-category" data-id="${escapeHtml(category.id)}" aria-label="Delete ${escapeHtml(category.label)}">✕</button></div>`).join("")}</div></div></details>
-        <details id="ledgerAccountsPanel" class="card panel ledger-collapsible"${ledgerAccountsOpen ? " open" : ""}><summary><div><span class="eyebrow">Cash Locations</span><h3>Account Manager</h3></div><span class="ledger-collapsible-meta">${state.ledgerAccounts.length} accounts</span></summary><div class="ledger-collapsible-content"><form id="ledgerAccountForm" class="category-form"><label>Icon<input name="icon" maxlength="12" value="🏦" required></label><label>Name<input name="name" maxlength="40" placeholder="Account name" required></label><label>Type<select name="type"><option value="bank">Bank</option><option value="wallet">Wallet</option></select></label><label>Opening balance (MYR)<input name="openingBalance" type="number" min="0" step="0.01" value="0" required></label><button class="primary-button" type="submit">Add Account</button></form><p id="ledgerAccountError" class="form-error" role="alert"></p><div class="ledger-account-manager">${balances.map(({ account, balance }) => `<article class="ledger-managed-account"><header><div class="ledger-managed-account-title"><span class="ledger-managed-account-icon" aria-hidden="true">${escapeHtml(account.icon ?? "•")}</span><div><strong>${escapeHtml(account.name)}</strong><small>${account.type === "bank" ? "Bank account" : "E-wallet"}</small></div></div><div class="ledger-managed-account-actions"><button class="secondary-button edit-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Edit ${escapeHtml(account.name)}">Edit</button><button class="icon-button danger delete-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Delete ${escapeHtml(account.name)}">✕</button></div></header><div class="ledger-managed-account-balances"><div><small>Opening balance</small><strong>${money(account.openingBalance)}</strong></div><div><small>Current balance</small><strong class="${balance >= 0 ? "income" : "expense"}">${balance < 0 ? "−" : ""}${money(Math.abs(balance))}</strong></div></div></article>`).join("")}</div></div></details>
+        <details id="ledgerAccountsPanel" class="card panel ledger-collapsible"${ledgerAccountsOpen ? " open" : ""}><summary><div><span class="eyebrow">Cash Locations</span><h3>Account Manager</h3></div><span class="ledger-collapsible-meta">${state.ledgerAccounts.length} accounts</span></summary><div class="ledger-collapsible-content"><form id="ledgerAccountForm" class="category-form"><label>Icon<input name="icon" maxlength="12" value="🏦" required></label><label>Name<input name="name" maxlength="40" placeholder="Account name" required></label><label>Type<select name="type"><option value="bank">Bank</option><option value="wallet">Wallet</option><option value="investment">Investment</option></select></label><label>Opening balance (MYR)<input name="openingBalance" type="number" min="0" step="0.01" value="0" required></label><button class="primary-button" type="submit">Add Account</button></form><p id="ledgerAccountError" class="form-error" role="alert"></p><div class="ledger-account-manager">${balances.map(({ account, balance }) => `<article class="ledger-managed-account"><header><div class="ledger-managed-account-title"><span class="ledger-managed-account-icon" aria-hidden="true">${escapeHtml(account.icon ?? "•")}</span><div><strong>${escapeHtml(account.name)}</strong><small>${accountTypeMeta(account.type).label}</small></div></div><div class="ledger-managed-account-actions"><button class="secondary-button edit-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Edit ${escapeHtml(account.name)}">Edit</button><button class="icon-button danger delete-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Delete ${escapeHtml(account.name)}">✕</button></div></header><div class="ledger-managed-account-balances"><div><small>Opening balance</small><strong>${money(account.openingBalance)}</strong></div><div><small>Current balance</small><strong class="${balance >= 0 ? "income" : "expense"}">${balance < 0 ? "−" : ""}${money(Math.abs(balance))}</strong></div></div></article>`).join("")}</div></div></details>
       </div>
     </div>`;
 }
@@ -1494,8 +1394,9 @@ function goalsWithIncompleteFirst(state: WealthState): Array<{ goal: WealthState
 
 function goalsTemplate(state: WealthState): string {
   const goalCards = goalsWithIncompleteFirst(state).map(({ goal, originalIndex }) => {
-    const ratio = goal.target > 0 ? Math.min(goal.current / goal.target, 1) : 0;
-    const months = goal.monthlyContribution > 0 ? Math.ceil(Math.max(goal.target - goal.current, 0) / goal.monthlyContribution) : null;
+    const current = linkedGoalCurrent(goal, state);
+    const ratio = goal.target > 0 ? Math.min(current / goal.target, 1) : 0;
+    const months = goal.monthlyContribution > 0 ? Math.ceil(Math.max(goal.target - current, 0) / goal.monthlyContribution) : null;
     const color = ratio >= 0.8 ? "var(--green)" : ratio >= 0.4 ? "var(--amber)" : "var(--ink)";
     const barColor = ratio >= 0.8 ? "var(--green)" : ratio >= 0.4 ? "var(--amber)" : "var(--blue)";
     const extra = months ? " · " + months + " months" : "";
@@ -1507,7 +1408,7 @@ function goalsTemplate(state: WealthState): string {
       '<h3>' + escapeHtml(goal.label) + '</h3>' +
       '<strong style="color:' + color + ';">' + percent(ratio) + '</strong>' +
       '<div class="bar"><span style="width:' + Math.round(ratio * 100) + '%;background:' + barColor + ';"></span></div>' +
-      '<small style="color:var(--ink-3);">' + money(goal.current) + ' / ' + money(goal.target) + extra + '</small>' +
+      '<small style="color:var(--ink-3);">' + money(current) + ' / ' + money(goal.target) + extra + (goal.accountId ? ' · Linked to account' : '') + '</small>' +
       '<p>' + escapeHtml(goal.note) + '</p>' +
       '<div class="goal-edit-form" id="goalEdit' + originalIndex + '" style="display:none;margin-top:12px;">' +
         '<form class="form-grid goalForm" data-index="' + originalIndex + '">' +
@@ -1516,6 +1417,7 @@ function goalsTemplate(state: WealthState): string {
           numberInput("current", "Current MYR", String(goal.current), "1") +
           numberInput("target", "Target MYR", String(goal.target), "1") +
           numberInput("monthlyContribution", "Monthly MYR", String(goal.monthlyContribution), "1") +
+          '<label>Linked account<select name="accountId"><option value="">Manual progress</option>' + state.ledgerAccounts.map((account) => '<option value="' + escapeHtml(account.id) + '"' + (account.id === goal.accountId ? ' selected' : '') + '>' + escapeHtml(account.name) + '</option>').join('') + '</select></label>' +
           '<label>Note<textarea name="note" rows="2">' + escapeHtml(goal.note) + '</textarea></label>' +
           '<div style="display:flex;gap:8px;">' +
             '<button class="primary-button" type="submit">Save</button>' +
@@ -1562,17 +1464,17 @@ function advisorPageTemplate(state: WealthState): string {
       </article>
       <article class="card panel">
         <div class="panel-head"><div><span class="eyebrow">Scenario Check</span><h3>Dip-Buy Trigger</h3></div><span style="color:var(--muted);font-size:12px;">Bear Market Plan</span></div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-          <div style="flex:1;min-width:140px;background:var(--surface);border-radius:8px;padding:10px 12px;">
+        <div class="scenario-summary-grid">
+          <div class="scenario-summary-cell">
             <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">🎯 Opportunity Reserve</div>
             <div style="font-size:16px;font-weight:700;color:var(--green);">${money(state.opportunity.total)}</div>
             <div style="font-size:11px;color:var(--ink-3);">Used: ${money(state.opportunity.used)} · Remaining: ${money(state.opportunity.total - state.opportunity.used)}</div>
           </div>
-          <div style="flex:1;min-width:140px;background:var(--surface);border-radius:8px;padding:10px 12px;">
+          <div class="scenario-summary-cell">
             <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">📊 VOO Allocation</div>
             <div style="font-size:16px;font-weight:700;">${money(state.opportunity.allocation.VOO)}</div>
           </div>
-          <div style="flex:1;min-width:140px;background:var(--surface);border-radius:8px;padding:10px 12px;">
+          <div class="scenario-summary-cell">
             <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">📊 QQQM Allocation</div>
             <div style="font-size:16px;font-weight:700;">${money(state.opportunity.allocation.QQQM)}</div>
           </div>
@@ -1582,7 +1484,7 @@ function advisorPageTemplate(state: WealthState): string {
           <button class="primary-button" type="submit">Check Rule</button>
         </form>
         <div id="drawdownResult" class="scenario-result">Enter the market drawdown from its peak to check whether reserve deployment is triggered.</div>
-        <div class="table-wrap compact-table">
+        <div class="table-wrap compact-table financial-table">
           <table><thead><tr><th>Trigger</th><th>Reserve %</th><th>Amount</th><th>VOO / QQQM</th><th>Status</th></tr></thead><tbody>${trancheRows}</tbody></table>
         </div>
       </article>
@@ -1628,6 +1530,8 @@ function rulesTemplate(state: WealthState): string {
 }
 
 function reviewTemplate(state: WealthState): string {
+  const month = new Date().toISOString().slice(0, 7);
+  const close = monthlyClose(state, month);
   const reviewRows = state.reviews.map((review) => {
     return '<article class="review-item"><div style="display:flex;justify-content:space-between;align-items:flex-start;"><strong>' + escapeHtml(review.month) + '</strong><button class="icon-button danger delete-review" data-id="' + review.id + '" title="Delete review">🗑️</button></div><span>Income ' +
       money(review.income) + ' · Spending ' + money(review.spending) + ' · Score ' +
@@ -1639,11 +1543,12 @@ function reviewTemplate(state: WealthState): string {
       <article class="card panel">
         <div class="panel-head"><div><span class="eyebrow">Monthly Close</span><h3>Monthly Review</h3></div><span style="color:var(--muted);font-size:12px;">Discipline</span></div>
         <form id="reviewForm" class="form-grid">
-          <label>Month<input name="month" type="month" required></label>
-          ${numberInput("income", "Income MYR", String(state.cashflow.allowance), "1")}
-          ${numberInput("spending", "Spending MYR", String(monthlyBasicExpense(state)), "1")}
-          <label>DCA Done?<select name="dcaDone"><option value="true">Yes</option><option value="false">No</option></select></label>
-          ${numberInput("disciplineScore", "Discipline Score", "85", "1")}
+          <label>Month<input name="month" type="month" required value="${month}"></label>
+          ${numberInput("income", "Income MYR", String(close.income), "1")}
+          ${numberInput("spending", "Spending MYR", String(close.spending), "1")}
+          <label>DCA Done?<select name="dcaDone"><option value="true"${close.dcaDone ? " selected" : ""}>Yes</option><option value="false"${!close.dcaDone ? " selected" : ""}>No</option></select></label>
+          ${numberInput("disciplineScore", "Discipline Score", String(close.disciplineScore), "1")}
+          <p class="wide-field panel-note">Calculated from ${money(close.income)} income, ${money(close.spending)} spending and ${money(close.dcaInvested)} invested this month.</p>
           <label class="wide-field">Notes<textarea name="notes" rows="4" placeholder="This month's cash flow, investment discipline, and next month's actions"></textarea></label>
           <button class="primary-button" type="submit">Save Review</button>
         </form>
@@ -1671,6 +1576,19 @@ function settingsTemplate(state: WealthState): string {
           <label>Base Currency<select name="baseCurrency"><option${state.profile.baseCurrency === "MYR" ? " selected" : ""}>MYR</option><option${state.profile.baseCurrency === "USD" ? " selected" : ""}>USD</option></select></label>
           <button class="primary-button" type="submit">Save Profile</button>
         </form>
+      </article>
+      <article class="card settings-section">
+        <h3>Recurring Cash Flow</h3>
+        <form id="recurringForm" class="form-grid"><label>Label<input name="label" maxlength="60" required></label>${numberInput("amount", "Amount MYR", "", "0.01")}<label>Type<select name="type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Day of month<input name="dayOfMonth" type="number" min="1" max="31" value="1" required></label><button class="primary-button" type="submit">Add recurring item</button></form>
+        <div class="settings-list">${state.recurringTransactions.map((item) => `<div><span>${escapeHtml(item.label)} · ${item.type} · day ${item.dayOfMonth}</span><strong>${money(item.amount)}</strong><button class="icon-button danger delete-recurring" data-id="${escapeHtml(item.id)}" aria-label="Delete recurring item">✕</button></div>`).join("") || '<p class="empty-state">No recurring items.</p>'}</div>
+      </article>
+      <article class="card settings-section">
+        <h3>Liabilities</h3>
+        <form id="liabilityForm" class="form-grid"><label>Name<input name="name" maxlength="60" required></label>${numberInput("balance", "Balance MYR", "", "0.01")}${numberInput("annualRate", "Annual rate %", "0", "0.01")}${numberInput("minimumPayment", "Minimum payment MYR", "0", "0.01")}<button class="primary-button" type="submit">Add liability</button></form>
+        <div class="settings-list">${state.liabilities.map((item) => `<div><span>${escapeHtml(item.name)} · ${item.annualRate.toFixed(2)}%</span><strong>${money(item.balance)}</strong><button class="icon-button danger delete-liability" data-id="${escapeHtml(item.id)}" aria-label="Delete liability">✕</button></div>`).join("") || '<p class="empty-state">No liabilities recorded.</p>'}</div>
+      </article>
+      <article class="card settings-section">
+        <h3>Privacy</h3><form id="privacyForm"><label class="setting-check"><input name="maskAmounts" type="checkbox"${state.privacy.maskAmounts ? " checked" : ""}>Mask financial amounts on screen</label><label class="setting-check"><input name="requireExportConfirmation" type="checkbox"${state.privacy.requireExportConfirmation ? " checked" : ""}>Confirm before exporting financial data</label><button class="primary-button" type="submit">Save privacy</button></form>
       </article>
       <article class="card settings-section">
         <h3>💰 Cashflow & DCA</h3>
@@ -1766,8 +1684,7 @@ export function quickViewTemplate(state: WealthState): string {
   return `
     <div style="max-width:400px;margin:0 auto;">
       <div style="text-align:center;margin-bottom:20px;">
-        <div class="brand-mark" style="width:48px;height:48px;margin:0 auto 8px;"><img src="/brand/wealth-mark.svg" alt=""></div>
-        <h2 style="font-size:20px;margin:0;">Personal Wealth OS</h2>
+        <img class="brand-logo brand-logo-dialog" src="/brand/wealthup-logo.png" alt="WEALTHUP Personal Wealth OS">
         <p style="font-size:12px;color:var(--ink-3);margin:4px 0 0;">Quick Overview</p>
       </div>
 
@@ -1809,7 +1726,7 @@ function recordsFromCsv(text: string): Trade[] {
   const isMoomooFormat = normalized.includes("symbol") && normalized.includes("side");
 
   if (isMoomooFormat) {
-    const USD_TO_MYR = 4.25; // fallback rate for display
+    const USD_TO_MYR = getUsdToMyr(); // dynamic rate, prefetched in main.ts
     return rows
       .filter((row) => {
         const status = get(row, ["status"]).toLowerCase();
@@ -1840,6 +1757,7 @@ function recordsFromCsv(text: string): Trade[] {
           amountUsd: Math.round(fillAmountUsd * 100) / 100,
           priceUsd: Math.round(fillPrice * 100) / 100,
           feeMyr: Math.round(platformFees * USD_TO_MYR * 100) / 100,
+          exchangeRate: USD_TO_MYR,
         };
       })
       .filter((trade): trade is Trade => trade !== null);
@@ -1860,12 +1778,14 @@ function recordsFromCsv(text: string): Trade[] {
         priceUsd: Number(get(row, ["price/unit (usd)", "price usd"])) || 0,
         type: (get(row, ["type"]) || "DCA") as TradeType,
         feeMyr: Number(get(row, ["fee", "fee myr"])) || 0,
+        exchangeRate: Number(get(row, ["exchange rate", "fx rate", "usd/myr"])) || (Number(get(row, ["amount (usd)", "amount usd"])) > 0 ? Number(get(row, ["amount(rm)", "amount myr", "total(rm)"])) / Number(get(row, ["amount (usd)", "amount usd"])) : getUsdToMyr()),
       };
     })
     .filter((trade): trade is Trade => trade !== null);
 }
 
 export function renderApp(root: HTMLElement, state: WealthState, setState: Setter, activePage = "dashboard", navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
+  document.body.classList.toggle("mask-financial-amounts", state.privacy.maskAmounts);
   const currentSidebarScrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
   if (currentSidebarScrollArea) {
     sidebarScrollPositions.set(root, currentSidebarScrollArea.scrollTop);
@@ -1880,7 +1800,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   // Quick view — no sidebar, just condensed data
   if (activePage === "quick") {
     root.className = "app-shell";
-    root.innerHTML = '<main class="main" style="padding:20px;">' + quickViewTemplate(state) + '</main>';
+    root.innerHTML = '<main class="main quick-view-main">' + quickViewTemplate(state) + '</main>';
     root.querySelector("#openFullApp")?.addEventListener("click", () => {
       renderApp(root, state, setState, "dashboard", navigate, user, onLogout);
     });
@@ -1984,7 +1904,10 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
 
   bindSidebar(root);
 
-  root.querySelector<HTMLButtonElement>("#exportJson")?.addEventListener("click", () => exportState(state));
+  root.querySelector<HTMLButtonElement>("#exportJson")?.addEventListener("click", () => {
+    if (state.privacy.requireExportConfirmation && !confirm("Export a file containing your financial data? Store it securely.")) return;
+    exportState(state);
+  });
   root.querySelector<HTMLInputElement>("#importJson")?.addEventListener("change", async (event) => {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
@@ -2124,6 +2047,17 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
   root.querySelectorAll<HTMLButtonElement>(".dashboard-nav").forEach((button) => {
     button.addEventListener("click", () => navigate?.(button.dataset.page ?? "dashboard"));
   });
+
+  if (activePage === "dashboard") {
+    root.querySelector<HTMLSelectElement>("#overviewGoalSelect")?.addEventListener("change", (event) => {
+      const overviewGoalId = (event.currentTarget as HTMLSelectElement).value;
+      if (!state.goals.some((goal) => goal.id === overviewGoalId)) return;
+      const next = { ...state, overviewGoalId };
+      setState(next, "Changed featured Overview goal");
+      if (navigate) navigate("dashboard");
+      else renderApp(root, next, setState, "dashboard");
+    });
+  }
   if (activePage === "calculator") {
     const mount = root.querySelector<HTMLElement>("#investmentGrowthCalculator");
     if (mount) {
@@ -2237,9 +2171,32 @@ function bindRules(root: HTMLElement, state: WealthState, setState: Setter, navi
 }
 
 function bindLedger(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
-  const refresh = (next = state, label?: string) => {
+  const refresh = (next = state, label?: string, preserveScroll = false) => {
+    const anchorTop = preserveScroll
+      ? root.querySelector<HTMLElement>(".ledger-filters")?.getBoundingClientRect().top
+      : undefined;
+    const scrollPosition = preserveScroll
+      ? { x: window.scrollX, y: window.scrollY, documentY: document.scrollingElement?.scrollTop ?? 0 }
+      : null;
+    if (preserveScroll) suppressLedgerAmountFocus = true;
     if (next !== state) setState(next, label);
     renderApp(root, next, setState, "ledger", navigate);
+    if (!scrollPosition) return;
+
+    const restoreScroll = () => {
+      const nextAnchorTop = root.querySelector<HTMLElement>(".ledger-filters")?.getBoundingClientRect().top;
+      if (anchorTop !== undefined && nextAnchorTop !== undefined) {
+        window.scrollBy(0, nextAnchorTop - anchorTop);
+      } else {
+        window.scrollTo(scrollPosition.x, scrollPosition.y);
+        document.scrollingElement?.scrollTo(scrollPosition.x, scrollPosition.documentY);
+      }
+    };
+    restoreScroll();
+    requestAnimationFrame(() => {
+      restoreScroll();
+      requestAnimationFrame(restoreScroll);
+    });
   };
 
   root.querySelector<HTMLDetailsElement>("#ledgerHistoryPanel")?.addEventListener("toggle", (event) => {
@@ -2251,8 +2208,18 @@ function bindLedger(root: HTMLElement, state: WealthState, setState: Setter, nav
   root.querySelector<HTMLDetailsElement>("#ledgerAccountsPanel")?.addEventListener("toggle", (event) => {
     ledgerAccountsOpen = (event.currentTarget as HTMLDetailsElement).open;
   });
+  root.querySelectorAll<HTMLDetailsElement>("[data-ledger-account-group]").forEach((group) => {
+    group.addEventListener("toggle", () => {
+      const type = group.dataset.ledgerAccountGroup as LedgerAccountType | undefined;
+      if (type) ledgerAccountGroupsOpen[type] = group.open;
+    });
+  });
 
-  root.querySelector<HTMLInputElement>("#ledgerAmount")?.focus();
+  if (suppressLedgerAmountFocus) {
+    suppressLedgerAmountFocus = false;
+  } else {
+    root.querySelector<HTMLInputElement>("#ledgerAmount")?.focus({ preventScroll: true });
+  }
   root.querySelectorAll<HTMLButtonElement>("[data-ledger-type]").forEach((button) => button.addEventListener("click", () => {
     const type = button.dataset.ledgerType as LedgerTransactionType;
     const form = root.querySelector<HTMLFormElement>("#ledgerForm");
@@ -2324,12 +2291,12 @@ function bindLedger(root: HTMLElement, state: WealthState, setState: Setter, nav
     if (!form) return;
     const data = new FormData(form);
     ledgerFilters = { ...ledgerFilters, startDate: String(data.get("startDate") ?? ""), endDate: String(data.get("endDate") ?? ""), type: String(data.get("type")) as LedgerFilters["type"], categoryId: String(data.get("categoryId") ?? ""), query: String(data.get("query") ?? "") };
-    refresh();
+    refresh(state, undefined, true);
   };
   root.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((button) => button.addEventListener("click", () => { ledgerFilters.preset = button.dataset.preset as LedgerFilters["preset"]; applyFilters(); }));
   root.querySelectorAll<HTMLInputElement | HTMLSelectElement>("#ledgerFilterForm input, #ledgerFilterForm select").forEach((field) => field.addEventListener("change", applyFilters));
   root.querySelector<HTMLInputElement>('#ledgerFilterForm input[name="query"]')?.addEventListener("search", applyFilters);
-  root.querySelector<HTMLButtonElement>("#resetLedgerFilters")?.addEventListener("click", () => { ledgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "" }; refresh(); });
+  root.querySelector<HTMLButtonElement>("#resetLedgerFilters")?.addEventListener("click", () => { ledgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "" }; refresh(state, undefined, true); });
 
   root.querySelector<HTMLFormElement>("#ledgerCategoryForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -2364,7 +2331,7 @@ function bindLedger(root: HTMLElement, state: WealthState, setState: Setter, nav
     const type = String(data.get("type")) as LedgerAccountType;
     const openingBalance = Number(data.get("openingBalance"));
     const error = root.querySelector<HTMLElement>("#ledgerAccountError");
-    if (!name || !["bank", "wallet"].includes(type) || !Number.isFinite(openingBalance) || openingBalance < 0) {
+    if (!name || !["bank", "wallet", "investment"].includes(type) || !Number.isFinite(openingBalance) || openingBalance < 0) {
       if (error) error.textContent = "Enter a name, valid type, and non-negative opening balance.";
       return;
     }
@@ -2375,7 +2342,8 @@ function bindLedger(root: HTMLElement, state: WealthState, setState: Setter, nav
     if (!account) return;
     const name = prompt("Account name", account.name)?.trim();
     if (!name) return;
-    const icon = prompt("Account icon", account.icon ?? (account.type === "bank" ? "🏦" : "👛"))?.trim() || "•";
+    const fallbackIcon = account.type === "bank" ? "🏦" : account.type === "wallet" ? "👛" : "📈";
+    const icon = prompt("Account icon", account.icon ?? fallbackIcon)?.trim() || "•";
     const openingInput = prompt("Opening balance (MYR)", String(account.openingBalance));
     if (openingInput === null) return;
     const openingBalance = Number(openingInput);
@@ -2495,6 +2463,7 @@ function bindGoals(root: HTMLElement, state: WealthState, setState: Setter, navi
         current: Number(data.get("current")) || 0,
         target: Number(data.get("target")) || 0,
         monthlyContribution: Number(data.get("monthlyContribution")) || 0,
+        accountId: String(data.get("accountId") ?? "") || undefined,
         note: String(data.get("note") ?? goals[index].note),
       };
       const next = { ...state, goals };
@@ -2509,7 +2478,10 @@ function bindGoals(root: HTMLElement, state: WealthState, setState: Setter, navi
       const index = Number(button.dataset.index);
       if (!confirm("Delete this goal?")) return;
       const goals = state.goals.filter((_, i) => i !== index);
-      const next = { ...state, goals };
+      const overviewGoalId = state.overviewGoalId === state.goals[index]?.id
+        ? goals.find((goal) => goal.target > 0 && goal.current < goal.target)?.id ?? goals[0]?.id ?? ""
+        : state.overviewGoalId;
+      const next = { ...state, goals, overviewGoalId };
       setState(next);
       doNavigate("goals");
     });
@@ -2561,6 +2533,7 @@ function bindPortfolio(root: HTMLElement, state: WealthState, setState: Setter, 
       amountUsd: Number(data.get("amountUsd")) || 0,
       priceUsd: Number(data.get("priceUsd")) || 0,
       feeMyr: Number(data.get("feeMyr")) || 0,
+      exchangeRate: Number(data.get("amountUsd")) > 0 ? Number(data.get("amountMyr")) / Number(data.get("amountUsd")) : getUsdToMyr(),
       notes: String(data.get("notes") ?? ""),
     };
     // Save custom ticker to memory if new
@@ -2686,6 +2659,12 @@ function bindReview(root: HTMLElement, state: WealthState, setState: Setter, nav
 }
 
 function bindSettings(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
+  const refreshSettings = (next: WealthState, label: string): void => { setState(next, label); renderApp(root, next, setState, "settings", navigate); };
+  root.querySelector<HTMLFormElement>("#recurringForm")?.addEventListener("submit", (event) => { event.preventDefault(); const data = new FormData(event.currentTarget as HTMLFormElement); const amount = Number(data.get("amount")); const dayOfMonth = Number(data.get("dayOfMonth")); if (!Number.isFinite(amount) || amount <= 0 || !Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) return; refreshSettings({ ...state, recurringTransactions: [...state.recurringTransactions, { id: createId("recurring"), label: String(data.get("label") ?? "").trim().slice(0, 60), amount, type: String(data.get("type")) as "income" | "expense", dayOfMonth, active: true }] }, "Add recurring transaction"); });
+  root.querySelectorAll<HTMLButtonElement>(".delete-recurring").forEach((button) => button.addEventListener("click", () => refreshSettings({ ...state, recurringTransactions: state.recurringTransactions.filter((item) => item.id !== button.dataset.id) }, "Delete recurring transaction")));
+  root.querySelector<HTMLFormElement>("#liabilityForm")?.addEventListener("submit", (event) => { event.preventDefault(); const data = new FormData(event.currentTarget as HTMLFormElement); const balance = Number(data.get("balance")); const annualRate = Number(data.get("annualRate")); const minimumPayment = Number(data.get("minimumPayment")); if (![balance, annualRate, minimumPayment].every((value) => Number.isFinite(value) && value >= 0)) return; refreshSettings({ ...state, liabilities: [...state.liabilities, { id: createId("liability"), name: String(data.get("name") ?? "").trim().slice(0, 60), balance, annualRate, minimumPayment }] }, "Add liability"); });
+  root.querySelectorAll<HTMLButtonElement>(".delete-liability").forEach((button) => button.addEventListener("click", () => refreshSettings({ ...state, liabilities: state.liabilities.filter((item) => item.id !== button.dataset.id) }, "Delete liability")));
+  root.querySelector<HTMLFormElement>("#privacyForm")?.addEventListener("submit", (event) => { event.preventDefault(); const data = new FormData(event.currentTarget as HTMLFormElement); refreshSettings({ ...state, privacy: { maskAmounts: data.get("maskAmounts") === "on", requireExportConfirmation: data.get("requireExportConfirmation") === "on" } }, "Update privacy settings"); });
   root.querySelector<HTMLFormElement>("#profileForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;

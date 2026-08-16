@@ -6,7 +6,16 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 10;
+export const CURRENT_VERSION = 14;
+
+function deviceId(): string {
+  const key = "personal-wealth-os-device-id";
+  const existing = localStorage.getItem(key);
+  if (existing) return existing;
+  const created = createId("device");
+  localStorage.setItem(key, created);
+  return created;
+}
 
 const RULE_CARD_IDS = new Set<RuleCardId>([
   "monthly-cashflow",
@@ -34,6 +43,9 @@ const DEFAULT_LEDGER_CATEGORIES: LedgerCategory[] = [
 const DEFAULT_LEDGER_ACCOUNTS: LedgerAccount[] = [
   { id: "account-bank", name: "Bank", type: "bank", openingBalance: 0, icon: "🏦" },
   { id: "account-wallet", name: "Wallet", type: "wallet", openingBalance: 0, icon: "👛" },
+  { id: "account-moomoo-cash", name: "Moomoo Cash", type: "investment", openingBalance: 0, icon: "💵" },
+  { id: "account-moomoo-mmf", name: "Moomoo MMF", type: "investment", openingBalance: 0, icon: "🪙" },
+  { id: "account-moomoo-invest", name: "Moomoo Invest", type: "investment", openingBalance: 0, icon: "📈" },
 ];
 
 function getUserStorageKey(uid?: string): string {
@@ -97,6 +109,7 @@ export const defaultState: WealthState = {
     { id: "wishlist", name: "Wishlist Fund", label: "Wishlist", current: 0, target: 500, monthlyContribution: 20, note: "MYR 20 is redirected from the Safety Bucket each month." },
     { id: "learning", name: "Learning Fund", label: "Learning Fund", current: 0, target: 300, monthlyContribution: 10, note: "For skills, courses, books, and tools." },
   ],
+  overviewGoalId: "travel",
   trades: [
     { id: "csv-001", date: "2025-10-28", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 21.42, amountUsd: 5.04, priceUsd: 630.54, feeMyr: 0.21 },
     { id: "csv-002", date: "2026-04-06", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 199.75, amountUsd: 47.00, priceUsd: 604.11, feeMyr: 1.99 },
@@ -122,6 +135,12 @@ export const defaultState: WealthState = {
   ledgerCategories: DEFAULT_LEDGER_CATEGORIES,
   ledgerAccounts: DEFAULT_LEDGER_ACCOUNTS,
   ledgerTransactions: [],
+  liabilities: [],
+  recurringTransactions: [],
+  netWorthSnapshots: [],
+  privacy: { maskAmounts: false, requireExportConfirmation: true },
+  updatedAt: 0,
+  deviceId: "default",
   ruleCardOverrides: {},
   ruleNoteTitle: "",
   ruleNotes: "",
@@ -197,12 +216,19 @@ export function emptyState(): WealthState {
     },
     buckets: [],
     goals: [],
+    overviewGoalId: "",
     trades: [],
     reviews: [],
     customTickers: [],
     ledgerCategories: structuredClone(DEFAULT_LEDGER_CATEGORIES),
     ledgerAccounts: structuredClone(DEFAULT_LEDGER_ACCOUNTS),
     ledgerTransactions: [],
+    liabilities: [],
+    recurringTransactions: [],
+    netWorthSnapshots: [],
+    privacy: { maskAmounts: false, requireExportConfirmation: true },
+    updatedAt: 0,
+    deviceId: deviceId(),
     ruleCardOverrides: {},
     ruleNoteTitle: "",
     ruleNotes: "",
@@ -215,7 +241,7 @@ function isLedgerType(value: unknown): value is LedgerTransactionType {
 }
 
 function isLedgerAccountType(value: unknown): value is LedgerAccountType {
-  return value === "bank" || value === "wallet";
+  return value === "bank" || value === "wallet" || value === "investment";
 }
 
 function validLedgerAccounts(value: unknown): LedgerAccount[] {
@@ -252,11 +278,66 @@ function ledgerCandidateItems(value: unknown): unknown[] {
   return [];
 }
 
+function normalizedAccountReference(value: string): string {
+  return value.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function recoveredAccountId(reference: string, role: "account" | "source" | "destination"): string {
+  let hash = 2166136261;
+  for (const character of `${role}:${reference}`) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `account-recovered-${role}-${(hash >>> 0).toString(36)}`;
+}
+
 function validLedgerTransactions(value: unknown, categories: LedgerCategory[], accounts: LedgerAccount[]): LedgerTransaction[] {
   const candidates = ledgerCandidateItems(value);
   const categoryTypes = new Map(categories.map((category) => [category.id, category.type]));
-  const accountIds = new Set(accounts.map((account) => account.id));
-  const fallbackAccountId = accounts[0]?.id ?? "";
+  const accountByReference = new Map<string, string>();
+  const registerAccount = (account: LedgerAccount): void => {
+    accountByReference.set(account.id, account.id);
+    const normalizedId = normalizedAccountReference(account.id);
+    const normalizedName = normalizedAccountReference(account.name);
+    if (normalizedId) accountByReference.set(normalizedId, account.id);
+    if (normalizedName) accountByReference.set(normalizedName, account.id);
+  };
+  accounts.forEach(registerAccount);
+
+  const resolveAccount = (item: Record<string, unknown>, fields: string[], role: "account" | "source" | "destination"): string => {
+    const rawReference = fields
+      .map((field) => item[field])
+      .find((candidate): candidate is string => typeof candidate === "string" && Boolean(candidate.trim()));
+    if (rawReference) {
+      const reference = rawReference.trim();
+      const normalizedReference = normalizedAccountReference(reference);
+      const existingId = accountByReference.get(reference) ?? (normalizedReference ? accountByReference.get(normalizedReference) : undefined);
+      if (existingId) return existingId;
+
+      const id = recoveredAccountId(reference, role);
+      const recovered: LedgerAccount = {
+        id,
+        name: reference.slice(0, 40),
+        type: "bank",
+        openingBalance: 0,
+        icon: "↺",
+      };
+      accounts.push(recovered);
+      registerAccount(recovered);
+      accountByReference.set(reference, id);
+      return id;
+    }
+
+    const roleName = role === "source" ? "Recovered transfer source" : role === "destination" ? "Recovered transfer destination" : "Recovered legacy account";
+    const id = recoveredAccountId(roleName, role);
+    const existingId = accountByReference.get(id);
+    if (existingId) return existingId;
+    const recovered: LedgerAccount = { id, name: roleName, type: "bank", openingBalance: 0, icon: "↺" };
+    accounts.push(recovered);
+    registerAccount(recovered);
+    return id;
+  };
+
   return candidates.flatMap((candidate): LedgerTransaction[] => {
     if (!candidate || typeof candidate !== "object") return [];
     const item = candidate as Record<string, unknown>;
@@ -264,13 +345,19 @@ function validLedgerTransactions(value: unknown, categories: LedgerCategory[], a
     const timestamp = typeof item.date === "string" ? new Date(item.date).getTime() : NaN;
     const type = item.type;
     const categoryValid = type === "transfer" ? !item.categoryId || typeof item.categoryId === "string" : typeof item.categoryId === "string" && categoryTypes.get(item.categoryId) === type;
-    const accountId = typeof item.accountId === "string" && accountIds.has(item.accountId) ? item.accountId : fallbackAccountId;
-    const accountValid = type === "transfer"
-      ? typeof item.fromAccountId === "string" && accountIds.has(item.fromAccountId) && typeof item.toAccountId === "string" && accountIds.has(item.toAccountId) && item.fromAccountId !== item.toAccountId
-      : Boolean(accountId);
-    if (typeof item.id !== "string" || !item.id || !Number.isFinite(amount) || amount <= 0 || !isLedgerType(type) || !categoryValid || !accountValid || !Number.isFinite(timestamp)) return [];
+    if (typeof item.id !== "string" || !item.id || !Number.isFinite(amount) || amount <= 0 || !isLedgerType(type) || !categoryValid || !Number.isFinite(timestamp)) return [];
+    const accountId = type !== "transfer"
+      ? resolveAccount(item, ["accountId", "account", "accountName"], "account")
+      : undefined;
+    const fromAccountId = type === "transfer"
+      ? resolveAccount(item, ["fromAccountId", "fromAccount", "fromAccountName", "sourceAccountId", "sourceAccount"], "source")
+      : undefined;
+    const toAccountId = type === "transfer"
+      ? resolveAccount(item, ["toAccountId", "toAccount", "toAccountName", "destinationAccountId", "destinationAccount"], "destination")
+      : undefined;
+    if (type === "transfer" && fromAccountId === toAccountId) return [];
     const note = typeof item.note === "string" ? item.note.trim().slice(0, 500) : undefined;
-    return [{ id: item.id, amount: Math.round((amount + Number.EPSILON) * 100) / 100, type, ...(type !== "transfer" && typeof item.categoryId === "string" ? { categoryId: item.categoryId } : {}), ...(type !== "transfer" ? { accountId } : {}), ...(type === "transfer" && typeof item.fromAccountId === "string" ? { fromAccountId: item.fromAccountId } : {}), ...(type === "transfer" && typeof item.toAccountId === "string" ? { toAccountId: item.toAccountId } : {}), date: new Date(timestamp).toISOString(), ...(note ? { note } : {}) }];
+    return [{ id: item.id, amount: Math.round((amount + Number.EPSILON) * 100) / 100, type, ...(type !== "transfer" && typeof item.categoryId === "string" ? { categoryId: item.categoryId } : {}), ...(type !== "transfer" ? { accountId } : {}), ...(type === "transfer" ? { fromAccountId, toAccountId } : {}), date: new Date(timestamp).toISOString(), ...(note ? { note } : {}) }];
   });
 }
 
@@ -288,7 +375,7 @@ function validRuleCardOverrides(value: unknown): Partial<Record<RuleCardId, Rule
   return result;
 }
 
-function migrateState(input: Partial<WealthState>): WealthState {
+export function migrateState(input: Partial<WealthState>): WealthState {
   const candidate = input as Partial<WealthState> & Record<string, unknown>;
   const merged = {
     ...cloneDefaultState(),
@@ -315,46 +402,75 @@ function migrateState(input: Partial<WealthState>): WealthState {
     : [];
   const legacyLedger = candidate.ledger && typeof candidate.ledger === "object" ? candidate.ledger as Record<string, unknown> : undefined;
   const ledgerCategories = validLedgerCategories(candidate.ledgerCategories ?? legacyLedger?.categories);
-  const ledgerAccounts = validLedgerAccounts(input.ledgerAccounts);
+  let ledgerAccounts = validLedgerAccounts(input.ledgerAccounts);
+  if ((input.version ?? 0) < 11) {
+    const existingIds = new Set(ledgerAccounts.map((account) => account.id));
+    const investmentAccounts = DEFAULT_LEDGER_ACCOUNTS.filter((account) => account.type === "investment" && !existingIds.has(account.id));
+    ledgerAccounts = [...ledgerAccounts, ...structuredClone(investmentAccounts)];
+  }
   const transactionSource = candidate.ledgerTransactions ?? candidate.transactions ?? candidate.ledgerEntries ?? legacyLedger?.transactions ?? legacyLedger?.entries;
   const ledgerTransactions = validLedgerTransactions(transactionSource, ledgerCategories, ledgerAccounts);
   merged.ledgerCategories = ledgerCategories;
   merged.ledgerAccounts = ledgerAccounts;
-  merged.ledgerTransactions = ledgerTransactions.filter((transaction) => {
-    const accounts = new Set(merged.ledgerAccounts.map((account) => account.id));
-    return transaction.type === "transfer"
-      ? accounts.has(transaction.fromAccountId ?? "") && accounts.has(transaction.toAccountId ?? "")
-      : accounts.has(transaction.accountId ?? "");
-  });
+  merged.ledgerTransactions = ledgerTransactions;
+  merged.trades = Array.isArray(input.trades) ? input.trades.map((trade) => ({
+    ...trade,
+    exchangeRate: Number.isFinite(trade.exchangeRate) && Number(trade.exchangeRate) > 0
+      ? Number(trade.exchangeRate)
+      : trade.amountUsd > 0 && trade.amountMyr > 0 ? trade.amountMyr / trade.amountUsd : 4.25,
+  })) : [];
+  merged.goals = Array.isArray(input.goals) ? input.goals.map((goal) => ({
+    ...goal,
+    ...(typeof goal.accountId === "string" && ledgerAccounts.some((account) => account.id === goal.accountId) ? { accountId: goal.accountId } : {}),
+  })) : [];
+  merged.liabilities = Array.isArray(input.liabilities) ? input.liabilities.filter((item) =>
+    item && typeof item.id === "string" && typeof item.name === "string" && Number.isFinite(item.balance) && item.balance >= 0 && Number.isFinite(item.annualRate) && item.annualRate >= 0 && Number.isFinite(item.minimumPayment) && item.minimumPayment >= 0
+  ) : [];
+  merged.recurringTransactions = Array.isArray(input.recurringTransactions) ? input.recurringTransactions.filter((item) =>
+    item && typeof item.id === "string" && typeof item.label === "string" && Number.isFinite(item.amount) && item.amount > 0 && (item.type === "income" || item.type === "expense") && Number.isInteger(item.dayOfMonth) && item.dayOfMonth >= 1 && item.dayOfMonth <= 31
+  ) : [];
+  merged.netWorthSnapshots = Array.isArray(input.netWorthSnapshots) ? input.netWorthSnapshots.filter((item) =>
+    item && typeof item.id === "string" && typeof item.date === "string" && Number.isFinite(Date.parse(item.date)) && Number.isFinite(item.assets) && item.assets >= 0 && Number.isFinite(item.liabilities) && item.liabilities >= 0
+  ) : [];
+  merged.privacy = {
+    maskAmounts: input.privacy?.maskAmounts === true,
+    requireExportConfirmation: input.privacy?.requireExportConfirmation !== false,
+  };
+  merged.updatedAt = Number.isFinite(input.updatedAt) ? Number(input.updatedAt) : 0;
+  merged.deviceId = typeof input.deviceId === "string" && input.deviceId ? input.deviceId : deviceId();
   merged.ruleCardOverrides = validRuleCardOverrides(input.ruleCardOverrides);
   merged.ruleNoteTitle = typeof input.ruleNoteTitle === "string" ? input.ruleNoteTitle.trim().slice(0, 80) : "";
   merged.ruleNotes = typeof input.ruleNotes === "string" ? input.ruleNotes.slice(0, 5000) : "";
   merged.hiddenRuleIds = Array.isArray(input.hiddenRuleIds)
     ? [...new Set(input.hiddenRuleIds.filter((id): id is RuleCardId => typeof id === "string" && RULE_CARD_IDS.has(id as RuleCardId)))]
     : [];
+  const requestedOverviewGoalId = typeof candidate.overviewGoalId === "string" ? candidate.overviewGoalId : "";
+  merged.overviewGoalId = merged.goals.some((goal) => goal.id === requestedOverviewGoalId)
+    ? requestedOverviewGoalId
+    : merged.goals.find((goal) => goal.target > 0 && goal.current < goal.target)?.id ?? merged.goals[0]?.id ?? "";
 
   if ((input.version ?? 0) < 3) {
     const legacyTextTranslations: Record<string, string> = {
-      "生存桶": "Survival Bucket",
-      "交通 + 吃饭，先保证现金流稳定。": "Transport and food come first to keep cash flow stable.",
-      "安全桶": "Safety Bucket",
-      "Emergency Fund 已达标！MYR 40 可重分配到成长桶或自由桶。": "The Emergency Fund is complete. MYR 40 can be redirected to Growth or Freedom.",
-      "成长桶": "Growth Bucket",
-      "VOO 70% / QQQM 30% 自动 DCA。": "Automated DCA split: 70% VOO and 30% QQQM.",
-      "自由桶": "Freedom Bucket",
-      "旅行基金和愿望清单（含原 Safety 桶 MYR 20 重分配）。": "Travel and wishlist funding, including MYR 20 redirected from Safety.",
-      "学习桶": "Learning Bucket",
-      "书、课程、工具和投资学习成本。": "Books, courses, tools, and investment education.",
-      "机会桶": "Opportunity Bucket",
-      "一次性熊市补仓资金，只按规则部署。": "One-time bear-market reserve deployed only according to the rules.",
-      "5 个月安全垫 ✅": "5-Month Safety Buffer ✅",
-      "已达成 5 个月安全垫目标！MYR 4,000 存够。": "The five-month safety-buffer goal is complete at MYR 4,000.",
-      "旅行基金": "Travel Fund",
-      "先用系统建议目标，之后可调整。": "Start with the suggested target and adjust it later if needed.",
-      "愿望清单": "Wishlist",
-      "每月 MYR 20 从 Safety 桶重分配而来。": "MYR 20 is redirected from the Safety Bucket each month.",
-      "学习基金": "Learning Fund",
-      "用于技能、课程、书籍、工具。": "For skills, courses, books, and tools.",
+      "\u751f\u5b58\u6876": "Survival Bucket",
+      "\u4ea4\u901a + \u5403\u996d，\u5148\u4fdd\u8bc1\u73b0\u91d1\u6d41\u7a33\u5b9a。": "Transport and food come first to keep cash flow stable.",
+      "\u5b89\u5168\u6876": "Safety Bucket",
+      "Emergency Fund \u5df2\u8fbe\u6807\uff01MYR 40 \u53ef\u91cd\u5206\u914d\u5230\u6210\u957f\u6876\u6216\u81ea\u7531\u6876。": "The Emergency Fund is complete. MYR 40 can be redirected to Growth or Freedom.",
+      "\u6210\u957f\u6876": "Growth Bucket",
+      "VOO 70% / QQQM 30% \u81ea\u52a8 DCA。": "Automated DCA split: 70% VOO and 30% QQQM.",
+      "\u81ea\u7531\u6876": "Freedom Bucket",
+      "\u65c5\u884c\u57fa\u91d1\u548c\u613f\u671b\u6e05\u5355（\u542b\u539f Safety \u6876 MYR 20 \u91cd\u5206\u914d）。": "Travel and wishlist funding, including MYR 20 redirected from Safety.",
+      "\u5b66\u4e60\u6876": "Learning Bucket",
+      "\u4e66、\u8bfe\u7a0b、\u5de5\u5177\u548c\u6295\u8d44\u5b66\u4e60\u6210\u672c。": "Books, courses, tools, and investment education.",
+      "\u673a\u4f1a\u6876": "Opportunity Bucket",
+      "\u4e00\u6b21\u6027\u718a\u5e02\u8865\u4ed3\u8d44\u91d1，\u53ea\u6309\u89c4\u5219\u90e8\u7f72。": "One-time bear-market reserve deployed only according to the rules.",
+      "5 \u4e2a\u6708\u5b89\u5168\u57ab ✅": "5-Month Safety Buffer ✅",
+      "\u5df2\u8fbe\u6210 5 \u4e2a\u6708\u5b89\u5168\u57ab\u76ee\u6807\uff01MYR 4,000 \u5b58\u591f。": "The five-month safety-buffer goal is complete at MYR 4,000.",
+      "\u65c5\u884c\u57fa\u91d1": "Travel Fund",
+      "\u5148\u7528\u7cfb\u7edf\u5efa\u8bae\u76ee\u6807，\u4e4b\u540e\u53ef\u8c03\u6574。": "Start with the suggested target and adjust it later if needed.",
+      "\u613f\u671b\u6e05\u5355": "Wishlist",
+      "\u6bcf\u6708 MYR 20 \u4ece Safety \u6876\u91cd\u5206\u914d\u800c\u6765。": "MYR 20 is redirected from the Safety Bucket each month.",
+      "\u5b66\u4e60\u57fa\u91d1": "Learning Fund",
+      "\u7528\u4e8e\u6280\u80fd、\u8bfe\u7a0b、\u4e66\u7c4d、\u5de5\u5177。": "For skills, courses, books, and tools.",
     };
     const translate = (value: string): string => legacyTextTranslations[value] ?? value;
     merged.buckets = merged.buckets.map((bucket) => ({ ...bucket, label: translate(bucket.label), note: translate(bucket.note) }));
@@ -387,16 +503,27 @@ export function saveState(state: WealthState, uid?: string, changeLabel?: string
       try {
         const prevState = JSON.parse(raw) as WealthState;
         saveSnapshot(prevState, changeLabel, uid);
-      } catch { /* ignore */ }
+      } catch { /* ignore snapshot parse errors */ }
     }
   }
 
   const key = getUserStorageKey(uid);
-  localStorage.setItem(key, JSON.stringify({ ...state, version: CURRENT_VERSION }));
+  const persisted = { ...state, version: CURRENT_VERSION, updatedAt: Date.now(), deviceId: state.deviceId || deviceId() };
+  try {
+    localStorage.setItem(key, JSON.stringify(persisted));
+  } catch (err) {
+    // localStorage quota exceeded or serialization failure — surface to UI
+    console.error("[saveState] localStorage write failed:", err);
+    window.dispatchEvent(new CustomEvent("pwo-save-error", { detail: { message: "Local storage save failed. Data may not persist." } }));
+    return;
+  }
   // Also sync to Firestore if logged in
   const user = currentUser();
   if (user) {
-    saveToFirestore(user.uid, state).catch(console.error);
+    saveToFirestore(user.uid, persisted).catch((err) => {
+      console.error("[saveState] Firestore sync failed:", err);
+      window.dispatchEvent(new CustomEvent("pwo-save-error", { detail: { message: "Cloud sync failed. Local copy is safe." } }));
+    });
   }
 }
 
@@ -406,10 +533,16 @@ export async function loadStateFromCloud(): Promise<WealthState | null> {
   // Don't catch errors here - let the caller distinguish "no data" from "load error"
   const cloudState = await loadFromFirestore(user.uid);
   if (cloudState) {
-    // Save to user-specific localStorage key
     const key = getUserStorageKey(user.uid);
-    localStorage.setItem(key, JSON.stringify({ ...cloudState, version: CURRENT_VERSION }));
-    return migrateState(cloudState as Partial<WealthState>);
+    const previousRaw = localStorage.getItem(key);
+    if (previousRaw) {
+      try {
+        saveSnapshot(JSON.parse(previousRaw) as WealthState, "Before cloud data refresh", user.uid);
+      } catch { /* Keep loading cloud data if the old local copy is invalid. */ }
+    }
+    const migrated = migrateState(cloudState as Partial<WealthState>);
+    localStorage.setItem(key, JSON.stringify(migrated));
+    return migrated;
   }
   return null;
 }

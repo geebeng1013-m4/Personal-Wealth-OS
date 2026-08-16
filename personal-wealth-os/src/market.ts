@@ -1,6 +1,76 @@
 // Market data module — fetches VOO/QQQM quotes from Yahoo Finance
 // K-line chart powered by TradingView Widget
 
+import { calculatePositionCostBasis, type CostBasisTrade } from "./rules";
+
+/** Default fallback USD→MYR rate when all dynamic sources fail. */
+const DEFAULT_USD_MYR = 4.25;
+
+/** Cached USD→MYR exchange rate. */
+let cachedUsdToMyr: number | null = null;
+let cachedUsdToMyrTimestamp = 0;
+const FX_CACHE_TTL = 3600_000; // 1 hour
+
+/**
+ * Fetch the current USD→MYR exchange rate.
+ * Tries a free exchange-rate API with a 1-hour cache, then falls back to the
+ * most-recent trade rate if available, then to DEFAULT_USD_MYR.
+ */
+export async function fetchUsdToMyr(trades?: { exchangeRate?: number; date: string }[]): Promise<number> {
+  // 1. Return cached if fresh
+  if (cachedUsdToMyr !== null && Date.now() - cachedUsdToMyrTimestamp < FX_CACHE_TTL) {
+    return cachedUsdToMyr;
+  }
+  // 2. Try a free exchange-rate API
+  try {
+    const res = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const json = await res.json() as { rates?: { MYR?: number } };
+      if (typeof json.rates?.MYR === "number" && json.rates.MYR > 0) {
+        cachedUsdToMyr = json.rates.MYR;
+        cachedUsdToMyrTimestamp = Date.now();
+        return cachedUsdToMyr;
+      }
+    }
+  } catch { /* fall through */ }
+
+  // 3. Derive from the most recent trade that has a valid exchangeRate
+  if (trades && trades.length > 0) {
+    const sorted = [...trades].sort((a, b) => b.date.localeCompare(a.date));
+    for (const t of sorted) {
+      if (typeof t.exchangeRate === "number" && t.exchangeRate > 0) {
+        return t.exchangeRate;
+      }
+    }
+  }
+
+  // 4. Hard-coded last resort
+  return DEFAULT_USD_MYR;
+}
+
+/**
+ * Synchronous getter for the cached USD→MYR rate.
+ * Returns the cached dynamic rate if available, otherwise falls back to DEFAULT_USD_MYR.
+ * Call fetchUsdToMyr() early in the app lifecycle to populate the cache.
+ */
+export function getUsdToMyr(): number {
+  return cachedUsdToMyr ?? DEFAULT_USD_MYR;
+}
+
+/** Pure string HTML-escape — safe for non-DOM environments. */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (ch) => {
+    switch (ch) {
+      case "\x26": return "\x26amp;";
+      case "<": return "\x26lt;";
+      case ">": return "\x26gt;";
+      case "\x22": return "\x26quot;";
+      case "\x27": return "\x26#39;";
+      default: return ch;
+    }
+  });
+}
+
 export interface MarketQuote {
   symbol: string;
   price: number;
@@ -145,50 +215,39 @@ export interface PortfolioPnL {
   unrealizedPnlUsd: number;
   unrealizedPnlMyr: number;
   unrealizedPnlPct: number;
+  realizedPnlUsd: number;
+  realizedPnlMyr: number;
   feeMyr: number;
 }
 
 export function calcPnLForTicker(
-  trades: { ticker: string; date: string; type: string; amountUsd: number; amountMyr: number; priceUsd: number; feeMyr: number }[],
+  trades: CostBasisTrade[],
   ticker: string,
   currentPriceUsd: number,
   usdToMyr = 4.25,
 ): PortfolioPnL {
-  const filtered = trades.filter((t) => t.ticker === ticker);
-  let totalUnits = 0;
-  let totalInvestedUsd = 0;
-  let totalInvestedMyr = 0;
-  let feeMyr = 0;
-
-  for (const t of filtered) {
-    const dir = t.type === "Sell" ? -1 : 1;
-    const units = t.priceUsd > 0 ? t.amountUsd / t.priceUsd : 0;
-    totalUnits += dir * units;
-    totalInvestedUsd += dir * t.amountUsd;
-    totalInvestedMyr += dir * (t.amountMyr + t.feeMyr);
-    feeMyr += t.feeMyr;
-  }
-
-  const avgCost = totalUnits > 0 ? totalInvestedUsd / totalUnits : 0;
-  const currentValueUsd = totalUnits * currentPriceUsd;
+  const costBasis = calculatePositionCostBasis(trades, ticker);
+  const currentValueUsd = costBasis.units * currentPriceUsd;
   const currentValueMyr = currentValueUsd * usdToMyr;
-  const pnlUsd = currentValueUsd - totalInvestedUsd;
-  const pnlMyr = currentValueMyr - totalInvestedMyr;
-  const pnlPct = totalInvestedUsd > 0 ? pnlUsd / totalInvestedUsd : 0;
+  const pnlUsd = currentValueUsd - costBasis.costBasisUsd;
+  const pnlMyr = currentValueMyr - costBasis.costBasisMyr;
+  const pnlPct = costBasis.costBasisUsd > 0 ? pnlUsd / costBasis.costBasisUsd : 0;
 
   return {
     ticker,
-    totalUnits,
-    totalInvestedUsd,
-    totalInvestedMyr,
-    averageCostUsd: round2(avgCost),
+    totalUnits: costBasis.units,
+    totalInvestedUsd: round2(costBasis.costBasisUsd),
+    totalInvestedMyr: round2(costBasis.costBasisMyr),
+    averageCostUsd: round2(costBasis.averageCostUsd),
     currentPriceUsd,
     currentValueUsd: round2(currentValueUsd),
     currentValueMyr: round2(currentValueMyr),
     unrealizedPnlUsd: round2(pnlUsd),
     unrealizedPnlMyr: round2(pnlMyr),
     unrealizedPnlPct: round2(pnlPct),
-    feeMyr: round2(feeMyr),
+    realizedPnlUsd: round2(costBasis.realizedPnlUsd),
+    realizedPnlMyr: round2(costBasis.realizedPnlMyr),
+    feeMyr: round2(costBasis.feesMyr),
   };
 }
 
@@ -197,7 +256,7 @@ export function calcPnLForTicker(
 interface TradeForTimeline {
   ticker: string;
   date: string;
-  type: string;
+  type: CostBasisTrade["type"];
   priceUsd: number;
   amountUsd: number;
   amountMyr: number;
@@ -212,7 +271,7 @@ export function buildTradeTimelineHtml(
   const filtered = trades.filter((t) => t.ticker === ticker);
   if (filtered.length === 0) return "";
 
-  const pnl = calcPnLForTicker(trades, ticker, currentPriceUsd, 4.25);
+  const pnl = calcPnLForTicker(trades, ticker, currentPriceUsd, getUsdToMyr());
   const sorted = [...filtered].sort((a, b) => a.date.localeCompare(b.date));
   const minDate = new Date(sorted[0].date + "T00:00:00Z");
   const maxDate = new Date(sorted[sorted.length - 1].date + "T00:00:00Z");
@@ -233,15 +292,17 @@ export function buildTradeTimelineHtml(
   const costLineTopPct = priceRange > 0 ? ((maxPrice - pnl.averageCostUsd) / priceRange) * 100 : 50;
 
   // Trade markers
+  const safeTicker = escapeHtml(ticker);
   const markers = sorted.map((t) => {
     const isBuy = t.type !== "Sell";
     const posMs = new Date(t.date + "T16:00:00Z").getTime();
     const leftPct = rangeMs > 0 ? ((posMs - startMs) / rangeMs) * 100 : 50;
     const priceTopPct = priceRange > 0 ? ((maxPrice - t.priceUsd) / priceRange) * 100 : 50;
     const units = t.priceUsd > 0 ? (t.amountUsd / t.priceUsd).toFixed(3) : "0";
+    const safeDate = escapeHtml(t.date);
 
-    return `<div class="tl-marker" style="left:${leftPct.toFixed(1)}%;top:${priceTopPct.toFixed(1)}%;" title="${t.date}\n${isBuy ? "Buy" : "Sell"} ${units} units @ $${t.priceUsd.toFixed(2)}">
-      <span class="tl-dot ${isBuy ? "tl-buy" : "tl-sell"}">${isBuy ? "↑" : "↓"}</span>
+    return `<div class="tl-marker" style="left:${leftPct.toFixed(1)}%;top:${priceTopPct.toFixed(1)}%;" title="${safeDate}\n${isBuy ? "Buy" : "Sell"} ${units} units @ $${t.priceUsd.toFixed(2)}">
+      <span class="tl-dot ${isBuy ? "tl-buy" : "tl-sell"}">${isBuy ? "\u2191" : "\u2193"}</span>
       <span class="tl-label">${isBuy ? "B" : "S"} ${units} @ $${t.priceUsd.toFixed(0)}</span>
     </div>`;
   }).join("");
@@ -257,7 +318,7 @@ export function buildTradeTimelineHtml(
 
   return `<div class="trade-timeline">
     <div class="tl-header">
-      <span class="tl-title">📊 Trade Timeline — ${ticker}</span>
+      <span class="tl-title">\ud83d\udcca Trade Timeline \u2014 ${safeTicker}</span>
       <span class="tl-cost-label">Avg Cost $${pnl.averageCostUsd.toFixed(2)}</span>
     </div>
     <div class="tl-body">
@@ -638,23 +699,39 @@ export function calcRiskMetrics(prices: HistoricalPrice[], benchmarkPrices?: His
   const riskFree = 0.045;
   const sharpe = annualVol > 0 ? (annualReturn - riskFree) / annualVol : 0;
 
-  // Beta vs benchmark
+  // Beta vs benchmark — align by date to handle mismatched histories
   let beta = 1;
-  if (benchmarkPrices && benchmarkPrices.length === prices.length) {
-    const benchReturns: number[] = [];
-    for (let i = 1; i < benchmarkPrices.length; i++) {
-      benchReturns.push((benchmarkPrices[i].close - benchmarkPrices[i - 1].close) / benchmarkPrices[i - 1].close);
+  if (benchmarkPrices && benchmarkPrices.length >= 2) {
+    const benchMap = new Map(benchmarkPrices.map((p) => [p.date, p.close]));
+    // Build aligned price series using only dates present in both
+    const alignedPrices: number[] = [];
+    const alignedBenchPrices: number[] = [];
+    for (const p of prices) {
+      const benchClose = benchMap.get(p.date);
+      if (benchClose !== undefined) {
+        alignedPrices.push(p.close);
+        alignedBenchPrices.push(benchClose);
+      }
     }
-    const benchMean = benchReturns.reduce((s, r) => s + r, 0) / benchReturns.length;
-    let covariance = 0;
-    let benchVariance = 0;
-    for (let i = 0; i < returns.length; i++) {
-      covariance += (returns[i] - mean) * (benchReturns[i] - benchMean);
-      benchVariance += (benchReturns[i] - benchMean) ** 2;
+    if (alignedPrices.length >= 2) {
+      const alignedReturns: number[] = [];
+      const benchReturns: number[] = [];
+      for (let i = 1; i < alignedPrices.length; i++) {
+        alignedReturns.push((alignedPrices[i] - alignedPrices[i - 1]) / alignedPrices[i - 1]);
+        benchReturns.push((alignedBenchPrices[i] - alignedBenchPrices[i - 1]) / alignedBenchPrices[i - 1]);
+      }
+      const aMean = alignedReturns.reduce((s, r) => s + r, 0) / alignedReturns.length;
+      const bMean = benchReturns.reduce((s, r) => s + r, 0) / benchReturns.length;
+      let covariance = 0;
+      let benchVariance = 0;
+      for (let i = 0; i < alignedReturns.length; i++) {
+        covariance += (alignedReturns[i] - aMean) * (benchReturns[i] - bMean);
+        benchVariance += (benchReturns[i] - bMean) ** 2;
+      }
+      covariance /= alignedReturns.length;
+      benchVariance /= alignedReturns.length;
+      beta = benchVariance > 0 ? covariance / benchVariance : 1;
     }
-    covariance /= returns.length;
-    benchVariance /= returns.length;
-    beta = benchVariance > 0 ? covariance / benchVariance : 1;
   }
 
   // Win rate (positive months)
