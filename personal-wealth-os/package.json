@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite --host localhost",
     "build": "npm run typecheck && vite build",
+    "build:demo": "npm run typecheck && cross-env VITE_DEMO_MODE=true vite build",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.api.json"
   },
@@ -27,7 +28,7 @@
   "dependencies": {
     "@vercel/blob": "^2.6.1",
     "firebase": "^12.15.0",
-    "firebase-admin": "^14.2.0",
+    "firebase-admin": "13.6.0",
     "lightweight-charts": "^5.2.0",
     "lucide-react": "^1.25.0",
     "ogl": "^1.0.11",

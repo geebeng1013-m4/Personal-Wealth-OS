@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Personal Wealth OS 代码质量与体验分析报告</title>
+<style>
+  @page { margin: 1.8cm 2cm; size: A4; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif; font-size: 13px; line-height: 1.7; color: #1a1a2e; background: #fff; padding: 40px 48px; }
+  h1 { font-size: 22px; font-weight: 700; color: #0f0f23; border-bottom: 3px solid #6c5ce7; padding-bottom: 10px; margin-bottom: 6px; }
+  .subtitle { font-size: 13px; color: #636e72; margin-bottom: 28px; }
+  h2 { font-size: 16px; font-weight: 700; color: #2d3436; margin: 26px 0 10px; padding-left: 10px; border-left: 4px solid #6c5ce7; }
+  h3 { font-size: 14px; font-weight: 600; color: #2d3436; margin: 16px 0 6px; }
+  p, li { font-size: 13px; line-height: 1.7; color: #2d3436; }
+  ul, ol { margin: 4px 0 8px 20px; }
+  li { margin-bottom: 3px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 4px; margin-right: 4px; }
+  .tag-green  { background: #d4edda; color: #155724; }
+  .tag-yellow { background: #fff3cd; color: #856404; }
+  .tag-red    { background: #f8d7da; color: #721c24; }
+  .tag-blue   { background: #d1ecf1; color: #0c5460; }
+  .tag-purple { background: #e8daef; color: #6c3483; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 12.5px; }
+  th { background: #f4f3ff; color: #2d3436; font-weight: 600; text-align: left; padding: 7px 10px; border-bottom: 2px solid #6c5ce7; }
+  td { padding: 6px 10px; border-bottom: 1px solid #dfe6e9; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  code { font-family: "Fira Code","Cascadia Code",monospace; font-size: 12px; background: #f8f9fa; padding: 1px 5px; border-radius: 3px; color: #d63384; }
+  .score-box { display: inline-flex; align-items: center; gap: 10px; background: linear-gradient(135deg,#6c5ce7,#a29bfe); color: #fff; font-size: 28px; font-weight: 800; padding: 12px 28px; border-radius: 12px; margin: 8px 0 16px; }
+  .score-box small { font-size: 13px; font-weight: 500; opacity: 0.9; }
+  .metric-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin: 10px 0 16px; }
+  .metric-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 12px; text-align: center; }
+  .metric-card .num { font-size: 22px; font-weight: 700; color: #6c5ce7; }
+  .metric-card .lbl { font-size: 11px; color: #636e72; margin-top: 2px; }
+  .issue { background: #fff8f0; border-left: 3px solid #e17055; padding: 8px 12px; margin: 6px 0; border-radius: 0 6px 6px 0; }
+  .issue strong { color: #d35400; }
+  .suggestion { background: #f0fff4; border-left: 3px solid #00b894; padding: 8px 12px; margin: 6px 0; border-radius: 0 6px 6px 0; }
+  .suggestion strong { color: #00897b; }
+  .footer { margin-top: 30px; padding-top: 12px; border-top: 1px solid #dfe6e9; font-size: 11px; color: #b2bec3; text-align: center; }
+  .toc { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 14px 20px; margin: 12px 0 20px; }
+  .toc a { color: #6c5ce7; text-decoration: none; font-size: 12.5px; }
+  .toc ol { margin-left: 18px; }
+  .toc li { margin-bottom: 2px; }
+  .module-table td:first-child { font-weight: 600; white-space: nowrap; }
+  .priority-high { color: #e74c3c; font-weight: 700; }
+  .priority-med  { color: #f39c12; font-weight: 700; }
+  .priority-low  { color: #27ae60; font-weight: 600; }
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<h1>Personal Wealth OS — 代码质量与体验分析报告</h1>
+<p class="subtitle">分析日期：2026-08-17 &nbsp;|&nbsp; 版本：v0.2.0 &nbsp;|&nbsp; 技术栈：Vite 5 · TypeScript · Firebase · Lightweight Charts</p>
+
+<div class="toc">
+<strong>目录</strong>
+<ol>
+  <li><a href="#overview">项目总览与架构评估</a></li>
+  <li><a href="#modules">模块职责与文件分析</a></li>
+  <li><a href="#code-quality">代码质量分析</a></li>
+  <li><a href="#security">安全性分析</a></li>
+  <li><a href="#ux">用户体验 (UX) 分析</a></li>
+  <li><a href="#improvements">可改进模块与建议</a></li>
+  <li><a href="#summary">总结评分与下一步</a></li>
+</ol>
+</div>
+
+<!-- ========== 1. 总览 ========== -->
+<h2 id="overview">1. 项目总览与架构评估</h2>
+
+<div class="metric-grid">
+  <div class="metric-card"><div class="num">12</div><div class="lbl">核心源文件</div></div>
+  <div class="metric-card"><div class="num">2,752</div><div class="lbl">ui.ts 行数</div></div>
+  <div class="metric-card"><div class="num">11</div><div class="lbl">功能页面</div></div>
+  <div class="metric-card"><div class="num">14</div><div class="lbl">状态版本号</div></div>
+</div>
+
+<p><strong>架构概述：</strong>项目采用原生 TypeScript + DOM 操作的单页应用架构，模块按职责清晰划分：<code>models.ts</code>（领域模型）、<code>state.ts</code>（状态管理与持久化）、<code>rules.ts</code>（纯函数计算）、<code>market.ts</code>（行情数据）、<code>firebase.ts</code>（认证与云同步）、<code>ui.ts</code>（页面渲染与事件绑定）、<code>main.ts</code>（启动与顶层协调）。</p>
+
+<p><span class="tag tag-green">✓ 良好</span> 模块职责边界清晰，<code>rules.ts</code> 保持纯函数设计，不直接操作 DOM 或存储。</p>
+<p><span class="tag tag-green">✓ 良好</span> 状态迁移机制完善，<code>migrateState()</code> 函数覆盖了版本 3 到 14 的所有迁移路径。</p>
+<p><span class="tag tag-green">✓ 良好</span> PWA 支持完整，含 Service Worker、manifest、离线提示和 iOS 安装引导。</p>
+
+<!-- ========== 2. 模块分析 ========== -->
+<h2 id="modules">2. 模块职责与文件分析</h2>
+
+<table class="module-table">
+<tr><th>文件</th><th>行数</th><th>职责</th><th>状态</th></tr>
+<tr><td>models.ts</td><td>~200</td><td>领域模型、接口定义（WealthState, Trade, Goal, Bucket 等）</td><td><span class="tag tag-green">良好</span></td></tr>
+<tr><td>state.ts</td><td>633</td><td>默认状态、持久化、版本迁移、快照系统、导入导出</td><td><span class="tag tag-green">良好</span></td></tr>
+<tr><td>rules.ts</td><td>223</td><td>财务计算（盈亏、现金流、紧急基金、投资组合摘要）</td><td><span class="tag tag-green">良好</span></td></tr>
+<tr><td>market.ts</td><td>672</td><td>行情获取、基本面、历史价格、风险指标、交易时间线</td><td><span class="tag tag-yellow">可优化</span></td></tr>
+<tr><td>firebase.ts</td><td>110</td><td>认证（Google OAuth）、Firestore 读写与订阅</td><td><span class="tag tag-yellow">需注意</span></td></tr>
+<tr><td>ui.ts</td><td>2,752</td><td>全部页面模板、事件绑定、导航、图表渲染</td><td><span class="tag tag-red">需拆分</span></td></tr>
+<tr><td>main.ts</td><td>274</td><td>启动流程、认证状态管理、主题、路由</td><td><span class="tag tag-green">良好</span></td></tr>
+<tr><td>financialHealth.ts</td><td>~300</td><td>净资产、月结、经常性交易预测、目标关联</td><td><span class="tag tag-green">良好</span></td></tr>
+<tr><td>ledger.ts</td><td>~400</td><td>账本分类汇总、账户余额、过滤器</td><td><span class="tag tag-green">良好</span></td></tr>
+<tr><td>styles.css</td><td>大</td><td>全局样式、响应式、深色/浅色主题、组件样式</td><td><span class="tag tag-yellow">可优化</span></td></tr>
+</table>
+
+<!-- ========== 3. 代码质量 ========== -->
+<h2 id="code-quality" class="page-break">3. 代码质量分析</h2>
+
+<h3>3.1 优点</h3>
+<ul>
+  <li><strong>严格 TypeScript：</strong><code>tsconfig.json</code> 启用 <code>strict: true</code>，目标 ES2022，代码中几乎无 <code>any</code> 使用（仅 <code>unknown</code> + 类型收窄）。</li>
+  <li><strong>纯函数设计：</strong><code>rules.ts</code> 中所有计算函数均为纯函数，接受 <code>WealthState</code> 并返回结果，无副作用，易于测试。</li>
+  <li><strong>状态不可变：</strong><code>setState()</code> 使用不可变语义，通过结构化克隆避免引用污染。</li>
+  <li><strong>数据安全：</strong>账本交易验证函数 <code>validLedgerTransactions()</code> 对每条记录进行严格校验（金额、日期、类型、账户引用）。</li>
+  <li><strong>防御性编程：</strong>市场数据模块对 Yahoo Finance API 返回结构做多层空值检查，缓存失效机制清晰。</li>
+</ul>
+
+<h3>3.2 发现的问题</h3>
+
+<div class="issue">
+<strong>问题 #1：ui.ts 过大（2,752 行）</strong><br>
+单文件包含 11 个功能页面的全部模板生成和事件绑定逻辑，违反单一职责原则。新增或修改任何页面时需要在巨大文件中定位，维护成本高且容易引入回归。
+</div>
+
+<div class="issue">
+<strong>问题 #2：硬编码汇率</strong><br>
+<code>market.ts</code> 中 <code>calcPnLForTicker()</code> 默认汇率为 <code>usdToMyr = 4.25</code>，<code>buildTradeTimelineHtml()</code> 也硬编码 4.25。汇率应从用户配置或动态 API 获取。
+</div>
+
+<div class="issue">
+<strong>问题 #3：缺少单元测试</strong><br>
+项目完全没有自动化测试。<code>rules.ts</code> 中的成本基础计算（FIFO 卖出）、<code>state.ts</code> 中的迁移逻辑和 <code>market.ts</code> 中的风险指标计算均无测试覆盖。对于金融计算类应用，这是一个显著的风险。
+</div>
+
+<div class="issue">
+<strong>问题 #4：CORS 代理依赖脆弱</strong><br>
+<code>market.ts</code> 依赖 3 个公共 CORS 代理（allorigins、corsproxy、codetabs），这些第三方服务随时可能不可用或限流。建议部署自建代理或改用后端 API 路由。
+</div>
+
+<div class="issue">
+<strong>问题 #5：HTML 模板字符串中的 XSS 风险</strong><br>
+虽然大部分用户输入经过 <code>escapeHtml()</code> 处理，但 <code>ui.ts</code> 中有大量 <code>innerHTML</code> 赋值，且部分模板函数直接拼接来自 API 的数据（如 <code>market.ts</code> 的 <code>buildTradeTimelineHtml()</code> 中的 <code>shortName</code>、<code>ticker</code>），存在潜在 XSS 风险。
+</div>
+
+<div class="issue">
+<strong>问题 #6：saveState 静默忽略无 UID 的保存</strong><br>
+<code>state.ts</code> 中 <code>saveState()</code> 在 <code>!uid</code> 时直接 <code>return</code>，不做任何提示。如果调用方忘记传入 UID，用户的数据将不会被持久化，且无任何错误反馈。
+</div>
+
+<div class="issue">
+<strong>问题 #7：Beta 计算前提假设不安全</strong><br>
+<code>calcRiskMetrics()</code> 中计算 Beta 时假设 <code>benchmarkPrices.length === prices.length</code>，如果不相等则默认 <code>beta = 1</code>。实际场景中两个时间序列长度经常不一致，应做日期对齐。
+</div>
+
+<!-- ========== 4. 安全性 ========== -->
+<h2 id="security">4. 安全性分析</h2>
+
+<table>
+<tr><th>项目</th><th>状态</th><th>说明</th></tr>
+<tr><td>Firebase API Key</td><td><span class="tag tag-green">正常</span></td><td>客户端配置中的 API Key 是 Firebase Web SDK 的公开配置，安全性由 Firestore Rules 保障</td></tr>
+<tr><td>Firestore Rules</td><td><span class="tag tag-green">已配置</span></td><td>存在 <code>firestore.rules</code> 文件，用户只能访问 <code>/users/{uid}/wealth/state</code></td></tr>
+<tr><td>XSS 防护</td><td><span class="tag tag-yellow">部分</span></td><td>有 <code>escapeHtml()</code> 但覆盖面不完全，API 数据直接拼接风险存在</td></tr>
+<tr><td>敏感数据</td><td><span class="tag tag-green">良好</span></td><td>日志中不记录认证令牌；隐私遮罩功能支持金额隐藏</td></tr>
+<tr><td>输入校验</td><td><span class="tag tag-green">良好</span></td><td>状态迁移和导入文件均有严格的校验和回退逻辑</td></tr>
+</table>
+
+<!-- ========== 5. UX 分析 ========== -->
+<h2 id="ux" class="page-break">5. 用户体验 (UX) 分析</h2>
+
+<h3>5.1 优点</h3>
+<ul>
+  <li><strong>信息架构清晰：</strong>页面按 Today / Plan / Grow / Reflect / System 五个分组组织，符合用户心智模型。</li>
+  <li><strong>深色/浅色主题：</strong>支持一键切换，使用 CSS 变量实现，对比度合理。</li>
+  <li><strong>PWA 安装体验：</strong>Android 和 iOS 均有安装引导，iOS 提供分步图文指引。</li>
+  <li><strong>快照系统：</strong>每次重大操作前自动保存快照（最多 20 个），用户可随时回滚，降低了操作风险。</li>
+  <li><strong>Quick View：</strong>提供 <code>/quick</code> 路径的快速查看模式，适合 PWA 快速启动。</li>
+  <li><strong>隐私遮罩：</strong><code>maskAmounts</code> 功能一键隐藏所有金额，适合公共场合使用。</li>
+</ul>
+
+<h3>5.2 需改进的体验问题</h3>
+
+<div class="issue">
+<strong>UX 问题 #1：市场数据加载无骨架屏</strong><br>
+行情数据通过 CORS 代理获取，可能需要 5-15 秒。在等待期间用户看不到任何加载指示器（取决于 UI 实现），容易误以为应用无响应。
+</div>
+
+<div class="issue">
+<strong>UX 问题 #2：错误状态不一致</strong><br>
+市场数据获取失败时（网络超时、代理不可用、API 返回异常），用户可能只看到空白区域而无明确的错误提示和重试按钮。
+</div>
+
+<div class="issue">
+<strong>UX 问题 #3：移动端表单体验</strong><br>
+财务输入表单使用 <code><input type="number"></code>，在 iOS 上会弹出数字键盘但失去小数点便捷输入；建议使用 <code>inputmode="decimal"</code>。
+</div>
+
+<div class="issue">
+<strong>UX 问题 #4：首次用户引导缺失</strong><br>
+新用户登录后直接看到默认状态数据（MYR 880 allowance 等），没有引导流程帮助理解各模块功能或进行初始配置。
+</div>
+
+<!-- ========== 6. 改进建议 ========== -->
+<h2 id="improvements">6. 可改进模块与建议</h2>
+
+<h3><span class="priority-high">[高优先级]</span> #1 — 拆分 ui.ts</h3>
+<div class="suggestion">
+<strong>建议：</strong>将 <code>ui.ts</code> 按页面拆分为独立模块：<br>
+<code>ui/dashboard.ts</code>、<code>ui/portfolio.ts</code>、<code>ui/ledger.ts</code>、<code>ui/market.ts</code>、<code>ui/settings.ts</code>、<code>ui/goals.ts</code>、<code>ui/buckets.ts</code>、<code>ui/advisor.ts</code>、<code>ui/rules.ts</code>、<code>ui/review.ts</code>、<code>ui/calculator.ts</code><br>
+保留 <code>ui.ts</code> 作为入口，负责导航、侧边栏和 <code>renderApp()</code> 调度。每个子模块导出自己的 <code>render()</code> 和 <code>bind()</code> 函数。
+</div>
+
+<h3><span class="priority-high">[高优先级]</span> #2 — 添加金融计算单元测试</h3>
+<div class="suggestion">
+<strong>建议：</strong>使用 Vitest 为以下核心函数编写测试：
+<ul>
+  <li><code>calculatePositionCostBasis()</code> — FIFO 卖出、部分卖出、零持仓边界</li>
+  <li><code>migrateState()</code> — 版本 3→14 的所有迁移路径</li>
+  <li><code>calcRiskMetrics()</code> — 空序列、单点、正常数据、Beta 对齐</li>
+  <li><code>portfolioSummary()</code> — 空持仓、单 ticker、多 ticker 配置</li>
+</ul>
+</div>
+
+<h3><span class="priority-high">[高优先级]</span> #3 — 动态汇率替换硬编码</h3>
+<div class="suggestion">
+<strong>建议：</strong>将 USD/MYR 汇率存入 <code>WealthState.profile</code>，默认从用户交易的 <code>exchangeRate</code> 字段取最新值，或通过 API 获取实时汇率。避免所有 4.25 硬编码。
+</div>
+
+<h3><span class="priority-med">[中优先级]</span> #4 — 自建 CORS 代理或后端 API</h3>
+<div class="suggestion">
+<strong>建议：</strong>项目已有 Vercel API 路由（<code>api/</code> 目录），可将行情请求移到后端 serverless function，消除对公共 CORS 代理的依赖。这也便于添加 API 缓存层（如 Vercel KV 或 Redis）。
+</div>
+
+<h3><span class="priority-med">[中优先级]</span> #5 — 增强加载和错误状态 UI</h3>
+<div class="suggestion">
+<strong>建议：</strong>
+<ul>
+  <li>为所有异步数据加载区域添加骨架屏（skeleton loader）</li>
+  <li>网络请求失败时显示可操作的错误消息 + 重试按钮</li>
+  <li>缓存过期数据仍可展示，但需标注"数据时间"和"离线/陈旧"状态</li>
+</ul>
+</div>
+
+<h3><span class="priority-med">[中优先级]</span> #6 — XSS 防护加固</h3>
+<div class="suggestion">
+<strong>建议：</strong>
+<ul>
+  <li>审计 <code>ui.ts</code> 和 <code>market.ts</code> 中所有 <code>innerHTML</code> 赋值点</li>
+  <li>对来自 API 的数据（<code>shortName</code>、<code>symbol</code>、<code>marketState</code>）统一经过 <code>escapeHtml()</code></li>
+  <li>考虑使用 <code>textContent</code> 替代 <code>innerHTML</code> 作为默认策略</li>
+</ul>
+</div>
+
+<h3><span class="priority-low">[低优先级]</span> #7 — 首次用户引导流程</h3>
+<div class="suggestion">
+<strong>建议：</strong>新增用户首次登录后显示简短的欢迎引导（3-5 步），帮助理解：Dashboard 概览 → Money Plan 分桶 → Investments 记录首笔交易 → Coach 查看建议。
+</div>
+
+<h3><span class="priority-low">[低优先级]</span> #8 — Beta 日期对齐优化</h3>
+<div class="suggestion">
+<strong>建议：</strong>在 <code>calcRiskMetrics()</code> 中按日期对齐两个时间序列（取交集日期），避免因交易日不同导致长度不一致时 Beta 默认为 1 的问题。
+</div>
+
+<!-- ========== 7. 总结 ========== -->
+<h2 id="summary">7. 总结评分</h2>
+
+<div class="score-box">7.5 / 10 <small>综合代码质量评分</small></div>
+
+<table>
+<tr><th>维度</th><th>评分</th><th>说明</th></tr>
+<tr><td>架构设计</td><td>8.5 / 10</td><td>模块划分清晰，职责边界良好；ui.ts 是主要扣分项</td></tr>
+<tr><td>代码质量</td><td>8.0 / 10</td><td>TypeScript 严格模式、纯函数设计；缺少测试是最大短板</td></tr>
+<tr><td>数据安全</td><td>8.0 / 10</td><td>状态迁移健壮、校验充分；saveState 静默失败需改进</td></tr>
+<tr><td>安全性</td><td>7.0 / 10</td><td>认证流程完整；HTML 拼接中的 XSS 风险需要加固</td></tr>
+<tr><td>用户体验</td><td>7.5 / 10</td><td>导航结构好、PWA 支持完整；加载状态和错误反馈可优化</td></tr>
+<tr><td>可维护性</td><td>6.5 / 10</td><td>ui.ts 2752 行是维护瓶颈；无测试降低了重构信心</td></tr>
+</table>
+
+<h3>下一步行动清单</h3>
+<ol>
+  <li><span class="priority-high">高</span> — 拆分 <code>ui.ts</code> 为按页面组织的子模块</li>
+  <li><span class="priority-high">高</span> — 引入 Vitest，为 <code>rules.ts</code> 和 <code>state.ts</code> 的迁移逻辑编写测试</li>
+  <li><span class="priority-high">高</span> — 替换硬编码汇率 4.25 为可配置/动态值</li>
+  <li><span class="priority-med">中</span> — 将行情请求迁移到 Vercel serverless function</li>
+  <li><span class="priority-med">中</span> — 审计并加固所有 <code>innerHTML</code> 中的 XSS 防护</li>
+  <li><span class="priority-med">中</span> — 为异步数据区域添加骨架屏和错误重试 UI</li>
+  <li><span class="priority-low">低</span> — 设计首次用户引导流程</li>
+  <li><span class="priority-low">低</span> — 优化 Beta 计算的日期对齐逻辑</li>
+</ol>
+
+<div class="footer">
+  Personal Wealth OS 代码质量与体验分析报告 · 自动生成于 2026-08-17 · Confidential
+</div>
+
+</body>
+</html>

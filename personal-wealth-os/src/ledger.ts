@@ -118,6 +118,39 @@ export function accountBalances(transactions: LedgerTransaction[], accounts: Led
   return accounts.map((account) => ({ account, balance: balances.get(account.id) ?? 0 }));
 }
 
+export function accountTypeBalance(transactions: LedgerTransaction[], accounts: LedgerAccount[], type: LedgerAccount["type"]): number {
+  return accountBalances(transactions, accounts)
+    .filter(({ account }) => account.type === type)
+    .reduce((total, { balance }) => total + balance, 0);
+}
+
+export interface InvestmentAssetShare {
+  totalAssets: number;
+  investmentAssets: number;
+  ratio: number | null;
+}
+
+function isMoneyMarketFundAccount(account: LedgerAccount): boolean {
+  const normalizedName = account.name.trim().toLowerCase();
+  return account.id === "account-moomoo-mmf"
+    || /(^|\s)mmf($|\s)/i.test(account.name)
+    || normalizedName.includes("money market fund");
+}
+
+export function investmentAssetShare(transactions: LedgerTransaction[], accounts: LedgerAccount[]): InvestmentAssetShare {
+  const balances = accountBalances(transactions, accounts);
+  const totalAssets = balances.reduce((total, { balance }) => total + balance, 0);
+  const investmentAssets = balances
+    .filter(({ account }) => account.type === "investment" && !isMoneyMarketFundAccount(account))
+    .reduce((total, { balance }) => total + balance, 0);
+
+  return {
+    totalAssets,
+    investmentAssets,
+    ratio: totalAssets > 0 ? Math.max(investmentAssets, 0) / totalAssets : null,
+  };
+}
+
 export function monthlyLedgerTotals(transactions: LedgerTransaction[], year: number): Array<{ month: number; income: number; expense: number }> {
   const months = Array.from({ length: 12 }, (_, month) => ({ month, income: 0, expense: 0 }));
   for (const transaction of transactions) {

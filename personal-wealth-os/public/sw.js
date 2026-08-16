@@ -1,10 +1,11 @@
-const CACHE_NAME = "wealth-os-v11";
+const CACHE_NAME = "wealth-os-v16";
 const PRECACHE = [
   "/",
   "/index.html",
   "/manifest.json",
   "/favicon.png",
-  "/brand/wealth-mark.svg",
+  "/brand/wealth-mark.png",
+  "/brand/wealthup-logo.png",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
 ];

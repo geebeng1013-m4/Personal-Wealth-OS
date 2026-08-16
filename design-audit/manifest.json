@@ -1,0 +1,118 @@
+{
+  "product": "WealthUp",
+  "type": "design-review",
+  "date": "2026-08-17",
+  "desktop_viewport": "1440x900",
+  "mobile_viewport": "390x844",
+  "pages": [
+    {
+      "route": "dashboard",
+      "name": "Overview",
+      "sidebar_group": "Home",
+      "desktop_screenshot": "01-dashboard-desktop.png",
+      "mobile_screenshot": "01-dashboard-mobile.png"
+    },
+    {
+      "route": "advisor",
+      "name": "Coach",
+      "sidebar_group": "Home",
+      "desktop_screenshot": "02-advisor-desktop.png",
+      "mobile_screenshot": "02-advisor-mobile.png"
+    },
+    {
+      "route": "buckets",
+      "name": "Money Plan",
+      "sidebar_group": "Planning",
+      "desktop_screenshot": "03-buckets-desktop.png",
+      "mobile_screenshot": "03-buckets-mobile.png"
+    },
+    {
+      "route": "goals",
+      "name": "Goals",
+      "sidebar_group": "Planning",
+      "desktop_screenshot": "04-goals-desktop.png",
+      "mobile_screenshot": "04-goals-mobile.png"
+    },
+    {
+      "route": "rules",
+      "name": "Rules",
+      "sidebar_group": "Planning",
+      "desktop_screenshot": "05-rules-desktop.png",
+      "mobile_screenshot": "05-rules-mobile.png"
+    },
+    {
+      "route": "portfolio",
+      "name": "Investments",
+      "sidebar_group": "Wealth",
+      "desktop_screenshot": "06-portfolio-desktop.png",
+      "mobile_screenshot": "06-portfolio-mobile.png"
+    },
+    {
+      "route": "market",
+      "name": "Market",
+      "sidebar_group": "Wealth",
+      "desktop_screenshot": "07-market-desktop.png",
+      "mobile_screenshot": "07-market-mobile.png"
+    },
+    {
+      "route": "calculator",
+      "name": "Scenarios",
+      "sidebar_group": "Tools",
+      "desktop_screenshot": "08-calculator-desktop.png",
+      "mobile_screenshot": "08-calculator-mobile.png"
+    },
+    {
+      "route": "ledger",
+      "name": "Activity",
+      "sidebar_group": "Tools",
+      "desktop_screenshot": "09-ledger-desktop.png",
+      "mobile_screenshot": "09-ledger-mobile.png"
+    },
+    {
+      "route": "review",
+      "name": "Review",
+      "sidebar_group": "Tools",
+      "desktop_screenshot": "10-review-desktop.png",
+      "mobile_screenshot": "10-review-mobile.png"
+    },
+    {
+      "route": "settings",
+      "name": "Settings",
+      "sidebar_group": "System",
+      "desktop_screenshot": "11-settings-desktop.png",
+      "mobile_screenshot": "11-settings-mobile.png"
+    }
+  ],
+  "screenshots": [
+    "01-dashboard-desktop.png",
+    "01-dashboard-mobile.png",
+    "02-advisor-desktop.png",
+    "02-advisor-mobile.png",
+    "03-buckets-desktop.png",
+    "03-buckets-mobile.png",
+    "04-goals-desktop.png",
+    "04-goals-mobile.png",
+    "05-rules-desktop.png",
+    "05-rules-mobile.png",
+    "06-portfolio-desktop.png",
+    "06-portfolio-mobile.png",
+    "07-market-desktop.png",
+    "07-market-mobile.png",
+    "08-calculator-desktop.png",
+    "08-calculator-mobile.png",
+    "09-ledger-desktop.png",
+    "09-ledger-mobile.png",
+    "10-review-desktop.png",
+    "10-review-mobile.png",
+    "11-settings-desktop.png",
+    "11-settings-mobile.png",
+    "12-mobile-menu.png"
+  ],
+  "documents": [
+    "design-audit-report.md",
+    "WEALTHUP-DESIGN-REVIEW.md",
+    "manifest.json"
+  ],
+  "audit_report": "design-audit-report.md",
+  "review_package": "WEALTHUP-DESIGN-REVIEW.md"
+}

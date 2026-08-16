@@ -5,6 +5,8 @@ import { renderApp, quickViewTemplate } from "./ui";
 import { onAuth, signInWithGoogle, handleRedirectResult, logOut } from "./firebase";
 import { fetchUsdToMyr } from "./market";
 import type { User } from "firebase/auth";
+import { isDemoMode } from "./demo";
+import { demoState, DEMO_USER_DISPLAY_NAME, DEMO_USER_EMAIL, DEMO_USER_PHOTO } from "./demoData";
 
 // PWA install prompt
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
@@ -258,21 +260,39 @@ async function handleAuth(user: User | null): Promise<void> {
   }
 }
 
-// Render immediately so a slow redirect check cannot leave the application blank.
-renderLogin();
-onAuth((user) => {
-  void handleAuth(user).catch((error: unknown) => {
-    console.error("[Auth] Failed to initialize signed-in session:", error);
-    if (!user) renderLogin();
-  });
-});
+// --- Demo mode: skip Firebase, load static demo data ---
+if (isDemoMode()) {
+  console.log("[Demo] Design Review mode — Firebase auth and writes are disabled.");
+  state = { ...demoState };
 
-handleRedirectResult()
-  .then((redirectUser) => {
-    if (redirectUser) {
-      console.log("[Auth] Sign-in successful via redirect:", redirectUser.email);
-    }
-  })
-  .catch((error: unknown) => {
-    console.error("[Auth] Redirect sign-in check failed:", error);
+  // Create a minimal mock user so the UI renders normally without real auth.
+  const demoUser = {
+    uid: "demo-user",
+    displayName: DEMO_USER_DISPLAY_NAME,
+    email: DEMO_USER_EMAIL,
+    photoURL: DEMO_USER_PHOTO,
+  } as unknown as User;
+
+  currentUser = demoUser;
+
+  renderApp(root!, state, setState, currentPage, navigate, demoUser, handleLogout);
+} else {
+  // Production path: real Firebase auth
+  renderLogin();
+  onAuth((user) => {
+    void handleAuth(user).catch((error: unknown) => {
+      console.error("[Auth] Failed to initialize signed-in session:", error);
+      if (!user) renderLogin();
+    });
   });
+
+  handleRedirectResult()
+    .then((redirectUser) => {
+      if (redirectUser) {
+        console.log("[Auth] Sign-in successful via redirect:", redirectUser.email);
+      }
+    })
+    .catch((error: unknown) => {
+      console.error("[Auth] Redirect sign-in check failed:", error);
+    });
+}

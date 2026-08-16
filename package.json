@@ -2,6 +2,7 @@
   "dependencies": {
     "clsx": "^2.1.1",
     "framer-motion": "^12.42.2",
+    "puppeteer": "^25.7.0",
     "tailwind-merge": "^3.6.0"
   }
 }

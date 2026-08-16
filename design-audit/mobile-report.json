@@ -1,0 +1,83 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "pages": [
+    {
+      "page": "Overview",
+      "id": "dashboard",
+      "filename": "01-dashboard-mobile.png",
+      "status": "ok"
+    },
+    {
+      "page": "Coach",
+      "id": "advisor",
+      "filename": "02-advisor-mobile.png",
+      "status": "ok"
+    },
+    {
+      "page": "Money Plan",
+      "id": "buckets",
+      "filename": "03-buckets-mobile.png",
+      "status": "ok"
+    },
+    {
+      "page": "Goals",
+      "id": "goals",
+      "filename": "04-goals-mobile.png",
+      "status": "ok"
+    },
+    {
+      "page": "Rules",
+      "id": "rules",
+      "filename": "05-rules-mobile.png",
+      "status": "ok"
+    },
+    {
+      "page": "Investments",
+      "id": "portfolio",
+      "filename": "06-portfolio-mobile.png",
+      "status": "ok"
+    },
+    {
+      "page": "Market",
+      "id": "market",
+      "filename": "07-market-mobile.png",
+      "status": "ok"
+    },
+    {
+      "page": "Scenarios",
+      "id": "calculator",
+      "filename": "08-calculator-mobile.png",
+      "status": "ok"
+    },
+    {
+      "page": "Activity",
+      "id": "ledger",
+      "filename": "09-ledger-mobile.png",
+      "status": "ok"
+    },
+    {
+      "page": "Review",
+      "id": "review",
+      "filename": "10-review-mobile.png",
+      "status": "ok"
+    },
+    {
+      "page": "Settings",
+      "id": "settings",
+      "filename": "11-settings-mobile.png",
+      "status": "ok"
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [
+    "Access to fetch at 'https://query1.finance.yahoo.com/v8/finance/chart/VOO?range=1y&interval=1d' from origin 'https://personal-wealth-os-demo.vercel.app' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED",
+    "Access to fetch at 'https://query1.finance.yahoo.com/v8/finance/chart/SPY?range=1y&interval=1d' from origin 'https://personal-wealth-os-demo.vercel.app' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED",
+    "Access to fetch at 'https://query1.finance.yahoo.com/v10/finance/quoteSummary/VOO?modules=summaryDetail,defaultKeyStatistics' from origin 'https://personal-wealth-os-demo.vercel.app' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+    "Failed to load resource: net::ERR_FAILED"
+  ]
+}

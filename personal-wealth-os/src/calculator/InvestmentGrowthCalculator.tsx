@@ -44,16 +44,16 @@ function GrowthTooltip({ active, label, payload }: TooltipContentProps) {
       <div className="calc-chart-tooltip-row">
         <span className="calc-chart-key calc-chart-key-principal" />
         <span>Principal contributed</span>
-        <strong>{currency.format(principal)}</strong>
+        <strong className="calc-font-mono calc-tabular-nums">{currency.format(principal)}</strong>
       </div>
       <div className="calc-chart-tooltip-row">
         <span className="calc-chart-key calc-chart-key-interest" />
         <span>Interest earned</span>
-        <strong>{currency.format(interest)}</strong>
+        <strong className="calc-font-mono calc-tabular-nums">{currency.format(interest)}</strong>
       </div>
       <div className="calc-chart-tooltip-total">
         <span>Total balance</span>
-        <strong>{currency.format(principal + interest)}</strong>
+        <strong className="calc-font-mono calc-tabular-nums">{currency.format(principal + interest)}</strong>
       </div>
     </div>
   );
@@ -87,7 +87,7 @@ function NumberField({ id, label, value, min, max, step, icon, suffix, normalize
         <span className="calc-pointer-events-none calc-absolute calc-left-3 calc-top-1/2 calc-flex -calc-translate-y-1/2 calc-items-center calc-text-slate-500">{icon}</span>
         <input
           id={id}
-          className="calc-field calc-pl-10 calc-pr-24"
+          className="calc-field calc-pl-10 calc-pr-24 calc-font-mono calc-tabular-nums"
           type="number"
           inputMode="decimal"
           value={draftValue}
@@ -178,17 +178,17 @@ export function InvestmentGrowthCalculator() {
         <div className="calc-flex calc-flex-col calc-gap-4 sm:calc-flex-row sm:calc-items-end sm:calc-justify-between">
           <div>
             <p className="calc-mb-2 calc-text-xs calc-font-bold calc-uppercase calc-tracking-[0.18em] calc-text-blue-500">Projected value</p>
-            <h3 id="growthProjectionTitle" className="calc-m-0 calc-text-3xl calc-font-extrabold calc-tracking-tight sm:calc-text-4xl">{currency.format(result.totalBalance)}</h3>
+            <h3 id="growthProjectionTitle" className="calc-m-0 calc-font-mono calc-text-3xl calc-font-extrabold calc-tracking-tight calc-tabular-nums sm:calc-text-4xl">{currency.format(result.totalBalance)}</h3>
             <p className="calc-mt-2 calc-text-sm" style={{ color: "var(--ink-2)" }}>Estimated balance after {years} {years === 1 ? "year" : "years"}</p>
           </div>
           <div className="calc-grid calc-grid-cols-2 calc-gap-3">
             <div className="calc-rounded-xl calc-border calc-border-blue-500/20 calc-bg-blue-500/10 calc-p-3">
               <span className="calc-block calc-text-xs calc-text-blue-500">Principal</span>
-              <strong className="calc-mt-1 calc-block calc-text-base">{currency.format(result.totalPrincipal)}</strong>
+              <strong className="calc-mt-1 calc-block calc-font-mono calc-text-base calc-tabular-nums">{currency.format(result.totalPrincipal)}</strong>
             </div>
             <div className="calc-rounded-xl calc-border calc-border-emerald-500/20 calc-bg-emerald-500/10 calc-p-3">
               <span className="calc-block calc-text-xs calc-text-emerald-500">Interest</span>
-              <strong className="calc-mt-1 calc-block calc-text-base">{currency.format(result.totalInterest)}</strong>
+              <strong className="calc-mt-1 calc-block calc-font-mono calc-text-base calc-tabular-nums">{currency.format(result.totalInterest)}</strong>
             </div>
           </div>
         </div>

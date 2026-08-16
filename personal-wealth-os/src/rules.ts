@@ -1,4 +1,17 @@
-import type { AdvisorMessage, PortfolioPosition, PortfolioSummary, Ticker, Trade, WealthState } from "./models";
+import type { AdvisorMessage, PortfolioPosition, PortfolioSummary, Trade, WealthState } from "./models";
+
+export interface PositionCostBasis {
+  ticker: string;
+  units: number;
+  costBasisUsd: number;
+  costBasisMyr: number;
+  averageCostUsd: number;
+  realizedPnlUsd: number;
+  realizedPnlMyr: number;
+  feesMyr: number;
+}
+
+export type CostBasisTrade = Pick<Trade, "ticker" | "date" | "type" | "amountUsd" | "amountMyr" | "priceUsd" | "feeMyr">;
 
 export function money(value: number, currency = "MYR"): string {
   return `${currency} ${Number(value || 0).toLocaleString("en-MY", { maximumFractionDigits: 2 })}`;
@@ -33,43 +46,86 @@ export function projectedAnnualEmergencyYield(state: WealthState): number {
   return state.emergency.current * state.emergency.annualYield;
 }
 
-export function tradeUnits(trade: Trade): number {
+export function tradeUnits(trade: Pick<Trade, "priceUsd" | "amountUsd">): number {
   if (trade.priceUsd <= 0 || trade.amountUsd <= 0) return 0;
   return trade.amountUsd / trade.priceUsd;
 }
 
+export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: string): PositionCostBasis {
+  const matchingTrades = trades
+    .map((trade, index) => ({ trade, index }))
+    .filter(({ trade }) => trade.ticker === ticker)
+    .sort((a, b) => a.trade.date.localeCompare(b.trade.date) || a.index - b.index);
+  let units = 0;
+  let costBasisUsd = 0;
+  let costBasisMyr = 0;
+  let realizedPnlUsd = 0;
+  let realizedPnlMyr = 0;
+  let feesMyr = 0;
+
+  matchingTrades.forEach(({ trade }) => {
+    const unitsTraded = tradeUnits(trade);
+    feesMyr += trade.feeMyr;
+    if (unitsTraded <= 0) return;
+
+    if (trade.type !== "Sell") {
+      units += unitsTraded;
+      costBasisUsd += trade.amountUsd;
+      costBasisMyr += trade.amountMyr + trade.feeMyr;
+      return;
+    }
+
+    if (units <= 0) return;
+    const unitsSold = Math.min(unitsTraded, units);
+    const soldFraction = unitsSold / units;
+    const removedCostUsd = costBasisUsd * soldFraction;
+    const removedCostMyr = costBasisMyr * soldFraction;
+    const proceedsFraction = unitsSold / unitsTraded;
+    const proceedsUsd = trade.amountUsd * proceedsFraction;
+    const proceedsMyr = Math.max(trade.amountMyr - trade.feeMyr, 0) * proceedsFraction;
+
+    realizedPnlUsd += proceedsUsd - removedCostUsd;
+    realizedPnlMyr += proceedsMyr - removedCostMyr;
+    units -= unitsSold;
+    costBasisUsd -= removedCostUsd;
+    costBasisMyr -= removedCostMyr;
+
+    if (units < 1e-10) {
+      units = 0;
+      costBasisUsd = 0;
+      costBasisMyr = 0;
+    }
+  });
+
+  return {
+    ticker,
+    units,
+    costBasisUsd,
+    costBasisMyr,
+    averageCostUsd: units > 0 ? costBasisUsd / units : 0,
+    realizedPnlUsd,
+    realizedPnlMyr,
+    feesMyr,
+  };
+}
+
 export function portfolioSummary(state: WealthState): PortfolioSummary {
-  // Collect all unique tickers from trades
-  const tickerSet = new Set<string>();
-  state.trades.forEach((t) => tickerSet.add(t.ticker));
+  const tickerSet = new Set<string>(Object.keys(state.dca.targets));
+  state.trades.forEach((trade) => tickerSet.add(trade.ticker));
   const tickers = Array.from(tickerSet);
-  if (tickers.length === 0) tickers.push("VOO", "QQQM"); // fallback
-
-  const totals: Record<string, { investedMyr: number; investedUsd: number; units: number }> = {};
-  tickers.forEach((ticker) => {
-    totals[ticker] = { investedMyr: 0, investedUsd: 0, units: 0 };
-  });
-
-  state.trades.forEach((trade) => {
-    if (!totals[trade.ticker]) totals[trade.ticker] = { investedMyr: 0, investedUsd: 0, units: 0 };
-    const direction = trade.type === "Sell" ? -1 : 1;
-    totals[trade.ticker].investedMyr += direction * (trade.amountMyr + trade.feeMyr);
-    totals[trade.ticker].investedUsd += direction * trade.amountUsd;
-    totals[trade.ticker].units += direction * tradeUnits(trade);
-  });
-
-  const totalInvestedMyr = tickers.reduce((sum, ticker) => sum + totals[ticker].investedMyr, 0);
-  const totalInvestedUsd = tickers.reduce((sum, ticker) => sum + totals[ticker].investedUsd, 0);
+  const costBases = new Map(tickers.map((ticker) => [ticker, calculatePositionCostBasis(state.trades, ticker)]));
+  const totalInvestedMyr = tickers.reduce((sum, ticker) => sum + costBases.get(ticker)!.costBasisMyr, 0);
+  const totalInvestedUsd = tickers.reduce((sum, ticker) => sum + costBases.get(ticker)!.costBasisUsd, 0);
   const positions: PortfolioPosition[] = tickers.map((ticker) => {
-    const actualAllocation = totalInvestedMyr > 0 ? totals[ticker].investedMyr / totalInvestedMyr : 0;
+    const costBasis = costBases.get(ticker)!;
+    const actualAllocation = totalInvestedMyr > 0 ? costBasis.costBasisMyr / totalInvestedMyr : 0;
     const targetAllocation = state.dca.targets[ticker] ?? 0;
-    const averageCostUsd = totals[ticker].units > 0 ? totals[ticker].investedUsd / totals[ticker].units : 0;
     return {
       ticker,
-      investedMyr: totals[ticker].investedMyr,
-      investedUsd: totals[ticker].investedUsd,
-      units: totals[ticker].units,
-      averageCostUsd,
+      investedMyr: costBasis.costBasisMyr,
+      investedUsd: costBasis.costBasisUsd,
+      units: costBasis.units,
+      averageCostUsd: costBasis.averageCostUsd,
       actualAllocation,
       targetAllocation,
       drift: actualAllocation - targetAllocation,
@@ -102,6 +158,13 @@ export function advisorMessages(state: WealthState): AdvisorMessage[] {
   const months = monthsToEmergencyTarget(state);
   const portfolio = portfolioSummary(state);
   const surplus = monthlySurplus(state);
+  const targetEntries = Object.entries(state.dca.targets).filter(([, allocation]) => allocation > 0);
+  const allocationLabel = targetEntries.length > 0
+    ? targetEntries.map(([ticker, allocation]) => `${ticker} ${money(state.dca.monthly * allocation)}`).join(" / ")
+    : "No target allocation configured";
+  const profileLabel = state.profile.age > 0
+    ? `${state.profile.age}-year-old ${state.profile.riskTolerance.toLowerCase()}-risk investor`
+    : `${state.profile.riskTolerance.toLowerCase()}-risk investor`;
   const messages: AdvisorMessage[] = [];
 
   messages.push({
@@ -115,7 +178,7 @@ export function advisorMessages(state: WealthState): AdvisorMessage[] {
 
   messages.push({
     title: "Keep DCA mechanical",
-    body: `Monthly DCA remains ${money(state.dca.monthly)}: VOO ${money(state.dca.monthly * state.dca.targets.VOO)} / QQQM ${money(state.dca.monthly * state.dca.targets.QQQM)}.`,
+    body: `Monthly DCA remains ${money(state.dca.monthly)}: ${allocationLabel}.`,
     severity: "positive",
   });
 
@@ -124,7 +187,7 @@ export function advisorMessages(state: WealthState): AdvisorMessage[] {
     body:
       portfolio.maxAbsoluteDrift > 0.08
         ? `Largest drift is ${percent(portfolio.maxAbsoluteDrift)}. Direct future buys toward the underweight ETF before changing strategy.`
-        : `VOO / QQQM remains within a practical tolerance band for a 19-year-old growth investor.`,
+        : `Your configured allocation remains within a practical tolerance band for a ${profileLabel}.`,
     severity: portfolio.maxAbsoluteDrift > 0.08 ? "action" : "positive",
   });
 
@@ -136,7 +199,7 @@ export function advisorMessages(state: WealthState): AdvisorMessage[] {
 
   messages.push({
     title: "Cashflow discipline",
-    body: "Monthly assignable surplus is MYR 216 after basic spending. This is enough for DCA, Wishlist, Freedom, and Learning if the plan is followed.",
+    body: `Monthly assignable surplus is ${money(surplus)} after basic spending. ${surplus >= state.dca.monthly ? "This currently covers the configured DCA plan." : `This is ${money(state.dca.monthly - surplus)} below the configured DCA plan.`}`,
     severity: surplus >= state.dca.monthly ? "positive" : "action",
   });
 
@@ -153,7 +216,7 @@ export function nextActions(state: WealthState): string[] {
   ];
 
   if (portfolioSummary(state).maxAbsoluteDrift > 0.08) {
-    actions.push("Use the next buy to reduce VOO / QQQM allocation drift.");
+    actions.push("Use the next buy to reduce allocation drift toward your configured targets.");
   }
 
   return actions;

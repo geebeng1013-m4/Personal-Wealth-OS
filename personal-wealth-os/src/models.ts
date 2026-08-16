@@ -66,6 +66,7 @@ export interface Goal {
   target: number;
   monthlyContribution: number;
   note: string;
+  accountId?: string;
 }
 
 export interface Trade {
@@ -78,7 +79,38 @@ export interface Trade {
   amountUsd: number;
   priceUsd: number;
   feeMyr: number;
+  exchangeRate?: number;
   notes?: string;
+}
+
+export interface Liability {
+  id: string;
+  name: string;
+  balance: number;
+  annualRate: number;
+  minimumPayment: number;
+}
+
+export interface RecurringTransaction {
+  id: string;
+  label: string;
+  amount: number;
+  type: "income" | "expense";
+  dayOfMonth: number;
+  accountId?: string;
+  active: boolean;
+}
+
+export interface NetWorthSnapshot {
+  id: string;
+  date: string;
+  assets: number;
+  liabilities: number;
+}
+
+export interface PrivacyPreferences {
+  maskAmounts: boolean;
+  requireExportConfirmation: boolean;
 }
 
 export interface Review {
@@ -93,7 +125,7 @@ export interface Review {
 
 export type LedgerTransactionType = "income" | "expense" | "transfer";
 
-export type LedgerAccountType = "bank" | "wallet";
+export type LedgerAccountType = "bank" | "wallet" | "investment";
 
 export interface LedgerAccount {
   id: string;
@@ -146,12 +178,19 @@ export interface WealthState {
   opportunity: OpportunityReserve;
   buckets: Bucket[];
   goals: Goal[];
+  overviewGoalId: string;
   trades: Trade[];
   reviews: Review[];
   customTickers: string[];
   ledgerCategories: LedgerCategory[];
   ledgerAccounts: LedgerAccount[];
   ledgerTransactions: LedgerTransaction[];
+  liabilities: Liability[];
+  recurringTransactions: RecurringTransaction[];
+  netWorthSnapshots: NetWorthSnapshot[];
+  privacy: PrivacyPreferences;
+  updatedAt: number;
+  deviceId: string;
   ruleCardOverrides: Partial<Record<RuleCardId, RuleCardContent>>;
   ruleNoteTitle: string;
   ruleNotes: string;

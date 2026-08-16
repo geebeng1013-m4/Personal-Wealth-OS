@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1504 1024" role="img" aria-labelledby="title desc">
+  <title id="title">WEALTHUP Personal Wealth OS</title>
+  <desc id="desc">The WEALTHUP outlined W monogram crossed by a rising arrow, above the WEALTHUP name and Personal Wealth OS tagline.</desc>
+  <rect width="1504" height="1024" fill="#000"/>
+  <path
+    d="M466 337 H571 Q581 337 588 347 L681 486 L748 397 Q756 386 769 386 H858 Q870 386 864 398 L801 508 Q794 521 783 521 Q776 521 767 516 L658 649 Q648 662 638 649 L449 365 Q439 350 447 342 Q454 337 466 337 Z"
+    fill="#000"
+    stroke="#fff"
+    stroke-width="22"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M786 552 H829 L996 328 L967 300 L1111 270 L1092 414 L1058 384 L877 648 Q871 655 861 655 H836 L778 570 Q772 561 777 556 Q780 552 786 552 Z"
+    fill="#000"
+    stroke="#fff"
+    stroke-width="22"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <text x="752" y="823" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="104" font-weight="900" text-anchor="middle" textLength="892" lengthAdjust="spacingAndGlyphs">WEALTHUP</text>
+  <text x="752" y="895" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="400" text-anchor="middle" textLength="806" lengthAdjust="spacingAndGlyphs">PERSONAL WEALTH OS</text>
+</svg>

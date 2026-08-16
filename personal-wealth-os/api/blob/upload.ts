@@ -74,6 +74,20 @@ export default async function handler(
     return;
   }
 
+  let decodedToken;
+  try {
+    decodedToken = await verifyFirebaseRequest(request);
+  } catch (error: unknown) {
+    console.error("[Blob upload] Authentication failed", error);
+    sendError(response, 500, "Authentication service unavailable.");
+    return;
+  }
+
+  if (!decodedToken) {
+    sendError(response, 401, "Authentication required or token expired.");
+    return;
+  }
+
   const body = parseBody(request.body as unknown);
   if (!body) {
     sendError(response, 400, "Expected pathname and string content.");
@@ -99,12 +113,6 @@ export default async function handler(
   }
 
   try {
-    const decodedToken = await verifyFirebaseRequest(request);
-    if (!decodedToken) {
-      sendError(response, 401, "Authentication required or token expired.");
-      return;
-    }
-
     const blob = await put(`users/${decodedToken.uid}/${pathname}`, body.content, {
       access: "private",
       contentType,

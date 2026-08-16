@@ -6,7 +6,12 @@ export default {
     preflight: false,
   },
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        sans: ["Inter", "SF Pro Display", "Segoe UI", "system-ui", "sans-serif"],
+        mono: ["Geist Mono", "SFMono-Regular", "Consolas", "Liberation Mono", "monospace"],
+      },
+    },
   },
   plugins: [],
 };
