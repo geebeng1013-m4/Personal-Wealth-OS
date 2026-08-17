@@ -1,4 +1,4 @@
-import type { LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, WealthState } from "./models";
+import type { LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, RuleNote, WealthState } from "./models";
 import {
   saveToFirestore,
   loadFromFirestore,
@@ -144,6 +144,7 @@ export const defaultState: WealthState = {
   ruleCardOverrides: {},
   ruleNoteTitle: "",
   ruleNotes: "",
+  ruleNotesList: [],
   hiddenRuleIds: [],
 };
 
@@ -232,6 +233,7 @@ export function emptyState(): WealthState {
     ruleCardOverrides: {},
     ruleNoteTitle: "",
     ruleNotes: "",
+    ruleNotesList: [],
     hiddenRuleIds: [],
   };
 }
@@ -441,6 +443,16 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   merged.ruleCardOverrides = validRuleCardOverrides(input.ruleCardOverrides);
   merged.ruleNoteTitle = typeof input.ruleNoteTitle === "string" ? input.ruleNoteTitle.trim().slice(0, 80) : "";
   merged.ruleNotes = typeof input.ruleNotes === "string" ? input.ruleNotes.slice(0, 5000) : "";
+  merged.ruleNotesList = Array.isArray(input.ruleNotesList)
+    ? input.ruleNotesList
+        .filter((n): n is RuleNote => {
+          if (!n || typeof n !== "object") return false;
+          const note = n as unknown as Record<string, unknown>;
+          return typeof note.id === "string" && typeof note.title === "string" && typeof note.body === "string";
+        })
+        .map((n) => ({ id: n.id, title: n.title.trim().slice(0, 80), body: n.body.slice(0, 5000), createdAt: typeof n.createdAt === "number" ? n.createdAt : 0 }))
+        .slice(0, 100)
+    : [];
   merged.hiddenRuleIds = Array.isArray(input.hiddenRuleIds)
     ? [...new Set(input.hiddenRuleIds.filter((id): id is RuleCardId => typeof id === "string" && RULE_CARD_IDS.has(id as RuleCardId)))]
     : [];

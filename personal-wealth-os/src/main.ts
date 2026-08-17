@@ -1,3 +1,4 @@
+import "./design-system.css";
 import "./styles.css";
 import type { WealthState } from "./models";
 import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState } from "./state";

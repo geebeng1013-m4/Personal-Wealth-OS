@@ -169,6 +169,13 @@ export interface RuleCardContent {
   body: string;
 }
 
+export interface RuleNote {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: number;
+}
+
 export interface WealthState {
   version: number;
   profile: Profile;
@@ -194,6 +201,7 @@ export interface WealthState {
   ruleCardOverrides: Partial<Record<RuleCardId, RuleCardContent>>;
   ruleNoteTitle: string;
   ruleNotes: string;
+  ruleNotesList: RuleNote[];
   hiddenRuleIds: RuleCardId[];
 }
 

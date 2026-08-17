@@ -231,4 +231,12 @@ export const demoState: WealthState = {
   ruleNoteTitle: "Investment Rules for 2026",
   ruleNotes: "1. Never skip a DCA month — consistency beats timing.\n2. Only deploy opportunity reserve when drawdown thresholds are hit.\n3. Review portfolio allocation quarterly.\n4. Keep emergency fund untouched unless true emergency.\n5. Track every ringgit — awareness is the first step to control.",
   hiddenRuleIds: [],
+  ruleNotesList: [
+    {
+      id: "default",
+      title: "Investment Rules for 2026",
+      body: "1. Never skip a DCA month — consistency beats timing.\n2. Only deploy opportunity reserve when drawdown thresholds are hit.\n3. Review portfolio allocation quarterly.\n4. Keep emergency fund untouched unless true emergency.\n5. Track every ringgit — awareness is the first step to control.",
+      createdAt: Date.now(),
+    },
+  ],
 };

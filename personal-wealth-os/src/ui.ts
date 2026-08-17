@@ -1,4 +1,4 @@
-import type { AdvisorMessage, LedgerAccountType, LedgerTransaction, LedgerTransactionType, RuleCardId, Ticker, Trade, TradeType, WealthState } from "./models";
+import type { AdvisorMessage, LedgerAccountType, LedgerTransaction, LedgerTransactionType, RuleCardId, RuleNote, Ticker, Trade, TradeType, WealthState } from "./models";
 import { createId, cloneDefaultState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, type Snapshot } from "./state";
 import {
   advisorMessages,
@@ -131,7 +131,7 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
         </div>
       </div>
     </aside>
-    <main class="main">
+    <main id="main-content" class="main">
       <div class="side-rays" aria-hidden="true">
         <div class="side-rays-container" id="sideRays"></div>
       </div>
@@ -193,58 +193,195 @@ function dashboardTemplate(state: WealthState): string {
   const planOnTrack = monthlySurplus(state) >= state.dca.monthly;
   const worth = netWorth(state.ledgerTransactions, state.ledgerAccounts, state.liabilities);
   const forecast = forecastRecurring(state.recurringTransactions);
+  const nwChangeClass = worth.net >= 0 ? "positive" : "negative";
+  const surplus = monthlySurplus(state);
+  const surplusPositive = currentMonthLedger.balance >= 0;
 
   return `
-    <section class="wealth-hero card">
-      <div class="wealth-hero-copy">
-        <div class="wealth-hero-topline"><span class="eyebrow">Tracked Wealth Base</span><span class="status-pill ${planOnTrack ? "positive" : "attention"}">${planOnTrack ? "Plan on track" : "Review required"}</span></div>
-        <strong class="wealth-total">${trackedCapital > 0 ? money(trackedCapital) : "Not established"}</strong>
-        <p>Investment cost, safety cash and undeployed opportunity reserve. This is a planning base, not a complete net-worth valuation.</p>
-        <div class="wealth-hero-actions"><button class="primary-button dashboard-nav" data-page="portfolio" type="button">Review portfolio</button><button class="secondary-button dashboard-nav" data-page="ledger" type="button">Open cash flow</button></div>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <!-- HERO: calm, spacious financial overview -->
+    <section class="v2-hero" aria-label="Financial overview">
+      <p class="v2-hero__greeting">Good ${getGreeting()}, ${escapeHtml(state.profile.name || "there")}</p>
+      <p class="v2-hero__wealth-label">Net worth</p>
+      <h1 class="v2-hero__wealth-value">${money(worth.net)}</h1>
+      <div class="v2-hero__change v2-hero__change--${nwChangeClass}">
+        ${nwChangeClass === "positive" ? "↑" : "↓"} ${money(Math.abs(worth.assets - worth.liabilities))} total assets
+        <span class="v2-status v2-status--${planOnTrack ? "positive" : "warning"}">${planOnTrack ? "● On track" : "● Review needed"}</span>
       </div>
-      <div class="wealth-allocation" aria-label="Tracked wealth allocation">
-        <div class="allocation-ring" style="--invested:${Math.round(investedShare * 100)}%;--safety:${Math.round((investedShare + safetyShare) * 100)}%;"><span><small>Allocated</small><strong>${percent(investedShare + safetyShare + reserveShare)}</strong></span></div>
-        <div class="allocation-legend">
-          <div><i class="invested"></i><span>Investments</span><strong>${money(portfolio.totalInvestedMyr)}</strong></div>
-          <div><i class="safety"></i><span>Safety</span><strong>${money(state.emergency.current)}</strong></div>
-          <div><i class="reserve"></i><span>Reserve</span><strong>${money(opportunity)}</strong></div>
-        </div>
+      <div class="v2-hero__actions">
+        <button class="v2-btn v2-btn--primary dashboard-nav" data-page="portfolio" type="button">Review portfolio</button>
+        <button class="v2-btn v2-btn--secondary dashboard-nav" data-page="ledger" type="button">Open cash flow</button>
+        <button class="v2-btn v2-btn--ghost dashboard-nav" data-page="goals" type="button">Goals</button>
       </div>
     </section>
-    <div class="metric-grid wealth-metrics">
-      <article class="card metric"><span>Net worth</span><strong class="${worth.net >= 0 ? "income" : "expense"}">${money(worth.net)}</strong><small>${money(worth.assets)} assets · ${money(worth.liabilities)} liabilities</small></article>
-      <article class="card metric"><span>Recurring forecast</span><strong class="${forecast.surplus >= 0 ? "income" : "expense"}">${money(forecast.surplus)}</strong><small>${money(forecast.income)} scheduled in · ${money(forecast.expense)} scheduled out</small></article>
-      <article class="card metric"><span>Monthly cash flow</span><strong class="${currentMonthLedger.balance >= 0 ? "income" : "expense"}">${currentMonthLedger.balance >= 0 ? "+" : "−"}${money(Math.abs(currentMonthLedger.balance))}</strong><small>${currentMonthTransactions.length ? `${money(currentMonthLedger.income)} in · ${money(currentMonthLedger.expense)} out` : "No activity recorded this month"}</small></article>
-      <article class="card metric"><span>Safety reserve</span><strong>${percent(emergency)}</strong><div class="bar"><span style="width:${Math.min(Math.round(emergency * 100), 100)}%"></span></div><small>${money(state.emergency.current)} of ${money(state.emergency.target)}${Number.isFinite(emergencyMonths) ? ` · ${emergencyMonths} months to target` : ""}</small></article>
-      <article class="card metric"><span>Monthly investment mandate</span><strong>${money(state.dca.monthly)}</strong><small>${state.trades.length} contributions recorded · long-term allocation plan</small></article>
-      <button class="card metric metric-action dashboard-nav" data-page="ledger" type="button" aria-label="Open cash flow account balances to review investment share">
-        <span>Investment share of total assets</span>
-        <strong>${assetShare.ratio === null ? "Not available" : percent(assetShare.ratio)}</strong>
-        <div class="bar" aria-hidden="true"><span style="width:${investmentShareWidth}%"></span></div>
-        <small>${assetShare.ratio === null ? `Total account assets are ${money(assetShare.totalAssets)}. Add a positive balance to calculate this ratio.` : `${money(assetShare.investmentAssets)} invested (excluding MMF) of ${money(assetShare.totalAssets)} total account assets.`}</small>
-      </button>
+
+    <!-- QUICK ACTIONS -->
+    <div class="v2-quick-actions" style="margin-top:var(--space-5);">
+      ${actions.slice(0, 3).map((action, index) => `<button class="v2-btn v2-btn--secondary v2-btn--sm" type="button" title="${escapeHtml(action)}">${String(index + 1).padStart(2, "0")} ${escapeHtml(action).substring(0, 40)}${action.length > 40 ? "…" : ""}</button>`).join("")}
+      <button class="v2-btn v2-btn--ghost v2-btn--sm dashboard-nav" data-page="advisor" type="button">All guidance →</button>
     </div>
-    <div class="cfo-grid">
-      <article class="card panel cfo-briefing">
-        <div class="panel-head"><div><span class="eyebrow">Personal CFO Briefing</span><h3>${primaryCoach ? escapeHtml(primaryCoach.title) : "Continue the plan"}</h3></div><span class="gold-marker">Priority</span></div>
-        <p class="mission-explanation">${primaryCoach ? escapeHtml(primaryCoach.body) : "Your plan has no urgent exceptions. Stay consistent with the next scheduled contribution."}</p>
-        <ol class="weekly-actions">${actions.slice(0, 3).map((action, index) => `<li><b>${String(index + 1).padStart(2, "0")}</b><span>${escapeHtml(action)}</span></li>`).join("")}</ol>
-        <button class="text-button dashboard-nav" data-page="advisor" type="button">View full guidance <span aria-hidden="true">→</span></button>
-      </article>
-      <article class="card panel monthly-review-card">
-        <div class="panel-head"><div><span class="eyebrow">Monthly Position</span><h3>Cash-flow discipline</h3></div><button class="text-button dashboard-nav" data-page="ledger" type="button">Activity →</button></div>
-        <div class="change-list">
-          <div><span>Recorded spending</span><strong>${money(currentMonthLedger.expense)}</strong><small>${expenseChange === null ? "A second month unlocks trend comparison." : `${expenseChange <= 0 ? "Lower" : "Higher"} by ${percent(Math.abs(expenseChange), 0)} month over month.`}</small></div>
-          <div><span>Assignable surplus</span><strong>${money(monthlySurplus(state))}</strong><small>${planOnTrack ? "Current DCA mandate is covered." : `DCA funding gap: ${money(state.dca.monthly - monthlySurplus(state))}.`}</small></div>
-          <div><span>Opportunity liquidity</span><strong>${money(opportunity)}</strong><small>${state.opportunity.used > 0 ? `${money(state.opportunity.used)} deployed under your rules.` : "Held for predefined deployment conditions."}</small></div>
+
+    <!-- CASH FLOW SUMMARY -->
+    <section class="v2-cashflow" style="margin-top:var(--space-5);" aria-label="Monthly cash flow">
+      <div class="v2-cashflow__item">
+        <span class="v2-cashflow__label">Income</span>
+        <span class="v2-cashflow__value" style="color:var(--color-positive);">${money(currentMonthLedger.income)}</span>
+      </div>
+      <div class="v2-cashflow__item v2-cashflow__item--center">
+        <span class="v2-cashflow__label">Expenses</span>
+        <span class="v2-cashflow__value">${money(currentMonthLedger.expense)}</span>
+        ${expenseChange !== null ? `<span style="font-size:var(--text-caption);color:var(--color-text-tertiary);margin-top:2px;">${expenseChange <= 0 ? "↓" : "↑"} ${percent(Math.abs(expenseChange), 0)} vs last month</span>` : ""}
+      </div>
+      <div class="v2-cashflow__item">
+        <span class="v2-cashflow__label">Surplus</span>
+        <span class="v2-cashflow__value" style="color:var(--color-${surplusPositive ? "positive" : "negative"});">${surplusPositive ? "+" : "−"}${money(Math.abs(surplus))}</span>
+      </div>
+    </section>
+
+    <!-- 2-COLUMN: ALLOCATION + HEALTH METRICS -->
+    <div class="v2-dashboard-grid v2-dashboard-grid--2col" style="margin-top:var(--space-5);">
+      <!-- Tracked Wealth Allocation -->
+      <section class="v2-card" aria-label="Tracked wealth allocation">
+        <div class="v2-section-header">
+          <h2 class="v2-section-header__title">Tracked Wealth Base</h2>
+          <p class="v2-section-header__subtitle">Investment cost, safety cash and undeployed opportunity reserve</p>
         </div>
-      </article>
+        <div class="v2-allocation">
+          <div class="v2-allocation__ring" style="background:conic-gradient(var(--color-accent) 0% ${Math.round(investedShare * 100)}%, var(--color-blue) ${Math.round(investedShare * 100)}% ${Math.round((investedShare + safetyShare) * 100)}%, var(--color-gold) ${Math.round((investedShare + safetyShare) * 100)}% 100%);" aria-label="Wealth allocation ring showing ${percent(investedShare + safetyShare + reserveShare)} allocated">
+            <div class="v2-allocation__center">
+              <strong>${percent(investedShare + safetyShare + reserveShare)}</strong>
+              <small>Allocated</small>
+            </div>
+          </div>
+          <div class="v2-allocation__legend">
+            <div class="v2-allocation__legend-item"><span class="v2-allocation__legend-dot" style="background:var(--color-accent);"></span>Investments <strong>${money(portfolio.totalInvestedMyr)}</strong></div>
+            <div class="v2-allocation__legend-item"><span class="v2-allocation__legend-dot" style="background:var(--color-blue);"></span>Safety <strong>${money(state.emergency.current)}</strong></div>
+            <div class="v2-allocation__legend-item"><span class="v2-allocation__legend-dot" style="background:var(--color-gold);"></span>Reserve <strong>${money(opportunity)}</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Financial Health Metrics -->
+      <section class="v2-card" aria-label="Financial health metrics">
+        <div class="v2-section-header">
+          <h2 class="v2-section-header__title">Financial Health</h2>
+        </div>
+        <div class="v2-health-grid">
+          <div class="v2-health-item">
+            <span class="v2-health-item__label">Safety reserve</span>
+            <span class="v2-health-item__value">${percent(emergency)}</span>
+            <div class="v2-health-item__bar"><div class="v2-health-item__bar-fill" style="width:${Math.min(Math.round(emergency * 100), 100)}%;"></div></div>
+            <span style="font-size:var(--text-caption);color:var(--color-text-tertiary);margin-top:2px;">${money(state.emergency.current)} of ${money(state.emergency.target)}${Number.isFinite(emergencyMonths) ? ` · ${emergencyMonths}mo to target` : ""}</span>
+          </div>
+          <div class="v2-health-item">
+            <span class="v2-health-item__label">Recurring forecast</span>
+            <span class="v2-health-item__value" style="color:var(--color-${forecast.surplus >= 0 ? "positive" : "negative"});">${money(forecast.surplus)}</span>
+            <span style="font-size:var(--text-caption);color:var(--color-text-tertiary);margin-top:2px;">${money(forecast.income)} in · ${money(forecast.expense)} out</span>
+          </div>
+          <div class="v2-health-item">
+            <span class="v2-health-item__label">DCA mandate</span>
+            <span class="v2-health-item__value">${money(state.dca.monthly)}</span>
+            <span style="font-size:var(--text-caption);color:var(--color-text-tertiary);margin-top:2px;">${state.trades.length} contributions recorded</span>
+          </div>
+          <div class="v2-health-item">
+            <span class="v2-health-item__label">Investment share</span>
+            <span class="v2-health-item__value">${assetShare.ratio === null ? "N/A" : percent(assetShare.ratio)}</span>
+            ${assetShare.ratio !== null ? `<div class="v2-health-item__bar"><div class="v2-health-item__bar-fill" style="width:${investmentShareWidth}%;"></div></div>` : ""}
+            <span style="font-size:var(--text-caption);color:var(--color-text-tertiary);margin-top:2px;">${assetShare.ratio === null ? `Total: ${money(assetShare.totalAssets)}` : `${money(assetShare.investmentAssets)} of ${money(assetShare.totalAssets)}`}</span>
+          </div>
+        </div>
+      </section>
     </div>
-    <article class="card panel wealth-journey">
-      <div class="panel-head"><div><span class="eyebrow">Wealth Journey</span><h3>${nextGoal ? escapeHtml(nextGoal.name) : "Define your next milestone"}</h3></div><div class="journey-head-actions">${state.goals.length > 0 ? `<label class="journey-goal-picker"><span>Featured goal</span><select id="overviewGoalSelect" aria-label="Choose the goal shown in Wealth Journey">${overviewGoalOptions}</select></label>` : ""}<button class="text-button dashboard-nav" data-page="goals" type="button">All goals →</button></div></div>
-      ${nextGoal ? `<div class="journey-layout"><div class="goal-ring" style="--progress:${Math.round(nextGoalRatio * 360)}deg"><span><strong>${percent(nextGoalRatio)}</strong><small>funded</small></span></div><div><strong class="journey-amount">${money(nextGoalCurrent)}</strong><p>toward ${money(nextGoal.target)}. ${nextGoal.monthlyContribution > 0 ? `At ${money(nextGoal.monthlyContribution)} monthly, the current plan has approximately ${Math.ceil(Math.max(nextGoal.target - nextGoalCurrent, 0) / nextGoal.monthlyContribution)} months remaining.` : "Add a monthly contribution to establish a projected timeline."}</p><div class="milestone-line"><i></i><span>Today</span><i></i><span>Next milestone</span><i class="gold"></i><span>Target</span></div></div></div>` : '<p class="empty-state">Create a goal to turn long-term wealth building into a visible, measurable journey.</p>'}
-    </article>
+
+    <!-- CFO INSIGHT + MONTHLY POSITION -->
+    <div class="v2-dashboard-grid v2-dashboard-grid--2col" style="margin-top:var(--space-5);">
+      <!-- Coach Insight -->
+      <section class="v2-card" aria-label="Financial coaching insight">
+        <div class="v2-section-header">
+          <h2 class="v2-section-header__title">${primaryCoach ? escapeHtml(primaryCoach.title) : "Continue the plan"}</h2>
+          <p class="v2-section-header__subtitle">Personal CFO briefing</p>
+        </div>
+        <p style="font-size:var(--text-body);color:var(--color-text-secondary);line-height:var(--leading-relaxed);margin:0 0 var(--space-5);">${primaryCoach ? escapeHtml(primaryCoach.body) : "Your plan has no urgent exceptions. Stay consistent with the next scheduled contribution."}</p>
+        <div class="v2-insights">
+          ${actions.slice(0, 3).map((action, index) => `<div class="v2-insight"><span class="v2-insight__icon v2-insight__icon--${index === 0 ? "positive" : index === 1 ? "warning" : "info"}">${index === 0 ? "✓" : index === 1 ? "!" : "i"}</span><span>${escapeHtml(action)}</span></div>`).join("")}
+        </div>
+        <button class="v2-btn v2-btn--ghost dashboard-nav" data-page="advisor" type="button" style="margin-top:var(--space-4);">View full guidance →</button>
+      </section>
+
+      <!-- Monthly Position -->
+      <section class="v2-card" aria-label="Monthly financial position">
+        <div class="v2-section-header">
+          <h2 class="v2-section-header__title">Monthly Position</h2>
+          <p class="v2-section-header__subtitle">Cash-flow discipline</p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--space-4);">
+          <div class="v2-metric">
+            <span class="v2-metric__label">Recorded spending</span>
+            <span class="v2-metric__value">${money(currentMonthLedger.expense)}</span>
+            ${expenseChange !== null ? `<span class="v2-metric__change v2-metric__change--${expenseChange <= 0 ? "positive" : "negative"}">${expenseChange <= 0 ? "↓" : "↑"} ${percent(Math.abs(expenseChange), 0)} month over month</span>` : `<span class="v2-metric__change" style="color:var(--color-text-tertiary);">A second month unlocks trend comparison</span>`}
+          </div>
+          <div class="v2-metric">
+            <span class="v2-metric__label">Assignable surplus</span>
+            <span class="v2-metric__value" style="color:var(--color-${surplus >= 0 ? "positive" : "negative"});">${money(surplus)}</span>
+            <span class="v2-metric__change" style="color:var(--color-text-tertiary);">${planOnTrack ? "Current DCA mandate is covered" : `DCA funding gap: ${money(state.dca.monthly - surplus)}`}</span>
+          </div>
+          <div class="v2-metric">
+            <span class="v2-metric__label">Opportunity liquidity</span>
+            <span class="v2-metric__value">${money(opportunity)}</span>
+            <span class="v2-metric__change" style="color:var(--color-text-tertiary);">${state.opportunity.used > 0 ? `${money(state.opportunity.used)} deployed under your rules` : "Held for predefined deployment conditions"}</span>
+          </div>
+        </div>
+        <button class="v2-btn v2-btn--ghost dashboard-nav" data-page="ledger" type="button" style="margin-top:var(--space-4);">Open activity →</button>
+      </section>
+    </div>
+
+    <!-- WEALTH JOURNEY -->
+    <section class="v2-card" style="margin-top:var(--space-5);" aria-label="Wealth journey progress">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);margin-bottom:var(--space-5);">
+        <div class="v2-section-header" style="margin-bottom:0;">
+          <h2 class="v2-section-header__title">${nextGoal ? escapeHtml(nextGoal.name) : "Define your next milestone"}</h2>
+          <p class="v2-section-header__subtitle">Wealth journey progress</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:var(--space-3);">
+          ${state.goals.length > 0 ? `<label style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-caption);color:var(--color-text-tertiary);">Featured goal<select class="v2-input" id="overviewGoalSelect" aria-label="Choose the goal shown in Wealth Journey" style="min-height:28px;font-size:var(--text-caption);">${overviewGoalOptions}</select></label>` : ""}
+          <button class="v2-btn v2-btn--ghost v2-btn--sm dashboard-nav" data-page="goals" type="button">All goals →</button>
+        </div>
+      </div>
+      ${nextGoal ? `
+        <div style="display:flex;align-items:center;gap:var(--space-8);flex-wrap:wrap;">
+          <div style="position:relative;width:140px;height:140px;flex-shrink:0;">
+            <svg viewBox="0 0 140 140" style="width:100%;height:100%;transform:rotate(-90deg);">
+              <circle cx="70" cy="70" r="60" fill="none" stroke="var(--color-border)" stroke-width="8" />
+              <circle cx="70" cy="70" r="60" fill="none" stroke="var(--color-accent)" stroke-width="8" stroke-linecap="round"
+                stroke-dasharray="${Math.round(2 * Math.PI * 60)}" stroke-dashoffset="${Math.round(2 * Math.PI * 60 * (1 - nextGoalRatio))}" />
+            </svg>
+            <div style="position:absolute;inset:0;display:grid;place-items:center;text-align:center;">
+              <div><strong style="font-size:20px;font-weight:700;color:var(--color-text-primary);display:block;">${percent(nextGoalRatio)}</strong><small style="font-size:var(--text-micro);color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.08em;">funded</small></div>
+            </div>
+          </div>
+          <div style="flex:1;min-width:200px;">
+            <strong style="font-size:var(--text-financial-lg);font-weight:700;color:var(--color-text-primary);display:block;margin-bottom:var(--space-2);">${money(nextGoalCurrent)}</strong>
+            <p style="font-size:var(--text-body);color:var(--color-text-secondary);line-height:var(--leading-relaxed);margin:0 0 var(--space-4);">toward ${money(nextGoal.target)}. ${nextGoal.monthlyContribution > 0 ? `At ${money(nextGoal.monthlyContribution)} monthly, the current plan has approximately ${Math.ceil(Math.max(nextGoal.target - nextGoalCurrent, 0) / nextGoal.monthlyContribution)} months remaining.` : "Add a monthly contribution to establish a projected timeline."}</p>
+            <div style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-caption);color:var(--color-text-tertiary);">
+              <span class="v2-status v2-status--info">Today</span>
+              <span style="color:var(--color-border-strong);">→</span>
+              <span class="v2-status v2-status--warning">Next milestone</span>
+              <span style="color:var(--color-border-strong);">→</span>
+              <span class="v2-status v2-status--positive">Target</span>
+            </div>
+          </div>
+        </div>
+      ` : '<p style="font-size:var(--text-body);color:var(--color-text-tertiary);text-align:center;padding:var(--space-8) 0;">Create a goal to turn long-term wealth building into a visible, measurable journey.</p>'}
+    </section>
   `;
+}
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "morning";
+  if (hour < 17) return "afternoon";
+  return "evening";
 }
 
 function portfolioChartSection(state: WealthState): string {
@@ -967,8 +1104,6 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
   };
 
   const comparisonAssets: StaticComparisonAsset[] = [
-    { symbol: "VOO", name: "Vanguard S&P 500 ETF", category: "US large-cap index ETF", exposure: "About 500 leading US companies across all major sectors.", role: "Core US equity holding", risk: "Market-level", fee: "0.03%", diversification: "Broad across sectors", income: "Quarterly dividends", fit: "Simple, low-cost US core", accent: "green" },
-    { symbol: "QQQM", name: "Invesco NASDAQ 100 ETF", category: "US growth index ETF", exposure: "100 large non-financial Nasdaq companies with a technology tilt.", role: "Growth satellite", risk: "Above market", fee: "0.15%", diversification: "Concentrated in mega-cap growth", income: "Quarterly dividends", fit: "Higher-growth allocation", accent: "blue" },
     { symbol: "VXUS", name: "Vanguard Total International Stock ETF", category: "Global ex-US equity ETF", exposure: "Developed and emerging-market equities outside the United States.", role: "International diversifier", risk: "Market, currency and emerging-market exposure", fee: "0.07%", diversification: "Broad developed and emerging ex-US markets", income: "Quarterly dividends; yield about 3.0%", fit: "Reduce reliance on a single US equity market", accent: "gold", referenceSnapshot: "P/E 14.5 · P/B 1.7 · High liquidity · Moderate-to-low growth with valuation-recovery potential" },
     { symbol: "AAPL", name: "Apple Inc.", category: "Single US company", exposure: "Consumer devices, services and a global hardware ecosystem.", role: "Concentrated satellite", risk: "Company-specific", fee: "No fund expense ratio", diversification: "Single issuer", income: "Quarterly dividends", fit: "High-conviction position", accent: "red" },
   ];
@@ -1510,7 +1645,12 @@ function rulesTemplate(state: WealthState): string {
   const cards = items
     .filter((item) => !state.hiddenRuleIds.includes(item.id))
     .map((item) => '<article class="card data-card rule-card"><div class="rule-card-head"><span class="eyebrow">' + escapeHtml(item.title) + '</span><div class="rule-card-actions"><button class="secondary-button edit-rule" data-rule-id="' + item.id + '" type="button" aria-label="Edit ' + escapeHtml(item.title) + ' rule">Edit</button><button class="icon-button danger delete-rule" data-rule-id="' + item.id + '" type="button" aria-label="Delete ' + escapeHtml(item.title) + ' rule" title="Delete rule">X</button></div></div><p style="white-space:pre-wrap;">' + escapeHtml(item.body) + '</p><form class="rule-edit-form" data-rule-id="' + item.id + '" hidden><label>Title<input name="title" maxlength="80" required value="' + escapeHtml(item.title) + '"></label><label>Content<textarea name="body" maxlength="2000" rows="5" required>' + escapeHtml(item.body) + '</textarea></label><p class="form-error" role="alert"></p><div class="rule-form-actions"><button class="primary-button" type="submit">Save</button><button class="secondary-button cancel-rule-edit" type="button">Cancel</button></div></form></article>');
-  if (state.ruleNotes.trim()) {
+  if (state.ruleNotesList.length > 0) {
+    state.ruleNotesList.forEach((note) => {
+      const title = note.title || "Personal Rule Notes";
+      cards.push('<article class="card data-card rule-card"><div class="rule-card-head"><span class="eyebrow">' + escapeHtml(title) + '</span><div class="rule-card-actions"><button class="secondary-button edit-rule-notes" data-note-id="' + note.id + '" type="button" aria-label="Edit ' + escapeHtml(title) + '">Edit</button><button class="icon-button danger delete-rule-notes" data-note-id="' + note.id + '" type="button" aria-label="Delete ' + escapeHtml(title) + '" title="Delete note">X</button></div></div><p style="white-space:pre-wrap;">' + escapeHtml(note.body.trim()) + '</p></article>');
+    });
+  } else if (state.ruleNotes.trim()) {
     cards.push('<article class="card data-card rule-card"><div class="rule-card-head"><span class="eyebrow">' + escapeHtml(state.ruleNoteTitle || "Personal Rule Notes") + '</span><div class="rule-card-actions"><button class="secondary-button edit-rule-notes" type="button" aria-label="Edit personal rule notes">Edit</button><button class="icon-button danger delete-rule-notes" type="button" aria-label="Delete personal rule notes" title="Delete rule">X</button></div></div><p style="white-space:pre-wrap;">' + escapeHtml(state.ruleNotes.trim()) + '</p></article>');
   }
   return '<div class="three-col-grid">' + (cards.join("") || '<p class="empty-state">No rule cards remain. Add personal notes below to create a new rule.</p>') + '</div>' +
@@ -2143,30 +2283,64 @@ function bindRules(root: HTMLElement, state: WealthState, setState: Setter, navi
     });
   });
 
-  root.querySelector<HTMLButtonElement>(".delete-rule-notes")?.addEventListener("click", () => {
-    if (!confirm("Delete your personal rule notes? A snapshot will be saved first.")) return;
-    showRules({ ...state, ruleNoteTitle: "", ruleNotes: "" }, "Delete rule notes");
+  root.querySelectorAll<HTMLButtonElement>(".delete-rule-notes").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const noteId = btn.dataset.noteId;
+      if (!confirm("Delete this rule note? A snapshot will be saved first.")) return;
+      if (noteId) {
+        const nextNotes = state.ruleNotesList.filter((n) => n.id !== noteId);
+        showRules({ ...state, ruleNotesList: nextNotes }, "Delete rule note");
+      } else {
+        showRules({ ...state, ruleNoteTitle: "", ruleNotes: "" }, "Delete rule notes");
+      }
+    });
   });
 
-  root.querySelector<HTMLButtonElement>(".edit-rule-notes")?.addEventListener("click", () => {
-    const titleInput = root.querySelector<HTMLInputElement>("#ruleNoteTitle");
-    const notesInput = root.querySelector<HTMLTextAreaElement>("#ruleNotes");
-    if (titleInput) titleInput.value = state.ruleNoteTitle;
-    if (notesInput) notesInput.value = state.ruleNotes;
-    titleInput?.scrollIntoView({ behavior: "smooth", block: "center" });
-    titleInput?.focus({ preventScroll: true });
+    let editingNoteId: string | null = null;
+    let lastUpdatedState: WealthState | null = null;
+  root.querySelectorAll<HTMLButtonElement>(".edit-rule-notes").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const noteId = btn.dataset.noteId;
+      const titleInput = root.querySelector<HTMLInputElement>("#ruleNoteTitle");
+      const notesInput = root.querySelector<HTMLTextAreaElement>("#ruleNotes");
+      if (noteId) {
+        const note = state.ruleNotesList.find((n) => n.id === noteId);
+        if (note) {
+          if (titleInput) titleInput.value = note.title;
+          if (notesInput) notesInput.value = note.body;
+          editingNoteId = noteId;
+        }
+      } else {
+        if (titleInput) titleInput.value = state.ruleNoteTitle;
+        if (notesInput) notesInput.value = state.ruleNotes;
+        editingNoteId = null;
+      }
+      titleInput?.scrollIntoView({ behavior: "smooth", block: "center" });
+      titleInput?.focus({ preventScroll: true });
+    });
   });
 
   root.querySelector<HTMLFormElement>("#ruleNotesForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;
     const data = new FormData(form);
-    const ruleNoteTitle = String(data.get("ruleNoteTitle") ?? "").trim().slice(0, 80);
-    const ruleNotes = String(data.get("ruleNotes") ?? "").slice(0, 5000);
-    const next = { ...state, ruleNoteTitle, ruleNotes };
-    setState(next, "Update rules notes");
-    if (navigate) navigate("rules");
-    else renderApp(root, next, setState, "rules");
+    const title = String(data.get("ruleNoteTitle") ?? "").trim().slice(0, 80);
+    const body = String(data.get("ruleNotes") ?? "").slice(0, 5000);
+    if (!body.trim()) return;
+    // Use lastUpdatedState when available so multiple sequential edits/adds
+    // build on the latest persisted list instead of the stale closure `state`.
+    const baseState = lastUpdatedState ?? state;
+    if (editingNoteId) {
+      const nextNotes = baseState.ruleNotesList.map((n) => n.id === editingNoteId ? { ...n, title, body } : n);
+      lastUpdatedState = { ...baseState, ruleNotesList: nextNotes };
+      setState(lastUpdatedState, "Edit rule note");
+    } else {
+      const newNote: RuleNote = { id: `rulenote-${Date.now()}-${Math.random().toString(16).slice(2)}`, title, body, createdAt: Date.now() };
+      lastUpdatedState = { ...baseState, ruleNotesList: [...baseState.ruleNotesList, newNote] };
+      setState(lastUpdatedState, "Add rule note");
+    }
+    const updatedState = lastUpdatedState ?? state;
+    renderApp(root, updatedState, setState, "rules", navigate);
   });
 }
 
