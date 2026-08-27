@@ -186,11 +186,10 @@ test("arch: no read model leaks persistence or AI state", () => {
 
 // --- Persisted schema -------------------------------------------------------
 
-test("arch: the persisted schema version is 17 and migrates from every earlier state", () => {
-  assert.equal(CURRENT_VERSION, 17);
-  for (const version of [3, 10, 11, 15, 16, 17]) {
+test("arch: every earlier persisted state migrates to the current version", () => {
+  for (const version of [3, 10, 11, 15, 16, 17, 18]) {
     const migrated = migrateState({ version, deviceId: `v${version}` });
-    assert.equal(migrated.version, 17, `v${version} did not migrate`);
+    assert.equal(migrated.version, CURRENT_VERSION, `v${version} did not migrate`);
     assert.ok(Array.isArray(migrated.actionRecords), `v${version} missing actionRecords`);
     assert.ok(Array.isArray(migrated.financialRules), `v${version} missing financialRules`);
   }

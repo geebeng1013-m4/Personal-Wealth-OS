@@ -3024,3 +3024,29 @@ td { border-color: var(--line); }
   /* .panel-head stacks here, so keep the count and the action on one row. */
   .panel-head-actions { width: 100%; justify-content: space-between; }
 }
+
+/* --- Investment account linked to the tracked portfolio --- */
+
+.account-portfolio-link {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.account-portfolio-link input { margin-top: 2px; flex-shrink: 0; cursor: pointer; }
+.account-portfolio-link span { display: block; }
+
+.account-portfolio-link small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.account-portfolio-link input:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }

@@ -135,6 +135,19 @@ export interface LedgerAccount {
   openingBalance: number;
   icon?: string;
   color?: string;
+  /**
+   * This account holds the shares tracked in the portfolio, so its balance and
+   * the portfolio's value are the same money.
+   *
+   * When set, net worth takes the value from the portfolio (which follows the
+   * live market price) and ignores this account's own balance, instead of
+   * counting both. Without it a manually maintained brokerage balance is added
+   * on top of the holdings it already represents, inflating net worth.
+   *
+   * Only meaningful on investment accounts. Brokerage CASH and money-market
+   * balances are genuinely separate money and must NOT be flagged.
+   */
+  holdsTrackedPortfolio?: boolean;
 }
 
 export interface LedgerCategory {

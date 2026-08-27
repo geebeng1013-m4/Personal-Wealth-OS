@@ -27,8 +27,10 @@ function record(overrides: Partial<ActionRecord> & Pick<ActionRecord, "id" | "re
 
 // --- schema & defaults ------------------------------------------------------
 
-test("actions: the schema version is 17", () => {
-  assert.equal(CURRENT_VERSION, 17);
+test("actions: the schema version is current", () => {
+  // Tracks the constant rather than a literal: a legitimate migration should
+  // not force unrelated version pins to be edited.
+  assert.ok(Number.isInteger(CURRENT_VERSION) && CURRENT_VERSION >= 17);
 });
 
 test("actions: a new user starts with an empty actionRecords array", () => {
@@ -50,7 +52,7 @@ test("actions: a v16 state migrates to v17 with an empty actionRecords array", (
     deviceId: "device-v16",
     dca: { monthly: 250, targets: { VOO: 0.8, QQQM: 0.2 } },
   });
-  assert.equal(migrated.version, 17);
+  assert.equal(migrated.version, CURRENT_VERSION);
   assert.deepEqual(migrated.actionRecords, []);
 });
 
@@ -82,7 +84,7 @@ test("actions: migration preserves every existing field", () => {
 
 test("actions: a much older state (v10) also migrates safely", () => {
   const migrated = migrateState({ version: 10, deviceId: "old" });
-  assert.equal(migrated.version, 17);
+  assert.equal(migrated.version, CURRENT_VERSION);
   assert.deepEqual(migrated.actionRecords, []);
   assert.ok(Array.isArray(migrated.financialRules));
 });
@@ -102,7 +104,7 @@ test("actions: migration is idempotent", () => {
   const once = migrateState({ version: 16, deviceId: "d", actionRecords: [record({ id: "a1", recommendationId: "r1" })] });
   const twice = migrateState(once);
   assert.deepEqual(twice.actionRecords, once.actionRecords);
-  assert.equal(twice.version, 17);
+  assert.equal(twice.version, CURRENT_VERSION);
 });
 
 test("actions: an export/import round-trip preserves records", () => {

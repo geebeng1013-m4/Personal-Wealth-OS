@@ -135,7 +135,14 @@ export function getFinancialSnapshot(
   // liabilities, the portfolio's contribution, and the net-worth identity.
   const portfolioValueIsLive = portfolio.totalInvestmentValueMyr !== null;
   const portfolioValueMyr = portfolio.totalInvestmentValueMyr ?? portfolio.totalInvestedMyr;
-  const totalAssets = ledger.totalPositiveBalance + portfolioValueMyr;
+  // An account flagged holdsTrackedPortfolio records the same money the
+  // portfolio already values, so its balance is netted out before the
+  // portfolio is added. Counting both inflated net worth by the whole
+  // portfolio — the balance a user maintains for their brokerage account IS
+  // their holdings. Accounts NOT flagged (brokerage cash, money-market funds)
+  // are separate money and stay in the total.
+  const ledgerAssets = ledger.totalPositiveBalance - ledger.portfolioMirroredBalance;
+  const totalAssets = ledgerAssets + portfolioValueMyr;
   const liabilities = totalLiabilities(state.liabilities);
 
   return {

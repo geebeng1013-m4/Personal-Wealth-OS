@@ -161,7 +161,7 @@ test("advisor: records survive a persistence round trip exactly", () => {
   const reloaded = migrateState(JSON.parse(JSON.stringify(withRecord)));
   assert.deepEqual(reloaded.actionRecords, withRecord.actionRecords);
   assert.equal(reloaded.version, CURRENT_VERSION);
-  assert.equal(CURRENT_VERSION, 17);
+  assert.ok(CURRENT_VERSION >= 17);
 });
 
 // --- Completion never leaks into the facts ---------------------------------

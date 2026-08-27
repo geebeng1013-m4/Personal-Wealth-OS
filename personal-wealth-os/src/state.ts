@@ -8,7 +8,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 17;
+export const CURRENT_VERSION = 18;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -273,7 +273,11 @@ function validLedgerAccounts(value: unknown): LedgerAccount[] {
     const openingBalance = typeof item.openingBalance === "number" ? item.openingBalance : Number(item.openingBalance ?? 0);
     if (!Number.isFinite(openingBalance) || openingBalance < 0) return [];
     const icon = typeof item.icon === "string" ? item.icon.trim().slice(0, 12) : "";
-    return [{ id: item.id, name: item.name.trim().slice(0, 40), type: item.type, openingBalance: Math.round((openingBalance + Number.EPSILON) * 100) / 100, ...(icon ? { icon } : {}) }];
+    // Only investment accounts can mirror the portfolio; the flag is ignored
+    // anywhere else so a stray value cannot quietly remove a bank balance from
+    // net worth.
+    const holdsTrackedPortfolio = item.holdsTrackedPortfolio === true && item.type === "investment";
+    return [{ id: item.id, name: item.name.trim().slice(0, 40), type: item.type, openingBalance: Math.round((openingBalance + Number.EPSILON) * 100) / 100, ...(icon ? { icon } : {}), ...(holdsTrackedPortfolio ? { holdsTrackedPortfolio: true } : {}) }];
   });
   return accounts.length > 0 ? accounts : structuredClone(DEFAULT_LEDGER_ACCOUNTS);
 }

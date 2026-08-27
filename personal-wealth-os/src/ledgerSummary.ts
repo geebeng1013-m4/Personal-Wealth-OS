@@ -79,6 +79,15 @@ export interface LedgerSnapshot {
   accountTypeBalances: Record<LedgerAccountType, number>;
   /** Sum of positive balances only. */
   totalPositiveBalance: number;
+  /**
+   * Positive balance held in accounts flagged holdsTrackedPortfolio — money the
+   * portfolio ALSO reports as the value of its holdings.
+   *
+   * Reported separately rather than removed here: the Ledger page still shows
+   * these accounts at their recorded balance, and this is the ledger's own
+   * total. Only net worth nets it out, so the same money is not counted twice.
+   */
+  portfolioMirroredBalance: number;
   currentMonth: LedgerMonthTotals;
   previousMonth: LedgerMonthTotals;
   /** Every recorded transaction, regardless of date. */
@@ -127,6 +136,11 @@ export function getLedgerSnapshot(state: WealthState, now = new Date()): LedgerS
       investment: accountTypeBalance(transactions, accounts, "investment", balances),
     },
     totalPositiveBalance: sumPositiveBalances(transactions, accounts, balances),
+    // Clamped the same way totalPositiveBalance is, so subtracting it from that
+    // total can never produce a negative or overshoot.
+    portfolioMirroredBalance: balances
+      .filter(({ account }) => account.holdsTrackedPortfolio === true)
+      .reduce((sum, { balance }) => sum + Math.max(balance, 0), 0),
     currentMonth: ledgerMonthTotals(transactions, currentKey),
     previousMonth: ledgerMonthTotals(transactions, previousKey),
     transactionCount: transactions.length,

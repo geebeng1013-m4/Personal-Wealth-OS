@@ -3,6 +3,7 @@ import { test } from "./testHarness";
 import { getFinancialSnapshot, monthlyClose, netWorth } from "../src/financialHealth";
 import { calculatePositionCostBasis } from "../src/rules";
 import { getPortfolioSnapshot } from "../src/portfolioSummary";
+import { getLedgerSnapshot } from "../src/ledgerSummary";
 import { priceMapFrom } from "../src/marketPrices";
 import { cloneDefaultState, emptyState, migrateState } from "../src/state";
 import type { LedgerAccount, LedgerTransaction, Liability, Trade, WealthState } from "../src/models";
@@ -339,4 +340,87 @@ test("networth: the ledger's investment-account balance is not the same pool as 
   // Both are included in totalAssets, additively, with nothing dropped.
   const ledgerOnly = netWorth(state.ledgerTransactions, state.ledgerAccounts, []).assets;
   assert.equal(snapshot.totalAssets, ledgerOnly + snapshot.portfolioValueMyr);
+});
+
+// --- Portfolio mirrored by a brokerage account (no double counting) --------
+//
+// A user who records their brokerage account's balance in the ledger AND has
+// the underlying trades in the portfolio holds ONE pot of money described
+// twice. Net worth previously added both, inflating it by the whole portfolio.
+
+/** Brokerage layout: separate cash + money-market, plus the share account. */
+const brokerageAccounts: LedgerAccount[] = [
+  { id: "acc-bank", name: "Bank", type: "bank", openingBalance: 1000 },
+  { id: "acc-mm-cash", name: "Moomoo Cash", type: "investment", openingBalance: 500 },
+  { id: "acc-mm-mmf", name: "Moomoo MMF", type: "investment", openingBalance: 4000 },
+  { id: "acc-mm-invest", name: "Moomoo Invest", type: "investment", openingBalance: 1900, holdsTrackedPortfolio: true },
+];
+const oneTrade: Trade[] = [
+  { id: "tr1", date: iso(2026, 7, 2), platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 1800, amountUsd: 420, priceUsd: 100, units: 4.2, feeMyr: 0 },
+];
+
+test("networth: a flagged account is replaced by the portfolio, not added to it", () => {
+  const state = stateWith({ ledgerAccounts: brokerageAccounts, trades: oneTrade });
+  const snapshot = getFinancialSnapshot(state, NOW);
+  const costBasis = calculatePositionCostBasis(state.trades, "VOO").costBasisMyr;
+
+  // Bank 1000 + cash 500 + MMF 4000 = 5500 of genuinely separate money,
+  // plus the portfolio. The flagged 1900 balance is NOT added on top.
+  assert.equal(snapshot.totalAssets, 5500 + costBasis);
+  assert.notEqual(snapshot.totalAssets, 5500 + 1900 + costBasis, "the portfolio was counted twice");
+});
+
+test("networth: unflagged brokerage cash and money-market stay in the total", () => {
+  // Only the share account mirrors the portfolio. Cash and MMF are real,
+  // separate assets and must never be dropped.
+  const state = stateWith({ ledgerAccounts: brokerageAccounts, trades: oneTrade });
+  const snapshot = getFinancialSnapshot(state, NOW);
+  assert.ok(snapshot.totalAssets > 5000, "separate brokerage money was wrongly excluded");
+  const withoutFlag = getFinancialSnapshot(stateWith({
+    ledgerAccounts: brokerageAccounts.map((a) => ({ ...a, holdsTrackedPortfolio: undefined })),
+    trades: oneTrade,
+  }), NOW);
+  // Removing the flag adds exactly the mirrored balance back.
+  assert.equal(withoutFlag.totalAssets, snapshot.totalAssets + 1900);
+});
+
+test("networth: the flagged balance is reported so it can be reconciled", () => {
+  const state = stateWith({ ledgerAccounts: brokerageAccounts, trades: oneTrade });
+  const ledger = getLedgerSnapshot(state, NOW);
+  assert.equal(ledger.portfolioMirroredBalance, 1900);
+  // The ledger's own total still includes it — only net worth nets it out, so
+  // the Ledger page keeps showing the account at its recorded balance.
+  assert.equal(ledger.totalPositiveBalance, 1000 + 500 + 4000 + 1900);
+});
+
+test("networth: with no flagged account nothing is netted out", () => {
+  const state = stateWith({ ledgerAccounts: accounts, trades: oneTrade });
+  const ledger = getLedgerSnapshot(state, NOW);
+  assert.equal(ledger.portfolioMirroredBalance, 0);
+  const snapshot = getFinancialSnapshot(state, NOW);
+  assert.equal(snapshot.totalAssets, ledger.totalPositiveBalance + snapshot.portfolioValueMyr);
+});
+
+test("networth: the flag only applies to investment accounts", () => {
+  // A bank account must never remove itself from net worth, however the flag
+  // arrived in the persisted data.
+  const state = migrateState({
+    deviceId: "device-test",
+    ledgerAccounts: [
+      { id: "acc-bank", name: "Bank", type: "bank", openingBalance: 3000, holdsTrackedPortfolio: true },
+    ],
+    trades: [],
+  });
+  assert.equal(state.ledgerAccounts[0]!.holdsTrackedPortfolio, undefined, "the flag must be stripped from a bank account");
+  assert.equal(getLedgerSnapshot(state, NOW).portfolioMirroredBalance, 0);
+  assert.equal(getFinancialSnapshot(state, NOW).totalAssets, 3000);
+});
+
+test("networth: the flag survives a persistence round trip", () => {
+  const state = stateWith({ ledgerAccounts: brokerageAccounts, trades: oneTrade });
+  const reloaded = migrateState(JSON.parse(JSON.stringify(state)));
+  const flagged = reloaded.ledgerAccounts.filter((a) => a.holdsTrackedPortfolio === true);
+  assert.equal(flagged.length, 1);
+  assert.equal(flagged[0]!.id, "acc-mm-invest");
+  assert.equal(getFinancialSnapshot(reloaded, NOW).totalAssets, getFinancialSnapshot(state, NOW).totalAssets);
 });
