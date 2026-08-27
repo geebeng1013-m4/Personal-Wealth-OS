@@ -2,12 +2,15 @@ import "./design-system.css";
 import "./styles.css";
 import type { WealthState } from "./models";
 import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState } from "./state";
-import { renderApp, quickViewTemplate } from "./ui";
+import { renderApp } from "./ui";
 import { onAuth, signInWithGoogle, handleRedirectResult, logOut } from "./firebase";
-import { fetchUsdToMyr } from "./market";
+import { fetchUsdToMyr, pruneMarketCache } from "./market";
 import type { User } from "firebase/auth";
 import { isDemoMode } from "./demo";
-import { demoState, DEMO_USER_DISPLAY_NAME, DEMO_USER_EMAIL, DEMO_USER_PHOTO } from "./demoData";
+import { demoStateFor, DEMO_USER_DISPLAY_NAME, DEMO_USER_EMAIL, DEMO_USER_PHOTO } from "./demoData";
+
+// Drop stale cached ticker data from previous sessions so localStorage doesn't grow unbounded.
+pruneMarketCache();
 
 // PWA install prompt
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
@@ -102,11 +105,13 @@ const appPages = new Set([
   "ledger",
   "buckets",
   "goals",
+  "tvm",
   "calculator",
   "advisor",
   "rules",
   "review",
   "settings",
+  "money-leaks",
 ]);
 
 function pageFromLocation(): string {
@@ -193,10 +198,8 @@ function renderLogin(): void {
 
     try {
       const user = await signInWithGoogle();
-      if (user) {
-        console.log("[Auth] Sign-in successful via popup:", user.email);
-      } else {
-        console.log("[Auth] Redirecting to Google sign-in...");
+      if (import.meta.env.DEV) {
+        console.log(user ? "[Auth] Sign-in successful via popup" : "[Auth] Redirecting to Google sign-in...");
       }
     } catch (err) {
       console.error("Sign-in failed:", err);
@@ -264,8 +267,6 @@ async function handleAuth(user: User | null): Promise<void> {
 // --- Demo mode: skip Firebase, load static demo data ---
 if (isDemoMode()) {
   console.log("[Demo] Design Review mode — Firebase auth and writes are disabled.");
-  state = { ...demoState };
-
   // Create a minimal mock user so the UI renders normally without real auth.
   const demoUser = {
     uid: "demo-user",
@@ -275,6 +276,11 @@ if (isDemoMode()) {
   } as unknown as User;
 
   currentUser = demoUser;
+
+  // Keep edits made in the preview deployment across rerenders and refreshes.
+  // The demo user is isolated from real accounts by its dedicated uid.
+  const demoStorageKey = "personal-wealth-os-state-demo-user";
+  state = localStorage.getItem(demoStorageKey) ? loadState(demoUser.uid) : demoStateFor(new Date());
 
   renderApp(root!, state, setState, currentPage, navigate, demoUser, handleLogout);
 } else {

@@ -78,6 +78,7 @@ export interface Trade {
   amountMyr: number;
   amountUsd: number;
   priceUsd: number;
+  units?: number;
   feeMyr: number;
   exchangeRate?: number;
   notes?: string;
@@ -176,6 +177,86 @@ export interface RuleNote {
   createdAt: number;
 }
 
+// --- Structured financial rules ---
+//
+// These are PERSONAL POLICY / PLANNING rules: what the user intends to do.
+// They are not recorded financial reality — never derive balances from them.
+// Recorded position comes from the ledger (see getFinancialSnapshot).
+//
+// Distinct from RuleCardId above, which is presentation-only (the seven
+// editable rule cards) and stays untouched for compatibility.
+
+export type FinancialRuleKind =
+  | "emergency-fund-minimum"
+  | "monthly-spending-limit"
+  | "dca-monthly-amount"
+  | "target-allocation"
+  | "allocation-drift-tolerance"
+  | "opportunity-reserve-deployment"
+  | "goal-contribution";
+
+interface FinancialRuleBase {
+  /** Stable identifier. Singleton rules use their kind as the id. */
+  id: string;
+  enabled: boolean;
+}
+
+/** Minimum balance the emergency fund should hold, in base currency. */
+export interface EmergencyFundMinimumRule extends FinancialRuleBase {
+  kind: "emergency-fund-minimum";
+  targetAmount: number;
+}
+
+/** Self-imposed ceiling on recorded monthly spending, in base currency. */
+export interface MonthlySpendingLimitRule extends FinancialRuleBase {
+  kind: "monthly-spending-limit";
+  limitAmount: number;
+}
+
+/** Amount to invest each month regardless of market conditions, in base currency. */
+export interface DcaMonthlyAmountRule extends FinancialRuleBase {
+  kind: "dca-monthly-amount";
+  amount: number;
+}
+
+/** Intended portfolio weights per ticker, as fractions that should sum to ~1. */
+export interface TargetAllocationRule extends FinancialRuleBase {
+  kind: "target-allocation";
+  targets: Record<Ticker, number>;
+}
+
+/** Maximum acceptable absolute drift from target allocation, as a fraction (0.08 = 8%). */
+export interface AllocationDriftToleranceRule extends FinancialRuleBase {
+  kind: "allocation-drift-tolerance";
+  maxDrift: number;
+}
+
+/** Bear-market deployment ladder: at each drawdown, deploy this share of the reserve. */
+export interface OpportunityReserveDeploymentRule extends FinancialRuleBase {
+  kind: "opportunity-reserve-deployment";
+  /** drawdown is a positive percentage (10 = -10%); percent is a fraction of the reserve. */
+  tranches: Array<{ drawdown: number; percent: number }>;
+}
+
+/** Intended monthly contribution toward one goal, in base currency. */
+export interface GoalContributionRule extends FinancialRuleBase {
+  kind: "goal-contribution";
+  goalId: string;
+  monthlyAmount: number;
+}
+
+export type FinancialRule =
+  | EmergencyFundMinimumRule
+  | MonthlySpendingLimitRule
+  | DcaMonthlyAmountRule
+  | TargetAllocationRule
+  | AllocationDriftToleranceRule
+  | OpportunityReserveDeploymentRule
+  | GoalContributionRule;
+
+/** Narrows a FinancialRule to the variant matching `kind`. */
+export type FinancialRuleOfKind<K extends FinancialRuleKind> = Extract<FinancialRule, { kind: K }>;
+
 export interface WealthState {
   version: number;
   profile: Profile;
@@ -203,6 +284,10 @@ export interface WealthState {
   ruleNotes: string;
   ruleNotesList: RuleNote[];
   hiddenRuleIds: RuleCardId[];
+  /** Structured personal-policy rules. Planning intent, never recorded balances. */
+  financialRules: FinancialRule[];
+  /** Whether the user acted on Advisor recommendations. Execution state only. */
+  actionRecords: ActionRecord[];
 }
 
 export interface PortfolioPosition {
@@ -222,6 +307,74 @@ export interface PortfolioSummary {
   totalUnits: number;
   positions: PortfolioPosition[];
   maxAbsoluteDrift: number;
+}
+
+// --- Advisor recommendations (FACT → RULE → IMPACT → ACTION) ---
+//
+// Every recommendation is traceable: an observed FACT, the RULE/policy that
+// gives it meaning, the IMPACT of that fact, and one concrete ACTION.
+// Recommendations are derived on demand and never persisted.
+
+/** A structured supporting value shown alongside a recommendation. */
+export interface AdvisorEvidence {
+  label: string;
+  value: string;
+}
+
+/** A concrete next step derived from exactly one recommendation. */
+export interface AdvisorAction {
+  /** Stable id, derived from the source recommendation. */
+  id: string;
+  label: string;
+  /** Existing page id to route to, when one applies. */
+  destination?: string;
+  recommendationId: string;
+}
+
+export interface AdvisorRecommendation {
+  /** Stable across runs for the same conclusion, so UI can key on it. */
+  id: string;
+  severity: AdviceSeverity;
+  title: string;
+  /** What the system observed. */
+  fact: string;
+  /**
+   * The structured FinancialRule this recommendation is evaluated against.
+   * null when no structured rule meaningfully applies — never invented.
+   */
+  ruleId: string | null;
+  /** Short explanation of the applicable rule or policy. */
+  rule: string;
+  /** Why the fact matters. */
+  impact: string;
+  /** One concrete next step. */
+  action: string;
+  destination?: string;
+  evidence: AdvisorEvidence[];
+}
+
+// --- Action records ---------------------------------------------------------
+//
+// Records whether the user acted on an Advisor recommendation. Deliberately
+// minimal: it stores execution STATE, not a copy of the recommendation. Title,
+// severity, impact, destination and copy all stay with the Advisor, which
+// regenerates them from current facts — a stored copy would go stale.
+//
+// Dependency direction: facts → recommendations → AdvisorSnapshot → ActionRecord.
+// An ActionRecord never produces or ranks a recommendation.
+
+export type ActionRecordStatus = "pending" | "completed";
+
+export interface ActionRecord {
+  id: string;
+  /** The AdvisorRecommendation this record tracks. The only link kept. */
+  recommendationId: string;
+  /** The action text as accepted, so a completed record stays readable. */
+  action: string;
+  status: ActionRecordStatus;
+  createdAt: number;
+  /** Set only when status is "completed". */
+  completedAt?: number;
 }
 
 export interface AdvisorMessage {

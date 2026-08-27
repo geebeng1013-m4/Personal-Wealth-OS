@@ -1,4 +1,4 @@
-const CACHE_NAME = "wealth-os-v16";
+const CACHE_NAME = "wealth-os-v17";
 const PRECACHE = [
   "/",
   "/index.html",

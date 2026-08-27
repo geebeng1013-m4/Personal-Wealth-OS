@@ -1,4 +1,6 @@
-import type { LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, RuleNote, WealthState } from "./models";
+import type { LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
+import { getDefaultFinancialRules, normalizeFinancialRules } from "./financialRules";
+import { normalizeActionRecords } from "./actionRecords";
 import {
   saveToFirestore,
   loadFromFirestore,
@@ -6,7 +8,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 14;
+export const CURRENT_VERSION = 17;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -111,24 +113,28 @@ export const defaultState: WealthState = {
   ],
   overviewGoalId: "travel",
   trades: [
-    { id: "csv-001", date: "2025-10-28", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 21.42, amountUsd: 5.04, priceUsd: 630.54, feeMyr: 0.21 },
-    { id: "csv-002", date: "2026-04-06", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 199.75, amountUsd: 47.00, priceUsd: 604.11, feeMyr: 1.99 },
-    { id: "csv-003", date: "2026-04-06", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 69.36, amountUsd: 16.32, priceUsd: 241.73, feeMyr: 0.68 },
-    { id: "csv-004", date: "2026-04-06", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 173.44, amountUsd: 40.81, priceUsd: 604.54, feeMyr: 1.70 },
-    { id: "csv-005", date: "2026-04-06", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 69.45, amountUsd: 16.34, priceUsd: 241.67, feeMyr: 0.68 },
-    { id: "csv-006", date: "2026-04-06", platform: "moomoo", ticker: "VOO", type: "Sell", amountMyr: 193.89, amountUsd: 45.62, priceUsd: 604.28, feeMyr: 1.91 },
-    { id: "csv-007", date: "2026-04-06", platform: "moomoo", ticker: "QQQM", type: "Sell", amountMyr: 69.45, amountUsd: 16.34, priceUsd: 241.75, feeMyr: 0.68 },
-    { id: "csv-008", date: "2026-05-04", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 44.54, amountUsd: 10.48, priceUsd: 663.51, feeMyr: 0.43 },
-    { id: "csv-009", date: "2026-05-05", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 193.80, amountUsd: 45.60, priceUsd: 664.69, feeMyr: 1.90 },
-    { id: "csv-010", date: "2026-05-05", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 96.31, amountUsd: 22.66, priceUsd: 280.16, feeMyr: 0.94 },
-    { id: "csv-011", date: "2026-05-12", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 225.17, amountUsd: 52.98, priceUsd: 674.91, feeMyr: 2.21 },
-    { id: "csv-012", date: "2026-05-12", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 112.63, amountUsd: 26.50, priceUsd: 289.61, feeMyr: 1.10 },
-    { id: "csv-013", date: "2026-05-28", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 59.67, amountUsd: 14.04, priceUsd: 691.52, feeMyr: 0.59 },
-    { id: "csv-014", date: "2026-05-28", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 23.08, amountUsd: 5.43, priceUsd: 301.60, feeMyr: 0.21 },
-    { id: "csv-015", date: "2026-06-03", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 314.88, amountUsd: 74.09, priceUsd: 693.77, feeMyr: 3.10 },
-    { id: "csv-016", date: "2026-06-05", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 143.23, amountUsd: 33.70, priceUsd: 685.00, feeMyr: 1.40 },
-    { id: "csv-017", date: "2026-06-05", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 63.28, amountUsd: 14.89, priceUsd: 296.00, feeMyr: 0.64 },
-    { id: "csv-018", date: "2026-06-26", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 0.26, amountUsd: 0.06, priceUsd: 290.95, feeMyr: 0.04 },
+    { id: "csv-001", date: "2025-10-28", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 21.42, amountUsd: 5.04, priceUsd: 630.54, units: 0.008, feeMyr: 1.23 },
+    { id: "csv-002", date: "2026-04-06T15:27:36.000Z", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 199.75, amountUsd: 47.00, priceUsd: 604.11, units: 0.0778, feeMyr: 3.06 },
+    { id: "csv-003", date: "2026-04-06T15:22:37.000Z", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 69.36, amountUsd: 16.32, priceUsd: 241.73, units: 0.0675, feeMyr: 1.74 },
+    { id: "csv-004", date: "2026-04-06T15:06:10.000Z", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 173.44, amountUsd: 40.81, priceUsd: 604.54, units: 0.0675, feeMyr: 2.76 },
+    { id: "csv-005", date: "2026-04-06T15:07:09.000Z", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 69.45, amountUsd: 16.34, priceUsd: 241.67, units: 0.0676, feeMyr: 1.74 },
+    { id: "csv-006", date: "2026-04-06T15:13:56.000Z", platform: "moomoo", ticker: "VOO", type: "Sell", amountMyr: 193.89, amountUsd: 45.62, priceUsd: 604.28, units: 0.0755, feeMyr: 2.98 },
+    { id: "csv-007", date: "2026-04-06T15:13:55.000Z", platform: "moomoo", ticker: "QQQM", type: "Sell", amountMyr: 69.45, amountUsd: 16.34, priceUsd: 241.75, units: 0.0676, feeMyr: 1.74 },
+    { id: "csv-008", date: "2026-05-04", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 44.54, amountUsd: 10.48, priceUsd: 663.51, units: 0.0158, feeMyr: 1.49 },
+    { id: "csv-009", date: "2026-05-05", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 193.80, amountUsd: 45.60, priceUsd: 664.69, units: 0.0686, feeMyr: 2.98 },
+    { id: "csv-010", date: "2026-05-05", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 96.31, amountUsd: 22.66, priceUsd: 280.16, units: 0.0809, feeMyr: 2.00 },
+    { id: "csv-011", date: "2026-05-12", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 225.17, amountUsd: 52.98, priceUsd: 674.91, units: 0.0785, feeMyr: 3.32 },
+    { id: "csv-012", date: "2026-05-12", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 112.63, amountUsd: 26.50, priceUsd: 289.61, units: 0.0915, feeMyr: 2.21 },
+    { id: "csv-013", date: "2026-05-28", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 59.67, amountUsd: 14.04, priceUsd: 691.52, units: 0.0203, feeMyr: 1.66 },
+    { id: "csv-014", date: "2026-05-28", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 23.08, amountUsd: 5.43, priceUsd: 301.60, units: 0.018, feeMyr: 1.28 },
+    { id: "csv-015", date: "2026-06-03", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 314.88, amountUsd: 74.09, priceUsd: 693.77, units: 0.1068, feeMyr: 4.17 },
+    { id: "csv-016", date: "2026-06-05", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 143.23, amountUsd: 33.70, priceUsd: 685.00, units: 0.0492, feeMyr: 2.47 },
+    { id: "csv-017", date: "2026-06-05", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 63.28, amountUsd: 14.89, priceUsd: 296.00, units: 0.0503, feeMyr: 1.70 },
+    { id: "csv-018", date: "2026-06-26", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 0.26, amountUsd: 0.06, priceUsd: 290.95, units: 0.0002, feeMyr: 1.06 },
+    { id: "csv-019", date: "2026-07-06", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 88.32, amountUsd: 20.78, priceUsd: 688.00, units: 0.0302, feeMyr: 1.96 },
+    { id: "csv-020", date: "2026-07-06", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 34.17, amountUsd: 8.04, priceUsd: 297.70, units: 0.027, feeMyr: 1.40 },
+    { id: "csv-021", date: "2026-08-12", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 38.34, amountUsd: 9.02, priceUsd: 710.20, units: 0.0127, feeMyr: 1.40 },
+    { id: "csv-022", date: "2026-08-12", platform: "moomoo", ticker: "QQQM", type: "DCA", amountMyr: 168.56, amountUsd: 39.66, priceUsd: 298.00, units: 0.1331, feeMyr: 2.68 },
   ],
   reviews: [],
   customTickers: [],
@@ -146,7 +152,13 @@ export const defaultState: WealthState = {
   ruleNotes: "",
   ruleNotesList: [],
   hiddenRuleIds: [],
+  financialRules: [],
+  actionRecords: [],
 };
+
+// Derived from defaultState's own planning config so the seed rules and the
+// planning values they mirror can never drift apart.
+defaultState.financialRules = getDefaultFinancialRules(defaultState);
 
 export function createId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -182,7 +194,7 @@ export function loadDefaultTemplate(uid?: string): WealthState {
 }
 
 export function emptyState(): WealthState {
-  return {
+  const state: WealthState = {
     version: CURRENT_VERSION,
     profile: {
       name: "",
@@ -235,7 +247,13 @@ export function emptyState(): WealthState {
     ruleNotes: "",
     ruleNotesList: [],
     hiddenRuleIds: [],
+    financialRules: [],
+    actionRecords: [],
   };
+  // A brand-new user has no planning values yet, so these seed rules are
+  // mostly disabled placeholders — present and valid, but asserting nothing.
+  state.financialRules = getDefaultFinancialRules(state);
+  return state;
 }
 
 function isLedgerType(value: unknown): value is LedgerTransactionType {
@@ -415,12 +433,31 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   merged.ledgerCategories = ledgerCategories;
   merged.ledgerAccounts = ledgerAccounts;
   merged.ledgerTransactions = ledgerTransactions;
-  merged.trades = Array.isArray(input.trades) ? input.trades.map((trade) => ({
-    ...trade,
-    exchangeRate: Number.isFinite(trade.exchangeRate) && Number(trade.exchangeRate) > 0
-      ? Number(trade.exchangeRate)
-      : trade.amountUsd > 0 && trade.amountMyr > 0 ? trade.amountMyr / trade.amountUsd : 4.25,
-  })) : [];
+  const defaultTradesById = new Map(defaultState.trades.map((trade) => [trade.id, trade]));
+  const hasLegacySeedPortfolio = (input.version ?? 0) < 15
+    && Array.isArray(input.trades)
+    && input.trades.length === 18
+    && input.trades.every((trade, index) => trade.id === `csv-${String(index + 1).padStart(3, "0")}`)
+    && input.trades[0]?.ticker === "VOO"
+    && input.trades[0]?.amountUsd === 5.04
+    && input.trades[17]?.ticker === "QQQM"
+    && input.trades[17]?.amountUsd === 0.06;
+  merged.trades = Array.isArray(input.trades) ? input.trades.map((trade): Trade => {
+    const migratedDefault = hasLegacySeedPortfolio ? defaultTradesById.get(trade.id) : undefined;
+    const source = migratedDefault ?? trade;
+    const units = Number(source.units);
+    return {
+      ...source,
+      ...(Number.isFinite(units) && units > 0 ? { units } : {}),
+      exchangeRate: Number.isFinite(source.exchangeRate) && Number(source.exchangeRate) > 0
+        ? Number(source.exchangeRate)
+        : source.amountUsd > 0 && source.amountMyr > 0 ? source.amountMyr / source.amountUsd : 4.25,
+    };
+  }) : [];
+  if (hasLegacySeedPortfolio) {
+    const existingTradeIds = new Set(merged.trades.map((trade) => trade.id));
+    merged.trades.push(...defaultState.trades.filter((trade) => !existingTradeIds.has(trade.id)).map((trade) => structuredClone(trade)));
+  }
   merged.goals = Array.isArray(input.goals) ? input.goals.map((goal) => ({
     ...goal,
     ...(typeof goal.accountId === "string" && ledgerAccounts.some((account) => account.id === goal.accountId) ? { accountId: goal.accountId } : {}),
@@ -456,6 +493,20 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   merged.hiddenRuleIds = Array.isArray(input.hiddenRuleIds)
     ? [...new Set(input.hiddenRuleIds.filter((id): id is RuleCardId => typeof id === "string" && RULE_CARD_IDS.has(id as RuleCardId)))]
     : [];
+
+  // v16: structured financial rules. Seed from the user's own planning config
+  // only when the field is absent (pre-v16 states, or an import that predates
+  // it). An explicitly stored array — including an empty one — is the user's
+  // configuration and is normalized rather than replaced, which also makes the
+  // migration idempotent.
+  merged.financialRules = Array.isArray(candidate.financialRules)
+    ? normalizeFinancialRules(candidate.financialRules)
+    : getDefaultFinancialRules(merged);
+
+  // v17: action records. Purely additive — a state without them starts empty,
+  // and an existing array is normalized rather than replaced. Malformed
+  // entries are dropped individually so the rest of the state survives.
+  merged.actionRecords = normalizeActionRecords(candidate.actionRecords);
   const requestedOverviewGoalId = typeof candidate.overviewGoalId === "string" ? candidate.overviewGoalId : "";
   merged.overviewGoalId = merged.goals.some((goal) => goal.id === requestedOverviewGoalId)
     ? requestedOverviewGoalId

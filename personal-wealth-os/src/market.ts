@@ -1,7 +1,8 @@
 // Market data module — fetches VOO/QQQM quotes from Yahoo Finance
 // K-line chart powered by TradingView Widget
 
-import { calculatePositionCostBasis, type CostBasisTrade } from "./rules";
+import { calculatePositionCostBasis, tradeUnits, type CostBasisTrade } from "./rules";
+import { isUsablePrice, normalizeQuotes, type PriceMap } from "./marketPrices";
 
 /** Default fallback USD→MYR rate when all dynamic sources fail. */
 const DEFAULT_USD_MYR = 4.25;
@@ -100,12 +101,12 @@ interface CacheEntry {
   data: unknown;
 }
 
-function getCached(key: string): unknown | null {
+function getCached(key: string, ttl: number = CACHE_TTL): unknown | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY + "_" + key);
     if (!raw) return null;
     const entry: CacheEntry = JSON.parse(raw);
-    if (Date.now() - entry.timestamp > CACHE_TTL) return null;
+    if (Date.now() - entry.timestamp > ttl) return null;
     return entry.data;
   } catch {
     return null;
@@ -119,6 +120,42 @@ function setCache(key: string, data: unknown): void {
   } catch { /* ignore */ }
 }
 
+const CACHE_RETENTION_MS = 24 * 3600_000; // 24 hours — well past every TTL above, so anything older is dead weight
+
+/**
+ * Drop stale pwo_market_cache_* entries (old symbols/ranges the user no longer
+ * looks at). Cache reads already ignore expired entries via getCached(); this
+ * just keeps localStorage from growing forever as the user browses more tickers
+ * over time. Safe to call once per app load.
+ */
+export function pruneMarketCache(): void {
+  try {
+    const now = Date.now();
+    const staleKeys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(CACHE_KEY + "_")) continue;
+      try {
+        const raw = localStorage.getItem(key);
+        const entry: CacheEntry | null = raw ? JSON.parse(raw) : null;
+        if (!entry || now - entry.timestamp > CACHE_RETENTION_MS) staleKeys.push(key);
+      } catch {
+        staleKeys.push(key); // corrupted entry — drop it
+      }
+    }
+    staleKeys.forEach((key) => localStorage.removeItem(key));
+  } catch { /* localStorage unavailable */ }
+}
+
+/**
+ * Fallback fetcher for the secondary market features (fundamentals, history).
+ *
+ * These public proxies are unreliable — corsproxy.io now rejects keyless
+ * requests and the others frequently time out — so anything that must be
+ * correct goes through the dedicated /api/quote route instead. This path is
+ * deliberately NOT a general server-side proxy: forwarding arbitrary URLs from
+ * the browser would be an open relay.
+ */
 async function fetchWithProxy(url: string): Promise<string> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
@@ -135,10 +172,57 @@ async function fetchWithProxy(url: string): Promise<string> {
   throw new Error("Unable to fetch market data — network error");
 }
 
+/**
+ * Fetch a secondary market dataset through the server-side route.
+ *
+ * The browser cannot call the upstream directly, so this is the only path that
+ * works. It falls back to the old public-proxy chain purely for environments
+ * where /api is not deployed; those proxies are unreliable, so a failure here
+ * simply means the panel stays empty rather than showing invented data.
+ */
+async function fetchMarketData(kind: "fundamentals" | "history", symbol: string, range?: string): Promise<string> {
+  const query = new URLSearchParams({ kind, symbol });
+  if (range) query.set("range", range);
+  try {
+    const response = await fetch(`/api/market?${query.toString()}`, {
+      signal: AbortSignal.timeout(12_000),
+      headers: { accept: "application/json" },
+    });
+    if (response.ok) return await response.text();
+  } catch { /* fall through to the legacy path */ }
+
+  const upstream = kind === "fundamentals"
+    ? `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryDetail,defaultKeyStatistics`
+    : `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range ?? "1y"}&interval=1d`;
+  return fetchWithProxy(upstream);
+}
+
 export async function fetchQuote(symbol: string): Promise<MarketQuote> {
   const cacheKey = "quote_" + symbol;
   const cached = getCached(cacheKey);
   if (cached) return cached as MarketQuote;
+
+  // Preferred path: the server-side route, which has no CORS restriction.
+  const live = await fetchLivePrices([symbol]);
+  const price = live.get(symbol.trim().toUpperCase());
+  if (price) {
+    const quote: MarketQuote = {
+      symbol: price.ticker,
+      price: price.priceUsd,
+      change: price.previousClose !== null ? price.priceUsd - price.previousClose : 0,
+      changePercent: price.previousClose !== null
+        ? ((price.priceUsd - price.previousClose) / price.previousClose) * 100
+        : 0,
+      open: 0, high: 0, low: 0,
+      prevClose: price.previousClose ?? 0,
+      volume: 0,
+      marketState: price.marketState,
+      shortName: symbol,
+      currency: price.currency,
+    };
+    setCache(cacheKey, quote);
+    return quote;
+  }
 
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=5m`;
   const text = await fetchWithProxy(url);
@@ -149,9 +233,12 @@ export async function fetchQuote(symbol: string): Promise<MarketQuote> {
   const meta = result.meta;
   // Strip exchange prefix (e.g. "AMEX:QQQM" → "QQQM")
   const cleanSymbol = (meta.symbol ?? symbol).replace(/^[A-Z]+:/, "");
+  // A missing or non-positive price means "unknown", never "worth zero", so
+  // the quote is rejected rather than published with a fabricated 0.
+  if (!isUsablePrice(meta.regularMarketPrice)) throw new Error("No price for " + symbol);
   const quote: MarketQuote = {
     symbol: cleanSymbol,
-    price: meta.regularMarketPrice ?? 0,
+    price: meta.regularMarketPrice,
     change: (meta.regularMarketPrice ?? 0) - (meta.chartPreviousClose ?? meta.previousClose ?? 0),
     changePercent: 0,
     open: meta.regularMarketOpen ?? 0,
@@ -169,6 +256,44 @@ export async function fetchQuote(symbol: string): Promise<MarketQuote> {
 
   setCache(cacheKey, quote);
   return quote;
+}
+
+/**
+ * Live prices for the given tickers, as validated PriceMap entries.
+ *
+ * Goes through the server-side /api/quote route: the browser cannot reach the
+ * upstream quote API directly (no CORS headers) and the anonymous CORS proxies
+ * the client used to fall back on no longer work. Called from the server there
+ * is no CORS at all.
+ *
+ * Never throws and never returns a fabricated price. A failure — offline, route
+ * missing in a static preview, malformed payload, unknown ticker — yields no
+ * entry for that ticker, which every consumer reads as "unknown".
+ */
+export async function fetchLivePrices(symbols: string[]): Promise<PriceMap> {
+  const wanted = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
+  if (wanted.length === 0) return new Map();
+
+  const cacheKey = "prices_" + wanted.slice().sort().join(",");
+  const cached = getCached(cacheKey);
+  if (cached) return normalizeQuotes(cached);
+
+  try {
+    const response = await fetch(`/api/quote?symbols=${encodeURIComponent(wanted.join(","))}`, {
+      signal: AbortSignal.timeout(12_000),
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) return new Map();
+
+    const payload: unknown = await response.json();
+    const prices = normalizeQuotes(payload);
+    // Only cache a response that actually produced prices, so a transient
+    // outage is retried rather than remembered for the whole TTL.
+    if (prices.size > 0) setCache(cacheKey, payload);
+    return prices;
+  } catch {
+    return new Map();
+  }
 }
 
 export async function fetchMultipleQuotes(symbols: string[]): Promise<MarketQuote[]> {
@@ -260,7 +385,12 @@ interface TradeForTimeline {
   priceUsd: number;
   amountUsd: number;
   amountMyr: number;
+  units?: number;
   feeMyr: number;
+}
+
+function timelineDate(raw: string, dateOnlyTime: string): Date {
+  return new Date(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T${dateOnlyTime}Z` : raw);
 }
 
 export function buildTradeTimelineHtml(
@@ -273,8 +403,8 @@ export function buildTradeTimelineHtml(
 
   const pnl = calcPnLForTicker(trades, ticker, currentPriceUsd, getUsdToMyr());
   const sorted = [...filtered].sort((a, b) => a.date.localeCompare(b.date));
-  const minDate = new Date(sorted[0].date + "T00:00:00Z");
-  const maxDate = new Date(sorted[sorted.length - 1].date + "T00:00:00Z");
+  const minDate = timelineDate(sorted[0].date, "00:00:00");
+  const maxDate = timelineDate(sorted[sorted.length - 1].date, "00:00:00");
 
   // Add some padding
   const padMs = Math.max((maxDate.getTime() - minDate.getTime()) * 0.05, 86400000 * 3);
@@ -295,10 +425,10 @@ export function buildTradeTimelineHtml(
   const safeTicker = escapeHtml(ticker);
   const markers = sorted.map((t) => {
     const isBuy = t.type !== "Sell";
-    const posMs = new Date(t.date + "T16:00:00Z").getTime();
+    const posMs = timelineDate(t.date, "16:00:00").getTime();
     const leftPct = rangeMs > 0 ? ((posMs - startMs) / rangeMs) * 100 : 50;
     const priceTopPct = priceRange > 0 ? ((maxPrice - t.priceUsd) / priceRange) * 100 : 50;
-    const units = t.priceUsd > 0 ? (t.amountUsd / t.priceUsd).toFixed(3) : "0";
+    const units = tradeUnits(t).toFixed(4);
     const safeDate = escapeHtml(t.date);
 
     return `<div class="tl-marker" style="left:${leftPct.toFixed(1)}%;top:${priceTopPct.toFixed(1)}%;" title="${safeDate}\n${isBuy ? "Buy" : "Sell"} ${units} units @ $${t.priceUsd.toFixed(2)}">
@@ -309,9 +439,9 @@ export function buildTradeTimelineHtml(
 
   // Date labels
   const dateLabels = sorted.map((t) => {
-    const posMs = new Date(t.date + "T16:00:00Z").getTime();
+    const posMs = timelineDate(t.date, "16:00:00").getTime();
     const leftPct = rangeMs > 0 ? ((posMs - startMs) / rangeMs) * 100 : 50;
-    const d = new Date(t.date + "T00:00:00Z");
+    const d = timelineDate(t.date, "00:00:00");
     const label = (d.getUTCMonth() + 1) + "/" + d.getUTCDate();
     return `<span class="tl-date-label" style="left:${leftPct.toFixed(1)}%">${label}</span>`;
   }).join("");
@@ -568,46 +698,60 @@ export async function fetchStockComparisons(symbols: string[]): Promise<StockCom
 
 const DIV_CACHE_TTL = 3600_000; // 1 hour
 
+/**
+ * Live fundamentals for one symbol.
+ *
+ * Served by /api/market?kind=fundamentals, which reads TradingView's public
+ * scanner. The previous provider's endpoint now requires an authenticated
+ * session and 401s for everyone, which silently left the panel showing
+ * hardcoded figures that had drifted from reality.
+ *
+ * TradingView populates yield, expense ratio and AUM for ETFs but genuinely
+ * returns nothing for per-share dividend, ex-dividend date, payout frequency
+ * or P/E. Those stay 0/"" here, and the UI renders them as unknown rather than
+ * inventing a value — a zero in this shape means "not reported", never "zero".
+ */
 export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
   const cacheKey = "fund_" + symbol;
-  const cached = getCached(cacheKey);
+  const cached = getCached(cacheKey, DIV_CACHE_TTL);
   if (cached) return cached as Fundamentals;
 
-  const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryDetail,defaultKeyStatistics`;
-  const text = await fetchWithProxy(url);
+  const text = await fetchMarketData("fundamentals", symbol);
   const json = JSON.parse(text);
-  const result = json?.quoteSummary?.result?.[0];
-  if (!result) throw new Error("No fundamentals for " + symbol);
+  const raw = json?.fundamentals;
+  if (!raw) throw new Error("No fundamentals for " + symbol);
 
-  const sd = result.summaryDetail ?? {};
-  const ks = result.defaultKeyStatistics ?? {};
+  const numeric = (value: unknown): number =>
+    typeof value === "number" && Number.isFinite(value) ? value : 0;
 
-  const freq = sd.dividendFrequency ?? "Quarterly";
+  // TradingView reports yield and expense ratio as percentages (1.043 = 1.043%);
+  // this interface has always carried them as fractions (0.01043).
+  const dividendYield = numeric(raw.dividends_yield) / 100;
+  const close = numeric(raw.close);
 
   const fund: Fundamentals = {
     symbol,
-    dividendYield: sd.dividendYield ?? 0,
-    dividendRate: sd.dividendRate ?? 0,
-    trailingPE: sd.trailingPE?.raw ?? ks.trailingPE?.raw ?? 0,
-    exDividendDate: sd.exDividendDate?.fmt ?? "",
-    exDividendTimestamp: sd.exDividendDate?.raw ?? 0,
-    dividendFrequency: typeof freq === "string" ? freq : String(freq),
-    fiveYearAvgDividendYield: sd.fiveYearAvgDividendYield?.raw ?? 0,
-    marketCap: sd.marketCap?.raw ?? 0,
-    trailingAnnualDividendRate: sd.trailingAnnualDividendRate?.raw ?? 0,
-    trailingAnnualDividendYield: sd.trailingAnnualDividendYield?.raw ?? 0,
-    expenseRatio: ks.expenseRatio?.raw ?? 0,
-    totalAssets: sd.totalAssets?.raw ?? ks.totalAssets?.raw ?? 0,
-    ytdReturn: ks.ytdReturn?.raw ?? 0,
-    threeYearReturn: ks.threeYearReturn?.raw ?? 0,
-    fiveYearReturn: ks.fiveYearReturn?.raw ?? 0,
+    dividendYield,
+    // Annual $ per share is not reported directly, but it is what the yield is
+    // defined against, so deriving it from yield x price is exact rather than
+    // a guess. Zero when either input is missing.
+    dividendRate: dividendYield > 0 && close > 0 ? dividendYield * close : 0,
+    trailingPE: 0,
+    exDividendDate: "",
+    exDividendTimestamp: 0,
+    dividendFrequency: "",
+    fiveYearAvgDividendYield: 0,
+    marketCap: 0,
+    trailingAnnualDividendRate: dividendYield > 0 && close > 0 ? dividendYield * close : 0,
+    trailingAnnualDividendYield: dividendYield,
+    expenseRatio: numeric(raw.expense_ratio) / 100,
+    totalAssets: numeric(raw.aum),
+    ytdReturn: 0,
+    threeYearReturn: 0,
+    fiveYearReturn: 0,
   };
 
-  // Temporarily override cache TTL for fundamentals
-  try {
-    const entry = { timestamp: Date.now(), data: fund };
-    localStorage.setItem(CACHE_KEY + "_" + cacheKey, JSON.stringify(entry));
-  } catch { /* ignore */ }
+  setCache(cacheKey, fund);
   return fund;
 }
 
@@ -620,11 +764,10 @@ export interface HistoricalPrice {
 
 export async function fetchHistoricalPrices(symbol: string, range = "1y"): Promise<HistoricalPrice[]> {
   const cacheKey = "hist_" + symbol + "_" + range;
-  const cached = getCached(cacheKey);
+  const cached = getCached(cacheKey, DIV_CACHE_TTL);
   if (cached) return cached as HistoricalPrice[];
 
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d`;
-  const text = await fetchWithProxy(url);
+  const text = await fetchMarketData("history", symbol, range);
   const json = JSON.parse(text);
   const result = json?.chart?.result?.[0];
   if (!result) throw new Error("No history for " + symbol);
@@ -643,11 +786,7 @@ export async function fetchHistoricalPrices(symbol: string, range = "1y"): Promi
     }
   }
 
-  // Cache with longer TTL
-  try {
-    const entry = { timestamp: Date.now(), data: prices };
-    localStorage.setItem(CACHE_KEY + "_" + cacheKey, JSON.stringify(entry));
-  } catch { /* ignore */ }
+  setCache(cacheKey, prices);
   return prices;
 }
 

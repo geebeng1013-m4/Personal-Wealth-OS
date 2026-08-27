@@ -21,13 +21,17 @@ import {
 } from "firebase/firestore";
 import type { WealthState } from "./models";
 
+// Firebase web config isn't a secret (it's shipped to every browser and scoped by
+// Firestore rules + authorized domains), but it's read from env vars so each
+// environment (dev / preview / prod) can point at its own Firebase project.
+// Falls back to the shared personal-wealth-os project if unset.
 const firebaseConfig = {
-  apiKey: "AIzaSyBjw4mnFHV-43uJ6wE7pTBCDDN_i1p5kMw",
-  authDomain: "personal-wealth-os-1deac.firebaseapp.com",
-  projectId: "personal-wealth-os-1deac",
-  storageBucket: "personal-wealth-os-1deac.firebasestorage.app",
-  messagingSenderId: "54126993111",
-  appId: "1:54126993111:web:590ef8fd71a903c2b79a92",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBjw4mnFHV-43uJ6wE7pTBCDDN_i1p5kMw",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "personal-wealth-os-1deac.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "personal-wealth-os-1deac",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "personal-wealth-os-1deac.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "54126993111",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:54126993111:web:590ef8fd71a903c2b79a92",
 };
 
 const app = initializeApp(firebaseConfig);
@@ -87,10 +91,10 @@ function userDocRef(uid: string) {
 export async function loadFromFirestore(uid: string): Promise<WealthState | null> {
   const snap = await getDoc(userDocRef(uid));
   if (!snap.exists()) {
-    console.log(`[Firestore] No data found for user ${uid}`);
+    if (import.meta.env.DEV) console.log("[Firestore] No data found for user");
     return null;
   }
-  console.log(`[Firestore] Loaded data for user ${uid}`);
+  if (import.meta.env.DEV) console.log("[Firestore] Loaded data for user");
   return snap.data() as WealthState;
 }
 

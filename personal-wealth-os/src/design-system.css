@@ -711,24 +711,32 @@
 
 .v2-allocation__center {
   position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
+  inset: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   z-index: 1;
   text-align: center;
 }
 
 .v2-allocation__center strong {
+  display: block;
   font-size: 18px;
   font-weight: var(--weight-bold);
+  line-height: 1;
   color: var(--color-text-primary);
 }
 
 .v2-allocation__center small {
+  display: block;
   font-size: var(--text-micro);
-  color: var(--color-text-tertiary);
+  font-weight: var(--weight-medium);
+  line-height: 1.2;
+  color: var(--color-text-secondary);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-wider);
+  letter-spacing: 0;
 }
 
 .v2-allocation__legend {
@@ -797,4 +805,872 @@
   .v2-hero__wealth-value {
     font-size: clamp(2rem, 10vw, 2.5rem);
   }
+}
+
+/* ==========================================================================
+   WEALTH OVERVIEW — Dashboard information hierarchy
+   Five questions first (net worth, cash flow, health, plan, priority);
+   everything else is demoted to a secondary "Details" region.
+   ========================================================================== */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Header --- */
+.ov-header {
+  margin-bottom: var(--space-6);
+}
+
+.ov-header__greeting {
+  font-size: var(--text-caption);
+  color: var(--color-text-tertiary);
+  margin: 0 0 var(--space-2);
+}
+
+.ov-header__title {
+  font-size: var(--text-display-sm, 28px);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-2);
+  letter-spacing: -0.01em;
+}
+
+.ov-header__summary {
+  font-size: var(--text-body);
+  color: var(--color-text-secondary);
+  margin: 0;
+  max-width: 60ch;
+}
+
+/* --- Shared section furniture --- */
+.ov-section {
+  margin-bottom: var(--space-6);
+}
+
+.ov-section__head {
+  margin-bottom: var(--space-4);
+}
+
+.ov-section__title {
+  font-size: var(--text-heading, 16px);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.ov-section__subtitle {
+  font-size: var(--text-caption);
+  color: var(--color-text-tertiary);
+  margin: 2px 0 0;
+}
+
+/* --- Section 1: Financial Snapshot --- */
+.ov-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.ov-metric {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+  min-width: 0;
+}
+
+.ov-metric--primary {
+  background: var(--color-surface-elevated, var(--color-surface));
+  border-color: var(--color-border-strong);
+}
+
+.ov-metric__label {
+  display: block;
+  font-size: var(--text-micro, 11px);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-2);
+}
+
+.ov-metric__value {
+  display: block;
+  font-size: var(--text-financial-lg, 24px);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.ov-metric--primary .ov-metric__value {
+  font-size: var(--text-financial-xl, 32px);
+}
+
+.ov-metric__value--positive { color: var(--color-positive); }
+.ov-metric__value--negative { color: var(--color-negative); }
+
+.ov-metric__note {
+  display: block;
+  font-size: var(--text-caption);
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+/* --- Sections 2 & 3: Wealth Health + Plan Status --- */
+.ov-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.ov-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+  min-width: 0;
+}
+
+/* Status is carried by an icon and a word, never by colour alone. */
+.ov-card--status.ov-card--healthy { border-left: 3px solid var(--color-positive); }
+.ov-card--status.ov-card--watch   { border-left: 3px solid var(--color-warning); }
+.ov-card--status.ov-card--action  { border-left: 3px solid var(--color-negative); }
+
+.ov-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-body);
+  font-weight: 700;
+  border-radius: var(--radius-md, 8px);
+  padding: 4px 10px;
+  margin: 0 0 var(--space-3);
+}
+
+.ov-status-badge__mark { font-size: 12px; line-height: 1; }
+
+.ov-status-badge--healthy { color: var(--color-positive); background: var(--color-positive-soft); }
+.ov-status-badge--watch   { color: var(--color-warning);  background: var(--color-warning-soft); }
+.ov-status-badge--action  { color: var(--color-negative); background: var(--color-negative-soft); }
+
+.ov-card__lead {
+  font-size: var(--text-body);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-4);
+}
+
+.ov-card__note {
+  font-size: var(--text-caption);
+  color: var(--color-text-tertiary);
+  margin: var(--space-3) 0 var(--space-4);
+}
+
+.ov-factors { list-style: none; margin: 0; padding: 0; }
+
+.ov-factor {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-caption);
+  flex-wrap: wrap;
+}
+
+.ov-factor__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ov-factor__dot--healthy { background: var(--color-positive); }
+.ov-factor__dot--watch   { background: var(--color-warning); }
+.ov-factor__dot--action  { background: var(--color-negative); }
+
+.ov-factor__label { color: var(--color-text-primary); font-weight: 600; }
+.ov-factor__detail { color: var(--color-text-tertiary); margin-left: auto; text-align: right; }
+
+.ov-plan__figures {
+  display: flex;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.ov-plan__amount {
+  display: block;
+  font-size: var(--text-financial-lg, 24px);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.ov-progress {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.ov-progress__fill {
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: 4px;
+}
+
+/* --- Section 4: Priority Action --- */
+.ov-priority {
+  border: 1px solid var(--color-border);
+  border-left-width: 4px;
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  margin-bottom: var(--space-8);
+  background: var(--color-surface-elevated, var(--color-surface));
+}
+
+.ov-priority--action   { border-left-color: var(--color-negative); }
+.ov-priority--watch    { border-left-color: var(--color-warning); }
+.ov-priority--positive { border-left-color: var(--color-positive); }
+
+.ov-priority__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-micro, 11px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-tertiary);
+}
+
+.ov-priority--action .ov-priority__eyebrow   { color: var(--color-negative); }
+.ov-priority--watch .ov-priority__eyebrow    { color: var(--color-warning); }
+.ov-priority--positive .ov-priority__eyebrow { color: var(--color-positive); }
+
+.ov-priority__title {
+  font-size: var(--text-financial-lg, 24px);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-4);
+  line-height: 1.25;
+}
+
+.ov-priority__body { margin-bottom: var(--space-5); }
+
+.ov-priority__row {
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--text-body);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-2);
+  line-height: var(--leading-relaxed);
+}
+
+.ov-priority__key {
+  flex-shrink: 0;
+  width: 44px;
+  font-size: var(--text-micro, 11px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-tertiary);
+  padding-top: 3px;
+}
+
+/* --- Secondary / Details region --- */
+.ov-secondary {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-6);
+}
+
+.ov-secondary__head { margin-bottom: var(--space-5); }
+
+.ov-secondary__title {
+  font-size: var(--text-caption);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-tertiary);
+  margin: 0;
+}
+
+.ov-secondary > .v2-dashboard-grid,
+.ov-secondary > .v2-card,
+.ov-secondary > section {
+  margin-bottom: var(--space-5);
+}
+
+/* --- Responsive --- */
+@media (max-width: 1120px) {
+  .ov-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 768px) {
+  .ov-pair { grid-template-columns: 1fr; }
+  .ov-priority { padding: var(--space-5); }
+  .ov-factor__detail { margin-left: 0; width: 100%; text-align: left; }
+}
+
+@media (max-width: 480px) {
+  .ov-metrics { grid-template-columns: 1fr; }
+  .ov-metric { padding: var(--space-4); }
+  .ov-priority__row { flex-direction: column; gap: 4px; }
+  .ov-priority__key { width: auto; padding-top: 0; }
+  .ov-plan__figures { gap: var(--space-4); }
+}
+
+/* --------------------------------------------------------------------------
+   Secondary detail groups (Step 5.1)
+   Supporting breakdowns, deliberately lighter than the primary sections so
+   they never compete with the Priority Action above.
+   -------------------------------------------------------------------------- */
+
+.ov-group {
+  margin-bottom: var(--space-6);
+}
+
+.ov-group__head {
+  margin-bottom: var(--space-3);
+}
+
+.ov-group__title {
+  font-size: var(--text-caption);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.ov-group__desc {
+  font-size: var(--text-micro, 11px);
+  color: var(--color-text-tertiary);
+  margin: 2px 0 0;
+}
+
+.ov-group__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+/* Flatter than .v2-card: no elevation, tighter padding. */
+.ov-detail-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 12px);
+  padding: var(--space-4);
+  min-width: 0;
+}
+
+.ov-detail-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.ov-detail-card__title {
+  font-size: var(--text-caption);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-3);
+}
+
+.ov-detail-card__head .ov-detail-card__title { margin-bottom: 0; }
+
+.ov-detail-card__lead {
+  font-size: var(--text-body);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-3);
+}
+
+.ov-detail-card__body {
+  font-size: var(--text-caption);
+  color: var(--color-text-secondary);
+  line-height: var(--leading-relaxed);
+  margin: 0 0 var(--space-3);
+}
+
+/* Compact label/value rows replace the large metric tiles that used to repeat
+   figures already shown in the primary sections. */
+.ov-detail-list {
+  margin: 0 0 var(--space-3);
+}
+
+.ov-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-caption);
+  flex-wrap: wrap;
+}
+
+.ov-detail-row:first-child { border-top: 0; }
+
+.ov-detail-row dt {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.ov-detail-row dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-weight: 600;
+  text-align: right;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ov-detail-row__note {
+  display: block;
+  font-size: var(--text-micro, 11px);
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+  margin-top: 1px;
+}
+
+.ov-detail-notes {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+}
+
+.ov-detail-notes li {
+  position: relative;
+  padding-left: var(--space-4);
+  font-size: var(--text-micro, 11px);
+  color: var(--color-text-tertiary);
+  line-height: var(--leading-relaxed);
+  margin-bottom: 2px;
+}
+
+.ov-detail-notes li::before {
+  content: "·";
+  position: absolute;
+  left: 6px;
+  color: var(--color-text-tertiary);
+}
+
+/* Keep the allocation ring readable at the reduced card size. */
+.ov-detail-card .v2-allocation__ring {
+  width: 108px;
+  height: 108px;
+}
+
+@media (max-width: 768px) {
+  .ov-group__grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .ov-detail-row { flex-direction: column; gap: 2px; }
+  .ov-detail-row dd { text-align: left; }
+}
+
+/* ==========================================================================
+   TVM CALCULATOR — standalone planning tool on the Calculator page
+   ========================================================================== */
+
+.tvm-card { margin-bottom: var(--space-5); }
+
+/* --- Mode tabs --- */
+.tvm-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 var(--space-5);
+}
+
+.tvm-mode {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--duration-fast, 150ms), color var(--duration-fast, 150ms);
+}
+
+.tvm-mode:hover { border-color: var(--color-border-strong); color: var(--color-text-primary); }
+
+.tvm-mode:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Active state carries a border and weight change, not colour alone. */
+.tvm-mode--active {
+  border-color: var(--color-accent);
+  background: var(--color-positive-soft);
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+/* --- Layout --- */
+.tvm-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+/* --- Inputs --- */
+.tvm-inputs { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+
+.tvm-field { display: block; min-width: 0; }
+
+.tvm-field__label {
+  display: block;
+  font-size: var(--text-caption);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+}
+
+.tvm-field__control {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.tvm-field__control:focus-within {
+  border-color: var(--color-accent);
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.tvm-field__unit {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: var(--text-micro, 11px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-tertiary);
+  background: var(--color-surface-elevated, var(--color-surface));
+  border-right: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.tvm-field__input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+
+.tvm-field__input:focus { outline: none; }
+
+.tvm-note {
+  font-size: var(--text-micro, 11px);
+  color: var(--color-text-tertiary);
+  line-height: var(--leading-relaxed);
+  margin: 0;
+}
+
+/* --- Result --- */
+.tvm-output { min-width: 0; }
+
+.tvm-result {
+  background: var(--color-surface-elevated, var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+  min-width: 0;
+}
+
+.tvm-result--invalid { border-left-color: var(--color-negative); }
+
+.tvm-result__label {
+  font-size: var(--text-micro, 11px);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-tertiary);
+  margin: 0 0 var(--space-2);
+}
+
+.tvm-result__value {
+  font-size: var(--text-financial-xl, 32px);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-4);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.tvm-result__rows { margin: 0 0 var(--space-4); }
+
+.tvm-result__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-caption);
+  flex-wrap: wrap;
+}
+
+.tvm-result__row:first-child { border-top: 0; }
+.tvm-result__row dt { color: var(--color-text-tertiary); }
+.tvm-result__row dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.tvm-result__summary {
+  font-size: var(--text-caption);
+  color: var(--color-text-secondary);
+  line-height: var(--leading-relaxed);
+  margin: 0;
+}
+
+/* --- Own money vs growth split --- */
+.tvm-split { margin-bottom: var(--space-4); }
+
+.tvm-split__bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-positive);
+  overflow: hidden;
+  margin-bottom: var(--space-2);
+}
+
+.tvm-split__own {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+}
+
+.tvm-split__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  font-size: var(--text-micro, 11px);
+  color: var(--color-text-tertiary);
+}
+
+.tvm-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.tvm-dot--own { background: var(--color-accent); }
+.tvm-dot--growth { background: var(--color-positive); }
+
+/* --- Validation --- */
+.tvm-errors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tvm-errors li {
+  font-size: var(--text-caption);
+  color: var(--color-negative);
+  line-height: var(--leading-relaxed);
+  margin-bottom: var(--space-2);
+}
+
+.tvm-errors li span { margin-right: 6px; }
+
+/* --- Responsive --- */
+@media (max-width: 900px) {
+  .tvm-layout { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .tvm-mode { flex: 1 1 100%; }
+  .tvm-result { padding: var(--space-4); }
+  .tvm-result__value { font-size: var(--text-financial-lg, 24px); }
+  .tvm-result__row { flex-direction: column; gap: 2px; }
+  .tvm-result__row dd { text-align: left; }
+}
+
+/* --- TVM five-variable solver layout --- */
+
+.tvm-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  margin: var(--space-4) 0 var(--space-5);
+}
+
+.tvm-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.tvm-legend {
+  font-size: var(--text-micro, 11px);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-tertiary);
+  padding: 0;
+  margin-right: var(--space-2);
+}
+
+.tvm-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-caption);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.tvm-radio input { accent-color: var(--color-accent); cursor: pointer; }
+.tvm-radio input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* Each solver row: label | input | solve button */
+.tvm-solver {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.tvm-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tvm-row--select { grid-template-columns: 150px minmax(0, 1fr); }
+
+.tvm-row__label {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-align: right;
+}
+
+.tvm-solve { width: 100%; justify-content: center; }
+
+.tvm-select { width: 100%; }
+
+.tvm-result--empty { border-left-color: var(--color-border-strong); }
+
+.tvm-result__hint {
+  font-size: var(--text-caption);
+  color: var(--color-text-tertiary);
+  line-height: var(--leading-relaxed);
+  margin: 0;
+}
+
+@media (max-width: 700px) {
+  .tvm-row,
+  .tvm-row--select {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+  .tvm-row__label { text-align: left; }
+  .tvm-solve { width: auto; align-self: flex-start; padding-left: 18px; padding-right: 18px; }
+  .tvm-options { flex-direction: column; gap: var(--space-3); }
+}
+
+/* --- Advisor priority action record (Step 14) --- */
+
+.advisor-action-record {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--color-surface-elevated, var(--color-surface));
+}
+
+.advisor-action-record--done {
+  border-left-color: var(--color-positive);
+}
+
+.advisor-action-record__copy {
+  min-width: 0;
+  flex: 1 1 220px;
+}
+
+.advisor-action-record__copy strong {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: var(--leading-relaxed);
+  overflow-wrap: anywhere;
+}
+
+.advisor-action-record__done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: var(--text-caption);
+  font-weight: 700;
+  color: var(--color-positive);
+  background: var(--color-positive-soft);
+  border-radius: var(--radius-md, 8px);
+  padding: 6px 12px;
+}
+
+.advisor-mark-done { flex-shrink: 0; }
+
+.advisor-mark-done:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .advisor-action-record { flex-direction: column; align-items: stretch; }
+  .advisor-mark-done, .advisor-action-record__done { width: 100%; justify-content: center; text-align: center; }
 }

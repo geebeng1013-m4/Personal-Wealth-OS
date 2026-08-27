@@ -1,52 +1,74 @@
-import type { AdvisorMessage, LedgerAccountType, LedgerTransaction, LedgerTransactionType, RuleCardId, RuleNote, Ticker, Trade, TradeType, WealthState } from "./models";
+import type { AdvisorRecommendation, LedgerAccountType, LedgerTransaction, LedgerTransactionType, RuleCardId, RuleNote, Ticker, Trade, TradeType, WealthState } from "./models";
 import { createId, cloneDefaultState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, type Snapshot } from "./state";
 import {
-  advisorMessages,
   emergencyRatio,
   money,
-  monthlyBasicExpense,
-  monthlySurplus,
   monthsToEmergencyTarget,
-  nextActions,
   percent,
-  portfolioSummary,
   projectedAnnualEmergencyYield,
   trancheStatus,
   tradeUnits,
 } from "./rules";
-import { fetchQuote, fetchMultipleQuotes, formatPrice, formatChange, formatVolume, type MarketQuote, calcPnLForTicker, type PortfolioPnL, buildTradeTimelineHtml, fetchFundamentals, type Fundamentals, fetchHistoricalPrices, calcRiskMetrics, getUsdToMyr, fetchUsdToMyr } from "./market";
-import { accountBalances, accountTypeBalance, categoryTotals, filterLedgerTransactions, investmentAssetShare, ledgerTotals, monthlyLedgerTotals, normalizeLedgerAmount, openingFunds, type AccountBalance, type LedgerFilters } from "./ledger";
+import { getAdvisorSnapshot, nextActions } from "./advisor";
+import { isRecommendationCompleted, markRecommendationDone } from "./actionRecords";
+import { buildTradeTimelineHtml, fetchFundamentals, fetchHistoricalPrices, calcRiskMetrics, getUsdToMyr, fetchLivePrices, fetchUsdToMyr } from "./market";
+import { categoryTotals, filterLedgerTransactions, investmentAssetShare, ledgerTotals, monthlyLedgerTotals, normalizeLedgerAmount, openingFunds, type AccountBalance, type LedgerFilters } from "./ledger";
+import { getLedgerSnapshot } from "./ledgerSummary";
+import { getHolding, getPortfolioSnapshot, type PortfolioSnapshot, type ValuationInputs } from "./portfolioSummary";
+import type { PriceMap } from "./marketPrices";
+import { getGoalsSnapshot } from "./goalSummary";
+import { getBudgetSnapshot } from "./budgetSummary";
+import {
+  calculateInflationAdjustedValue,
+  solveTvm,
+  COMPOUNDING_LABELS,
+  type CompoundingFrequency,
+  type PaymentTiming,
+  type RateKind,
+  type TvmSolveInput,
+  type TvmVariable,
+} from "./tvm";
 import { mountSideRays } from "./sideRays";
-import { forecastRecurring, linkedGoalCurrent, monthlyClose, netWorth, rebalanceContributions, tradeExchangeRate } from "./financialHealth";
+import { forecastRecurring, getFinancialSnapshot, monthlyClose, nextRecurringOccurrence, rebalanceContributions, tradeExchangeRate } from "./financialHealth";
+import type { MoneyLeakCategory } from "./moneyLeaks";
+// Money Leaks detect WHAT happened; the Advisor supplies the guidance shown
+// alongside each finding. Both arrive pre-merged via this compatibility shape.
+import { detectMoneyLeaks, type MoneyLeak } from "./advisor";
+import { recordsFromCsv } from "./csvImport";
+import { buildOverviewModel } from "./overview";
 
 type Setter = (state: WealthState, changeLabel?: string) => void;
 type Navigate = (page: string) => void;
 
 const sideRaysCleanup = new WeakMap<HTMLElement, () => void>();
 const calculatorCleanup = new WeakMap<HTMLElement, () => void>();
+/** Stops the periodic live-price refresh (see PRICE_STALE_AFTER_MS) started for this root. */
+const priceRefreshCleanup = new WeakMap<HTMLElement, () => void>();
 const sidebarScrollPositions = new WeakMap<HTMLElement, number>();
 
 type Page = readonly [id: string, english: string, subtitle: string];
 type PageGroup = readonly [title: string, pages: readonly Page[]];
 
 const pageGroups = [
-  ["Today", [
-    ["dashboard", "Overview", "Your next move"],
-    ["advisor", "Coach", "Guidance & scenarios"],
-  ]],
-  ["Plan", [
-    ["buckets", "Money Plan", "Fund allocation"],
+  ["Wealth", [
+    ["dashboard", "Overview", "Financial command centre"],
+    ["portfolio", "Portfolio", "Investments & activity"],
     ["goals", "Goals", "Progress & targets"],
+    ["market", "Market", "Research when needed"],
+  ]],
+  ["Money", [
+    ["ledger", "Ledger", "Income & expenses"],
+    ["buckets", "Budget", "Fund allocation"],
+    ["money-leaks", "Money Leaks", "Detected cash-flow drag"],
+  ]],
+  ["Intelligence", [
+    ["advisor", "Advisor", "Guidance & scenarios"],
+    ["review", "Review", "Monthly check-in"],
     ["rules", "Rules", "Decision framework"],
   ]],
-  ["Grow", [
-    ["portfolio", "Investments", "Portfolio & activity"],
-    ["market", "Market", "Research when needed"],
-    ["calculator", "Scenarios", "Growth calculator"],
-  ]],
-  ["Reflect", [
-    ["ledger", "Activity", "Income & expenses"],
-    ["review", "Review", "Monthly check-in"],
+  ["Tools", [
+    ["tvm", "TVM Calculator", "Time value of money"],
+    ["calculator", "Investment Growth", "Contribution projections"],
   ]],
   ["System", [
     ["settings", "Settings", "Configuration"],
@@ -83,15 +105,6 @@ function getTheme(): string {
 }
 
 // Map ticker to TradingView symbol format (EXCHANGE:SYMBOL)
-const TV_SYMBOL_MAP: Record<string, string> = {
-  VOO: "NYSEARCA:VOO",
-  QQQM: "NASDAQ:QQQM",
-};
-
-function toTVSymbol(ticker: string): string {
-  return TV_SYMBOL_MAP[ticker.toUpperCase()] ?? ticker;
-}
-
 function shellTemplate(activePage: string, state: WealthState, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }): string {
   const themeIcon = getTheme() === "dark" ? "☀️" : "🌙";
   const active = pages.find(([id]) => id === activePage);
@@ -147,201 +160,325 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
 }
 
 function dashboardTemplate(state: WealthState): string {
-  const portfolio = portfolioSummary(state);
-  const emergency = emergencyRatio(state);
+  // The Dashboard's single read model. Every canonical figure below is read
+  // from it — this template formats and renders, it does not calculate.
+  const overview = buildOverviewModel(state, new Date(), livePriceInputs());
+  const snapshot = overview.snapshot;
+  const portfolio = overview.portfolio;
+  const budget = overview.budget;
+  const tracked = overview.trackedWealth;
+  const expenseChange = overview.cashFlow.expenseChange;
+  const emergency = overview.emergencyRatio;
+  const nextGoal = overview.goals.featured;
+  const nextGoalCurrent = nextGoal?.currentAmount ?? 0;
+  const nextGoalRatio = nextGoal?.progress ?? 0;
+  const planOnTrack = budget.planCoversDca;
+  const surplus = budget.plannedSurplus;
+  const opportunity = tracked.reserve;
+  const investedShare = tracked.investedShare;
+  const safetyShare = tracked.safetyShare;
+  const reserveShare = tracked.reserveShare;
+
+  // Findings and recurring forecasts are read straight from their own canonical
+  // sources; the Dashboard only renders them.
+  const leakSummary = detectMoneyLeaks(state);
   const actions = nextActions(state);
   const assetShare = investmentAssetShare(state.ledgerTransactions, state.ledgerAccounts);
-  const investmentShareWidth = assetShare.ratio === null ? 0 : Math.min(Math.round(assetShare.ratio * 100), 100);
-  const opportunity = state.opportunity.total - state.opportunity.used;
-  const trackedCapital = portfolio.totalInvestedMyr + state.emergency.current + opportunity;
-  const currentMonthTransactions = filterLedgerTransactions(state.ledgerTransactions, {
-    preset: "month",
-    startDate: "",
-    endDate: "",
-    type: "all",
-    categoryId: "",
-    query: "",
-  });
-  const currentMonthLedger = ledgerTotals(currentMonthTransactions);
-  const previousMonth = new Date();
-  previousMonth.setMonth(previousMonth.getMonth() - 1);
-  const previousMonthTransactions = state.ledgerTransactions.filter((transaction) => {
-    const date = new Date(transaction.date);
-    return date.getFullYear() === previousMonth.getFullYear() && date.getMonth() === previousMonth.getMonth();
-  });
-  const previousMonthLedger = ledgerTotals(previousMonthTransactions);
-  const expenseChange = previousMonthLedger.expense > 0
-    ? (currentMonthLedger.expense - previousMonthLedger.expense) / previousMonthLedger.expense
-    : null;
-  const nextGoal = state.goals.find((goal) => goal.id === state.overviewGoalId)
-    ?? goalsWithIncompleteFirst(state).find(({ goal }) => goal.target > 0 && goal.current < goal.target)?.goal
-    ?? state.goals[0];
-  const nextGoalCurrent = nextGoal ? linkedGoalCurrent(nextGoal, state) : 0;
-  const nextGoalRatio = nextGoal && nextGoal.target > 0 ? Math.min(nextGoalCurrent / nextGoal.target, 1) : 0;
+  const emergencyMonths = monthsToEmergencyTarget(state);
+  const forecast = forecastRecurring(state.recurringTransactions);
+  const nextRecurring = nextRecurringOccurrence(state.recurringTransactions);
+
+  // UI interaction state: the goal picker's options list.
   const overviewGoalOptions = state.goals
     .map((goal) => `<option value="${escapeHtml(goal.id)}"${goal.id === nextGoal?.id ? " selected" : ""}>${escapeHtml(goal.name)}</option>`)
     .join("");
-  const coachMessages = advisorMessages(state);
-  const primaryCoach = coachMessages.find((message) => message.severity === "action")
-    ?? coachMessages.find((message) => message.severity === "watch")
-    ?? coachMessages[0];
-  const emergencyMonths = monthsToEmergencyTarget(state);
-  const trackedBase = Math.max(trackedCapital, 1);
-  const investedShare = Math.min(portfolio.totalInvestedMyr / trackedBase, 1);
-  const safetyShare = Math.min(state.emergency.current / trackedBase, 1);
-  const reserveShare = Math.min(opportunity / trackedBase, 1);
-  const planOnTrack = monthlySurplus(state) >= state.dca.monthly;
-  const worth = netWorth(state.ledgerTransactions, state.ledgerAccounts, state.liabilities);
-  const forecast = forecastRecurring(state.recurringTransactions);
-  const nwChangeClass = worth.net >= 0 ? "positive" : "negative";
-  const surplus = monthlySurplus(state);
-  const surplusPositive = currentMonthLedger.balance >= 0;
 
   return `
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
-    <!-- HERO: calm, spacious financial overview -->
-    <section class="v2-hero" aria-label="Financial overview">
-      <p class="v2-hero__greeting">Good ${getGreeting()}, ${escapeHtml(state.profile.name || "there")}</p>
-      <p class="v2-hero__wealth-label">Net worth</p>
-      <h1 class="v2-hero__wealth-value">${money(worth.net)}</h1>
-      <div class="v2-hero__change v2-hero__change--${nwChangeClass}">
-        ${nwChangeClass === "positive" ? "↑" : "↓"} ${money(Math.abs(worth.assets - worth.liabilities))} total assets
-        <span class="v2-status v2-status--${planOnTrack ? "positive" : "warning"}">${planOnTrack ? "● On track" : "● Review needed"}</span>
+    <!-- ============ HEADER ============ -->
+    <header class="ov-header">
+      <p class="ov-header__greeting">Good ${getGreeting()}, ${escapeHtml(overview.greetingName)}</p>
+      <h2 class="ov-header__title">Wealth Overview</h2>
+      <p class="ov-header__summary">${escapeHtml(overview.headline)}</p>
+    </header>
+
+    <!-- ============ SECTION 1 — FINANCIAL SNAPSHOT ============ -->
+    <section class="ov-section" aria-labelledby="ovSnapshotTitle">
+      <div class="ov-section__head">
+        <h3 class="ov-section__title" id="ovSnapshotTitle">Financial Snapshot</h3>
+        <p class="ov-section__subtitle">Recorded position and this month's cash flow</p>
       </div>
-      <div class="v2-hero__actions">
-        <button class="v2-btn v2-btn--primary dashboard-nav" data-page="portfolio" type="button">Review portfolio</button>
-        <button class="v2-btn v2-btn--secondary dashboard-nav" data-page="ledger" type="button">Open cash flow</button>
-        <button class="v2-btn v2-btn--ghost dashboard-nav" data-page="goals" type="button">Goals</button>
+      <div class="ov-metrics">
+        <div class="ov-metric ov-metric--primary">
+          <span class="ov-metric__label">Net Worth</span>
+          <strong class="ov-metric__value" id="ovNetWorth">${money(overview.netWorth)}</strong>
+          <span class="ov-metric__note" id="ovNetWorthNote">${money(overview.totalAssets)} assets − ${money(overview.totalLiabilities)} liabilities</span>
+        </div>
+        <div class="ov-metric">
+          <span class="ov-metric__label">Income</span>
+          <strong class="ov-metric__value ov-metric__value--positive">${money(overview.cashFlow.income)}</strong>
+          <span class="ov-metric__note">Recorded this month</span>
+        </div>
+        <div class="ov-metric">
+          <span class="ov-metric__label">Expenses</span>
+          <strong class="ov-metric__value">${money(overview.cashFlow.expenses)}</strong>
+          <span class="ov-metric__note">${overview.cashFlow.expenseChange !== null
+            ? `${overview.cashFlow.expenseChange <= 0 ? "↓" : "↑"} ${percent(Math.abs(overview.cashFlow.expenseChange), 0)} vs last month`
+            : "Recorded this month"}</span>
+        </div>
+        <div class="ov-metric">
+          <span class="ov-metric__label">Surplus</span>
+          <strong class="ov-metric__value ov-metric__value--${overview.cashFlow.surplus >= 0 ? "positive" : "negative"}">${overview.cashFlow.surplus >= 0 ? "+" : "−"}${money(Math.abs(overview.cashFlow.surplus))}</strong>
+          <span class="ov-metric__note">Income minus expenses</span>
+        </div>
       </div>
     </section>
 
-    <!-- QUICK ACTIONS -->
-    <div class="v2-quick-actions" style="margin-top:var(--space-5);">
-      ${actions.slice(0, 3).map((action, index) => `<button class="v2-btn v2-btn--secondary v2-btn--sm" type="button" title="${escapeHtml(action)}">${String(index + 1).padStart(2, "0")} ${escapeHtml(action).substring(0, 40)}${action.length > 40 ? "…" : ""}</button>`).join("")}
-      <button class="v2-btn v2-btn--ghost v2-btn--sm dashboard-nav" data-page="advisor" type="button">All guidance →</button>
+    <!-- ============ SECTION 2 & 3 — WEALTH HEALTH + PLAN STATUS ============ -->
+    <div class="ov-pair">
+      <section class="ov-card ov-card--status ov-card--${overview.wealthHealth.status}" aria-labelledby="ovHealthTitle">
+        <div class="ov-section__head">
+          <h3 class="ov-section__title" id="ovHealthTitle">Wealth Health</h3>
+          <p class="ov-section__subtitle">Overall financial condition</p>
+        </div>
+        <p class="ov-status-badge ov-status-badge--${overview.wealthHealth.status}">
+          <span class="ov-status-badge__mark" aria-hidden="true">${overview.wealthHealth.status === "healthy" ? "✓" : overview.wealthHealth.status === "watch" ? "!" : "▲"}</span>
+          ${escapeHtml(overview.wealthHealth.label)}
+        </p>
+        <p class="ov-card__lead">${escapeHtml(overview.wealthHealth.summary)}</p>
+        <ul class="ov-factors">
+          ${overview.wealthHealth.factors.map((factor) => `
+            <li class="ov-factor">
+              <span class="ov-factor__dot ov-factor__dot--${factor.status}" aria-hidden="true"></span>
+              <span class="ov-factor__label">${escapeHtml(factor.label)}</span>
+              <span class="ov-factor__detail">${escapeHtml(factor.detail)}</span>
+              <span class="visually-hidden">Status: ${escapeHtml(factor.status)}</span>
+            </li>
+          `).join("")}
+        </ul>
+      </section>
+
+      <section class="ov-card" aria-labelledby="ovPlanTitle">
+        <div class="ov-section__head">
+          <h3 class="ov-section__title" id="ovPlanTitle">Plan Status</h3>
+          <p class="ov-section__subtitle">Monthly contribution plan</p>
+        </div>
+        <p class="ov-status-badge ov-status-badge--${overview.planStatus.onTrack ? "healthy" : "watch"}">
+          <span class="ov-status-badge__mark" aria-hidden="true">${overview.planStatus.onTrack ? "✓" : "!"}</span>
+          ${escapeHtml(overview.planStatus.label)}
+        </p>
+        <div class="ov-plan__figures">
+          <div><span class="ov-metric__label">Planned</span><strong class="ov-plan__amount">${money(overview.planStatus.plannedAmount)}</strong></div>
+          <div><span class="ov-metric__label">Contributed</span><strong class="ov-plan__amount">${money(overview.planStatus.actualAmount)}</strong></div>
+        </div>
+        ${overview.planStatus.progress !== null ? `
+          <div class="ov-progress" role="progressbar"
+               aria-valuenow="${Math.round(overview.planStatus.progress * 100)}" aria-valuemin="0" aria-valuemax="100"
+               aria-label="Monthly contribution progress">
+            <div class="ov-progress__fill" style="width:${Math.round(overview.planStatus.progress * 100)}%;"></div>
+          </div>
+          <p class="ov-card__note">${Math.round(overview.planStatus.progress * 100)}% of this month's plan · ${escapeHtml(overview.planStatus.detail)}</p>
+        ` : `<p class="ov-card__note">${escapeHtml(overview.planStatus.detail)}</p>`}
+        <button class="v2-btn v2-btn--ghost v2-btn--sm dashboard-nav" data-page="portfolio" type="button">Open portfolio →</button>
+      </section>
     </div>
 
-    <!-- CASH FLOW SUMMARY -->
-    <section class="v2-cashflow" style="margin-top:var(--space-5);" aria-label="Monthly cash flow">
-      <div class="v2-cashflow__item">
-        <span class="v2-cashflow__label">Income</span>
-        <span class="v2-cashflow__value" style="color:var(--color-positive);">${money(currentMonthLedger.income)}</span>
-      </div>
-      <div class="v2-cashflow__item v2-cashflow__item--center">
-        <span class="v2-cashflow__label">Expenses</span>
-        <span class="v2-cashflow__value">${money(currentMonthLedger.expense)}</span>
-        ${expenseChange !== null ? `<span style="font-size:var(--text-caption);color:var(--color-text-tertiary);margin-top:2px;">${expenseChange <= 0 ? "↓" : "↑"} ${percent(Math.abs(expenseChange), 0)} vs last month</span>` : ""}
-      </div>
-      <div class="v2-cashflow__item">
-        <span class="v2-cashflow__label">Surplus</span>
-        <span class="v2-cashflow__value" style="color:var(--color-${surplusPositive ? "positive" : "negative"});">${surplusPositive ? "+" : "−"}${money(Math.abs(surplus))}</span>
-      </div>
-    </section>
-
-    <!-- 2-COLUMN: ALLOCATION + HEALTH METRICS -->
-    <div class="v2-dashboard-grid v2-dashboard-grid--2col" style="margin-top:var(--space-5);">
-      <!-- Tracked Wealth Allocation -->
-      <section class="v2-card" aria-label="Tracked wealth allocation">
-        <div class="v2-section-header">
-          <h2 class="v2-section-header__title">Tracked Wealth Base</h2>
-          <p class="v2-section-header__subtitle">Investment cost, safety cash and undeployed opportunity reserve</p>
+    <!-- ============ SECTION 4 — PRIORITY ACTION ============ -->
+    ${overview.priorityAction ? `
+      <section class="ov-priority ov-priority--${overview.priorityAction.severity}" aria-labelledby="ovPriorityTitle">
+        <p class="ov-priority__eyebrow">
+          <span class="ov-priority__mark" aria-hidden="true">${overview.priorityAction.severity === "action" ? "▲" : overview.priorityAction.severity === "watch" ? "!" : "✓"}</span>
+          Priority ${escapeHtml(overview.priorityAction.severity === "positive" ? "status" : overview.priorityAction.severity)}
+        </p>
+        <h3 class="ov-priority__title" id="ovPriorityTitle">${escapeHtml(overview.priorityAction.title)}</h3>
+        <div class="ov-priority__body">
+          <p class="ov-priority__row"><span class="ov-priority__key">Why</span><span>${escapeHtml(overview.priorityAction.explanation)}</span></p>
+          <p class="ov-priority__row"><span class="ov-priority__key">Do</span><span>${escapeHtml(overview.priorityAction.actionLabel)}</span></p>
+          ${isRecommendationCompleted(state, overview.priorityAction.recommendationId)
+            ? '<p class="ov-priority__row"><span class="ov-priority__key">Status</span><span class="ov-priority__done"><span aria-hidden="true">✓</span> You marked this done</span></p>'
+            : ""}
         </div>
-        <div class="v2-allocation">
-          <div class="v2-allocation__ring" style="background:conic-gradient(var(--color-accent) 0% ${Math.round(investedShare * 100)}%, var(--color-blue) ${Math.round(investedShare * 100)}% ${Math.round((investedShare + safetyShare) * 100)}%, var(--color-gold) ${Math.round((investedShare + safetyShare) * 100)}% 100%);" aria-label="Wealth allocation ring showing ${percent(investedShare + safetyShare + reserveShare)} allocated">
-            <div class="v2-allocation__center">
-              <strong>${percent(investedShare + safetyShare + reserveShare)}</strong>
-              <small>Allocated</small>
+        <!-- Why / Do / Act in one place. Without the action here the user had
+             to find this same recommendation among six cards on the Advisor
+             page just to record it. Same ActionRecord mechanism, and the
+             priority itself is still chosen purely by the Advisor. -->
+        <div class="ov-priority__actions">
+          <button class="v2-btn v2-btn--primary dashboard-nav" data-page="${escapeHtml(overview.priorityAction.destination)}" type="button">
+            Go to ${escapeHtml(overview.priorityAction.destination.replace(/-/g, " "))}
+          </button>
+          ${isRecommendationCompleted(state, overview.priorityAction.recommendationId)
+            ? ""
+            : `<button class="v2-btn v2-btn--ghost dashboard-mark-done" type="button" data-recommendation-id="${escapeHtml(overview.priorityAction.recommendationId)}">Mark as done</button>`}
+        </div>
+      </section>
+    ` : `
+      <section class="ov-priority ov-priority--positive" aria-labelledby="ovPriorityTitle">
+        <p class="ov-priority__eyebrow"><span class="ov-priority__mark" aria-hidden="true">✓</span> Priority status</p>
+        <h3 class="ov-priority__title" id="ovPriorityTitle">Nothing needs your attention</h3>
+        <div class="ov-priority__body"><p class="ov-priority__row"><span class="ov-priority__key">Why</span><span>No exceptions were detected against your configured rules.</span></p></div>
+      </section>
+    `}
+
+    <!-- ============ SECONDARY — DETAILS ============ -->
+    <div class="ov-secondary">
+      <div class="ov-secondary__head">
+        <h3 class="ov-secondary__title">Details</h3>
+        <p class="ov-section__subtitle">Supporting breakdowns behind the summary above</p>
+      </div>
+
+    <!-- ---------- A. WEALTH DETAILS ---------- -->
+    <section class="ov-group" aria-labelledby="ovGroupWealth">
+      <div class="ov-group__head">
+        <h4 class="ov-group__title" id="ovGroupWealth">Wealth Details</h4>
+        <p class="ov-group__desc">Where your tracked capital sits</p>
+      </div>
+      <div class="ov-group__grid">
+        <section class="ov-detail-card" aria-label="Tracked wealth allocation">
+          <h5 class="ov-detail-card__title">Tracked Wealth Base</h5>
+          <div class="v2-allocation">
+            <div class="v2-allocation__ring" style="background:conic-gradient(var(--color-accent) 0% ${Math.round(investedShare * 100)}%, var(--color-blue) ${Math.round(investedShare * 100)}% ${Math.round((investedShare + safetyShare) * 100)}%, var(--color-gold) ${Math.round((investedShare + safetyShare) * 100)}% 100%);" aria-label="Wealth allocation ring showing ${percent(investedShare + safetyShare + reserveShare)} allocated">
+              <div class="v2-allocation__center">
+                <strong>${percent(investedShare + safetyShare + reserveShare)}</strong>
+                <small>Allocated</small>
+              </div>
+            </div>
+            <div class="v2-allocation__legend">
+              <div class="v2-allocation__legend-item"><span class="v2-allocation__legend-dot" style="background:var(--color-accent);"></span>Investments <strong>${money(portfolio.totalInvestedMyr)}</strong></div>
+              <div class="v2-allocation__legend-item"><span class="v2-allocation__legend-dot" style="background:var(--color-blue);"></span>Safety <strong>${money(state.emergency.current)}</strong></div>
+              <div class="v2-allocation__legend-item"><span class="v2-allocation__legend-dot" style="background:var(--color-gold);"></span>Reserve <strong>${money(opportunity)}</strong></div>
             </div>
           </div>
-          <div class="v2-allocation__legend">
-            <div class="v2-allocation__legend-item"><span class="v2-allocation__legend-dot" style="background:var(--color-accent);"></span>Investments <strong>${money(portfolio.totalInvestedMyr)}</strong></div>
-            <div class="v2-allocation__legend-item"><span class="v2-allocation__legend-dot" style="background:var(--color-blue);"></span>Safety <strong>${money(state.emergency.current)}</strong></div>
-            <div class="v2-allocation__legend-item"><span class="v2-allocation__legend-dot" style="background:var(--color-gold);"></span>Reserve <strong>${money(opportunity)}</strong></div>
-          </div>
-        </div>
-      </section>
+          <!-- What the investments are worth now, versus what went in. Every
+               figure is read from the canonical PortfolioSnapshot; nothing here
+               is calculated. Unknown stays "--". -->
+          <dl class="ov-detail-list ov-valuation" data-valuation-status="${portfolio.valuationStatus}">
+            <div class="ov-detail-row">
+              <dt>Market value</dt>
+              <dd id="ovMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)} <span class="ov-detail-row__note">${escapeHtml(valuationNote(portfolio))}</span></dd>
+            </div>
+            <div class="ov-detail-row">
+              <dt>Invested</dt>
+              <dd>${money(portfolio.totalInvestedMyr)} <span class="ov-detail-row__note">Capital contributed, at cost</span></dd>
+            </div>
+            <div class="ov-detail-row">
+              <dt>Unrealised P&amp;L</dt>
+              <dd id="ovUnrealised" class="${pnlTone(portfolio.unrealizedPnlMyr)}">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} <span class="ov-detail-row__note">${portfolio.realizedPnlMyr !== 0 ? `Realised to date ${money(portfolio.realizedPnlMyr)}` : "Excludes realised gains"}</span></dd>
+            </div>
+          </dl>
+        </section>
 
-      <!-- Financial Health Metrics -->
-      <section class="v2-card" aria-label="Financial health metrics">
-        <div class="v2-section-header">
-          <h2 class="v2-section-header__title">Financial Health</h2>
-        </div>
-        <div class="v2-health-grid">
-          <div class="v2-health-item">
-            <span class="v2-health-item__label">Safety reserve</span>
-            <span class="v2-health-item__value">${percent(emergency)}</span>
-            <div class="v2-health-item__bar"><div class="v2-health-item__bar-fill" style="width:${Math.min(Math.round(emergency * 100), 100)}%;"></div></div>
-            <span style="font-size:var(--text-caption);color:var(--color-text-tertiary);margin-top:2px;">${money(state.emergency.current)} of ${money(state.emergency.target)}${Number.isFinite(emergencyMonths) ? ` · ${emergencyMonths}mo to target` : ""}</span>
-          </div>
-          <div class="v2-health-item">
-            <span class="v2-health-item__label">Recurring forecast</span>
-            <span class="v2-health-item__value" style="color:var(--color-${forecast.surplus >= 0 ? "positive" : "negative"});">${money(forecast.surplus)}</span>
-            <span style="font-size:var(--text-caption);color:var(--color-text-tertiary);margin-top:2px;">${money(forecast.income)} in · ${money(forecast.expense)} out</span>
-          </div>
-          <div class="v2-health-item">
-            <span class="v2-health-item__label">DCA mandate</span>
-            <span class="v2-health-item__value">${money(state.dca.monthly)}</span>
-            <span style="font-size:var(--text-caption);color:var(--color-text-tertiary);margin-top:2px;">${state.trades.length} contributions recorded</span>
-          </div>
-          <div class="v2-health-item">
-            <span class="v2-health-item__label">Investment share</span>
-            <span class="v2-health-item__value">${assetShare.ratio === null ? "N/A" : percent(assetShare.ratio)}</span>
-            ${assetShare.ratio !== null ? `<div class="v2-health-item__bar"><div class="v2-health-item__bar-fill" style="width:${investmentShareWidth}%;"></div></div>` : ""}
-            <span style="font-size:var(--text-caption);color:var(--color-text-tertiary);margin-top:2px;">${assetShare.ratio === null ? `Total: ${money(assetShare.totalAssets)}` : `${money(assetShare.investmentAssets)} of ${money(assetShare.totalAssets)}`}</span>
-          </div>
-        </div>
-      </section>
-    </div>
+        <!-- Same data as before, demoted to compact rows: the headline status
+             for these is already carried by Wealth Health and Plan Status. -->
+        <section class="ov-detail-card" aria-label="Financial health breakdown">
+          <h5 class="ov-detail-card__title">Financial Health</h5>
+          <dl class="ov-detail-list">
+            <div class="ov-detail-row">
+              <dt>Safety reserve</dt>
+              <!-- "0mo to target" is noise once the buffer is funded, and
+                   meaningless when no target is set. Only show a countdown
+                   when there is actually something left to fund. -->
+              <dd>${percent(emergency)} <span class="ov-detail-row__note">${state.emergency.target > 0
+                ? `${money(state.emergency.current)} of ${money(state.emergency.target)}${Number.isFinite(emergencyMonths) && emergencyMonths > 0 ? ` · ${emergencyMonths}mo to target` : emergency >= 1 ? " · fully funded" : ""}`
+                : "No emergency-fund target set"}</span></dd>
+            </div>
+            <div class="ov-detail-row">
+              <dt>Recurring forecast</dt>
+              <dd>${money(forecast.surplus)} <span class="ov-detail-row__note">${money(forecast.income)} in · ${money(forecast.expense)} out${nextRecurring ? ` · Next ${nextRecurring.date.toLocaleDateString("en-MY", { day: "numeric", month: "short" })}` : ""}</span></dd>
+            </div>
+            <div class="ov-detail-row">
+              <dt>DCA mandate</dt>
+              <dd>${money(budget.plannedDcaAmount)} <span class="ov-detail-row__note">${portfolio.tradeCount} contributions recorded</span></dd>
+            </div>
+            <div class="ov-detail-row">
+              <!-- Deliberately labelled as an ACCOUNT BALANCE. This is the
+                   ledger balance sitting in investment accounts, which is a
+                   different fact from contributed capital (cost basis) and
+                   from market value — all three appear on this page. -->
+              <dt>Investment accounts</dt>
+              <dd>${assetShare.ratio === null ? "N/A" : percent(assetShare.ratio)} <span class="ov-detail-row__note">${assetShare.ratio === null ? `No account balances recorded` : `${money(assetShare.investmentAssets)} of ${money(assetShare.totalAssets)} account balances`}</span></dd>
+            </div>
+          </dl>
+          <!-- Health says what is weak; the Advisor is where the response
+               lives. Without this the card was a dead end. -->
+          <button class="v2-btn v2-btn--ghost v2-btn--sm dashboard-nav" data-page="advisor" type="button">See what to do →</button>
+        </section>
+      </div>
+    </section>
 
-    <!-- CFO INSIGHT + MONTHLY POSITION -->
-    <div class="v2-dashboard-grid v2-dashboard-grid--2col" style="margin-top:var(--space-5);">
-      <!-- Coach Insight -->
-      <section class="v2-card" aria-label="Financial coaching insight">
-        <div class="v2-section-header">
-          <h2 class="v2-section-header__title">${primaryCoach ? escapeHtml(primaryCoach.title) : "Continue the plan"}</h2>
-          <p class="v2-section-header__subtitle">Personal CFO briefing</p>
-        </div>
-        <p style="font-size:var(--text-body);color:var(--color-text-secondary);line-height:var(--leading-relaxed);margin:0 0 var(--space-5);">${primaryCoach ? escapeHtml(primaryCoach.body) : "Your plan has no urgent exceptions. Stay consistent with the next scheduled contribution."}</p>
-        <div class="v2-insights">
-          ${actions.slice(0, 3).map((action, index) => `<div class="v2-insight"><span class="v2-insight__icon v2-insight__icon--${index === 0 ? "positive" : index === 1 ? "warning" : "info"}">${index === 0 ? "✓" : index === 1 ? "!" : "i"}</span><span>${escapeHtml(action)}</span></div>`).join("")}
-        </div>
-        <button class="v2-btn v2-btn--ghost dashboard-nav" data-page="advisor" type="button" style="margin-top:var(--space-4);">View full guidance →</button>
-      </section>
+    <!-- ---------- B. ACTIVITY & FINDINGS ---------- -->
+    <section class="ov-group" aria-labelledby="ovGroupActivity">
+      <div class="ov-group__head">
+        <h4 class="ov-group__title" id="ovGroupActivity">Activity &amp; Findings</h4>
+        <p class="ov-group__desc">Detected cash-flow drag and this month's position</p>
+      </div>
+      <div class="ov-group__grid">
+        <section class="ov-detail-card" aria-labelledby="overviewLeakTitle">
+          <div class="ov-detail-card__head">
+            <h5 class="ov-detail-card__title" id="overviewLeakTitle">Money Leaks</h5>
+            <span class="status-pill ${leakSummary.highCount > 0 ? "status-bad" : "status-warn"}">${leakSummary.leaks.length} detected</span>
+          </div>
+          <p class="ov-detail-card__lead">${money(leakSummary.monthlyImpact)}<span class="ov-detail-row__note">/mo across ${leakSummary.categoryCount} ${leakSummary.categoryCount === 1 ? "category" : "categories"}</span></p>
+          <dl class="ov-detail-list">
+            <div class="ov-detail-row">
+              <dt>Highest impact</dt>
+              <dd>${escapeHtml(leakSummary.topLeak?.title ?? "No material leak detected")} <span class="ov-detail-row__note">${escapeHtml(leakSummary.topLeak?.recommendation ?? "Keep transactions and recurring payments current to improve coverage.")}</span></dd>
+            </div>
+          </dl>
+          <button class="v2-btn v2-btn--ghost v2-btn--sm dashboard-nav" data-page="money-leaks" type="button">Review findings →</button>
+        </section>
 
-      <!-- Monthly Position -->
-      <section class="v2-card" aria-label="Monthly financial position">
-        <div class="v2-section-header">
-          <h2 class="v2-section-header__title">Monthly Position</h2>
-          <p class="v2-section-header__subtitle">Cash-flow discipline</p>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:var(--space-4);">
-          <div class="v2-metric">
-            <span class="v2-metric__label">Recorded spending</span>
-            <span class="v2-metric__value">${money(currentMonthLedger.expense)}</span>
-            ${expenseChange !== null ? `<span class="v2-metric__change v2-metric__change--${expenseChange <= 0 ? "positive" : "negative"}">${expenseChange <= 0 ? "↓" : "↑"} ${percent(Math.abs(expenseChange), 0)} month over month</span>` : `<span class="v2-metric__change" style="color:var(--color-text-tertiary);">A second month unlocks trend comparison</span>`}
-          </div>
-          <div class="v2-metric">
-            <span class="v2-metric__label">Assignable surplus</span>
-            <span class="v2-metric__value" style="color:var(--color-${surplus >= 0 ? "positive" : "negative"});">${money(surplus)}</span>
-            <span class="v2-metric__change" style="color:var(--color-text-tertiary);">${planOnTrack ? "Current DCA mandate is covered" : `DCA funding gap: ${money(state.dca.monthly - surplus)}`}</span>
-          </div>
-          <div class="v2-metric">
-            <span class="v2-metric__label">Opportunity liquidity</span>
-            <span class="v2-metric__value">${money(opportunity)}</span>
-            <span class="v2-metric__change" style="color:var(--color-text-tertiary);">${state.opportunity.used > 0 ? `${money(state.opportunity.used)} deployed under your rules` : "Held for predefined deployment conditions"}</span>
-          </div>
-        </div>
-        <button class="v2-btn v2-btn--ghost dashboard-nav" data-page="ledger" type="button" style="margin-top:var(--space-4);">Open activity →</button>
-      </section>
-    </div>
+        <!-- Spending and surplus already headline the Financial Snapshot, so
+             they appear here only as supporting context. -->
+        <section class="ov-detail-card" aria-label="Monthly financial position">
+          <h5 class="ov-detail-card__title">Monthly Position</h5>
+          <dl class="ov-detail-list">
+            <div class="ov-detail-row">
+              <dt>Recorded spending</dt>
+              <dd>${money(snapshot.currentMonthExpenses)} <span class="ov-detail-row__note">${expenseChange !== null ? `${expenseChange <= 0 ? "↓" : "↑"} ${percent(Math.abs(expenseChange), 0)} month over month` : "A second month unlocks trend comparison"}</span></dd>
+            </div>
+            <div class="ov-detail-row">
+              <dt>Assignable surplus (planned)</dt>
+              <dd>${money(surplus)} <span class="ov-detail-row__note">${planOnTrack ? "Current DCA mandate is covered" : `DCA funding gap: ${money(budget.plannedDcaAmount - surplus)}`}</span></dd>
+            </div>
+            <div class="ov-detail-row">
+              <dt>Opportunity liquidity</dt>
+              <dd>${money(opportunity)} <span class="ov-detail-row__note">${state.opportunity.used > 0 ? `${money(state.opportunity.used)} deployed under your rules` : "Held for predefined deployment conditions"}</span></dd>
+            </div>
+          </dl>
+          <button class="v2-btn v2-btn--ghost v2-btn--sm dashboard-nav" data-page="ledger" type="button">Open activity →</button>
+        </section>
+      </div>
+    </section>
 
-    <!-- WEALTH JOURNEY -->
-    <section class="v2-card" style="margin-top:var(--space-5);" aria-label="Wealth journey progress">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);margin-bottom:var(--space-5);">
-        <div class="v2-section-header" style="margin-bottom:0;">
-          <h2 class="v2-section-header__title">${nextGoal ? escapeHtml(nextGoal.name) : "Define your next milestone"}</h2>
-          <p class="v2-section-header__subtitle">Wealth journey progress</p>
+    <!-- ---------- C. GUIDANCE ---------- -->
+    <section class="ov-group" aria-labelledby="ovGroupGuidance">
+      <div class="ov-group__head">
+        <h4 class="ov-group__title" id="ovGroupGuidance">Guidance</h4>
+        <p class="ov-group__desc">Full briefing behind the priority action above</p>
+      </div>
+      <section class="ov-detail-card" aria-label="Financial coaching insight">
+        <!-- Titled by what it is, not by the headline — that is already the
+             Priority Action above. The briefing body still appears in full. -->
+        <h5 class="ov-detail-card__title">Personal CFO briefing</h5>
+        <p class="ov-detail-card__body">${escapeHtml(overview.briefing)}</p>
+        <ul class="ov-detail-notes">
+          ${actions.slice(0, 3).map((action) => `<li>${escapeHtml(action)}</li>`).join("")}
+        </ul>
+        <button class="v2-btn v2-btn--ghost v2-btn--sm dashboard-nav" data-page="advisor" type="button">View full guidance →</button>
+      </section>
+    </section>
+
+    <!-- ---------- D. GOALS ---------- -->
+    <section class="ov-group" aria-labelledby="ovGroupGoals">
+      <div class="ov-group__head">
+        <h4 class="ov-group__title" id="ovGroupGoals">Goals</h4>
+        <p class="ov-group__desc">Progress toward your funded milestones</p>
+      </div>
+    <section class="ov-detail-card" aria-label="Wealth journey progress">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3);margin-bottom:var(--space-4);">
+        <div>
+          <h5 class="ov-detail-card__title">${nextGoal ? escapeHtml(nextGoal.name) : "Define your next milestone"}</h5>
         </div>
         <div style="display:flex;align-items:center;gap:var(--space-3);">
           ${state.goals.length > 0 ? `<label style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-caption);color:var(--color-text-tertiary);">Featured goal<select class="v2-input" id="overviewGoalSelect" aria-label="Choose the goal shown in Wealth Journey" style="min-height:28px;font-size:var(--text-caption);">${overviewGoalOptions}</select></label>` : ""}
@@ -362,7 +499,7 @@ function dashboardTemplate(state: WealthState): string {
           </div>
           <div style="flex:1;min-width:200px;">
             <strong style="font-size:var(--text-financial-lg);font-weight:700;color:var(--color-text-primary);display:block;margin-bottom:var(--space-2);">${money(nextGoalCurrent)}</strong>
-            <p style="font-size:var(--text-body);color:var(--color-text-secondary);line-height:var(--leading-relaxed);margin:0 0 var(--space-4);">toward ${money(nextGoal.target)}. ${nextGoal.monthlyContribution > 0 ? `At ${money(nextGoal.monthlyContribution)} monthly, the current plan has approximately ${Math.ceil(Math.max(nextGoal.target - nextGoalCurrent, 0) / nextGoal.monthlyContribution)} months remaining.` : "Add a monthly contribution to establish a projected timeline."}</p>
+            <p style="font-size:var(--text-body);color:var(--color-text-secondary);line-height:var(--leading-relaxed);margin:0 0 var(--space-4);">toward ${money(nextGoal.targetAmount)}. ${nextGoal.estimatedMonthsToTarget !== null ? `At ${money(nextGoal.monthlyContribution)} monthly, the current plan has approximately ${nextGoal.estimatedMonthsToTarget} months remaining.` : "Add a monthly contribution to establish a projected timeline."}</p>
             <div style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-caption);color:var(--color-text-tertiary);">
               <span class="v2-status v2-status--info">Today</span>
               <span style="color:var(--color-border-strong);">→</span>
@@ -372,9 +509,258 @@ function dashboardTemplate(state: WealthState): string {
             </div>
           </div>
         </div>
-      ` : '<p style="font-size:var(--text-body);color:var(--color-text-tertiary);text-align:center;padding:var(--space-8) 0;">Create a goal to turn long-term wealth building into a visible, measurable journey.</p>'}
+      ` : '<p style="font-size:var(--text-body);color:var(--color-text-tertiary);text-align:center;padding:var(--space-6) 0;">Create a goal to turn long-term wealth building into a visible, measurable journey.</p>'}
     </section>
+    </section><!-- /.ov-group (Goals) -->
+    </div><!-- /.ov-secondary -->
   `;
+}
+
+const leakCategoryLabels: Record<MoneyLeak["category"], string> = {
+  subscription: "Subscription",
+  fee: "Fee",
+  duplicate: "Duplicate",
+  increase: "Spending increase",
+  unusual: "Unusual spending",
+  budget: "Budget drift",
+  goal: "Goal drift",
+  debt: "Debt cost",
+};
+let selectedMoneyLeakId = "";
+
+// --- Live market prices (transient) ----------------------------------------
+//
+// Quotes live here for the lifetime of the page and nowhere else. They are
+// deliberately NOT part of WealthState: a price is an observation about the
+// world, not something the user owns, and persisting it would mean a stale
+// number could later be presented as current. Reloading simply re-fetches.
+//
+// An empty map is the honest default — it means "no price known", which every
+// consumer renders as unknown rather than as zero.
+let livePrices: PriceMap = new Map();
+let liveUsdToMyr: number | null = null;
+let priceFetchInFlight = false;
+/** Tickers the last fetch covered, so switching symbols can refetch. */
+let pricedSymbols = "";
+/** When the current livePrices were fetched, so a long-open tab can tell it has gone stale. */
+let pricesFetchedAt = 0;
+/**
+ * How long a price is trusted before refreshLivePrices() will fetch again.
+ *
+ * Without this, a tab left open kept showing whatever quote arrived on the
+ * very first load, forever — the fetch guard only ever asked "do we have SOME
+ * price for these tickers", never "is it still recent". A real comparison
+ * against a live brokerage app surfaced this: after the tab had been open a
+ * while, the app's gain figure was noticeably behind the brokerage's, purely
+ * because the market had moved since that one fetch and nothing ever asked
+ * again.
+ */
+const PRICE_STALE_AFTER_MS = 60_000;
+/**
+ * How often an open page re-checks whether its price has gone stale.
+ *
+ * Deliberately shorter than PRICE_STALE_AFTER_MS. Polling at exactly the
+ * staleness period never works: the timer starts before the first quote
+ * resolves, so every tick lands a few hundred milliseconds INSIDE the freshness
+ * window and no-ops, and the price only actually refreshes on the tick after
+ * that. Checking twice per window means a stale price is picked up promptly
+ * while still making at most one request per window.
+ */
+const PRICE_POLL_INTERVAL_MS = PRICE_STALE_AFTER_MS / 2;
+
+/** The market inputs handed to the canonical portfolio snapshot. */
+function livePriceInputs(): ValuationInputs {
+  return { prices: livePrices, usdToMyr: liveUsdToMyr };
+}
+
+/** Placeholder for a fact that is genuinely unknown. Never a zero. */
+const UNKNOWN = "--";
+
+/**
+ * Format a canonical money field that may be unknown.
+ * Formatting only — a null stays "--" and is never coerced to 0.
+ */
+function moneyOrUnknown(value: number | null | undefined): string {
+  return value == null ? UNKNOWN : money(value);
+}
+
+/** Format a canonical P&L: signed money plus signed percent, or "--". */
+function pnlText(amount: number | null | undefined, ratio: number | null | undefined): string {
+  if (amount == null) return UNKNOWN;
+  const sign = amount >= 0 ? "+" : "−";
+  const percentPart = ratio == null ? "" : ` (${sign}${percent(Math.abs(ratio), 2)})`;
+  return `${sign}${money(Math.abs(amount))}${percentPart}`;
+}
+
+/** CSS modifier for a canonical P&L value. Neutral while unknown. */
+function pnlTone(amount: number | null | undefined): string {
+  if (amount == null) return "";
+  return amount >= 0 ? "ov-metric__value--positive" : "ov-metric__value--negative";
+}
+
+/**
+ * One honest sentence about how complete a valuation is, straight from the
+ * canonical status. The UI never decides this itself.
+ */
+function valuationNote(portfolio: PortfolioSnapshot): string {
+  // The age is shown alongside the delayed-data disclaimer rather than instead
+  // of it: "may be delayed" alone gave no way to tell a 30-second-old quote
+  // from one that had sat unrefreshed for an hour.
+  const age = quoteAgeLabel(portfolio.valuedAt);
+  const ageSuffix = age ? ` · ${age}` : "";
+  if (portfolio.valuationStatus === "complete") return `Market data may be delayed${ageSuffix}`;
+  if (portfolio.valuationStatus === "partial") {
+    const missing = portfolio.unpricedTickers.length;
+    return `Partial valuation · ${missing} ${missing === 1 ? "holding" : "holdings"} unavailable${ageSuffix}`;
+  }
+  return portfolio.totalInvestedMyr > 0 ? "No market price available yet" : "No holdings recorded";
+}
+
+/**
+ * Fetch quotes for the tickers the user actually holds, then re-render.
+ *
+ * Guarded so a page that renders repeatedly does not queue duplicate requests.
+ * Once fetched, a price is reused for PRICE_STALE_AFTER_MS rather than forever
+ * — a tab left open must eventually ask again, or its valuation quietly falls
+ * behind a real brokerage's live view. Silent on failure: no prices simply
+ * means the valuation stays unknown (or keeps whatever was last known).
+ */
+function refreshLivePrices(state: WealthState, onUpdated: () => void): void {
+  const symbols = [...new Set([
+    ...state.trades.map((trade) => trade.ticker),
+    ...Object.keys(state.dca.targets),
+  ])].filter(Boolean).sort();
+  if (symbols.length === 0) return;
+
+  const key = symbols.join(",");
+  const isFresh = key === pricedSymbols && livePrices.size > 0 && Date.now() - pricesFetchedAt < PRICE_STALE_AFTER_MS;
+  if (priceFetchInFlight || isFresh) return;
+  priceFetchInFlight = true;
+
+  void Promise.all([
+    fetchLivePrices(symbols),
+    fetchUsdToMyr(state.trades).catch(() => null),
+  ]).then(([prices, rate]) => {
+    priceFetchInFlight = false;
+    if (prices.size === 0) return; // unknown stays unknown; do not overwrite a good price with nothing
+    livePrices = prices;
+    pricedSymbols = key;
+    pricesFetchedAt = Date.now();
+    liveUsdToMyr = typeof rate === "number" && Number.isFinite(rate) && rate > 0 ? rate : null;
+    onUpdated();
+  }).catch(() => { priceFetchInFlight = false; });
+}
+
+/** Human-scale "how long ago" for a quote timestamp. Never claims to be live. */
+function quoteAgeLabel(quotedAtMs: number | null): string {
+  if (!quotedAtMs) return "";
+  const ageMs = Date.now() - quotedAtMs;
+  if (ageMs < 0) return "";
+  const minutes = Math.floor(ageMs / 60_000);
+  if (minutes < 1) return "priced moments ago";
+  if (minutes < 60) return `priced ${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `priced ${hours}h ago`;
+  return `priced ${Math.floor(hours / 24)}d ago`;
+}
+
+function leakInsightStrip(state: WealthState, categories: MoneyLeakCategory[], label: string): string {
+  const leak = detectMoneyLeaks(state).leaks.find((item) => categories.includes(item.category));
+  if (!leak) return "";
+  return `<aside class="leak-insight-strip leak-insight-strip--${leak.severity}"><div><span class="eyebrow">${escapeHtml(label)}</span><strong>${escapeHtml(leak.title)}</strong><p>${escapeHtml(leak.summary)}</p></div><div class="leak-insight-impact"><small>Potential impact</small><b>${money(leak.monthlyImpact)}${leak.impactBasis === "one-time" ? " observed" : "/mo"}</b><button class="secondary-button dashboard-nav" data-page="money-leaks" data-leak-id="${escapeHtml(leak.id)}" type="button">Review finding</button></div></aside>`;
+}
+
+function leakImpactLabel(leak: MoneyLeak): string {
+  return leak.impactBasis === "one-time" ? "observed once" : "per month";
+}
+
+/**
+ * The canonical Advisor recommendation for one Money Leak finding.
+ *
+ * Findings say WHAT happened; the Advisor owns WHY it matters and WHAT to do.
+ * Both are read from AdvisorSnapshot.leakRecommendations — the UI never writes
+ * advisory copy of its own, and never re-derives one from the finding.
+ */
+function leakAdvice(
+  recommendations: AdvisorRecommendation[],
+  leakId: string,
+): AdvisorRecommendation | undefined {
+  return recommendations.find((recommendation) => recommendation.id === `advisor:leak:${leakId}`);
+}
+
+/**
+ * Execution state for one leak recommendation.
+ *
+ * Completing an action records only that the user did what was suggested. The
+ * finding itself is untouched: the leak may well still be there, so this must
+ * never be presented as the problem being solved.
+ */
+function leakActionBlock(state: WealthState, recommendation: AdvisorRecommendation | undefined): string {
+  if (!recommendation) return "";
+  const done = isRecommendationCompleted(state, recommendation.id);
+  if (done) {
+    return `<div class="leak-action-state"><span class="leak-action-done">✓ Action completed</span>
+      <span class="leak-action-note">Recorded on your side. The finding stays listed until the next scan no longer detects it.</span></div>`;
+  }
+  return `<div class="leak-action-state"><button class="v2-btn v2-btn--primary v2-btn--sm leak-mark-done"
+    data-recommendation-id="${escapeHtml(recommendation.id)}"
+    data-action-label="${escapeHtml(recommendation.action)}">Mark as done</button></div>`;
+}
+
+function moneyLeaksTemplate(state: WealthState): string {
+  const summary = detectMoneyLeaks(state);
+  // Canonical advice for every finding, already ranked by the Advisor.
+  const leakRecommendations = getAdvisorSnapshot(state).leakRecommendations;
+  const selected = summary.leaks.find((leak) => leak.id === selectedMoneyLeakId) ?? summary.topLeak;
+  if (selected) selectedMoneyLeakId = selected.id;
+  const leakRows = summary.leaks.length > 0
+    ? summary.leaks.map((leak) => `
+      <button class="leak-row ${leak.id === selected?.id ? "is-selected" : ""}" data-leak-id="${escapeHtml(leak.id)}" aria-pressed="${leak.id === selected?.id ? "true" : "false"}">
+        <span class="leak-row-main">
+          <span class="leak-row-heading"><strong>${escapeHtml(leak.title)}</strong><span class="leak-severity leak-${leak.severity}">${leak.severity} priority</span></span>
+          <span>${escapeHtml(leak.summary)}</span>
+          <span class="leak-row-meta">${leakCategoryLabels[leak.category]} · ${Math.round(leak.confidence * 100)}% confidence</span>
+        </span>
+        <span class="leak-row-impact"><strong>${money(leak.monthlyImpact)}</strong><span>${leakImpactLabel(leak)}</span><span>${leak.impactBasis === "one-time" ? "Not annualised" : `${money(leak.annualImpact)} annual`}</span></span>
+      </button>`).join("")
+    : `<div class="empty-state"><strong>No material leaks detected</strong><span>Keep recurring payments and transaction details current so the scan can stay useful.</span></div>`;
+  const selectedAdvice = selected ? leakAdvice(leakRecommendations, selected.id) : undefined;
+  const detail = selected ? `
+    <div class="leak-detail-content" data-leak-detail="${escapeHtml(selected.id)}">
+      <div class="leak-detail-head">
+        <div><span class="eyebrow">${leakCategoryLabels[selected.category]}</span><h2>${escapeHtml(selected.title)}</h2></div>
+        <span class="leak-severity leak-${selected.severity}">${selected.severity} priority</span>
+      </div>
+      <div class="leak-detail-impact"><strong>${money(selected.annualImpact)}</strong><span>${selected.impactBasis === "one-time" ? "observed one-time impact" : "estimated annual impact"}</span></div>
+      <section><h3>What was observed</h3><p>${escapeHtml(selected.summary)}</p></section>
+      <dl class="leak-evidence">${selected.evidence.map((item) => `<div><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(item.value)}</dd></div>`).join("")}</dl>
+      ${selectedAdvice ? `<section><h3>Why it matters</h3><p>${escapeHtml(selectedAdvice.impact)}</p></section>
+      <section class="leak-recommendation"><h3>Recommended next move</h3><p>${escapeHtml(selectedAdvice.action)}</p></section>`
+      : `<section class="leak-recommendation"><h3>Recommended next move</h3><p class="empty-state">No recommendation applies to this finding yet. The observation above is the full picture.</p></section>`}
+      ${leakActionBlock(state, selectedAdvice)}
+      <div class="leak-detail-actions"><button class="primary-button leak-primary-action" data-action="${selected.primaryAction}" data-leak-id="${escapeHtml(selected.id)}">${escapeHtml(selected.actionLabel)}</button><button class="secondary-button dashboard-nav" data-page="advisor" data-advisor-prompt="How should I address ${escapeHtml(selected.title)}?">Ask Advisor</button></div>
+    </div>` : `<div class="empty-state"><strong>No money leaks detected</strong><span>Your recent spending is within the current leak-detection rules.</span></div>`;
+  return `
+    <section class="page-shell money-leaks-page">
+      <header class="page-header compact-page-header">
+        <div><span class="eyebrow">Cash Flow</span><h1>Money Leaks</h1><p>Deterministic checks across recurring payments, transactions, budgets, goals, and debt.</p></div>
+        <div class="page-header-actions"><button class="secondary-button dashboard-nav" data-page="ledger">Open transactions</button><button class="primary-button dashboard-nav" data-page="buckets">Review budget</button></div>
+      </header>
+      <section class="leak-summary-strip" aria-label="Money leak summary">
+        <div><span>Potential monthly drag</span><strong>${money(summary.monthlyImpact)}</strong></div>
+        <div><span>Potential annual impact</span><strong>${money(summary.annualImpact)}</strong></div>
+        <div><span>Findings</span><strong>${summary.leaks.length}</strong></div>
+        <div><span>High priority</span><strong>${summary.highCount}</strong></div>
+      </section>
+      <div class="money-leaks-workspace">
+        <section class="card leak-list-panel" aria-label="Detected money leaks">
+          <div class="section-head"><div><span class="eyebrow">Detected issues</span><h2 class="card-title">Prioritised by annual impact</h2></div><span class="card-sub">Select a row for evidence and actions</span></div>
+          <div class="leak-list">${leakRows}</div>
+        </section>
+        <aside class="card leak-detail-panel" aria-live="polite">${detail}</aside>
+      </div>
+      <p class="money-leaks-disclaimer">Estimates are planning aids based on available records. Confirm merchant charges, account statements, and goal assumptions before changing or disputing payments.</p>
+    </section>`;
 }
 
 function getGreeting(): string {
@@ -384,83 +770,24 @@ function getGreeting(): string {
   return "evening";
 }
 
-function portfolioChartSection(state: WealthState): string {
-  const portfolio = portfolioSummary(state);
-  if (portfolio.positions.length === 0) return "";
-  const canvasId = "allocationChart";
-  const chartData = portfolio.positions.map((p) => ({
-    ticker: p.ticker,
-    value: p.investedMyr,
-    color: p.ticker === "VOO" ? "#3b82f6" : "#a855f7",
-  }));
-  const chartJson = JSON.stringify(chartData);
-  const totalMoney = money(portfolio.totalInvestedMyr);
-
-  return `
-    <article class="card panel">
-      <div class="panel-head"><div><span class="eyebrow">Asset Allocation</span><h3>Portfolio Allocation</h3></div><strong style="color:var(--green);">${totalMoney}</strong></div>
-      <div class="chart-grid">
-        <div>
-          ${chartData.map((d) => {
-            const pct = portfolio.totalInvestedMyr > 0 ? Math.round((d.value / portfolio.totalInvestedMyr) * 100) : 0;
-            return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
-              '<div style="width:12px;height:12px;border-radius:3px;background:' + d.color + ';"></div>' +
-              '<div style="flex:1;">' +
-              '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;"><span>' + d.ticker + '</span><span>' + money(d.value) + '</span></div>' +
-              '<div class="bar"><span style="width:' + pct + '%;background:' + d.color + ';"></span></div>' +
-              '</div></div>';
-          }).join("")}
-        </div>
-        <canvas id="${canvasId}" width="300" height="300" style="max-height:280px;margin:0 auto;"></canvas>
-      </div>
-      <script>
-        (function(){
-          try {
-            var canvas = document.getElementById('${canvasId}');
-            if (!canvas) return;
-            var ctx = canvas.getContext('2d');
-            if (!ctx) return;
-            var data = ${chartJson};
-            var total = data.reduce(function(s,d){return s+d.value;},0);
-            if (total <= 0) return;
-            var cx=150,cy=150,r=120,inner=70;
-            var start = -Math.PI / 2;
-            data.forEach(function(d) {
-              var angle = (d.value / total) * Math.PI * 2;
-              ctx.beginPath();
-              ctx.arc(cx, cy, r, start, start + angle);
-              ctx.arc(cx, cy, inner, start + angle, start, true);
-              ctx.closePath();
-              ctx.fillStyle = d.color;
-              ctx.fill();
-              start += angle;
-            });
-            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() || '#e2e8ec';
-            ctx.font = '700 20px Inter, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('${totalMoney}', cx, cy - 8);
-            ctx.font = '500 11px Inter, sans-serif';
-            ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink-3').trim() || '#5f7584';
-            ctx.fillText('TOTAL INVESTED', cx, cy + 14);
-          } catch(e) {}
-        })();
-      </script>
-    </article>
-  `;
-}
-
 function portfolioTemplate(state: WealthState): string {
-  const portfolio = portfolioSummary(state);
-  const positionRows = portfolio.positions.map((position) => {
+  const portfolio = getPortfolioSnapshot(state, new Date(), livePriceInputs());
+  const positionRows = portfolio.holdings.map((position) => {
     const driftClass = Math.abs(position.drift) > 0.08 ? "negative" : "positive";
     const driftSign = position.drift >= 0 ? "+" : "";
+    // Market price, value and P&L come straight off the holding. A holding with
+    // no usable quote shows "--" rather than being valued at zero.
+    const pnlClass = position.unrealizedPnlMyr == null
+      ? "" : position.unrealizedPnlMyr >= 0 ? "positive" : "negative";
     return '<tr>' +
       '<td><span class="ticker-badge">' + position.ticker + '</span></td>' +
       '<td>' + money(position.investedMyr) + '</td>' +
       '<td>USD ' + position.investedUsd.toFixed(2) + '</td>' +
       '<td>' + position.units.toFixed(5) + '</td>' +
       '<td>USD ' + position.averageCostUsd.toFixed(2) + '</td>' +
+      '<td>' + (position.priceUsd == null ? UNKNOWN : 'USD ' + position.priceUsd.toFixed(2)) + '</td>' +
+      '<td>' + moneyOrUnknown(position.marketValueMyr) + '</td>' +
+      '<td class="' + pnlClass + '">' + pnlText(position.unrealizedPnlMyr, position.unrealizedPnlPercentMyr) + '</td>' +
       '<td>' + percent(position.actualAllocation) + ' / ' + percent(position.targetAllocation) + '</td>' +
       '<td class="' + driftClass + '">' + driftSign + percent(position.drift, 1) + '</td>' +
       '</tr>';
@@ -479,22 +806,31 @@ function portfolioTemplate(state: WealthState): string {
         '<td>USD ' + trade.priceUsd.toFixed(2) + '</td>' +
         '<td>' + tradeExchangeRate(trade).toFixed(4) + '</td>' +
         '<td>' + tradeUnits(trade).toFixed(5) + '</td>' +
-        '<td><button class="icon-button danger delete-trade" data-id="' + trade.id + '" title="Delete trade">✕</button></td>' +
+        '<td><button class="icon-button danger delete-trade" data-id="' + trade.id + '" type="button" aria-label="Delete trade" title="Delete trade">✕</button></td>' +
         '</tr>';
     }).join("");
 
   const allocationHealth = portfolio.maxAbsoluteDrift <= 0.05 ? "Aligned" : portfolio.maxAbsoluteDrift <= 0.1 ? "Monitor" : "Rebalance";
   const contributionPlan = rebalanceContributions(state);
+  const heldCount = portfolio.holdings.filter((position) => position.units > 0).length;
   return `
     <section class="portfolio-hero card">
-      <div><span class="eyebrow">Long-term Investment Portfolio</span><strong>${money(portfolio.totalInvestedMyr)}</strong><p>Capital contributed across ${portfolio.positions.length} holdings · USD ${portfolio.totalInvestedUsd.toFixed(2)} cost basis</p></div>
+      <!-- Count only positions actually held. The holdings list also carries
+           target tickers with zero units, so the raw length would claim
+           holdings the user does not own. Figures themselves are unchanged. -->
+      <div><span class="eyebrow">Long-term Investment Portfolio</span><strong>${money(portfolio.totalInvestedMyr)}</strong><p>${heldCount > 0
+        ? `Capital contributed across ${heldCount} ${heldCount === 1 ? "holding" : "holdings"} · USD ${portfolio.totalInvestedUsd.toFixed(2)} cost basis`
+        : "No contributions recorded yet · targets are configured but nothing is held"}</p></div>
+      <!-- What it is worth now, beside what went in. Read from the canonical
+           snapshot; unknown renders "--" and is never shown as zero. -->
+      <div class="portfolio-health" data-valuation-status="${portfolio.valuationStatus}"><span>Market value</span><strong id="pfMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)}</strong><small id="pfUnrealised" class="${pnlTone(portfolio.unrealizedPnlMyr)}">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} · ${escapeHtml(valuationNote(portfolio))}</small></div>
       <div class="portfolio-health"><span>Allocation health</span><strong>${allocationHealth}</strong><small>Largest drift ${percent(portfolio.maxAbsoluteDrift, 1)}</small></div>
     </section>
     <article class="card panel"><div class="panel-head"><div><span class="eyebrow">Next Contribution</span><h3>Rebalance with new money</h3></div><span class="panel-note">No selling required</span></div><div class="rebalance-plan">${contributionPlan.map((item) => `<div><strong>${escapeHtml(item.ticker)}</strong><span>${money(item.amount)}</span></div>`).join("")}</div></article>
     <div class="portfolio-command-grid">
       <article class="card panel portfolio-allocation-panel">
         <div class="panel-head"><div><span class="eyebrow">Strategic Allocation</span><h3>Portfolio structure</h3></div><span class="status-pill ${portfolio.maxAbsoluteDrift <= 0.08 ? "positive" : "attention"}">${allocationHealth}</span></div>
-        ${portfolio.positions.length ? `<div class="portfolio-positions">${portfolio.positions.map((position, index) => `<div class="position-card"><div class="position-identity"><span class="position-index">${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(position.ticker)}</strong><small>${position.ticker === "VOO" ? "Core market exposure" : position.ticker === "QQQM" ? "Growth allocation" : "Portfolio holding"}</small></div></div><div class="position-value"><strong>${money(position.investedMyr)}</strong><small>${percent(position.actualAllocation)} of portfolio</small></div><div class="allocation-track"><span style="width:${Math.min(position.actualAllocation * 100, 100)}%"></span><i style="left:${Math.min(position.targetAllocation * 100, 100)}%" title="Target ${percent(position.targetAllocation)}"></i></div><div class="position-meta"><span>Target ${percent(position.targetAllocation)}</span><span class="${Math.abs(position.drift) > 0.08 ? "negative" : "positive"}">${position.drift >= 0 ? "+" : ""}${percent(position.drift, 1)} drift</span></div></div>`).join("")}</div>` : '<p class="empty-state">No portfolio positions yet. Record a contribution to establish your long-term allocation.</p>'}
+        ${portfolio.holdings.length ? `<div class="portfolio-positions">${portfolio.holdings.map((position, index) => `<div class="position-card"><div class="position-identity"><span class="position-index">${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(position.ticker)}</strong><small>${position.ticker === "VOO" ? "Core market exposure" : position.ticker === "QQQM" ? "Growth allocation" : "Portfolio holding"}</small></div></div><div class="position-value"><strong>${money(position.investedMyr)}</strong><small>${percent(position.actualAllocation)} of portfolio</small></div><div class="allocation-track"><span style="width:${Math.min(position.actualAllocation * 100, 100)}%"></span><i style="left:${Math.min(position.targetAllocation * 100, 100)}%" title="Target ${percent(position.targetAllocation)}"></i></div><div class="position-meta"><span>Target ${percent(position.targetAllocation)}</span><span class="${Math.abs(position.drift) > 0.08 ? "negative" : "positive"}">${position.drift >= 0 ? "+" : ""}${percent(position.drift, 1)} drift</span></div></div>`).join("")}</div>` : '<p class="empty-state">No portfolio positions yet. Record a contribution to establish your long-term allocation.</p>'}
       </article>
       <article class="card panel contribution-panel">
         <div class="panel-head"><div><span class="eyebrow">Contribution Record</span><h3>Add investment activity</h3></div><span class="panel-note">Cost basis</span></div>
@@ -506,6 +842,7 @@ function portfolioTemplate(state: WealthState): string {
           ${numberInput("amountMyr", "Amount MYR")}
           ${numberInput("amountUsd", "Amount USD")}
           ${numberInput("priceUsd", "Price / Unit USD")}
+          ${numberInput("units", "Filled Quantity")}
           ${numberInput("feeMyr", "Fee MYR", "0")}
           <label>Notes<input name="notes" type="text" placeholder="Optional"></label>
           <button class="primary-button" type="submit">Record contribution</button>
@@ -517,18 +854,20 @@ function portfolioTemplate(state: WealthState): string {
       </article>
     </div>
     <details class="card panel portfolio-details">
-      <summary><div><span class="eyebrow">Position Detail</span><h3>Cost basis and allocation data</h3></div><span>${portfolio.positions.length} holdings</span></summary>
+      <summary><div><span class="eyebrow">Position Detail</span><h3>Cost basis and allocation data</h3></div><span>${portfolio.holdings.length} holdings</span></summary>
       <div class="portfolio-details-content">
         <div class="table-wrap compact-table financial-table">
           <table>
-            <thead><tr><th>Ticker</th><th>Invested MYR</th><th>Invested USD</th><th>Units</th><th>Avg Cost</th><th>Actual / Target</th><th>Drift</th></tr></thead>
+            <thead><tr><th>Ticker</th><th>Invested MYR</th><th>Invested USD</th><th>Units</th><th>Avg Cost</th><th>Market Price</th><th>Market Value</th><th>Unrealised P&amp;L</th><th>Actual / Target</th><th>Drift</th></tr></thead>
             <tbody>${positionRows}</tbody>
           </table>
         </div>
       </div>
     </details>
     <article class="card panel portfolio-activity">
-      <div class="panel-head"><div><span class="eyebrow">Portfolio Activity</span><h3>Contribution history</h3></div><span class="panel-note">${state.trades.length} records</span></div>
+      <div class="panel-head"><div><span class="eyebrow">Portfolio Activity</span><h3>Contribution history</h3></div><div class="panel-head-actions"><span class="panel-note">${state.trades.length} records</span>${state.trades.length > 0
+        ? '<button class="secondary-button danger-button clear-trades" type="button">Clear all</button>'
+        : ""}</div></div>
       <div class="table-wrap financial-table">
         <table>
           <thead><tr><th>Date</th><th>Platform</th><th>Ticker</th><th>Type</th><th>Amount MYR</th><th>Amount USD</th><th>Price USD</th><th>FX</th><th>Units</th><th></th></tr></thead>
@@ -754,6 +1093,7 @@ function marketTemplate(state: WealthState): string {
     <!-- Dividends Tab -->
     <div class="market-tab-content" data-tab-content="dividends">
       <div id="dividendsContent">
+        <p id="div-source" class="ov-detail-row__note" style="margin:0 0 10px;"></p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;">
           <div class="card" style="padding:16px;">
             <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">💰 Dividend Yield</div>
@@ -799,7 +1139,8 @@ function marketTemplate(state: WealthState): string {
     <div class="market-tab-content" data-tab-content="calendar">
       <div id="calendarContent">
         <div class="card" style="padding:16px;">
-          <div style="font-size:13px;font-weight:600;margin-bottom:12px;">📅 Upcoming Economic Events</div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;">📅 Recurring Economic Event Calendar</div>
+          <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px;">Illustrative recurring events, not live-fetched — check an official source (e.g. bls.gov, federalreserve.gov) for exact upcoming dates.</div>
           <div id="calendar-events"></div>
         </div>
       </div>
@@ -807,7 +1148,7 @@ function marketTemplate(state: WealthState): string {
   `;
 }
 
-function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
+function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): void {
   let currentSymbol = "VOO";
   let currentInterval = "12M";
   let customTickers = [...state.customTickers];
@@ -953,24 +1294,36 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
     if (pnlPanel) pnlPanel.style.display = "";
     if (pnlEmpty) pnlEmpty.style.display = "none";
 
-    const pnl = calcPnLForTicker(state.trades, symbol, 0, getUsdToMyr());
-    const isProfit = pnl.unrealizedPnlUsd >= 0;
+    // Valuation comes from the canonical portfolio snapshot, which is the only
+    // place that turns a live price into a market value. This panel renders;
+    // it does not calculate. A holding with no usable price stays unknown --
+    // never zero, which would report a total loss that did not happen.
+    const holding = getHolding(getPortfolioSnapshot(state, new Date(), livePriceInputs()), symbol as Ticker);
+    const valued = holding?.marketValueUsd != null;
+    const pnlUsd = holding?.unrealizedPnlUsd ?? null;
+    const isProfit = (pnlUsd ?? 0) >= 0;
     const color = isProfit ? "var(--green)" : "var(--red)";
-    const sign = isProfit ? "+" : "";
+    const sign = isProfit ? "+" : "−";
+    const UNKNOWN = "--";
 
     const el = (id: string) => root.querySelector<HTMLElement>(id);
     const setT = (id: string, v: string) => { const e = el(id); if (e) e.textContent = v; };
     const setC = (id: string, c: string) => { const e = el(id); if (e) e.style.color = c; };
 
-    setT("#pnl-invested", "USD " + pnl.totalInvestedUsd.toFixed(2));
-    setT("#pnl-units", pnl.totalUnits.toFixed(4));
-    setT("#pnl-cost", "USD " + pnl.averageCostUsd.toFixed(2));
-    setT("#pnl-value", "USD " + pnl.currentValueUsd.toFixed(2));
-    setT("#pnl-amount", sign + "USD " + Math.abs(pnl.unrealizedPnlUsd).toFixed(2));
-    setC("#pnl-amount", color);
-    setT("#pnl-pct", sign + (pnl.unrealizedPnlPct * 100).toFixed(2) + "%");
-    setC("#pnl-pct", color);
-    setT("#pnl-fees", "MYR " + pnl.feeMyr.toFixed(2));
+    // Recorded facts — always known, shown whether or not a price exists.
+    setT("#pnl-invested", "USD " + (holding?.investedUsd ?? 0).toFixed(2));
+    setT("#pnl-units", (holding?.units ?? 0).toFixed(4));
+    setT("#pnl-cost", "USD " + (holding?.averageCostUsd ?? 0).toFixed(2));
+    setT("#pnl-fees", "MYR " + (holding?.feesMyr ?? 0).toFixed(2));
+
+    // Live facts — unknown until a real quote arrives.
+    setT("#pnl-value", valued ? "USD " + holding!.marketValueUsd!.toFixed(2) : UNKNOWN);
+    setT("#pnl-amount", pnlUsd !== null ? sign + "USD " + Math.abs(pnlUsd).toFixed(2) : UNKNOWN);
+    setC("#pnl-amount", pnlUsd !== null ? color : "");
+    setT("#pnl-pct", holding?.unrealizedPnlPercent != null
+      ? sign + (Math.abs(holding.unrealizedPnlPercent) * 100).toFixed(2) + "%"
+      : UNKNOWN);
+    setC("#pnl-pct", holding?.unrealizedPnlPercent != null ? color : "");
 
     // Trade list
     const tradeListEl = el("#pnl-trades-list");
@@ -978,7 +1331,7 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
       const tradesForTicker = state.trades.filter((t) => t.ticker === symbol);
       const rows = tradesForTicker.map((t) => {
         const isBuy = t.type !== "Sell";
-        const units = t.priceUsd > 0 ? (t.amountUsd / t.priceUsd).toFixed(4) : "0";
+        const units = tradeUnits(t).toFixed(4);
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface);border-radius:6px;margin-bottom:4px;font-size:12px;">' +
           '<span style="display:flex;gap:8px;align-items:center;">' +
             '<span style="color:' + (isBuy ? 'var(--green)' : 'var(--red)') + ';font-weight:700;width:20px;">' + (isBuy ? '↑' : '↓') + '</span>' +
@@ -1153,7 +1506,6 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
       const metrics = calcRiskMetrics(prices, spyPrices);
 
       const pct = (v: number) => (v * 100).toFixed(1) + "%";
-      const color = (v: number) => v >= 0 ? "var(--green)" : "var(--red)";
 
       setT("#risk-drawdown", pct(metrics.maxDrawdown));
       const ddEl = root.querySelector<HTMLElement>("#risk-drawdown");
@@ -1199,25 +1551,39 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
 
     try {
       const fund = await fetchFundamentals(symbol);
-      setT("#div-yield", (fund.dividendYield * 100).toFixed(2) + "%");
-      setT("#div-frequency", fund.dividendFrequency);
-      setT("#div-annual", "$" + fund.dividendRate.toFixed(2));
-      setT("#div-pe", fund.trailingPE > 0 ? fund.trailingPE.toFixed(1) : "N/A");
+      // A zero from this provider means "not reported for this instrument",
+      // never "the value is zero" — so each field renders unknown rather than
+      // a misleading 0.00%.
+      setT("#div-source", "Live data from the market provider.");
+      setT("#div-yield", fund.dividendYield > 0 ? (fund.dividendYield * 100).toFixed(2) + "%" : UNKNOWN);
+      setT("#div-frequency", fund.dividendFrequency || UNKNOWN);
+      setT("#div-annual", fund.dividendRate > 0 ? "$" + fund.dividendRate.toFixed(2) : UNKNOWN);
+      setT("#div-pe", fund.trailingPE > 0 ? fund.trailingPE.toFixed(1) : UNKNOWN);
 
+      // Only the rows the provider actually answered. Expense ratio and AUM
+      // are reported for ETFs and matter more to a long-term holder than the
+      // ex-dividend date this source does not carry.
       const historyEl = root.querySelector<HTMLElement>("#div-history");
-      if (historyEl && fund.exDividendDate) {
-        historyEl.innerHTML =
-          '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;">' +
-            '<span>Next Ex-Dividend</span><span style="font-weight:600;">' + fund.exDividendDate + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;">' +
-            '<span>5Y Avg Yield</span><span style="font-weight:600;">' + (fund.fiveYearAvgDividendYield * 100).toFixed(2) + '%</span></div>' +
-          '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;">' +
-            '<span>Annual Dividend</span><span style="font-weight:600;">$' + fund.trailingAnnualDividendRate.toFixed(2) + '</span></div>';
+      if (historyEl) {
+        const row = (label: string, value: string, last = false) =>
+          '<div style="display:flex;justify-content:space-between;padding:8px 0;' +
+          (last ? "" : "border-bottom:1px solid var(--line);") +
+          'font-size:13px;"><span>' + escapeHtml(label) + '</span>' +
+          '<span style="font-weight:600;">' + escapeHtml(value) + '</span></div>';
+        const rows: string[] = [];
+        if (fund.expenseRatio > 0) rows.push(row("Expense ratio", (fund.expenseRatio * 100).toFixed(2) + "%"));
+        if (fund.totalAssets > 0) rows.push(row("Fund size (AUM)", "USD " + (fund.totalAssets / 1e9).toFixed(1) + "B"));
+        if (fund.exDividendDate) rows.push(row("Next Ex-Dividend", fund.exDividendDate));
+        if (fund.trailingAnnualDividendRate > 0) rows.push(row("Annual dividend / share", "$" + fund.trailingAnnualDividendRate.toFixed(2)));
+        historyEl.innerHTML = rows.length > 0
+          ? rows.join("")
+          : '<div class="empty-state">No further fund detail is reported for ' + escapeHtml(symbol) + '.</div>';
       }
     } catch (err) {
       console.warn("[Market] API failed, using static dividend data for " + symbol, err);
       const sd = staticDiv[symbol];
       if (!sd) {
+        setT("#div-source", "Dividend data is unavailable for this symbol.");
         setT("#div-yield", "N/A");
         setT("#div-frequency", "N/A");
         setT("#div-annual", "N/A");
@@ -1228,6 +1594,11 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
       }
       setT("#div-yield", sd.yield);
       setT("#div-frequency", sd.freq);
+      // These are hardcoded reference figures, not a live reading. The provider
+      // endpoint requires an authenticated session and now returns 401 for
+      // everyone, so this fallback is what users actually see — saying nothing
+      // would present a stale snapshot as today's dividend data.
+      setT("#div-source", "Reference snapshot — the live dividend feed is unavailable, so these figures are indicative only and may be out of date.");
       setT("#div-annual", sd.annual);
       setT("#div-pe", sd.pe);
       const historyEl = root.querySelector<HTMLElement>("#div-history");
@@ -1325,6 +1696,13 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter, nav
   loadDividends(currentSymbol);
   loadRisk(currentSymbol);
   renderStaticComparison();
+
+  // Quotes arrive asynchronously, and go stale after PRICE_STALE_AFTER_MS if
+  // this page stays open. Until a price lands the panel shows "--"; each
+  // (re)fetch repaints it with the current quote behind it.
+  refreshLivePrices(state, () => updatePnL(currentSymbol));
+  const marketPriceTimer = setInterval(() => refreshLivePrices(state, () => updatePnL(currentSymbol)), PRICE_POLL_INTERVAL_MS);
+  priceRefreshCleanup.set(root, () => clearInterval(marketPriceTimer));
 }
 
 function tradeTypeColor(type: string): string {
@@ -1387,19 +1765,348 @@ function localDateValue(iso?: string): string {
   return local.toISOString().slice(0, 10);
 }
 
+// --- TVM Calculator ---------------------------------------------------------
+// Session-only inputs: deliberately not persisted to WealthState, localStorage
+// or Firebase. Refreshing the page resets the calculator, which is fine for a
+// hypothetical planning tool.
+
+// --- TVM Calculator ---------------------------------------------------------
+// Classic five-variable solver: fill any four of PV / PMT / FV / Rate /
+// Periods and solve for the fifth.
+//
+// Session-only inputs: deliberately not persisted to WealthState, localStorage
+// or Firebase. Refreshing the page resets the calculator, which is fine for a
+// hypothetical planning tool.
+
+type TvmFieldName = "presentValue" | "payment" | "futureValue" | "annualRatePercent" | "periods";
+
+const TVM_DEFAULTS: Record<TvmFieldName, string> = {
+  presentValue: "-1000",
+  payment: "-300",
+  futureValue: "",
+  annualRatePercent: "8",
+  periods: "120",
+};
+
+let tvmValues: Record<TvmFieldName, string> = { ...TVM_DEFAULTS };
+let tvmFrequency: CompoundingFrequency = "monthly";
+let tvmTiming: PaymentTiming = "end";
+let tvmRateKind: RateKind = "nominal";
+/** The most recent solve, so the result panel survives re-renders. */
+let tvmSolved: { variable: TvmVariable; result: ReturnType<typeof solveTvm> } | null = null;
+
+/** Inflation is a separate small tool, not one of the five variables. */
+const tvmInflation = { futureAmount: "100000", inflationRatePercent: "3", years: "10" };
+
+const TVM_ROWS: Array<{ name: TvmFieldName; label: string; button: string; unit: string; step: string }> = [
+  { name: "presentValue", label: "Present Value", button: "PV", unit: "MYR", step: "100" },
+  { name: "payment", label: "Payments", button: "PMT", unit: "MYR", step: "50" },
+  { name: "futureValue", label: "Future Value", button: "FV", unit: "MYR", step: "1000" },
+  { name: "annualRatePercent", label: "Annual Rate (%)", button: "Rate", unit: "%", step: "0.1" },
+  { name: "periods", label: "Periods", button: "Periods", unit: "n", step: "1" },
+];
+
+/** Parse a field. Empty means "not filled in", never silently 0. */
+function tvmNumber(name: TvmFieldName): number {
+  const raw = tvmValues[name].trim();
+  if (raw === "") return Number.NaN;
+  return Number(raw);
+}
+
+function tvmSolveInput(): TvmSolveInput {
+  return {
+    presentValue: tvmNumber("presentValue"),
+    payment: tvmNumber("payment"),
+    futureValue: tvmNumber("futureValue"),
+    annualRatePercent: tvmNumber("annualRatePercent"),
+    periods: tvmNumber("periods"),
+    frequency: tvmFrequency,
+    timing: tvmTiming,
+    rateKind: tvmRateKind,
+  };
+}
+
+function tvmFormat(variable: TvmVariable, value: number): string {
+  if (variable === "annualRatePercent") return `${(Math.round(value * 1000) / 1000).toLocaleString("en-MY")}%`;
+  if (variable === "periods") return `${Math.round(value * 100) / 100}`;
+  return money(value);
+}
+
+const TVM_LABELS: Record<TvmVariable, string> = {
+  presentValue: "Present Value",
+  payment: "Payment",
+  futureValue: "Future Value",
+  annualRatePercent: "Annual Rate",
+  periods: "Periods",
+};
+
+function tvmResultTemplate(): string {
+  if (!tvmSolved) {
+    return `
+      <div class="tvm-result tvm-result--empty" role="status">
+        <p class="tvm-result__label">Result</p>
+        <p class="tvm-result__hint">Fill in any four values, then press the button beside the one you want to solve.</p>
+      </div>`;
+  }
+
+  const { variable, result } = tvmSolved;
+  if (!result.ok) {
+    return `
+      <div class="tvm-result tvm-result--invalid" role="status">
+        <p class="tvm-result__label">${escapeHtml(TVM_LABELS[variable])}</p>
+        <p class="tvm-result__value">—</p>
+        <ul class="tvm-errors" role="alert">
+          ${result.errors.map((error) => `<li><span aria-hidden="true">⚠</span> ${escapeHtml(error.message)}</li>`).join("")}
+        </ul>
+      </div>`;
+  }
+
+  const v = result.value;
+  const periodsLabel = `${Math.round(v.periods * 100) / 100} ${COMPOUNDING_LABELS[tvmFrequency].toLowerCase()} periods`;
+  return `
+    <div class="tvm-result" role="status">
+      <p class="tvm-result__label">Solved for ${escapeHtml(TVM_LABELS[variable])}</p>
+      <p class="tvm-result__value">${escapeHtml(tvmFormat(variable, v.value))}</p>
+      <dl class="tvm-result__rows">
+        <div class="tvm-result__row"><dt>Present value</dt><dd>${money(v.presentValue)}</dd></div>
+        <div class="tvm-result__row"><dt>Payment</dt><dd>${money(v.payment)}</dd></div>
+        <div class="tvm-result__row"><dt>Future value</dt><dd>${money(v.futureValue)}</dd></div>
+        <div class="tvm-result__row"><dt>Annual rate</dt><dd>${Math.round(v.annualRatePercent * 1000) / 1000}% ${escapeHtml(tvmRateKind)}</dd></div>
+        <div class="tvm-result__row"><dt>Periods</dt><dd>${escapeHtml(periodsLabel)}</dd></div>
+        <div class="tvm-result__row"><dt>Total payments</dt><dd>${money(v.totalPayments)}</dd></div>
+        <div class="tvm-result__row"><dt>Total interest</dt><dd>${money(v.totalInterest)}</dd></div>
+      </dl>
+      <p class="tvm-result__summary">Based on your own assumptions: ${escapeHtml(COMPOUNDING_LABELS[tvmFrequency].toLowerCase())} compounding, payments at the ${tvmTiming === "end" ? "end" : "beginning"} of each period, ${escapeHtml(tvmRateKind)} rate. Projections only — not guaranteed returns or investment advice.</p>
+    </div>`;
+}
+
+function tvmInflationTemplate(): string {
+  const result = calculateInflationAdjustedValue({
+    futureAmount: Number(tvmInflation.futureAmount.trim() === "" ? Number.NaN : tvmInflation.futureAmount),
+    inflationRatePercent: Number(tvmInflation.inflationRatePercent.trim() === "" ? Number.NaN : tvmInflation.inflationRatePercent),
+    years: Number(tvmInflation.years.trim() === "" ? Number.NaN : tvmInflation.years),
+  });
+
+  const fields: Array<{ name: keyof typeof tvmInflation; label: string; unit: string; step: string }> = [
+    { name: "futureAmount", label: "Future amount", unit: "MYR", step: "1000" },
+    { name: "inflationRatePercent", label: "Inflation rate", unit: "%", step: "0.1" },
+    { name: "years", label: "Years", unit: "years", step: "1" },
+  ];
+
+  return `
+    <section class="card panel tvm-card" aria-labelledby="tvmInflationTitle">
+      <div class="panel-head">
+        <div>
+          <span class="eyebrow">Planning Tool</span>
+          <h3 id="tvmInflationTitle">Inflation Adjustment</h3>
+          <p class="card-sub">What a future amount is worth in today's money.</p>
+        </div>
+      </div>
+      <div class="tvm-layout">
+        <div class="tvm-inputs">
+          ${fields.map((field) => `
+            <label class="tvm-field" for="tvmInf-${field.name}">
+              <span class="tvm-field__label">${escapeHtml(field.label)}</span>
+              <span class="tvm-field__control">
+                <span class="tvm-field__unit" aria-hidden="true">${escapeHtml(field.unit)}</span>
+                <input class="tvm-field__input" id="tvmInf-${field.name}" type="number" inputmode="decimal"
+                       step="${field.step}" value="${escapeHtml(tvmInflation[field.name])}"
+                       data-tvm-inflation="${field.name}">
+              </span>
+            </label>`).join("")}
+        </div>
+        <div class="tvm-output" aria-live="polite">
+          ${result.ok ? `
+            <div class="tvm-result" role="status">
+              <p class="tvm-result__label">Today's purchasing power</p>
+              <p class="tvm-result__value">${money(result.value.todaysPurchasingPower)}</p>
+              <dl class="tvm-result__rows">
+                <div class="tvm-result__row"><dt>Purchasing-power loss</dt><dd>${money(result.value.purchasingPowerLoss)}</dd></div>
+                <div class="tvm-result__row"><dt>Loss</dt><dd>${percent(result.value.purchasingPowerLossPercent, 1)}</dd></div>
+              </dl>
+              <p class="tvm-result__summary">Assumption: constant ${escapeHtml(tvmInflation.inflationRatePercent || "0")}% inflation.</p>
+            </div>` : `
+            <div class="tvm-result tvm-result--invalid" role="status">
+              <p class="tvm-result__label">Today's purchasing power</p>
+              <p class="tvm-result__value">—</p>
+              <ul class="tvm-errors" role="alert">
+                ${result.errors.map((e) => `<li><span aria-hidden="true">⚠</span> ${escapeHtml(e.message)}</li>`).join("")}
+              </ul>
+            </div>`}
+        </div>
+      </div>
+    </section>`;
+}
+
+function tvmCalculatorTemplate(): string {
+  // Wrapper so Reset can re-render just the calculator, not the page shell.
+  return `<div id="tvmRoot">${tvmCardsTemplate()}</div>`;
+}
+
+function tvmCardsTemplate(): string {
+  return `
+    <section class="card panel tvm-card" aria-labelledby="tvmTitle">
+      <div class="panel-head">
+        <div>
+          <span class="eyebrow">Planning Tool</span>
+          <h3 id="tvmTitle">TVM Calculator</h3>
+          <p class="card-sub">Fill in any four values, then solve for the fifth.</p>
+        </div>
+        <button class="secondary-button" type="button" id="tvmReset">Reset</button>
+      </div>
+
+      <div class="tvm-options">
+        <fieldset class="tvm-fieldset">
+          <legend class="tvm-legend">Annual Rate</legend>
+          ${(["nominal", "effective"] as RateKind[]).map((kind) => `
+            <label class="tvm-radio">
+              <input type="radio" name="tvmRateKind" value="${kind}" data-tvm-ratekind="${kind}"${tvmRateKind === kind ? " checked" : ""}>
+              <span>${kind === "nominal" ? "Nominal" : "Effective"}</span>
+            </label>`).join("")}
+        </fieldset>
+        <fieldset class="tvm-fieldset">
+          <legend class="tvm-legend">Mode</legend>
+          ${(["end", "beginning"] as PaymentTiming[]).map((timing) => `
+            <label class="tvm-radio">
+              <input type="radio" name="tvmTiming" value="${timing}" data-tvm-timing="${timing}"${tvmTiming === timing ? " checked" : ""}>
+              <span>${timing === "end" ? "End" : "Beginning"}</span>
+            </label>`).join("")}
+        </fieldset>
+      </div>
+
+      <div class="tvm-solver">
+        ${TVM_ROWS.map((row) => `
+          <div class="tvm-row">
+            <label class="tvm-row__label" for="tvm-${row.name}">${escapeHtml(row.label)}</label>
+            <span class="tvm-field__control">
+              <span class="tvm-field__unit" aria-hidden="true">${escapeHtml(row.unit)}</span>
+              <input class="tvm-field__input" id="tvm-${row.name}" type="number" inputmode="decimal"
+                     step="${row.step}" value="${escapeHtml(tvmValues[row.name])}"
+                     data-tvm-input="${row.name}" aria-describedby="tvmSignNote">
+            </span>
+            <button class="v2-btn v2-btn--secondary v2-btn--sm tvm-solve" type="button"
+                    data-tvm-solve="${row.name}"
+                    aria-label="Solve for ${escapeHtml(row.label)}">${escapeHtml(row.button)}</button>
+          </div>`).join("")}
+
+        <div class="tvm-row tvm-row--select">
+          <label class="tvm-row__label" for="tvmFrequency">Compounding</label>
+          <select class="v2-input tvm-select" id="tvmFrequency" data-tvm-frequency>
+            ${(Object.keys(COMPOUNDING_LABELS) as CompoundingFrequency[]).map((key) => `
+              <option value="${key}"${key === tvmFrequency ? " selected" : ""}>${escapeHtml(COMPOUNDING_LABELS[key])}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+
+      <p class="tvm-note" id="tvmSignNote">Cash-flow signs matter: money you pay in is negative, money you receive is positive. Leave the value you want to solve for blank, or just press its button to overwrite it.</p>
+
+      <div class="tvm-output" id="tvmOutput" aria-live="polite">
+        ${tvmResultTemplate()}
+      </div>
+    </section>
+    ${tvmInflationTemplate()}`;
+}
+
+function bindTvmCalculator(root: HTMLElement): void {
+  const rerenderAll = () => {
+    const host = root.querySelector<HTMLElement>("#tvmRoot");
+    if (!host) return;
+    host.innerHTML = tvmCardsTemplate();
+    bindTvmCalculator(root);
+  };
+  const rerenderResult = () => {
+    const output = root.querySelector<HTMLElement>("#tvmOutput");
+    if (output) output.innerHTML = tvmResultTemplate();
+  };
+
+  root.querySelectorAll<HTMLInputElement>("[data-tvm-input]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const name = input.dataset.tvmInput as TvmFieldName | undefined;
+      if (name) tvmValues[name] = input.value;
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-tvm-solve]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const variable = button.dataset.tvmSolve as TvmVariable | undefined;
+      if (!variable) return;
+      const result = solveTvm(variable, tvmSolveInput());
+      tvmSolved = { variable, result };
+      // Write the solved value back into its own field, as a solver does.
+      if (result.ok) {
+        const solved = result.value.value;
+        tvmValues[variable as TvmFieldName] = String(
+          variable === "annualRatePercent" || variable === "periods"
+            ? Math.round(solved * 1e4) / 1e4
+            : Math.round(solved * 100) / 100,
+        );
+        const field = root.querySelector<HTMLInputElement>(`[data-tvm-input="${variable}"]`);
+        if (field) field.value = tvmValues[variable as TvmFieldName];
+      }
+      rerenderResult();
+    });
+  });
+
+  root.querySelectorAll<HTMLInputElement>("[data-tvm-ratekind]").forEach((input) => {
+    input.addEventListener("change", () => {
+      tvmRateKind = input.dataset.tvmRatekind as RateKind;
+      rerenderResult();
+    });
+  });
+
+  root.querySelectorAll<HTMLInputElement>("[data-tvm-timing]").forEach((input) => {
+    input.addEventListener("change", () => {
+      tvmTiming = input.dataset.tvmTiming as PaymentTiming;
+      rerenderResult();
+    });
+  });
+
+  root.querySelector<HTMLSelectElement>("[data-tvm-frequency]")?.addEventListener("change", (event) => {
+    tvmFrequency = (event.currentTarget as HTMLSelectElement).value as CompoundingFrequency;
+    rerenderResult();
+  });
+
+  root.querySelector<HTMLButtonElement>("#tvmReset")?.addEventListener("click", () => {
+    tvmValues = { ...TVM_DEFAULTS };
+    tvmFrequency = "monthly";
+    tvmTiming = "end";
+    tvmRateKind = "nominal";
+    tvmSolved = null;
+    rerenderAll();
+    root.querySelector<HTMLInputElement>('[data-tvm-input="presentValue"]')?.focus();
+  });
+
+  root.querySelectorAll<HTMLInputElement>("[data-tvm-inflation]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const name = input.dataset.tvmInflation as keyof typeof tvmInflation | undefined;
+      if (!name) return;
+      tvmInflation[name] = input.value;
+      const card = input.closest(".tvm-card");
+      const output = card?.querySelector<HTMLElement>(".tvm-output");
+      if (!output) return;
+      // Re-render only the inflation card's output, preserving focus.
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = tvmInflationTemplate();
+      const fresh = wrapper.querySelector(".tvm-output");
+      if (fresh) output.innerHTML = fresh.innerHTML;
+    });
+  });
+}
+
 function ledgerTemplate(state: WealthState): string {
   const filtered = filterLedgerTransactions(state.ledgerTransactions, ledgerFilters, new Date(), state.ledgerCategories, state.ledgerAccounts);
+  // Totals here follow the user's own filter (arbitrary range/type/category),
+  // so they deliberately stay on the raw path rather than the canonical model.
   const totals = ledgerTotals(filtered);
   const totalOpeningFunds = openingFunds(state.ledgerAccounts);
-  const totalNetAssets = accountTypeBalance(state.ledgerTransactions, state.ledgerAccounts, "bank")
-    + accountTypeBalance(state.ledgerTransactions, state.ledgerAccounts, "wallet")
-    + accountTypeBalance(state.ledgerTransactions, state.ledgerAccounts, "investment");
-  const liquidNetAssets = accountTypeBalance(state.ledgerTransactions, state.ledgerAccounts, "bank")
-    + accountTypeBalance(state.ledgerTransactions, state.ledgerAccounts, "wallet");
+  // Account balances and type totals are canonical ledger facts.
+  const ledger = getLedgerSnapshot(state);
+  const liquidNetAssets = ledger.accountTypeBalances.bank + ledger.accountTypeBalances.wallet;
+  const totalNetAssets = liquidNetAssets + ledger.accountTypeBalances.investment;
   const editing = state.ledgerTransactions.find((transaction) => transaction.id === ledgerEditingId);
   const entryType = editing?.type ?? ledgerEntryType;
   const entryCategories = state.ledgerCategories.filter((category) => category.type === entryType);
-  const balances = accountBalances(state.ledgerTransactions, state.ledgerAccounts);
+  const balances = ledger.accountBalances;
   const accountTypeMeta = (type: LedgerAccountType): { label: string; emptyLabel: string; icon: string } => {
     if (type === "bank") return { label: "Bank account", emptyLabel: "bank accounts", icon: "🏦" };
     if (type === "wallet") return { label: "E-wallet", emptyLabel: "e-wallets", icon: "👛" };
@@ -1449,6 +2156,7 @@ function ledgerTemplate(state: WealthState): string {
   }).join("");
 
   return `<div class="section-title"><span class="eyebrow">Everyday Money</span><h3>Ledger</h3><p>Capture income, expenses, and account transfers, then understand where your money goes.</p></div>
+    ${leakInsightStrip(state, ["duplicate", "fee", "subscription"], "Transaction check")}
     <div class="ledger-layout">
       <article class="card panel ledger-entry"><div class="panel-head"><div><span class="eyebrow">Quick Entry</span><h3>${editing ? "Edit Transaction" : "Add Transaction"}</h3></div>${editing ? '<button id="cancelLedgerEdit" class="secondary-button" type="button">Cancel</button>' : ""}</div>
         <form id="ledgerForm"><input name="id" type="hidden" value="${escapeHtml(editing?.id ?? "")}"><div class="ledger-type-toggle" role="group" aria-label="Transaction type"><button type="button" data-ledger-type="expense" class="${entryType === "expense" ? "active expense" : ""}">− Expense</button><button type="button" data-ledger-type="income" class="${entryType === "income" ? "active income" : ""}">+ Income</button><button type="button" data-ledger-type="transfer" class="${entryType === "transfer" ? "active transfer" : ""}">↔ Transfer</button></div><input name="type" type="hidden" value="${entryType}">
@@ -1460,7 +2168,7 @@ function ledgerTemplate(state: WealthState): string {
       <div class="ledger-main">
         <div class="ledger-summary"><article class="card"><span>Opening Funds</span><strong>${money(totalOpeningFunds)}</strong><small>Starting balance across all accounts</small></article><article class="card"><span>Income</span><strong class="income">+${money(totals.income)}</strong><small>Income in the selected period</small></article><article class="card"><span>Expenses</span><strong class="expense">−${money(totals.expense)}</strong><small>Expenses in the selected period</small></article><article class="card"><span>Total Net Assets</span><strong class="${totalNetAssets >= 0 ? "income" : "expense"}">${totalNetAssets < 0 ? "−" : ""}${money(Math.abs(totalNetAssets))}</strong><small>Bank + E-wallet + Investment</small></article><article class="card"><span>Liquid Net Assets</span><strong class="${liquidNetAssets >= 0 ? "income" : "expense"}">${liquidNetAssets < 0 ? "−" : ""}${money(Math.abs(liquidNetAssets))}</strong><small>Bank + E-wallet · Investment excluded</small></article></div>
         <article class="card ledger-account-summary"><div class="ledger-account-summary-head"><div><span class="eyebrow">Cash Locations</span><h3>Account Balances</h3><p>Opening balances adjusted by income, expenses, and transfers.</p></div><div><small>Total Net Assets</small><strong class="${totalNetAssets >= 0 ? "income" : "expense"}">${totalNetAssets < 0 ? "−" : ""}${money(Math.abs(totalNetAssets))}</strong></div></div><div class="ledger-account-columns">${accountGroup("bank", "Bank", "🏦")}${accountGroup("wallet", "E-wallet", "👛")}${accountGroup("investment", "Investment", "📈")}</div></article>
-        <article class="card panel ledger-filters"><form id="ledgerFilterForm"><div class="filter-presets">${(["week", "month", "year", "custom"] as const).map((preset) => `<button type="button" data-preset="${preset}" class="${ledgerFilters.preset === preset ? "active" : ""}">${preset === "week" ? "This week" : preset === "month" ? "This month" : preset === "year" ? "This year" : "Custom"}</button>`).join("")}</div><div class="ledger-filter-fields ${ledgerFilters.preset === "custom" ? "show-custom" : ""}"><label class="custom-date">From<input name="startDate" type="date" value="${ledgerFilters.startDate}"></label><label class="custom-date">To<input name="endDate" type="date" value="${ledgerFilters.endDate}"></label><label>Type<select name="type"><option value="all">All types</option><option value="expense"${ledgerFilters.type === "expense" ? " selected" : ""}>Expense</option><option value="income"${ledgerFilters.type === "income" ? " selected" : ""}>Income</option><option value="transfer"${ledgerFilters.type === "transfer" ? " selected" : ""}>Transfer</option></select></label><label>Category<select name="categoryId"><option value="">All categories</option>${categoryOptions}</select></label><label>Search<input name="query" type="search" value="${escapeHtml(ledgerFilters.query)}" placeholder="Note, category, account"></label><button class="secondary-button" id="resetLedgerFilters" type="button">Reset</button></div></form></article>
+        <article class="card panel ledger-filters"><form id="ledgerFilterForm"><div class="filter-presets">${(["today", "week", "month", "year", "custom"] as const).map((preset) => `<button type="button" data-preset="${preset}" class="${ledgerFilters.preset === preset ? "active" : ""}">${preset === "today" ? "Today" : preset === "week" ? "This week" : preset === "month" ? "This month" : preset === "year" ? "This year" : "Custom"}</button>`).join("")}</div><div class="ledger-filter-fields ${ledgerFilters.preset === "custom" ? "show-custom" : ""}"><label class="custom-date">From<input name="startDate" type="date" value="${ledgerFilters.startDate}"></label><label class="custom-date">To<input name="endDate" type="date" value="${ledgerFilters.endDate}"></label><label>Type<select name="type"><option value="all">All types</option><option value="expense"${ledgerFilters.type === "expense" ? " selected" : ""}>Expense</option><option value="income"${ledgerFilters.type === "income" ? " selected" : ""}>Income</option><option value="transfer"${ledgerFilters.type === "transfer" ? " selected" : ""}>Transfer</option></select></label><label>Category<select name="categoryId"><option value="">All categories</option>${categoryOptions}</select></label><label>Search<input name="query" type="search" value="${escapeHtml(ledgerFilters.query)}" placeholder="Note, category, account"></label><button class="secondary-button" id="resetLedgerFilters" type="button">Reset</button></div></form></article>
         <div class="ledger-report-grid"><article class="card panel"><div class="panel-head"><div><span class="eyebrow">Expense Mix</span><h3>Category Share</h3></div></div>${expenses.length ? `<div class="ledger-donut-wrap"><div class="ledger-donut" style="background:conic-gradient(${donut})"><span>${money(totals.expense)}</span></div><div class="ledger-legend">${expenses.map((item, index) => `<div><i style="background:${palette[index % palette.length]}"></i><span>${escapeHtml(item.category.icon + " " + item.category.label)}</span><strong>${percent(item.share, 1)}</strong></div>`).join("")}</div></div><div class="ledger-bars">${expenses.map((item, index) => `<div><span>${escapeHtml(item.category.label)}</span><div><i style="width:${(item.amount / maxCategory) * 100}%;background:${palette[index % palette.length]}"></i></div><strong>${money(item.amount)}</strong></div>`).join("")}</div>` : '<p class="empty-state">No expense data in this period.</p>'}</article>
           <article class="card panel"><div class="panel-head"><div><span class="eyebrow">Annual Overview</span><h3>Monthly Income vs Expense</h3></div></div><div class="monthly-chart">${monthly.map((item) => `<div class="month-column"><div class="month-bars"><i class="income" style="height:${Math.max(item.income / monthlyMax * 100, item.income ? 3 : 0)}%" title="Income ${money(item.income)}"></i><i class="expense" style="height:${Math.max(item.expense / monthlyMax * 100, item.expense ? 3 : 0)}%" title="Expense ${money(item.expense)}"></i></div><small>${new Date(2000, item.month).toLocaleString("en", { month: "short" }).slice(0, 1)}</small></div>`).join("")}</div><div class="chart-key"><span><i class="income"></i>Income</span><span><i class="expense"></i>Expense</span></div></article></div>
         <details id="ledgerHistoryPanel" class="card panel ledger-collapsible"${ledgerHistoryOpen ? " open" : ""}><summary><div><span class="eyebrow">Transactions</span><h3>History</h3></div><span class="ledger-collapsible-meta">${filtered.length} records</span></summary><div class="ledger-collapsible-content"><div class="ledger-list">${transactionRows || '<p class="empty-state">No transactions match this view. Add your first record above.</p>'}</div></div></details>
@@ -1471,10 +2179,10 @@ function ledgerTemplate(state: WealthState): string {
 }
 
 function bucketsTemplate(state: WealthState): string {
-  const surplus = Math.max(monthlySurplus(state), 1);
-  const bucketCards = state.buckets.map((bucket, index) => {
-    const base = bucket.id === "survival" ? state.cashflow.allowance : bucket.cadence === "one-time" ? bucket.amount : surplus;
-    const width = Math.min((bucket.amount / base) * 100, 100);
+  // Bucket allocation facts come from the canonical budget read model.
+  const bucketCards = getBudgetSnapshot(state).buckets.map((bucket) => {
+    const index = bucket.index;
+    const width = bucket.allocationRatio * 100;
     return '<article class="card data-card">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
         '<span class="eyebrow">' + escapeHtml(bucket.name) + '</span>' +
@@ -1510,6 +2218,7 @@ function bucketsTemplate(state: WealthState): string {
 
   return `
     <div class="section-title"><span class="eyebrow">Capital Routing</span><h3>Monthly Fund Allocation Matrix</h3><p>Give every ringgit a clear purpose to reduce emotional spending and impulsive investing.</p></div>
+    ${leakInsightStrip(state, ["budget"], "Budget signal")}
     <div class="three-col-grid">
       ${bucketCards}
       ${addBucketCard}
@@ -1517,21 +2226,15 @@ function bucketsTemplate(state: WealthState): string {
   `;
 }
 
-function goalsWithIncompleteFirst(state: WealthState): Array<{ goal: WealthState["goals"][number]; originalIndex: number }> {
-  return state.goals
-    .map((goal, originalIndex) => ({ goal, originalIndex }))
-    .sort((a, b) => {
-      const aComplete = a.goal.target > 0 && a.goal.current >= a.goal.target;
-      const bComplete = b.goal.target > 0 && b.goal.current >= b.goal.target;
-      return Number(aComplete) - Number(bComplete);
-    });
-}
-
 function goalsTemplate(state: WealthState): string {
-  const goalCards = goalsWithIncompleteFirst(state).map(({ goal, originalIndex }) => {
-    const current = linkedGoalCurrent(goal, state);
-    const ratio = goal.target > 0 ? Math.min(current / goal.target, 1) : 0;
-    const months = goal.monthlyContribution > 0 ? Math.ceil(Math.max(goal.target - current, 0) / goal.monthlyContribution) : null;
+  // Goal facts come from the canonical read model.
+  const goalCards = getGoalsSnapshot(state).ordered.map((snapshot) => {
+    const goal = state.goals[snapshot.index];
+    const originalIndex = snapshot.index;
+    const current = snapshot.currentAmount;
+    const linkedAccount = snapshot.linkedAccountName;
+    const ratio = snapshot.progress;
+    const months = snapshot.estimatedMonthsToTarget;
     const color = ratio >= 0.8 ? "var(--green)" : ratio >= 0.4 ? "var(--amber)" : "var(--ink)";
     const barColor = ratio >= 0.8 ? "var(--green)" : ratio >= 0.4 ? "var(--amber)" : "var(--blue)";
     const extra = months ? " · " + months + " months" : "";
@@ -1543,7 +2246,8 @@ function goalsTemplate(state: WealthState): string {
       '<h3>' + escapeHtml(goal.label) + '</h3>' +
       '<strong style="color:' + color + ';">' + percent(ratio) + '</strong>' +
       '<div class="bar"><span style="width:' + Math.round(ratio * 100) + '%;background:' + barColor + ';"></span></div>' +
-      '<small style="color:var(--ink-3);">' + money(current) + ' / ' + money(goal.target) + extra + (goal.accountId ? ' · Linked to account' : '') + '</small>' +
+      '<small style="color:var(--ink-3);">' + money(current) + ' / ' + money(goal.target) + extra + '</small>' +
+      '<small class="goal-account-link" style="color:var(--ink-3);">' + (linkedAccount ? 'Linked account: ' + escapeHtml(linkedAccount) : snapshot.isAccountLinked ? 'Linked account: Account unavailable' : 'Progress: Manual') + '</small>' +
       '<p>' + escapeHtml(goal.note) + '</p>' +
       '<div class="goal-edit-form" id="goalEdit' + originalIndex + '" style="display:none;margin-top:12px;">' +
         '<form class="form-grid goalForm" data-index="' + originalIndex + '">' +
@@ -1554,8 +2258,9 @@ function goalsTemplate(state: WealthState): string {
           numberInput("monthlyContribution", "Monthly MYR", String(goal.monthlyContribution), "1") +
           '<label>Linked account<select name="accountId"><option value="">Manual progress</option>' + state.ledgerAccounts.map((account) => '<option value="' + escapeHtml(account.id) + '"' + (account.id === goal.accountId ? ' selected' : '') + '>' + escapeHtml(account.name) + '</option>').join('') + '</select></label>' +
           '<label>Note<textarea name="note" rows="2">' + escapeHtml(goal.note) + '</textarea></label>' +
+          '<p class="form-error goal-form-error" role="alert" hidden></p>' +
           '<div style="display:flex;gap:8px;">' +
-            '<button class="primary-button" type="submit">Save</button>' +
+            '<button class="primary-button save-goal" type="button">Save</button>' +
             '<button class="secondary-button cancel-goal-edit" type="button" data-index="' + originalIndex + '">Cancel</button>' +
             '<button class="danger-button delete-goal" type="button" data-index="' + originalIndex + '">Delete</button>' +
           '</div>' +
@@ -1564,20 +2269,76 @@ function goalsTemplate(state: WealthState): string {
       '</article>';
   }).join("");
 
-  const addGoalCard = '<article class="card data-card" style="display:flex;align-items:center;justify-content:center;min-height:120px;border-style:dashed;cursor:pointer;" id="addGoalBtn">' +
+  // A real button: the card was previously an <article> with a click handler,
+  // so it could not be reached or activated from the keyboard.
+  const addGoalCard = '<button class="card data-card" type="button" style="display:flex;align-items:center;justify-content:center;min-height:120px;border-style:dashed;cursor:pointer;width:100%;" id="addGoalBtn">' +
     '<div style="text-align:center;color:var(--ink-3);">' +
-      '<div style="font-size:24px;margin-bottom:4px;">+</div>' +
+      '<div style="font-size:24px;margin-bottom:4px;" aria-hidden="true">+</div>' +
       '<span>Add Goal</span>' +
     '</div>' +
-  '</article>';
+  '</button>';
+
+  // With no goals the page was otherwise blank: no explanation of what a goal
+  // is for, and nothing but a dashed card to click.
+  const goalsEmptyState = state.goals.length === 0
+    ? '<p class="empty-state">No goals yet. A goal gives a specific amount of money a job — a trip, a purchase, a buffer — so surplus stops drifting. Add one to start tracking progress against a target.</p>'
+    : "";
 
   return `
     <div class="section-title"><span class="eyebrow">Goal System</span><h3>Goals and Wishlist</h3><p>Goals do not restrict your life; they give every ringgit a clear direction.</p></div>
+    ${leakInsightStrip(state, ["goal"], "Goal pace")}
+    ${goalsEmptyState}
     <div class="two-col-grid">
       ${goalCards}
       ${addGoalCard}
     </div>
   `;
+}
+
+/**
+ * Minimal ActionRecord control for the priority recommendation.
+ * Records whether the user acted; it never affects ranking.
+ */
+function advisorPriorityActionControl(state: WealthState): string {
+  const priority = getAdvisorSnapshot(state).priority;
+  if (!priority) return "";
+  const done = isRecommendationCompleted(state, priority.id);
+  return `
+    <div class="advisor-action-record${done ? " advisor-action-record--done" : ""}">
+      <div class="advisor-action-record__copy">
+        <span class="eyebrow">Priority action</span>
+        <strong>${escapeHtml(priority.action)}</strong>
+      </div>
+      ${done
+        ? '<span class="advisor-action-record__done"><span aria-hidden="true">✓</span> Completed</span>'
+        : `<button class="primary-button advisor-mark-done" type="button" data-recommendation-id="${escapeHtml(priority.id)}" data-action-label="${escapeHtml(priority.action)}">Mark as done</button>`}
+    </div>`;
+}
+
+/**
+ * One Advisor recommendation with its execution state.
+ *
+ * Wording, severity and order all come from the recommendation itself — this
+ * only adds the control for recording that the user acted on it. Completing a
+ * recommendation never removes it: the Advisor is a derived read model, so the
+ * card stays until the underlying facts change.
+ */
+function advisorRecommendationCard(state: WealthState, recommendation: AdvisorRecommendation): string {
+  const done = isRecommendationCompleted(state, recommendation.id);
+  // Same body composition advisorMessages() has always produced.
+  const body = `${recommendation.fact} ${recommendation.action}`.trim();
+  return `<div class="advice ${recommendation.severity}${done ? " advice--done" : ""}" data-recommendation-id="${escapeHtml(recommendation.id)}">
+      <strong>${escapeHtml(recommendation.title)}</strong>
+      <span>${escapeHtml(body)}</span>
+      <div class="advice-action">${done
+        ? '<span class="advice-action__done"><span aria-hidden="true">✓</span> Action completed</span>'
+        : `<button class="v2-btn v2-btn--ghost v2-btn--sm advisor-mark-done" type="button" data-recommendation-id="${escapeHtml(recommendation.id)}" data-action-label="${escapeHtml(recommendation.action)}">Mark as done</button>`}
+        ${recommendation.destination
+          // The recommendation already names where the work happens. Surfacing
+          // it means the card tells the user what to do AND how to get there.
+          ? `<button class="v2-btn v2-btn--ghost v2-btn--sm dashboard-nav" type="button" data-page="${escapeHtml(recommendation.destination)}">Go to ${escapeHtml(recommendation.destination.replace(/-/g, " "))} →</button>`
+          : ""}</div>
+    </div>`;
 }
 
 function advisorPageTemplate(state: WealthState): string {
@@ -1592,10 +2353,16 @@ function advisorPageTemplate(state: WealthState): string {
   }).join("");
 
   return `
+    ${leakInsightStrip(state, ["debt", "goal", "budget", "fee", "subscription", "duplicate"], "Priority guidance")}
     <div class="terminal-grid">
       <article class="card panel advisor-panel">
         <div class="panel-head"><div><span class="eyebrow">Advisor Engine</span><h3>Financial Planning Guidance</h3></div><span style="color:var(--muted);font-size:12px;">Rules-based</span></div>
-        <div class="advice-list">${advisorMessages(state).map(adviceCard).join("")}</div>
+        ${advisorPriorityActionControl(state)}
+        <!-- Rendered straight from AdvisorSnapshot.recommendations: the same
+             cards as before, in the same canonical order, now each carrying its
+             own execution state. The UI does not rank or re-word anything. -->
+        <div class="advice-list">${getAdvisorSnapshot(state).recommendations
+          .map((recommendation) => advisorRecommendationCard(state, recommendation)).join("")}</div>
       </article>
       <article class="card panel">
         <div class="panel-head"><div><span class="eyebrow">Scenario Check</span><h3>Dip-Buy Trigger</h3></div><span style="color:var(--muted);font-size:12px;">Bear Market Plan</span></div>
@@ -1627,13 +2394,10 @@ function advisorPageTemplate(state: WealthState): string {
   `;
 }
 
-function adviceCard(msg: AdvisorMessage): string {
-  return '<div class="advice ' + msg.severity + '"><strong>' + escapeHtml(msg.title) + '</strong><span>' + escapeHtml(msg.body) + '</span></div>';
-}
-
 function rulesTemplate(state: WealthState): string {
+  const rulesBudget = getBudgetSnapshot(state);
   const defaultItems: Array<{ id: RuleCardId; title: string; body: string }> = [
-    { id: "monthly-cashflow", title: "Monthly Cashflow", body: "💰 " + money(state.cashflow.allowance) + " allowance, " + money(monthlyBasicExpense(state)) + " basic spending, " + money(monthlySurplus(state)) + " assignable surplus." },
+    { id: "monthly-cashflow", title: "Monthly Cashflow", body: "💰 " + money(rulesBudget.plannedAllowance) + " allowance, " + money(rulesBudget.plannedSpending) + " basic spending, " + money(rulesBudget.plannedSurplus) + " assignable surplus." },
     { id: "dca-mandate", title: "DCA Mandate", body: "📈 " + money(state.dca.monthly) + " per month. VOO " + percent(state.dca.targets.VOO) + " / QQQM " + percent(state.dca.targets.QQQM) + "." },
     { id: "emergency-fund", title: "Emergency Fund", body: "🛡️ " + money(state.emergency.current) + " / " + money(state.emergency.target) + ". Estimated annual yield: " + money(projectedAnnualEmergencyYield(state)) + "." },
     { id: "opportunity-reserve", title: "Opportunity Reserve", body: "🎯 " + money(state.opportunity.total) + " one-time reserve. Split " + money(state.opportunity.allocation.VOO) + " VOO / " + money(state.opportunity.allocation.QQQM) + " QQQM." },
@@ -1653,7 +2417,7 @@ function rulesTemplate(state: WealthState): string {
   } else if (state.ruleNotes.trim()) {
     cards.push('<article class="card data-card rule-card"><div class="rule-card-head"><span class="eyebrow">' + escapeHtml(state.ruleNoteTitle || "Personal Rule Notes") + '</span><div class="rule-card-actions"><button class="secondary-button edit-rule-notes" type="button" aria-label="Edit personal rule notes">Edit</button><button class="icon-button danger delete-rule-notes" type="button" aria-label="Delete personal rule notes" title="Delete rule">X</button></div></div><p style="white-space:pre-wrap;">' + escapeHtml(state.ruleNotes.trim()) + '</p></article>');
   }
-  return '<div class="three-col-grid">' + (cards.join("") || '<p class="empty-state">No rule cards remain. Add personal notes below to create a new rule.</p>') + '</div>' +
+  return leakInsightStrip(state, ["debt", "budget", "goal"], "Rule check") + '<div class="three-col-grid">' + (cards.join("") || '<p class="empty-state">No rule cards remain. Add personal notes below to create a new rule.</p>') + '</div>' +
     '<article class="card panel" style="margin-top:16px;">' +
       '<div class="panel-head"><div><span class="eyebrow">Custom Rules</span><h3>Rule Notes</h3></div><span style="color:var(--muted);font-size:12px;">Up to 5,000 characters</span></div>' +
       '<form id="ruleNotesForm">' +
@@ -1670,25 +2434,28 @@ function rulesTemplate(state: WealthState): string {
 }
 
 function reviewTemplate(state: WealthState): string {
-  const month = new Date().toISOString().slice(0, 7);
+  const now = new Date();
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const close = monthlyClose(state, month);
+  const snapshot = getFinancialSnapshot(state, now);
   const reviewRows = state.reviews.map((review) => {
-    return '<article class="review-item"><div style="display:flex;justify-content:space-between;align-items:flex-start;"><strong>' + escapeHtml(review.month) + '</strong><button class="icon-button danger delete-review" data-id="' + review.id + '" title="Delete review">🗑️</button></div><span>Income ' +
+    return '<article class="review-item"><div style="display:flex;justify-content:space-between;align-items:flex-start;"><strong>' + escapeHtml(review.month) + '</strong><button class="icon-button danger delete-review" data-id="' + review.id + '" type="button" aria-label="Delete review for ' + escapeHtml(review.month) + '" title="Delete review">🗑️</button></div><span>Income ' +
       money(review.income) + ' · Spending ' + money(review.spending) + ' · Score ' +
       review.disciplineScore + '/100</span><p>' + escapeHtml(review.notes || "No notes") + '</p></article>';
   }).join("");
 
   return `
+    ${leakInsightStrip(state, ["fee", "duplicate", "subscription", "budget", "goal", "debt"], "Monthly review signal")}
     <div class="terminal-grid">
       <article class="card panel">
         <div class="panel-head"><div><span class="eyebrow">Monthly Close</span><h3>Monthly Review</h3></div><span style="color:var(--muted);font-size:12px;">Discipline</span></div>
         <form id="reviewForm" class="form-grid">
           <label>Month<input name="month" type="month" required value="${month}"></label>
-          ${numberInput("income", "Income MYR", String(close.income), "1")}
-          ${numberInput("spending", "Spending MYR", String(close.spending), "1")}
+          ${numberInput("income", "Income MYR", String(snapshot.currentMonthIncome), "1")}
+          ${numberInput("spending", "Spending MYR", String(snapshot.currentMonthExpenses), "1")}
           <label>DCA Done?<select name="dcaDone"><option value="true"${close.dcaDone ? " selected" : ""}>Yes</option><option value="false"${!close.dcaDone ? " selected" : ""}>No</option></select></label>
           ${numberInput("disciplineScore", "Discipline Score", String(close.disciplineScore), "1")}
-          <p class="wide-field panel-note">Calculated from ${money(close.income)} income, ${money(close.spending)} spending and ${money(close.dcaInvested)} invested this month.</p>
+          <p class="wide-field panel-note">Calculated from ${money(snapshot.currentMonthIncome)} income, ${money(snapshot.currentMonthExpenses)} spending and ${money(close.dcaInvested)} invested this month.</p>
           <label class="wide-field">Notes<textarea name="notes" rows="4" placeholder="This month's cash flow, investment discipline, and next month's actions"></textarea></label>
           <button class="primary-button" type="submit">Save Review</button>
         </form>
@@ -1719,8 +2486,8 @@ function settingsTemplate(state: WealthState): string {
       </article>
       <article class="card settings-section">
         <h3>Recurring Cash Flow</h3>
-        <form id="recurringForm" class="form-grid"><label>Label<input name="label" maxlength="60" required></label>${numberInput("amount", "Amount MYR", "", "0.01")}<label>Type<select name="type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Day of month<input name="dayOfMonth" type="number" min="1" max="31" value="1" required></label><button class="primary-button" type="submit">Add recurring item</button></form>
-        <div class="settings-list">${state.recurringTransactions.map((item) => `<div><span>${escapeHtml(item.label)} · ${item.type} · day ${item.dayOfMonth}</span><strong>${money(item.amount)}</strong><button class="icon-button danger delete-recurring" data-id="${escapeHtml(item.id)}" aria-label="Delete recurring item">✕</button></div>`).join("") || '<p class="empty-state">No recurring items.</p>'}</div>
+        <form id="recurringForm" class="form-grid"><label>Label<input name="label" maxlength="60" required></label>${numberInput("amount", "Amount MYR", "", "0.01")}<label>Type<select name="type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Day of month<input name="dayOfMonth" type="number" min="1" max="31" value="1" required><small class="field-hint">If a month is shorter, it runs on the last day.</small></label><button class="primary-button" type="submit">Add recurring item</button></form>
+        <div class="settings-list">${state.recurringTransactions.map((item) => `<div><span>${escapeHtml(item.label)} · ${item.type} · day ${item.dayOfMonth}${item.dayOfMonth >= 29 ? " · short-month fallback" : ""}</span><strong>${money(item.amount)}</strong><button class="icon-button danger delete-recurring" data-id="${escapeHtml(item.id)}" aria-label="Delete recurring item">✕</button></div>`).join("") || '<p class="empty-state">No recurring items.</p>'}</div>
       </article>
       <article class="card settings-section">
         <h3>Liabilities</h3>
@@ -1767,54 +2534,18 @@ function settingsTemplate(state: WealthState): string {
   `;
 }
 
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let current = "";
-  let row: string[] = [];
-  let quoted = false;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    const next = text[index + 1];
-    if (char === '"' && quoted && next === '"') {
-      current += '"';
-      index += 1;
-    } else if (char === '"') {
-      quoted = !quoted;
-    } else if (char === ',' && !quoted) {
-      row.push(current.trim());
-      current = "";
-    } else if ((char === '\n' || char === '\r') && !quoted) {
-      if (char === '\r' && next === '\n') index += 1;
-      row.push(current.trim());
-      if (row.some(Boolean)) rows.push(row);
-      row = [];
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-  row.push(current.trim());
-  if (row.some(Boolean)) rows.push(row);
-  return rows;
-}
-
-function parseMoomooDate(raw: string): string {
-  // "Jun 26, 2026 00:00:00 ET" or "May 12, 2026 10:52:00 ET"
-  const match = raw.match(/^(\w+ \d+), (\d{4})/);
-  if (!match) return raw;
-  const d = new Date(match[0]);
-  if (isNaN(d.getTime())) return raw;
-  return d.toISOString().slice(0, 10);
-}
-
 export function quickViewTemplate(state: WealthState): string {
-  const portfolio = portfolioSummary(state);
+  const portfolio = getPortfolioSnapshot(state);
   const emergency = emergencyRatio(state);
-  const surplus = monthlySurplus(state);
+  // PLANNED surplus (allowance minus basic spending), not the recorded
+  // income-minus-expenses surplus the Dashboard shows. The label says so:
+  // the two are different facts and routinely differ.
+  const surplus = getBudgetSnapshot(state).plannedSurplus;
   const investedMyr = portfolio.totalInvestedMyr;
-  const targetRows = goalsWithIncompleteFirst(state).map(({ goal: g }) => {
-    const pct = g.target > 0 ? Math.min(Math.round(g.current / g.target * 100), 100) : 0;
+  // Progress uses the canonical currentAmount, so Quick View, the Goals page
+  // and the Dashboard can never disagree about how funded a goal is.
+  const targetRows = getGoalsSnapshot(state).ordered.map((g) => {
+    const pct = Math.round(g.progress * 100);
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">' +
       '<span style="font-size:13px;color:var(--ink-2);">' + escapeHtml(g.label) + '</span>' +
       '<span style="font-size:13px;font-weight:600;color:' + (pct >= 80 ? 'var(--green)' : 'var(--ink)') + ';">' + pct + '%</span>' +
@@ -1838,7 +2569,7 @@ export function quickViewTemplate(state: WealthState): string {
           <div style="font-size:20px;font-weight:700;color:${emergency >= 0.8 ? 'var(--green)' : 'var(--ink)'};">${percent(emergency)}</div>
         </div>
         <div style="background:var(--surface);border-radius:12px;padding:14px;text-align:center;">
-          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">MONTHLY SURPLUS</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">PLANNED SURPLUS</div>
           <div style="font-size:20px;font-weight:700;">${money(surplus)}</div>
         </div>
         <div style="background:var(--surface);border-radius:12px;padding:14px;text-align:center;">
@@ -1854,76 +2585,6 @@ export function quickViewTemplate(state: WealthState): string {
   `;
 }
 
-function recordsFromCsv(text: string): Trade[] {
-  const [headers = [], ...rows] = parseCsv(text);
-  const normalized = headers.map((h) => h.toLowerCase().replace(/\s+/g, " ").trim());
-  const get = (row: string[], names: string[]) => {
-    const idx = normalized.findIndex((h) => names.includes(h));
-    return idx >= 0 ? row[idx] ?? "" : "";
-  };
-
-  // Detect Moomoo Universal Account format by checking for "Symbol" and "Side" columns
-  const isMoomooFormat = normalized.includes("symbol") && normalized.includes("side");
-
-  if (isMoomooFormat) {
-    const USD_TO_MYR = getUsdToMyr(); // dynamic rate, prefetched in main.ts
-    return rows
-      .filter((row) => {
-        const status = get(row, ["status"]).toLowerCase();
-        return status === "filled"; // only import filled orders
-      })
-      .map((row): Trade | null => {
-        const ticker = get(row, ["symbol"]).toUpperCase();
-        if (!ticker) return null;
-
-        const side = get(row, ["side"]).toLowerCase();
-        const fillAmountUsd = Number(get(row, ["fill amount"])) || Number(get(row, ["order amount"])) || 0;
-        const fillPrice = Number(get(row, ["filled@avg price"])) || Number(get(row, ["order price"])) || 0;
-        const platformFees = Number(get(row, ["platform fees"])) || 0;
-
-        // Determine trade type from side
-        let tradeType: TradeType = "DCA";
-        if (side === "sell") {
-          tradeType = "Sell";
-        }
-
-        return {
-          id: createId("csv"),
-          date: parseMoomooDate(get(row, ["order time"])),
-          platform: "moomoo",
-          ticker: ticker as Ticker,
-          type: tradeType,
-          amountMyr: Math.round(fillAmountUsd * USD_TO_MYR * 100) / 100,
-          amountUsd: Math.round(fillAmountUsd * 100) / 100,
-          priceUsd: Math.round(fillPrice * 100) / 100,
-          feeMyr: Math.round(platformFees * USD_TO_MYR * 100) / 100,
-          exchangeRate: USD_TO_MYR,
-        };
-      })
-      .filter((trade): trade is Trade => trade !== null);
-  }
-
-  // Fallback: original simple CSV format
-  return rows
-    .map((row): Trade | null => {
-      const ticker = get(row, ["ticker"]).toUpperCase();
-      if (!ticker) return null;
-      return {
-        id: createId("csv"),
-        date: get(row, ["date"]),
-        platform: get(row, ["platform"]) || "moomoo",
-        ticker: ticker as Ticker,
-        amountMyr: Number(get(row, ["amount(rm)", "amount myr", "total(rm)"])) || 0,
-        amountUsd: Number(get(row, ["amount (usd)", "amount usd"])) || 0,
-        priceUsd: Number(get(row, ["price/unit (usd)", "price usd"])) || 0,
-        type: (get(row, ["type"]) || "DCA") as TradeType,
-        feeMyr: Number(get(row, ["fee", "fee myr"])) || 0,
-        exchangeRate: Number(get(row, ["exchange rate", "fx rate", "usd/myr"])) || (Number(get(row, ["amount (usd)", "amount usd"])) > 0 ? Number(get(row, ["amount(rm)", "amount myr", "total(rm)"])) / Number(get(row, ["amount (usd)", "amount usd"])) : getUsdToMyr()),
-      };
-    })
-    .filter((trade): trade is Trade => trade !== null);
-}
-
 export function renderApp(root: HTMLElement, state: WealthState, setState: Setter, activePage = "dashboard", navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
   document.body.classList.toggle("mask-financial-amounts", state.privacy.maskAmounts);
   const currentSidebarScrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
@@ -1936,6 +2597,8 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   calculatorCleanup.delete(root);
   sideRaysCleanup.get(root)?.();
   sideRaysCleanup.delete(root);
+  priceRefreshCleanup.get(root)?.();
+  priceRefreshCleanup.delete(root);
 
   // Quick view — no sidebar, just condensed data
   if (activePage === "quick") {
@@ -1984,11 +2647,13 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
     ledger: ledgerTemplate(state),
     buckets: bucketsTemplate(state),
     goals: goalsTemplate(state),
+    tvm: tvmCalculatorTemplate(),
     calculator: '<div id="investmentGrowthCalculator"></div>',
     advisor: advisorPageTemplate(state),
     rules: rulesTemplate(state),
     review: reviewTemplate(state),
     settings: settingsTemplate(state),
+    "money-leaks": moneyLeaksTemplate(state),
   };
   mount.innerHTML = templates[activePage] ?? templates.dashboard;
 
@@ -2011,7 +2676,6 @@ function keepActiveNavigationVisible(root: HTMLElement): void {
 }
 
 function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
-  const activePage = activePageFromNav(root) ?? "dashboard";
   const doNavigate = navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user));
 
   root.querySelectorAll<HTMLButtonElement>(".nav-item").forEach((button) => {
@@ -2059,7 +2723,7 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
 
   root.querySelector<HTMLButtonElement>("#versionHistory")?.addEventListener("click", () => {
     const snapshots = loadSnapshots(user?.email ?? undefined);
-    renderVersionHistoryModal(root, state, setState, snapshots, navigate, user, onLogout);
+    renderVersionHistoryModal(root, setState, snapshots, navigate, user, onLogout);
   });
 
   root.querySelector<HTMLButtonElement>("#resetData")?.addEventListener("click", () => {
@@ -2105,7 +2769,7 @@ function bindSidebar(root: HTMLElement): void {
   });
 }
 
-function renderVersionHistoryModal(root: HTMLElement, state: WealthState, setState: Setter, snapshots: Snapshot[], navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
+function renderVersionHistoryModal(root: HTMLElement, setState: Setter, snapshots: Snapshot[], navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
   // Remove existing modal if any
   root.querySelector("#versionHistoryModal")?.remove();
 
@@ -2185,10 +2849,77 @@ function activePageFromNav(root: HTMLElement): string | undefined {
 
 function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activePage: string, navigate?: Navigate): void {
   root.querySelectorAll<HTMLButtonElement>(".dashboard-nav").forEach((button) => {
-    button.addEventListener("click", () => navigate?.(button.dataset.page ?? "dashboard"));
+    button.addEventListener("click", () => {
+      if (button.dataset.leakId) selectedMoneyLeakId = button.dataset.leakId;
+      navigate?.(button.dataset.page ?? "dashboard");
+    });
   });
 
   if (activePage === "dashboard") {
+    // Record the priority action straight from the Dashboard. The id is
+    // validated against the live Advisor snapshot, so a stale button can never
+    // write a record for advice that is no longer current.
+    root.querySelector<HTMLButtonElement>(".dashboard-mark-done")?.addEventListener("click", (event) => {
+      const button = event.currentTarget as HTMLButtonElement;
+      const recommendationId = button.dataset.recommendationId;
+      if (!recommendationId) return;
+      const priority = getAdvisorSnapshot(state).priority;
+      if (!priority || priority.id !== recommendationId) return;
+      const next: WealthState = {
+        ...state,
+        actionRecords: markRecommendationDone(state.actionRecords, {
+          id: createId("action"),
+          recommendationId,
+          action: priority.action,
+        }),
+      };
+      setState(next, "Mark priority action done");
+      if (navigate) navigate("dashboard");
+      else renderApp(root, next, setState, "dashboard");
+    });
+
+    // Quotes arrive after the first paint, and go stale after PRICE_STALE_AFTER_MS
+    // if the tab stays open. When a (re)fetch lands, patch only the two
+    // valuation rows from the canonical snapshot — re-rendering the whole page
+    // would discard the user's scroll position and any open control.
+    const patchDashboardValuation = (): void => {
+      const updated = buildOverviewModel(state, new Date(), livePriceInputs());
+      const { portfolio } = updated;
+      // Net Worth folds in the portfolio's value (live price, or cost basis
+      // when none is available). Once a live price lands it must be repainted
+      // alongside Market Value — otherwise the two figures on the same page
+      // would silently disagree about which portfolio value is current.
+      const netWorthEl = root.querySelector<HTMLElement>("#ovNetWorth");
+      const netWorthNoteEl = root.querySelector<HTMLElement>("#ovNetWorthNote");
+      if (netWorthEl) netWorthEl.textContent = money(updated.netWorth);
+      if (netWorthNoteEl) netWorthNoteEl.textContent = `${money(updated.totalAssets)} assets − ${money(updated.totalLiabilities)} liabilities`;
+      const valueEl = root.querySelector<HTMLElement>("#ovMarketValue");
+      const pnlEl = root.querySelector<HTMLElement>("#ovUnrealised");
+      if (valueEl) {
+        valueEl.innerHTML = `${moneyOrUnknown(portfolio.totalInvestmentValueMyr)} <span class="ov-detail-row__note">${escapeHtml(valuationNote(portfolio))}</span>`;
+      }
+      if (pnlEl) {
+        pnlEl.className = pnlTone(portfolio.unrealizedPnlMyr);
+        pnlEl.innerHTML = `${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} <span class="ov-detail-row__note">${portfolio.realizedPnlMyr !== 0 ? `Realised to date ${escapeHtml(money(portfolio.realizedPnlMyr))}` : "Excludes realised gains"}</span>`;
+      }
+      root.querySelector<HTMLElement>(".ov-valuation")?.setAttribute("data-valuation-status", portfolio.valuationStatus);
+    };
+    refreshLivePrices(state, patchDashboardValuation);
+    // Keep asking while this Dashboard stays on screen, so a tab left open
+    // does not freeze on the price it happened to load first.
+    const dashboardPriceTimer = setInterval(() => refreshLivePrices(state, patchDashboardValuation), PRICE_POLL_INTERVAL_MS);
+    // Browsers throttle timers in background tabs, so coming back to a tab
+    // that has been hidden for hours would otherwise show a very old price
+    // until the next tick. Ask again the moment it becomes visible.
+    const onDashboardVisible = (): void => {
+      if (document.visibilityState === "visible") refreshLivePrices(state, patchDashboardValuation);
+    };
+    document.addEventListener("visibilitychange", onDashboardVisible);
+    priceRefreshCleanup.set(root, () => {
+      clearInterval(dashboardPriceTimer);
+      document.removeEventListener("visibilitychange", onDashboardVisible);
+    });
+
     root.querySelector<HTMLSelectElement>("#overviewGoalSelect")?.addEventListener("change", (event) => {
       const overviewGoalId = (event.currentTarget as HTMLSelectElement).value;
       if (!state.goals.some((goal) => goal.id === overviewGoalId)) return;
@@ -2198,6 +2929,8 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
       else renderApp(root, next, setState, "dashboard");
     });
   }
+  if (activePage === "money-leaks") bindMoneyLeaks(root, state, setState, navigate);
+  if (activePage === "tvm") bindTvmCalculator(root);
   if (activePage === "calculator") {
     const mount = root.querySelector<HTMLElement>("#investmentGrowthCalculator");
     if (mount) {
@@ -2222,15 +2955,113 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
         });
     }
   }
-  if (activePage === "portfolio") bindPortfolio(root, state, setState, navigate);
-  if (activePage === "advisor") bindAdvisor(root, state);
+  if (activePage === "portfolio") {
+    bindPortfolio(root, state, setState, navigate);
+    // Prices land after the first paint, and go stale after
+    // PRICE_STALE_AFTER_MS if the page stays open. Re-render the page each
+    // time a (re)fetch lands so the holdings table and hero pick up the
+    // canonical snapshot's latest valuation.
+    const refetchPortfolio = (): void => {
+      if (navigate) navigate("portfolio");
+      else renderApp(root, state, setState, "portfolio");
+    };
+    refreshLivePrices(state, refetchPortfolio);
+    const portfolioPriceTimer = setInterval(() => refreshLivePrices(state, refetchPortfolio), PRICE_POLL_INTERVAL_MS);
+    const onPortfolioVisible = (): void => {
+      if (document.visibilityState === "visible") refreshLivePrices(state, refetchPortfolio);
+    };
+    document.addEventListener("visibilitychange", onPortfolioVisible);
+    priceRefreshCleanup.set(root, () => {
+      clearInterval(portfolioPriceTimer);
+      document.removeEventListener("visibilitychange", onPortfolioVisible);
+    });
+  }
+  if (activePage === "advisor") bindAdvisor(root, state, setState, navigate);
   if (activePage === "review") bindReview(root, state, setState, navigate);
   if (activePage === "settings") bindSettings(root, state, setState, navigate);
   if (activePage === "goals") bindGoals(root, state, setState, navigate);
-  if (activePage === "market") bindMarket(root, state, setState, navigate);
+  if (activePage === "market") bindMarket(root, state, setState);
   if (activePage === "ledger") bindLedger(root, state, setState, navigate);
   if (activePage === "buckets") bindBuckets(root, state, setState, navigate);
   if (activePage === "rules") bindRules(root, state, setState, navigate);
+}
+
+function bindMoneyLeaks(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
+  const summary = detectMoneyLeaks(state);
+  // One canonical recommendation list for the whole page, in Advisor order.
+  const leakRecommendations = getAdvisorSnapshot(state).leakRecommendations;
+  const initialLeak = summary.leaks.find((leak) => leak.id === selectedMoneyLeakId) ?? summary.topLeak;
+  const renderDetail = (leak: MoneyLeak): void => {
+    const panel = root.querySelector<HTMLElement>(".leak-detail-panel");
+    if (!panel) return;
+    const advice = leakAdvice(leakRecommendations, leak.id);
+    panel.innerHTML = `
+      <div class="leak-detail-content" data-leak-detail="${escapeHtml(leak.id)}">
+        <div class="leak-detail-head"><div><span class="eyebrow">${leakCategoryLabels[leak.category]}</span><h2>${escapeHtml(leak.title)}</h2></div><span class="leak-severity leak-${leak.severity}">${leak.severity} priority</span></div>
+        <div class="leak-detail-impact"><strong>${money(leak.annualImpact)}</strong><span>${leak.impactBasis === "one-time" ? "observed one-time impact" : "estimated annual impact"}</span></div>
+        <section><h3>What was observed</h3><p>${escapeHtml(leak.summary)}</p></section>
+        <dl class="leak-evidence">${leak.evidence.map((item) => `<div><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(item.value)}</dd></div>`).join("")}</dl>
+        ${advice ? `<section><h3>Why it matters</h3><p>${escapeHtml(advice.impact)}</p></section>
+        <section class="leak-recommendation"><h3>Recommended next move</h3><p>${escapeHtml(advice.action)}</p></section>`
+        : `<section class="leak-recommendation"><h3>Recommended next move</h3><p class="empty-state">No recommendation applies to this finding yet. The observation above is the full picture.</p></section>`}
+        ${leakActionBlock(state, advice)}
+        <div class="leak-detail-actions"><button class="primary-button leak-primary-action" data-action="${leak.primaryAction}">${escapeHtml(leak.actionLabel)}</button><button class="secondary-button leak-advisor-action">Ask Advisor</button></div>
+      </div>`;
+    bindDetailActions(panel, leak);
+    bindMarkDone(panel);
+  };
+
+  /**
+   * Record that the user carried out a recommendation. This writes execution
+   * state only — the finding, its impact and its severity are untouched, and
+   * the leak stays on the list.
+   */
+  const bindMarkDone = (scope: ParentNode): void => {
+    scope.querySelector<HTMLButtonElement>(".leak-mark-done")?.addEventListener("click", (event) => {
+      const button = event.currentTarget as HTMLButtonElement;
+      const recommendationId = button.dataset.recommendationId ?? "";
+      const action = button.dataset.actionLabel ?? "";
+      if (!recommendationId) return;
+      const next: WealthState = {
+        ...state,
+        actionRecords: markRecommendationDone(state.actionRecords, {
+          id: `action-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          recommendationId,
+          action,
+        }),
+      };
+      setState(next, "Marked a money-leak action as done");
+      if (navigate) navigate("money-leaks");
+      else renderApp(root, next, setState, "money-leaks");
+    });
+  };
+  const bindDetailActions = (scope: ParentNode, leak: MoneyLeak): void => {
+    scope.querySelector<HTMLButtonElement>(".leak-primary-action")?.addEventListener("click", () => {
+      const pageByAction: Record<MoneyLeak["primaryAction"], string> = {
+        "review-recurring": "settings",
+        "review-ledger": "ledger",
+        "review-budget": "buckets",
+        "review-goal": "goals",
+        "review-debt": "settings",
+      };
+      navigate?.(pageByAction[leak.primaryAction]);
+    });
+    scope.querySelector<HTMLButtonElement>(".leak-advisor-action")?.addEventListener("click", () => navigate?.("advisor"));
+  };
+  root.querySelectorAll<HTMLButtonElement>(".leak-row").forEach((row) => row.addEventListener("click", () => {
+    const leak = summary.leaks.find((item) => item.id === row.dataset.leakId);
+    if (!leak) return;
+    root.querySelectorAll<HTMLButtonElement>(".leak-row").forEach((item) => {
+      const selected = item === row;
+      item.classList.toggle("is-selected", selected);
+      item.setAttribute("aria-pressed", String(selected));
+    });
+    renderDetail(leak);
+  }));
+  // The first detail panel comes from the template rather than renderDetail(),
+  // so its controls need binding here too.
+  if (initialLeak) bindDetailActions(root, initialLeak);
+  bindMarkDone(root);
 }
 
 function bindRules(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
@@ -2623,26 +3454,59 @@ function bindGoals(root: HTMLElement, state: WealthState, setState: Setter, navi
     });
   });
 
-  // Save goal form
+  // Save explicitly on click so the action remains reliable across browsers/PWA shells.
   root.querySelectorAll<HTMLFormElement>(".goalForm").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
+    const saveGoal = (): void => {
       const index = Number(form.dataset.index);
+      const error = form.querySelector<HTMLElement>(".goal-form-error");
+      const showError = (message: string): void => {
+        if (!error) return;
+        error.textContent = message;
+        error.hidden = false;
+      };
+      if (!Number.isInteger(index) || index < 0 || index >= state.goals.length) {
+        showError("This goal is no longer available. Please refresh the Goals page and try again.");
+        return;
+      }
       const data = new FormData(form);
+      const name = String(data.get("name") ?? "").trim();
+      const label = String(data.get("label") ?? "").trim();
+      const current = Number(data.get("current"));
+      const target = Number(data.get("target"));
+      const monthlyContribution = Number(data.get("monthlyContribution"));
+      if (!name || !label) {
+        showError("Name and label are required.");
+        return;
+      }
+      if (![current, target, monthlyContribution].every((value) => Number.isFinite(value) && value >= 0)) {
+        showError("Current, target, and monthly amounts must be zero or more.");
+        return;
+      }
       const goals = [...state.goals];
       goals[index] = {
         ...goals[index],
-        name: String(data.get("name") ?? goals[index].name),
-        label: String(data.get("label") ?? goals[index].label),
-        current: Number(data.get("current")) || 0,
-        target: Number(data.get("target")) || 0,
-        monthlyContribution: Number(data.get("monthlyContribution")) || 0,
+        name,
+        label,
+        current,
+        target,
+        monthlyContribution,
         accountId: String(data.get("accountId") ?? "") || undefined,
         note: String(data.get("note") ?? goals[index].note),
       };
       const next = { ...state, goals };
-      setState(next);
-      doNavigate("goals");
+      setState(next, "Updated goal");
+      const saved = form.querySelector<HTMLElement>(".goal-form-error");
+      if (saved) {
+        saved.textContent = "Saved";
+        saved.hidden = false;
+        saved.classList.add("form-success");
+      }
+      renderApp(root, next, setState, "goals", navigate);
+    };
+    form.querySelector<HTMLButtonElement>(".save-goal")?.addEventListener("click", saveGoal);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      saveGoal();
     });
   });
 
@@ -2652,8 +3516,10 @@ function bindGoals(root: HTMLElement, state: WealthState, setState: Setter, navi
       const index = Number(button.dataset.index);
       if (!confirm("Delete this goal?")) return;
       const goals = state.goals.filter((_, i) => i !== index);
+      // Re-pick the featured goal through the canonical model so completion
+      // here matches what the Goals cards show.
       const overviewGoalId = state.overviewGoalId === state.goals[index]?.id
-        ? goals.find((goal) => goal.target > 0 && goal.current < goal.target)?.id ?? goals[0]?.id ?? ""
+        ? getGoalsSnapshot({ ...state, goals, overviewGoalId: "" }).featuredGoalId
         : state.overviewGoalId;
       const next = { ...state, goals, overviewGoalId };
       setState(next);
@@ -2679,8 +3545,6 @@ function bindGoals(root: HTMLElement, state: WealthState, setState: Setter, navi
 }
 
 function bindPortfolio(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
-  const doNavigate = navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate));
-
   // Toggle custom ticker input
   const tickerSelect = root.querySelector<HTMLSelectElement>("#tickerSelect");
   const customWrap = root.querySelector<HTMLElement>("#customTickerWrap");
@@ -2706,6 +3570,7 @@ function bindPortfolio(root: HTMLElement, state: WealthState, setState: Setter, 
       amountMyr: Number(data.get("amountMyr")) || 0,
       amountUsd: Number(data.get("amountUsd")) || 0,
       priceUsd: Number(data.get("priceUsd")) || 0,
+      units: Number(data.get("units")) || undefined,
       feeMyr: Number(data.get("feeMyr")) || 0,
       exchangeRate: Number(data.get("amountUsd")) > 0 ? Number(data.get("amountMyr")) / Number(data.get("amountUsd")) : getUsdToMyr(),
       notes: String(data.get("notes") ?? ""),
@@ -2731,18 +3596,76 @@ function bindPortfolio(root: HTMLElement, state: WealthState, setState: Setter, 
     renderApp(root, next, setState, "portfolio", navigate);
   });
 
+  // Clear the whole contribution history in one step — the practical way to
+  // undo a bad CSV import without deleting dozens of rows by hand. Deliberately
+  // spells out how many records are going and that it cannot be undone, since
+  // this wipes the entire cost-basis history the portfolio is derived from.
+  root.querySelector<HTMLButtonElement>(".clear-trades")?.addEventListener("click", () => {
+    const count = state.trades.length;
+    if (count === 0) return;
+    const confirmed = confirm(
+      `Delete all ${count} contribution ${count === 1 ? "record" : "records"}?\n\n` +
+      "This clears the entire cost-basis history behind your portfolio — units, average cost and realised P&L will all reset. This cannot be undone.",
+    );
+    if (!confirmed) return;
+    const next = { ...state, trades: [] };
+    setState(next, "Cleared contribution history");
+    renderApp(root, next, setState, "portfolio", navigate);
+  });
+
   root.querySelectorAll<HTMLButtonElement>(".delete-trade").forEach((button) => {
     button.addEventListener("click", () => {
       const id = button.dataset.id;
       if (!id || !confirm("Delete this trade record?")) return;
+      const scrollPosition = {
+        x: window.scrollX,
+        y: window.scrollY,
+        documentY: document.scrollingElement?.scrollTop ?? 0,
+      };
       const next = { ...state, trades: state.trades.filter((t) => t.id !== id) };
       setState(next);
       renderApp(root, next, setState, "portfolio", navigate);
+
+      const restoreScroll = () => {
+        window.scrollTo(scrollPosition.x, scrollPosition.y);
+        document.scrollingElement?.scrollTo(scrollPosition.x, scrollPosition.documentY);
+      };
+      restoreScroll();
+      requestAnimationFrame(() => {
+        restoreScroll();
+        requestAnimationFrame(restoreScroll);
+      });
     });
   });
 }
 
-function bindAdvisor(root: HTMLElement, state: WealthState): void {
+function bindAdvisor(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate): void {
+  // Mark any recommendation as done — the priority callout and every card in
+  // the list. Persists an ActionRecord only: the recommendation itself is
+  // untouched, keeps its ranking, and stays on the page.
+  const recommendations = getAdvisorSnapshot(state).recommendations;
+  root.querySelectorAll<HTMLButtonElement>(".advisor-mark-done").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      const target = event.currentTarget as HTMLButtonElement;
+      const recommendationId = target.dataset.recommendationId;
+      if (!recommendationId) return;
+      // The id must belong to a live recommendation, so a stale button can
+      // never write a record for advice that no longer exists.
+      const recommendation = recommendations.find((item) => item.id === recommendationId);
+      if (!recommendation) return;
+      const next: WealthState = {
+        ...state,
+        actionRecords: markRecommendationDone(state.actionRecords, {
+          id: createId("action"),
+          recommendationId,
+          action: recommendation.action,
+        }),
+      };
+      setState(next, "Mark advisor action done");
+      renderApp(root, next, setState, "advisor", navigate);
+    });
+  });
+
   root.querySelector<HTMLFormElement>("#drawdownForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const drawdown = Number(root.querySelector<HTMLInputElement>("#drawdownInput")?.value) || 0;
@@ -2770,7 +3693,6 @@ function bindAdvisor(root: HTMLElement, state: WealthState): void {
     const totalDeploy = triggered.reduce((sum, t) => sum + t.amount, 0);
     const totalVoo = triggered.reduce((sum, t) => sum + t.suggestedVoo, 0);
     const totalQqqm = triggered.reduce((sum, t) => sum + t.suggestedQqqm, 0);
-    const latest = triggered.at(-1)!;
     result.innerHTML = '<div style="font-size:14px;font-weight:700;color:var(--amber);margin-bottom:8px;">🐻 -' + drawdown + '% Drawdown: Deploy ' + money(totalDeploy) + '</div>' +
       '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
         '<div style="flex:1;background:var(--surface);border-radius:6px;padding:8px;text-align:center;">' +

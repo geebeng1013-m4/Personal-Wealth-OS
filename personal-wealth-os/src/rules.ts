@@ -1,4 +1,4 @@
-import type { AdvisorMessage, PortfolioPosition, PortfolioSummary, Trade, WealthState } from "./models";
+import type { PortfolioPosition, PortfolioSummary, Trade, WealthState } from "./models";
 
 export interface PositionCostBasis {
   ticker: string;
@@ -11,7 +11,7 @@ export interface PositionCostBasis {
   feesMyr: number;
 }
 
-export type CostBasisTrade = Pick<Trade, "ticker" | "date" | "type" | "amountUsd" | "amountMyr" | "priceUsd" | "feeMyr">;
+export type CostBasisTrade = Pick<Trade, "ticker" | "date" | "type" | "amountUsd" | "amountMyr" | "priceUsd" | "units" | "feeMyr">;
 
 export function money(value: number, currency = "MYR"): string {
   return `${currency} ${Number(value || 0).toLocaleString("en-MY", { maximumFractionDigits: 2 })}`;
@@ -46,7 +46,8 @@ export function projectedAnnualEmergencyYield(state: WealthState): number {
   return state.emergency.current * state.emergency.annualYield;
 }
 
-export function tradeUnits(trade: Pick<Trade, "priceUsd" | "amountUsd">): number {
+export function tradeUnits(trade: Pick<Trade, "priceUsd" | "amountUsd" | "units">): number {
+  if (Number.isFinite(trade.units) && Number(trade.units) > 0) return Number(trade.units);
   if (trade.priceUsd <= 0 || trade.amountUsd <= 0) return 0;
   return trade.amountUsd / trade.priceUsd;
 }
@@ -70,7 +71,7 @@ export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: str
 
     if (trade.type !== "Sell") {
       units += unitsTraded;
-      costBasisUsd += trade.amountUsd;
+      costBasisUsd += unitsTraded * trade.priceUsd;
       costBasisMyr += trade.amountMyr + trade.feeMyr;
       return;
     }
@@ -81,7 +82,7 @@ export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: str
     const removedCostUsd = costBasisUsd * soldFraction;
     const removedCostMyr = costBasisMyr * soldFraction;
     const proceedsFraction = unitsSold / unitsTraded;
-    const proceedsUsd = trade.amountUsd * proceedsFraction;
+    const proceedsUsd = unitsSold * trade.priceUsd;
     const proceedsMyr = Math.max(trade.amountMyr - trade.feeMyr, 0) * proceedsFraction;
 
     realizedPnlUsd += proceedsUsd - removedCostUsd;
@@ -109,16 +110,32 @@ export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: str
   };
 }
 
-export function portfolioSummary(state: WealthState): PortfolioSummary {
+/**
+ * `costBases` lets a caller that needs the per-ticker cost bases anyway receive
+ * the same map back instead of recomputing it. Pass an empty Map: it is filled
+ * in here and left populated for the caller. Omitting it behaves as before.
+ */
+export function portfolioSummary(
+  state: WealthState,
+  costBases: Map<string, PositionCostBasis> = new Map(),
+): PortfolioSummary {
   const tickerSet = new Set<string>(Object.keys(state.dca.targets));
   state.trades.forEach((trade) => tickerSet.add(trade.ticker));
   const tickers = Array.from(tickerSet);
-  const costBases = new Map(tickers.map((ticker) => [ticker, calculatePositionCostBasis(state.trades, ticker)]));
+  for (const ticker of tickers) {
+    if (!costBases.has(ticker)) costBases.set(ticker, calculatePositionCostBasis(state.trades, ticker));
+  }
   const totalInvestedMyr = tickers.reduce((sum, ticker) => sum + costBases.get(ticker)!.costBasisMyr, 0);
   const totalInvestedUsd = tickers.reduce((sum, ticker) => sum + costBases.get(ticker)!.costBasisUsd, 0);
+  // Drift compares where money actually sits against where it was meant to
+  // sit. With nothing invested there is no actual allocation to compare, so
+  // drift is not "100% off target" — it does not exist yet. Reporting
+  // 0 - target here told a brand-new user their allocation was badly broken
+  // before they had bought anything.
+  const hasAllocation = totalInvestedMyr > 0;
   const positions: PortfolioPosition[] = tickers.map((ticker) => {
     const costBasis = costBases.get(ticker)!;
-    const actualAllocation = totalInvestedMyr > 0 ? costBasis.costBasisMyr / totalInvestedMyr : 0;
+    const actualAllocation = hasAllocation ? costBasis.costBasisMyr / totalInvestedMyr : 0;
     const targetAllocation = state.dca.targets[ticker] ?? 0;
     return {
       ticker,
@@ -128,7 +145,7 @@ export function portfolioSummary(state: WealthState): PortfolioSummary {
       averageCostUsd: costBasis.averageCostUsd,
       actualAllocation,
       targetAllocation,
-      drift: actualAllocation - targetAllocation,
+      drift: hasAllocation ? actualAllocation - targetAllocation : 0,
     };
   });
 
@@ -153,71 +170,7 @@ export function trancheStatus(state: WealthState, drawdown: number) {
   });
 }
 
-export function advisorMessages(state: WealthState): AdvisorMessage[] {
-  const emergency = emergencyRatio(state);
-  const months = monthsToEmergencyTarget(state);
-  const portfolio = portfolioSummary(state);
-  const surplus = monthlySurplus(state);
-  const targetEntries = Object.entries(state.dca.targets).filter(([, allocation]) => allocation > 0);
-  const allocationLabel = targetEntries.length > 0
-    ? targetEntries.map(([ticker, allocation]) => `${ticker} ${money(state.dca.monthly * allocation)}`).join(" / ")
-    : "No target allocation configured";
-  const profileLabel = state.profile.age > 0
-    ? `${state.profile.age}-year-old ${state.profile.riskTolerance.toLowerCase()}-risk investor`
-    : `${state.profile.riskTolerance.toLowerCase()}-risk investor`;
-  const messages: AdvisorMessage[] = [];
-
-  messages.push({
-    title: emergency < 1 ? "Safety still needs funding" : "Safety bucket complete ✅",
-    body:
-      emergency < 1
-        ? `Emergency Fund is ${percent(emergency)} complete. Keep MYR ${state.emergency.monthlyTopUp}/month; estimated completion in ${months} months.`
-        : `Emergency Fund reached ${money(state.emergency.target)}! You're safe. Consider redirecting savings to Happy Fun and Wishlist.`,
-    severity: emergency < 1 ? "watch" : "positive",
-  });
-
-  messages.push({
-    title: "Keep DCA mechanical",
-    body: `Monthly DCA remains ${money(state.dca.monthly)}: ${allocationLabel}.`,
-    severity: "positive",
-  });
-
-  messages.push({
-    title: portfolio.maxAbsoluteDrift > 0.08 ? "Allocation drift is visible" : "Allocation drift is controlled",
-    body:
-      portfolio.maxAbsoluteDrift > 0.08
-        ? `Largest drift is ${percent(portfolio.maxAbsoluteDrift)}. Direct future buys toward the underweight ETF before changing strategy.`
-        : `Your configured allocation remains within a practical tolerance band for a ${profileLabel}.`,
-    severity: portfolio.maxAbsoluteDrift > 0.08 ? "action" : "positive",
-  });
-
-  messages.push({
-    title: "Opportunity Reserve remains separate",
-    body: `${money(state.opportunity.total - state.opportunity.used)} is reserved for -10%, -15%, and -20% deployment rules. Do not mix it with daily spending.`,
-    severity: "watch",
-  });
-
-  messages.push({
-    title: "Cashflow discipline",
-    body: `Monthly assignable surplus is ${money(surplus)} after basic spending. ${surplus >= state.dca.monthly ? "This currently covers the configured DCA plan." : `This is ${money(state.dca.monthly - surplus)} below the configured DCA plan.`}`,
-    severity: surplus >= state.dca.monthly ? "positive" : "action",
-  });
-
-  return messages;
-}
-
-export function nextActions(state: WealthState): string[] {
-  const actions = [
-    `DCA ${money(state.dca.monthly)} this month unless cashflow breaks.`,
-    state.emergency.monthlyTopUp > 0
-      ? `Top up Safety by ${money(state.emergency.monthlyTopUp)} until Emergency Fund reaches ${money(state.emergency.target)}.`
-      : `Emergency Fund is complete! Consider redirecting ${money(state.emergency.monthlyTopUp || 40)} to Happy Fun and Wishlist buckets.`,
-    "Review spending at month end and record whether DCA was executed.",
-  ];
-
-  if (portfolioSummary(state).maxAbsoluteDrift > 0.08) {
-    actions.push("Use the next buy to reduce allocation drift toward your configured targets.");
-  }
-
-  return actions;
-}
+// advisorMessages() and nextActions() moved to advisor.ts, which layers the
+// FACT → RULE → IMPACT → ACTION contract over these calculations. They cannot
+// live here: financialHealth.ts imports this module, so importing
+// getFinancialSnapshot() from here would create a cycle.

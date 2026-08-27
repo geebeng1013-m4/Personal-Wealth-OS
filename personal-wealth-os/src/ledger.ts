@@ -1,6 +1,6 @@
 import type { LedgerAccount, LedgerCategory, LedgerTransaction, LedgerTransactionType } from "./models";
 
-export type LedgerRangePreset = "week" | "month" | "year" | "custom";
+export type LedgerRangePreset = "today" | "week" | "month" | "year" | "custom";
 
 export interface LedgerFilters {
   preset: LedgerRangePreset;
@@ -47,6 +47,7 @@ function parseLocalDate(value: string, end = false): Date | null {
 
 export function ledgerRange(preset: LedgerRangePreset, now = new Date(), customStart = "", customEnd = ""): { start: Date | null; end: Date | null } {
   if (preset === "custom") return { start: parseLocalDate(customStart), end: parseLocalDate(customEnd, true) };
+  if (preset === "today") return { start: startOfLocalDay(now), end: endOfLocalDay(now) };
   const end = endOfLocalDay(now);
   if (preset === "week") {
     const start = startOfLocalDay(now);
@@ -89,9 +90,8 @@ export function openingFunds(accounts: LedgerAccount[]): number {
   return accounts.reduce((total, account) => total + account.openingBalance, 0);
 }
 
-export function currentNetAssets(transactions: LedgerTransaction[], accounts: LedgerAccount[]): number {
-  return openingFunds(accounts) + ledgerTotals(transactions).balance;
-}
+// currentNetAssets() removed in Step 15: it had no consumer in src or tests,
+// and LedgerSnapshot.totalPositiveBalance / accountTypeBalances supersede it.
 
 export function categoryTotals(transactions: LedgerTransaction[], categories: LedgerCategory[], type: LedgerTransactionType): CategoryTotal[] {
   const amounts = new Map<string, number>();
@@ -118,8 +118,18 @@ export function accountBalances(transactions: LedgerTransaction[], accounts: Led
   return accounts.map((account) => ({ account, balance: balances.get(account.id) ?? 0 }));
 }
 
-export function accountTypeBalance(transactions: LedgerTransaction[], accounts: LedgerAccount[], type: LedgerAccount["type"]): number {
-  return accountBalances(transactions, accounts)
+/**
+ * `balances` lets a caller that already ran accountBalances() over the same
+ * transactions and accounts reuse the result instead of replaying every
+ * transaction again. Omitting it computes them exactly as before.
+ */
+export function accountTypeBalance(
+  transactions: LedgerTransaction[],
+  accounts: LedgerAccount[],
+  type: LedgerAccount["type"],
+  balances: AccountBalance[] = accountBalances(transactions, accounts),
+): number {
+  return balances
     .filter(({ account }) => account.type === type)
     .reduce((total, { balance }) => total + balance, 0);
 }

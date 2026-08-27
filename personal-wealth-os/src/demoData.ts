@@ -7,13 +7,14 @@
  */
 
 import type { WealthState } from "./models";
+import { getDefaultFinancialRules } from "./financialRules";
 
 export const DEMO_USER_DISPLAY_NAME = "Alex Chen";
 export const DEMO_USER_EMAIL = "demo@wealthup.cc";
 export const DEMO_USER_PHOTO = "";
 
 export const demoState: WealthState = {
-  version: 14,
+  version: 17,
   profile: {
     name: "Alex Chen",
     age: 22,
@@ -239,4 +240,73 @@ export const demoState: WealthState = {
       createdAt: Date.now(),
     },
   ],
+  financialRules: [],
+  actionRecords: [],
 };
+
+// Seeded from the demo user's own planning config, exactly as a real upgrading
+// user's rules would be derived.
+demoState.financialRules = getDefaultFinancialRules(demoState);
+
+/**
+ * The calendar month this fixture was written around. Every date below sits at
+ * a fixed offset from it — the newest ledger entries land in this month, the
+ * history runs backwards from it.
+ */
+export const DEMO_ANCHOR_MONTH = "2026-08";
+
+/** Whole-month distance from the anchor to `now`. Negative points backwards. */
+function monthsFromAnchor(now: Date): number {
+  const [year, month] = DEMO_ANCHOR_MONTH.split("-").map(Number);
+  return (now.getFullYear() - year!) * 12 + (now.getMonth() + 1 - month!);
+}
+
+/** Shift a "YYYY-MM" or "YYYY-MM-DD..." string by whole months, clamping the day. */
+function shiftDateString(value: string, months: number): string {
+  const monthOnly = /^(\d{4})-(\d{2})$/.exec(value);
+  if (monthOnly) {
+    const shifted = new Date(Number(monthOnly[1]), Number(monthOnly[2]) - 1 + months, 1);
+    return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, "0")}`;
+  }
+  const full = /^(\d{4})-(\d{2})-(\d{2})(.*)$/.exec(value);
+  if (!full) return value;
+
+  const [, year, month, day, rest] = full;
+  const targetMonth = new Date(Number(year), Number(month) - 1 + months, 1);
+  // Clamp so the 31st never rolls into the following month.
+  const lastDay = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0).getDate();
+  const safeDay = Math.min(Number(day), lastDay);
+  return `${targetMonth.getFullYear()}-${String(targetMonth.getMonth() + 1).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}${rest ?? ""}`;
+}
+
+/** Recursively shift every date-shaped string. Nothing else is touched. */
+function shiftDates<T>(value: T, months: number): T {
+  if (typeof value === "string") {
+    return (/^\d{4}-\d{2}(-\d{2})?/.test(value) ? shiftDateString(value, months) : value) as T;
+  }
+  if (Array.isArray(value)) return value.map((item) => shiftDates(item, months)) as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) out[key] = shiftDates(item, months);
+    return out as T;
+  }
+  return value;
+}
+
+/**
+ * The demo state as of `now`.
+ *
+ * The literal dates in this file stay readable and reviewable; they are shifted
+ * forward whole months at load time so the newest entries always fall in the
+ * current month. Without this the demo silently emptied out the moment the real
+ * calendar moved past the anchor — a visitor next month would have seen income
+ * MYR 0 and concluded the app was broken.
+ *
+ * Shifting by whole months keeps every relative gap, so all the figures the
+ * demo is known for stay exactly the same.
+ */
+export function demoStateFor(now: Date = new Date()): WealthState {
+  const months = monthsFromAnchor(now);
+  const base = structuredClone(demoState);
+  return months === 0 ? base : shiftDates(base, months);
+}

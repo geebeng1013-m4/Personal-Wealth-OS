@@ -1140,7 +1140,7 @@ textarea { resize: vertical; }
   gap: 16px;
 }
 
-.rebalance-plan,.settings-list{display:grid;gap:8px}.rebalance-plan{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}.rebalance-plan>div,.settings-list>div{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--line);border-radius:6px}.setting-check{display:flex;align-items:center;gap:8px;margin:12px 0}.setting-check input{width:auto}.mask-financial-amounts .wealth-total,.mask-financial-amounts .metric strong,.mask-financial-amounts .ledger-amount,.mask-financial-amounts .ledger-account-balance,.mask-financial-amounts .position-value strong,.mask-financial-amounts .journey-amount{filter:blur(8px);user-select:none}
+.rebalance-plan,.settings-list{display:grid;gap:8px}.rebalance-plan{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}.rebalance-plan>div,.settings-list>div{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--line);border-radius:6px}.setting-check{display:flex;align-items:center;gap:8px;margin:12px 0}.setting-check input{width:auto}.mask-financial-amounts .v2-hero__wealth-value,.mask-financial-amounts .v2-hero__change,.mask-financial-amounts .v2-allocation__legend-item strong,.mask-financial-amounts .metric strong,.mask-financial-amounts .wealth-total,.mask-financial-amounts .journey-amount,.mask-financial-amounts .portfolio-hero > div > strong,.mask-financial-amounts .portfolio-health > strong,.mask-financial-amounts .rebalance-plan span,.mask-financial-amounts .position-value strong,.mask-financial-amounts .ledger-amount,.mask-financial-amounts .ledger-account-balance,.mask-financial-amounts .ledger-summary strong,.mask-financial-amounts .ledger-account-group-total > strong,.mask-financial-amounts .ledger-managed-account-balances strong,.mask-financial-amounts .ledger-donut > span,.mask-financial-amounts .ledger-legend strong,.mask-financial-amounts .ledger-bars strong,.mask-financial-amounts .settings-list strong,.mask-financial-amounts .scenario-summary-cell > div:nth-child(2){filter:blur(8px);user-select:none}
 .settings-section { padding: 20px 22px; }
 .settings-section h3 {
   font-size: 15px;
@@ -2690,4 +2690,337 @@ td { border-color: var(--line); }
   }
 
   .etf-holding-copy b { grid-column: 3; }
+}
+
+/* ---- Money Leaks intelligence ---- */
+.compact-page-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.compact-page-header h1 {
+  margin: 3px 0 5px;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.compact-page-header p,
+.money-leaks-disclaimer {
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.page-header-actions,
+.leak-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.leak-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.leak-summary-strip > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 15px 17px;
+  border-right: 1px solid var(--line);
+}
+
+.leak-summary-strip > div:last-child { border-right: 0; }
+.leak-summary-strip span { color: var(--ink-3); font-size: 11px; }
+.leak-summary-strip strong { font-size: 19px; overflow-wrap: anywhere; }
+
+.money-leaks-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr);
+  align-items: start;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.leak-list-panel,
+.leak-detail-panel { padding: 18px; }
+.section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.card-title { font-size: 22px; line-height: 1.2; }
+.card-sub { color: var(--ink); font-size: 16px; line-height: 1.35; }
+.leak-list { display: grid; gap: 7px; }
+
+.leak-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 124px;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.leak-row:hover,
+.leak-row:focus-visible { border-color: var(--glass-border-hover); }
+.leak-row.is-selected { border-color: var(--green); background: var(--green-dim); }
+.leak-row-main { display: grid; gap: 5px; min-width: 0; color: var(--ink-2); font-size: 12px; line-height: 1.5; }
+.leak-row-heading { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; min-width: 0; color: var(--ink); }
+.leak-row-heading strong { font-size: 14px; }
+.leak-row-heading .leak-severity {
+  display: inline-flex;
+  place-items: initial;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  min-height: 20px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.leak-row-meta { color: var(--ink-3); font-size: 11px; }
+.leak-row-impact { display: grid; align-content: center; justify-items: end; gap: 2px; color: var(--ink-3); font-size: 10px; }
+.leak-row-impact strong { color: var(--ink); font-size: 16px; }
+
+.leak-severity {
+  display: inline-grid;
+  place-items: center;
+  width: 70px;
+  height: 70px;
+  padding: 8px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.leak-high { color: var(--red); background: var(--red-dim); }
+.leak-medium { color: var(--amber); background: var(--amber-dim); }
+.leak-low { color: var(--blue); background: var(--blue-dim); }
+
+.leak-detail-panel { position: sticky; top: 18px; }
+.leak-detail-content { display: grid; gap: 17px; }
+.leak-detail-head { display: flex; justify-content: space-between; gap: 12px; }
+.leak-detail-head h2 { margin-top: 4px; font-size: 18px; line-height: 1.3; }
+.leak-detail-impact { display: grid; gap: 2px; padding: 13px; border-left: 3px solid var(--green); background: var(--surface-2); }
+.leak-detail-impact strong { font-size: 21px; }
+.leak-detail-impact span { color: var(--ink-3); font-size: 11px; }
+.leak-detail-content h3 { margin-bottom: 5px; font-size: 12px; }
+.leak-detail-content p { color: var(--ink-2); font-size: 12px; line-height: 1.65; }
+.leak-evidence { display: grid; margin: 0; border-top: 1px solid var(--line); }
+.leak-evidence > div { display: grid; grid-template-columns: minmax(90px, .7fr) minmax(0, 1.3fr); gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.leak-evidence dt { color: var(--ink-3); font-size: 10px; }
+.leak-evidence dd { margin: 0; color: var(--ink); font-size: 11px; overflow-wrap: anywhere; }
+.leak-recommendation { padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+.money-leaks-disclaimer { margin: 13px 2px 0; }
+
+.overview-leak-card { min-width: 0; }
+.overview-leak-layout { display: grid; gap: 14px; }
+.overview-leak-value { display: block; font-size: 25px; }
+.overview-leak-value span { margin-left: 3px; color: var(--ink-3); font-size: 11px; font-weight: 500; }
+.overview-leak-focus { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+.overview-leak-focus strong { font-size: 13px; }
+.overview-leak-focus > span:last-child { color: var(--ink-2); font-size: 11px; line-height: 1.55; }
+
+.leak-insight-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  margin: 14px 0 16px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--amber);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.leak-insight-strip--high { border-left-color: var(--red); }
+.leak-insight-strip--medium { border-left-color: var(--amber); }
+.leak-insight-strip--low { border-left-color: var(--blue); }
+.leak-insight-strip > div:first-child { display: grid; gap: 3px; min-width: 0; }
+.leak-insight-strip strong { font-size: 13px; }
+.leak-insight-strip p { color: var(--ink-2); font-size: 11px; line-height: 1.5; }
+.leak-insight-strip .leak-severity {
+  align-self: center;
+  justify-self: end;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.leak-insight-impact { display: grid; grid-template-columns: auto auto; align-items: center; gap: 2px 10px; }
+.leak-insight-impact small { color: var(--ink-3); font-size: 9px; }
+.leak-insight-impact b { font-size: 14px; }
+.leak-insight-impact button { grid-column: 1 / -1; }
+
+.mask-financial-amounts .overview-leak-value,
+.mask-financial-amounts .leak-summary-strip strong,
+.mask-financial-amounts .leak-row-impact,
+.mask-financial-amounts .leak-detail-impact strong,
+.mask-financial-amounts .leak-insight-impact b { filter: blur(8px); user-select: none; }
+
+@media (max-width: 1080px) {
+  .money-leaks-workspace { grid-template-columns: 1fr; }
+  .leak-detail-panel { position: static; }
+}
+
+@media (max-width: 720px) {
+  .compact-page-header,
+  .leak-insight-strip { align-items: stretch; grid-template-columns: 1fr; flex-direction: column; }
+  .compact-page-header { display: flex; }
+  .leak-insight-strip { gap: 10px; }
+  .page-header-actions > button { flex: 1; }
+  .leak-summary-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .leak-summary-strip > div:nth-child(2) { border-right: 0; }
+  .leak-summary-strip > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line); }
+  .leak-row { grid-template-columns: 1fr; gap: 10px; }
+  .leak-row-impact { grid-template-columns: auto auto; justify-content: space-between; justify-items: start; }
+  .leak-row-impact span:last-child { grid-column: 1 / -1; }
+  .leak-insight-impact { grid-template-columns: 1fr auto; }
+  .leak-insight-impact button { width: 100%; }
+}
+
+@media (max-width: 390px) {
+  .leak-list-panel,
+  .leak-detail-panel { padding: 14px; }
+  .leak-summary-strip strong { font-size: 16px; }
+  .leak-detail-head { align-items: flex-start; flex-direction: column; }
+  .leak-evidence > div { grid-template-columns: 1fr; gap: 3px; }
+  .leak-detail-actions > button { width: 100%; }
+}
+
+/* --- Money leak action state (Step 22) --- */
+
+.leak-action-state {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0 4px;
+}
+
+.leak-action-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--green);
+  background: var(--surface);
+  border: 1px solid var(--green);
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+
+.leak-action-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.leak-mark-done { align-self: flex-start; }
+
+.leak-mark-done:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .leak-mark-done, .leak-action-done { align-self: stretch; width: 100%; justify-content: center; text-align: center; }
+}
+
+/* --- Advisor per-recommendation action state (Step 23) --- */
+
+.advice-action { margin-top: 10px; }
+
+.advice--done { opacity: 0.85; }
+
+.advice-action__done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.advisor-mark-done:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.ov-priority__done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--green);
+}
+
+@media (max-width: 640px) {
+  .advice-action > button, .advice-action__done { width: 100%; justify-content: center; text-align: center; }
+}
+
+/* --- Decision-flow actions (Step 25) --- */
+
+.ov-priority__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.advice-action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .ov-priority__actions > button { width: 100%; }
+  .advice-action > button, .advice-action__done { width: 100%; justify-content: center; text-align: center; }
+}
+
+/* --- Contribution history bulk action --- */
+
+.panel-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.clear-trades { font-size: 12px; padding: 6px 12px; }
+
+.clear-trades:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  /* .panel-head stacks here, so keep the count and the action on one row. */
+  .panel-head-actions { width: 100%; justify-content: space-between; }
 }
