@@ -3031,22 +3031,49 @@ td { border-color: var(--line); }
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  margin-top: 12px;
-  padding-top: 12px;
+  /* min-width:0 lets the text column shrink inside the grid cell instead of
+     forcing the card wider than its track. */
+  min-width: 0;
+  margin-top: 14px;
+  padding-top: 14px;
   border-top: 1px solid var(--line);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
-.account-portfolio-link input { margin-top: 2px; flex-shrink: 0; cursor: pointer; }
-.account-portfolio-link span { display: block; }
+/* The global `input` rule sets width:100% and min-height:38px, which turned
+   this checkbox into a large square that consumed the whole row and squeezed
+   the label into a one-character column. Reset it back to a checkbox. */
+.account-portfolio-link input[type="checkbox"] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 2px 0 0;
+  padding: 0;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+
+/* The text column: min-width:0 is what actually allows wrapping here. */
+.account-portfolio-link > span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 
 .account-portfolio-link small {
   display: block;
-  margin-top: 3px;
+  margin-top: 4px;
   font-size: 11px;
   line-height: 1.5;
   color: var(--ink-3);
 }
 
-.account-portfolio-link input:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.account-portfolio-link input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
