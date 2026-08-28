@@ -1127,7 +1127,15 @@ function etfTopHoldingsTemplate(selected: EtfHoldingsSymbol = "VOO"): string {
         ${(Object.keys(ETF_TOP_HOLDINGS) as EtfHoldingsSymbol[]).map((symbol) => `<button class="etf-holdings-tab${symbol === selected ? " active" : ""}" data-etf-holdings="${symbol}" type="button" role="tab" aria-selected="${symbol === selected}">${symbol}</button>`).join("")}
       </div>
     </header>
-    <div class="etf-holdings-summary" aria-live="polite"><span><strong id="etfHoldingsSymbol">${selected}</strong> · Top Holdings <b id="etfHoldingsTotal">${profile.topHoldingsTotalPercent}</b></span><small>Updated: <time id="etfHoldingsDate">${profile.updateDate}</time></small></div>
+    <!-- Live fund facts. These the data feed really does publish, so they are
+         fetched per symbol; the holdings list below it cannot be, and says so
+         rather than letting a dated snapshot pass for current. -->
+    <dl id="etfLiveFacts" class="etf-live-facts">
+      <div><dt>Expense ratio</dt><dd data-fact="expense">${UNKNOWN}</dd></div>
+      <div><dt>Dividend yield</dt><dd data-fact="yield">${UNKNOWN}</dd></div>
+      <div><dt>Fund size</dt><dd data-fact="aum">${UNKNOWN}</dd></div>
+    </dl>
+    <div class="etf-holdings-summary" aria-live="polite"><span><strong id="etfHoldingsSymbol">${selected}</strong> · Top Holdings <b id="etfHoldingsTotal">${profile.topHoldingsTotalPercent}</b></span><small>Holdings as at <time id="etfHoldingsDate">${profile.updateDate}</time> · fixed snapshot, not live</small></div>
     <ol id="etfHoldingsList" class="etf-holdings-list">${etfHoldingsRowsTemplate(profile)}</ol>
   </section>`;
 }
@@ -1314,6 +1322,10 @@ function marketTemplate(state: WealthState): string {
 
 function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): void {
   let currentSymbol = "VOO";
+  // Which fund the Composition panel is showing. Tracked separately because a
+  // slow fundamentals response must not paint itself over a fund the user has
+  // already moved on from.
+  let currentEtfSymbol = "VOO";
   let currentInterval = "12M";
   let customTickers = [...state.customTickers];
 
@@ -1325,20 +1337,62 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
     }
   }
 
-  function selectEtfHoldings(symbol: EtfHoldingsSymbol): void {
-    const profile = ETF_TOP_HOLDINGS[symbol];
+  /**
+   * Fill the live half of the Composition panel.
+   *
+   * Holdings themselves are not available from any feed this app can reach —
+   * Yahoo's holdings endpoint is credential-gated and TradingView's scanner
+   * returns null for every holdings column — so what is fetched here is what
+   * genuinely is published: fee, yield and fund size. Anything missing shows a
+   * dash, so a fund with no data never borrows the previous fund's numbers.
+   */
+  function loadEtfLiveFacts(symbol: string): void {
+    const facts = root.querySelector<HTMLElement>("#etfLiveFacts");
+    if (!facts) return;
+    const set = (key: string, value: string) => {
+      const cell = facts.querySelector<HTMLElement>(`[data-fact="${key}"]`);
+      if (cell) cell.textContent = value;
+    };
+    set("expense", UNKNOWN);
+    set("yield", UNKNOWN);
+    set("aum", UNKNOWN);
+    const requested = symbol;
+    void fetchFundamentals(symbol).then((data) => {
+      // A slow response for a symbol the user has already navigated away from
+      // must not overwrite the one now on screen.
+      if (!data || requested !== currentEtfSymbol) return;
+      set("expense", fundPercentOrDash(data.expenseRatio));
+      set("yield", fundPercentOrDash(data.dividendYield));
+      set("aum", fundSize(data.totalAssets));
+    }).catch(() => { /* dashes stand */ });
+  }
+
+  function selectEtfHoldings(symbol: string): void {
+    const profile = (ETF_TOP_HOLDINGS as Record<string, EtfHoldingsProfile | undefined>)[symbol];
     const list = root.querySelector<HTMLOListElement>("#etfHoldingsList");
     const symbolEl = root.querySelector<HTMLElement>("#etfHoldingsSymbol");
     const totalEl = root.querySelector<HTMLElement>("#etfHoldingsTotal");
     const dateEl = root.querySelector<HTMLTimeElement>("#etfHoldingsDate");
     if (!list || !symbolEl || !totalEl || !dateEl) return;
 
+    currentEtfSymbol = symbol;
     root.querySelectorAll<HTMLButtonElement>(".etf-holdings-tab").forEach((button) => {
       const active = button.dataset.etfHoldings === symbol;
       button.classList.toggle("active", active);
       button.setAttribute("aria-selected", String(active));
     });
     symbolEl.textContent = symbol;
+    loadEtfLiveFacts(symbol);
+
+    // No snapshot on file is a fact worth stating. Showing the previous fund's
+    // holdings under this fund's name would be the worst of both.
+    if (!profile) {
+      totalEl.textContent = UNKNOWN;
+      dateEl.textContent = UNKNOWN;
+      list.innerHTML = '<li class="etf-holdings-empty">No holdings breakdown on file for '
+        + escapeHtml(symbol) + '. The figures above are live; a holdings list would have to be added by hand.</li>';
+      return;
+    }
     totalEl.textContent = profile.topHoldingsTotalPercent;
     dateEl.textContent = profile.updateDate;
     list.innerHTML = etfHoldingsRowsTemplate(profile);
@@ -1357,6 +1411,7 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
     updatePnL(currentSymbol);
     updateTimeline(currentSymbol);
     updateStaticForSymbol(currentSymbol);
+    selectEtfHoldings(currentSymbol);
     loadDividends(currentSymbol);
     loadRisk(currentSymbol);
   }
@@ -1955,6 +2010,10 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
   loadRisk(currentSymbol);
   renderStaticComparison();
   loadComparisonFundamentals();
+  // The Composition panel ships with the first symbol already selected, so its
+  // live figures have to be fetched here too — otherwise the opening view is
+  // the only one that never gets any.
+  selectEtfHoldings(currentSymbol);
 
   // Quotes arrive asynchronously, and go stale after PRICE_STALE_AFTER_MS if
   // this page stays open. Until a price lands the panel shows "--"; each

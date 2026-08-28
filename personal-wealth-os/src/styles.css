@@ -2296,6 +2296,18 @@ textarea { padding-top: 12px; }
 /* Shared secondary pages */
 .terminal-grid, .two-col-grid, .three-col-grid, .settings-grid { gap: 20px; }
 .data-card, .settings-section { padding: 25px; }
+/* A list sitting directly under a form had nothing between it and the submit
+   button, so the first row read as part of the button. The adjacent selector
+   keeps this to exactly that pairing. */
+.form-grid + .settings-list, .category-form + .settings-list { margin-top: 16px; }
+
+/* Live fund facts sit above the dated holdings list, so the split between
+   what is fetched and what is a snapshot is visible rather than implied. */
+.etf-live-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 14px 0 4px; }
+.etf-live-facts > div { padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.etf-live-facts dt { margin: 0 0 4px; color: var(--ink-3); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+.etf-live-facts dd { margin: 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.etf-holdings-empty { color: var(--ink-3); font-size: 12px; line-height: 1.6; list-style: none; padding: 14px 0; }
 .data-card > strong { font-variant-numeric: tabular-nums; }
 .table-wrap { border-color: var(--line); border-radius: 14px; }
 table { font-variant-numeric: tabular-nums; }
