@@ -322,12 +322,42 @@ export function resolveExchangeCoverage(
 }
 
 /**
+ * The rate from the recorded conversion closest in time to a given date.
+ *
+ * This is what prices dollars no conversion explains — cross-currency orders,
+ * where the broker converts at settlement and files no separate exchange
+ * record. Those conversions happen the same day as the fill, so the nearest
+ * manual conversion is a close read of the same market. It is an estimate, but
+ * an estimate from the user's own statement, which beats the rate that happened
+ * to be live when a CSV was imported months later.
+ */
+function nearestConversionRate(date: string, exchanges: CurrencyExchange[]): number | null {
+  const when = Date.parse(date.slice(0, 10));
+  if (Number.isNaN(when)) return null;
+  let best: CurrencyExchange | null = null;
+  let bestGap = Infinity;
+  for (const exchange of exchanges) {
+    if (exchange.direction !== "myr-to-usd" || exchange.usdAmount <= 0) continue;
+    const gap = Math.abs(Date.parse(exchange.date) - when);
+    if (!Number.isNaN(gap) && gap < bestGap) {
+      bestGap = gap;
+      best = exchange;
+    }
+  }
+  return best === null ? null : exchangeRateOf(best);
+}
+
+/**
  * Restate each buy's ringgit cost using the conversions that funded it.
  *
- * Trades keep their own `amountMyr` for any dollars no conversion explains, so
- * a portfolio with no records behaves exactly as before, and one with partial
- * records improves only where there is evidence. The figure converges on the
- * truth as more conversions are recorded; it never jumps to it.
+ * Dollars a conversion funded are costed at what that conversion cost. Dollars
+ * none explains — cross-currency orders, settled by the broker without a
+ * separate record — are costed at the nearest conversion's rate instead, which
+ * is the same market days apart rather than a rate from an unrelated month. A
+ * portfolio with no records at all is returned untouched.
+ *
+ * Coverage still reports those dollars as uncovered: a better estimate is not
+ * the same as evidence, and the UI should keep saying which is which.
  *
  * Sells are restated too, at the rate the returning dollars carried. Their
  * proceeds never became ringgit — the money lands in the same USD balance and
@@ -350,16 +380,21 @@ export function tradesWithExchangeCost(
       return { ...trade, amountMyr: trade.amountUsd * rate, exchangeRate: rate };
     }
     const resolved = costs.get(trade.id);
-    if (!resolved || resolved.usdSpent <= 0 || resolved.effectiveRate === null) return trade;
+    if (!resolved || resolved.usdSpent <= 0) return trade;
 
-    // The unexplained share keeps the trade's existing ringgit figure, scaled
-    // to the part of the order it still covers.
-    const uncoveredShare = resolved.uncoveredUsd / resolved.usdSpent;
-    const amountMyr = resolved.costMyr + uncoveredShare * trade.amountMyr;
+    // Price the unexplained dollars off the nearest conversion. With no
+    // conversion to reach for, the trade keeps the figure it arrived with,
+    // scaled to the part of the order still unexplained.
+    const nearest = nearestConversionRate(trade.date, exchanges);
+    const uncoveredMyr = nearest !== null
+      ? resolved.uncoveredUsd * nearest
+      : (resolved.uncoveredUsd / resolved.usdSpent) * trade.amountMyr;
+    if (resolved.effectiveRate === null && nearest === null) return trade;
+    const amountMyr = resolved.costMyr + uncoveredMyr;
     return {
       ...trade,
       amountMyr,
-      exchangeRate: trade.amountUsd > 0 ? amountMyr / trade.amountUsd : resolved.effectiveRate,
+      exchangeRate: trade.amountUsd > 0 ? amountMyr / trade.amountUsd : (resolved.effectiveRate ?? nearest ?? undefined),
     };
   });
 }

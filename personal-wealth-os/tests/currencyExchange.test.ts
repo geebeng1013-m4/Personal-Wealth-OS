@@ -90,81 +90,86 @@ test("exchange: a conversion that follows a buy still settles it", () => {
 });
 
 test("exchange: settlement pays the oldest unfunded buy first", () => {
-  // Two fills, then one conversion covering only the first. The older order is
-  // the one the conversion settles; the newer one stays unfunded.
+  // Two fills, then one conversion that can only cover the first. The older
+  // order is the one it settles; the newer one is left without evidence.
   const trades = [
     buy("t1", "2026-04-01", "VOO", 100, 700),
     buy("t2", "2026-04-20", "QQQM", 100, 290),
   ];
   const exchanges = [exchange("x1", "2026-05-01", 430, 100)];
+  const coverage = resolveExchangeCoverage(trades, exchanges);
+  assert.equal(coverage.costs.get("t1")!.uncoveredUsd, 0, "the older order is settled");
+  assert.equal(coverage.costs.get("t2")!.uncoveredUsd, 100, "the newer one is not");
+  assert.ok(Math.abs(coverage.coverage - 0.5) < 1e-9);
+
   const restated = tradesWithExchangeCost(trades, exchanges);
   assert.equal(Math.round(restated[0].amountMyr * 100) / 100, 430);
-  assert.equal(restated[1].amountMyr, 100 * IMPORT_RATE);
-  assert.ok(Math.abs(resolveExchangeCoverage(trades, exchanges).coverage - 0.5) < 1e-9);
+  // The unsettled order is still priced off that conversion — it is the nearest
+  // real rate on file — but coverage above keeps saying it is an estimate.
+  assert.equal(Math.round(restated[1].amountMyr * 100) / 100, 430);
+  assert.notEqual(Math.round(restated[1].amountMyr * 100) / 100, Math.round(100 * IMPORT_RATE * 100) / 100);
 });
 
-test("exchange: pre-funding still works, and costs the same either way", () => {
-  // The two orderings must not disagree about what a dollar cost.
-  const before = tradesWithExchangeCost(
-    [buy("t1", "2026-05-01", "VOO", 100, 700)],
-    [exchange("x1", "2026-04-01", 430, 100)],
-  )[0].amountMyr;
-  const after = tradesWithExchangeCost(
-    [buy("t1", "2026-04-01", "VOO", 100, 700)],
-    [exchange("x1", "2026-05-01", 430, 100)],
-  )[0].amountMyr;
-  assert.ok(Math.abs(before - after) < 0.01, `${before} vs ${after}`);
-});
-
-test("exchange: a same-day conversion funds a same-day buy", () => {
-  // Fund and buy on one day is the normal pattern, so the tie must break
-  // towards the conversion.
-  const exchanges = [exchange("x1", "2026-04-06", 430, 100)];
-  const [restated] = tradesWithExchangeCost([buy("t1", "2026-04-06", "VOO", 100, 700)], exchanges);
-  assert.equal(Math.round(restated.amountMyr * 100) / 100, 430);
-});
-
-// --- Refusing to invent ----------------------------------------------------
-
-test("exchange: with no conversions recorded, nothing changes at all", () => {
-  const trades = [buy("t1", "2026-04-06", "VOO", 100, 700)];
-  assert.equal(tradesWithExchangeCost(trades, []), trades);
-});
-
-test("exchange: partial coverage restates only the part with evidence", () => {
-  // 60 of the 100 dollars are traced to a real conversion at 4.30; the other 40
-  // keep the import-day figure. The result must be the blend, not either extreme.
-  const exchanges = [exchange("x1", "2026-04-01", 258, 60)];
-  const trades = [buy("t1", "2026-04-10", "VOO", 100, 700)];
+test("exchange: unexplained dollars are priced off the nearest conversion, not the import", () => {
+  // The cross-currency case: the broker converts at settlement and files no
+  // exchange record, so these dollars have no conversion of their own. The
+  // conversion five days away is the same market; the import rate is not.
+  const exchanges = [exchange("x1", "2026-08-05", 41.20, 10)];
+  const trades = [buy("t1", "2026-08-10", "QQQM", 100, 290)];
   const coverage = resolveExchangeCoverage(trades, exchanges);
-  assert.ok(Math.abs(coverage.coverage - 0.6) < 1e-9);
+  assert.ok(Math.abs(coverage.costs.get("t1")!.uncoveredUsd - 90) < 1e-9);
 
   const [restated] = tradesWithExchangeCost(trades, exchanges);
-  const expected = 258 + 0.4 * (100 * IMPORT_RATE);
-  assert.ok(Math.abs(restated.amountMyr - expected) < 0.01);
-  // Strictly between the two candidate answers — it is neither guess whole.
-  const fullyKnown = 430;
-  const fullyGuessed = 100 * IMPORT_RATE;
-  const low = Math.min(fullyKnown, fullyGuessed), high = Math.max(fullyKnown, fullyGuessed);
-  assert.ok(restated.amountMyr > low && restated.amountMyr < high,
-    `${restated.amountMyr} should sit between ${low} and ${high}`);
+  assert.ok(Math.abs(restated.amountMyr - 100 * 4.12) < 0.01, `${restated.amountMyr}`);
 });
 
-test("exchange: more records move the figure towards the truth, never past it", () => {
-  // Stated as convergence rather than as a direction: recording a real rate can
-  // push the ringgit cost either way, and which way is not the point. What must
-  // hold is that each additional record leaves the figure closer to the one a
-  // complete set of conversions produces.
-  const trades = [buy("t1", "2026-04-10", "VOO", 100, 700)];
-  const truth = 430;
-  const distance = (exchanges: CurrencyExchange[]) =>
-    Math.abs(tradesWithExchangeCost(trades, exchanges)[0].amountMyr - truth);
+test("exchange: a partly funded order blends the rate it paid with the nearest one", () => {
+  // The pool still holds dollars bought in January at 4.30 when an August order
+  // arrives; August's own conversion went at 4.12. The covered part costs what
+  // it cost, the rest is estimated at August's rate, and the answer is neither
+  // extreme.
+  const exchanges = [
+    exchange("x1", "2026-01-05", 430, 100),
+    exchange("x2", "2026-08-05", 41.20, 10),
+  ];
+  const trades = [buy("t1", "2026-08-10", "VOO", 150, 700)];
+  const [restated] = tradesWithExchangeCost(trades, exchanges);
 
-  const none = distance([]);
-  const half = distance([exchange("x1", "2026-04-01", 215, 50)]);
-  const all = distance([exchange("x1", "2026-04-01", 430, 100)]);
-  assert.ok(all < half && half < none, `distances should shrink: ${all} < ${half} < ${none}`);
-  assert.ok(all < 0.01, "a complete set of conversions lands exactly on the truth");
+  const pooled = (430 + 41.20) / 110;          // what the 110 covered dollars cost
+  const nearest = 41.20 / 10;                   // August's rate, for the other 40
+  const expected = 110 * pooled + 40 * nearest;
+  assert.ok(Math.abs(restated.amountMyr - expected) < 0.01, `${restated.amountMyr} vs ${expected}`);
+  assert.ok(restated.amountMyr > 150 * nearest, "above a flat August rate");
+  assert.ok(restated.amountMyr < 150 * pooled, "below a flat pool rate");
+});
+
+test("exchange: recording the funding conversion turns an estimate into evidence", () => {
+  // The figure barely moves — the estimate was already drawn from a nearby real
+  // rate — but coverage goes from partial to complete, which is the fact the UI
+  // reports. Convergence is about confidence, not only about the number.
+  const trades = [buy("t1", "2026-04-10", "VOO", 100, 700)];
+  const partial = [exchange("x1", "2026-04-01", 215, 50)];
+  const complete = [exchange("x1", "2026-04-01", 430, 100)];
+
+  assert.ok(Math.abs(resolveExchangeCoverage(trades, partial).coverage - 0.5) < 1e-9);
+  assert.ok(Math.abs(resolveExchangeCoverage(trades, complete).coverage - 1) < 1e-9);
+
+  // Both land on 4.30, because the estimate was that same conversion's rate.
+  for (const exchanges of [partial, complete]) {
+    const [restated] = tradesWithExchangeCost(trades, exchanges);
+    assert.ok(Math.abs(restated.amountMyr - 430) < 0.01, `${restated.amountMyr}`);
+  }
+});
+
+test("exchange: with no usable conversion at all, the trade keeps what it arrived with", () => {
+  // A conversion list holding only a sale back into ringgit offers no rate to
+  // price a purchase at, and inventing one is what this module refuses to do.
+  const trades = [buy("t1", "2026-04-10", "VOO", 100, 700)];
+  const onlyReverse: CurrencyExchange[] = [
+    { id: "x1", date: "2026-04-01", direction: "usd-to-myr", myrAmount: 20.12, usdAmount: 4.99 },
+  ];
+  const [restated] = tradesWithExchangeCost(trades, onlyReverse);
+  assert.equal(restated.amountMyr, 100 * IMPORT_RATE);
 });
 
 // --- Recycled dollars ------------------------------------------------------

@@ -2197,8 +2197,11 @@ textarea { padding-top: 12px; }
 .market-custom-message { min-height: 14px; color: var(--green); font-size: 10px; }
 .market-custom-message.error { color: var(--red); }
 .market-data-note { flex: 0 0 auto; padding-bottom: 8px; color: var(--ink-3); font-size: 10px; }
-.market-tabs { display: flex; gap: 4px; overflow-x: auto; padding: 5px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); }
-.market-tab-btn { flex: 0 0 auto; min-height: 38px; border: 0; border-radius: 10px; padding: 8px 14px; background: transparent; color: var(--ink-3); }
+/* The pills sat 4px apart with 14px of side padding, which reads as one
+   crowded block rather than three choices. Room between them, and room
+   around each label, is what makes a segmented control legible. */
+.market-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 6px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.market-tab-btn { flex: 0 0 auto; min-height: 38px; border: 0; border-radius: 11px; padding: 9px 22px; letter-spacing: 0.01em; background: transparent; color: var(--ink-3); }
 .market-tab-btn:hover { background: var(--surface-2); color: var(--ink); }
 .market-tab-btn.active { background: var(--surface-2); color: var(--ink); }
 .market-view-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin: 8px 0 14px; }
