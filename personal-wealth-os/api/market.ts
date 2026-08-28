@@ -37,6 +37,112 @@ const TRADINGVIEW_FUNDAMENTAL_COLUMNS = [
   "currency",
 ] as const;
 
+/**
+ * ETF holdings and sector weights, via Yahoo's quoteSummary.
+ *
+ * That endpoint answers "Invalid Crumb" to an anonymous request, which an
+ * earlier round read as "gone" — it is not. It wants a session: one request to
+ * pick up a cookie, one to trade that cookie for a crumb, then the real call
+ * carrying both. The crumb is reused until it stops working, so the ordinary
+ * request costs nothing extra.
+ *
+ * Worth the two extra requests because nothing else has this. TradingView's
+ * scanner returns null for every holdings and sector column, and the fund
+ * issuers' own endpoints are per-issuer (Vanguard answers for VOO, not QQQM).
+ * This is the one source that covers every ETF the app tracks.
+ */
+const YAHOO_SUMMARY = "https://query1.finance.yahoo.com/v10/finance/quoteSummary";
+const YAHOO_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
+let yahooSession: { cookie: string; crumb: string } | null = null;
+
+async function openYahooSession(): Promise<{ cookie: string; crumb: string } | null> {
+  const seed = await fetch("https://fc.yahoo.com", {
+    headers: { "user-agent": YAHOO_UA },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
+  // The seed request is expected to fail as a page; only its Set-Cookie matters.
+  const cookie = (seed.headers.get("set-cookie") ?? "").split(";")[0];
+  if (!cookie) return null;
+  const crumbResponse = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
+    headers: { "user-agent": YAHOO_UA, cookie },
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  });
+  if (!crumbResponse.ok) return null;
+  const crumb = (await crumbResponse.text()).trim();
+  // A crumb with markup in it is an error page, not a token.
+  if (!crumb || crumb.length > 64 || crumb.includes("<")) return null;
+  return { cookie, crumb };
+}
+
+interface HoldingsPayload {
+  asOfLabel: string | null;
+  holdings: Array<{ symbol: string; name: string; weight: number }>;
+  sectors: Array<{ sector: string; weight: number }>;
+}
+
+function readTopHoldings(raw: unknown): HoldingsPayload | null {
+  const result = (raw as { quoteSummary?: { result?: unknown[] } })?.quoteSummary?.result;
+  const top = Array.isArray(result)
+    ? (result[0] as { topHoldings?: Record<string, unknown> } | undefined)?.topHoldings
+    : undefined;
+  if (!top) return null;
+
+  const num = (value: unknown): number | null => {
+    const raw = (value as { raw?: unknown } | undefined)?.raw;
+    return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+  };
+
+  const holdings = (Array.isArray(top.holdings) ? top.holdings : [])
+    .map((entry) => {
+      const item = entry as Record<string, unknown>;
+      const weight = num(item.holdingPercent);
+      const symbol = typeof item.symbol === "string" ? item.symbol : "";
+      if (weight === null || !symbol) return null;
+      return {
+        symbol,
+        name: typeof item.holdingName === "string" ? item.holdingName : symbol,
+        weight,
+      };
+    })
+    .filter((item): item is { symbol: string; name: string; weight: number } => item !== null);
+
+  // Sector weights arrive as an array of single-key objects.
+  const sectors = (Array.isArray(top.sectorWeightings) ? top.sectorWeightings : [])
+    .map((entry) => {
+      const pair = Object.entries(entry as Record<string, unknown>)[0];
+      if (!pair) return null;
+      const weight = num(pair[1]);
+      if (weight === null || weight <= 0) return null;
+      return { sector: pair[0], weight };
+    })
+    .filter((item): item is { sector: string; weight: number } => item !== null)
+    .sort((a, b) => b.weight - a.weight);
+
+  if (holdings.length === 0 && sectors.length === 0) return null;
+  return { asOfLabel: null, holdings, sectors };
+}
+
+async function fetchYahooHoldings(symbol: string): Promise<HoldingsPayload | null> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (!yahooSession) yahooSession = await openYahooSession();
+    if (!yahooSession) return null;
+    const url = `${YAHOO_SUMMARY}/${encodeURIComponent(symbol)}`
+      + `?modules=topHoldings&crumb=${encodeURIComponent(yahooSession.crumb)}`;
+    const response = await fetch(url, {
+      headers: { "user-agent": YAHOO_UA, cookie: yahooSession.cookie },
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    });
+    if (response.status === 401 || response.status === 403) {
+      // The session went stale. Drop it and try once with a fresh one.
+      yahooSession = null;
+      continue;
+    }
+    if (!response.ok) return null;
+    return readTopHoldings(await response.json());
+  }
+  return null;
+}
+
 function isValidSymbol(value: string): boolean {
   return new RegExp(`^[A-Za-z0-9.^:-]{1,${MAX_SYMBOL_LENGTH}}$`).test(value);
 }
@@ -114,6 +220,24 @@ export default async function handler(request: VercelRequest, response: VercelRe
     return;
   }
 
+  if (kind === "holdings") {
+    try {
+      const holdings = await fetchYahooHoldings(symbol);
+      if (!holdings) {
+        // A stock has no holdings, and that is an answer, not a failure.
+        response.status(404).json({ error: "no holdings available" });
+        return;
+      }
+      // Holdings are restated monthly at most; a stale hour costs nothing.
+      response.setHeader("Cache-Control", "public, max-age=0, s-maxage=21600, stale-while-revalidate=86400");
+      response.status(200).json({ symbol, ...holdings });
+    } catch (error) {
+      const reason = error instanceof Error && error.name === "TimeoutError" ? "timeout" : "network error";
+      response.status(504).json({ error: reason });
+    }
+    return;
+  }
+
   if (kind === "fundamentals") {
     try {
       const fundamentals = await fetchTradingViewFundamentals(symbol);
@@ -132,7 +256,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
   const upstream = upstreamFor(kind, symbol, range);
   if (!upstream) {
-    response.status(400).json({ error: "kind must be 'fundamentals' or 'history'" });
+    response.status(400).json({ error: "kind must be 'fundamentals', 'holdings' or 'history'" });
     return;
   }
 

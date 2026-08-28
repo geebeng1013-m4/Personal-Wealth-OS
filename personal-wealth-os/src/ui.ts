@@ -11,7 +11,7 @@ import {
 } from "./rules";
 import { getAdvisorSnapshot, nextActions } from "./advisor";
 import { isRecommendationCompleted, markRecommendationDone } from "./actionRecords";
-import { buildTradeTimelineHtml, fetchFundamentals, fetchHistoricalPrices, calcRiskMetrics, getUsdToMyr, fetchLivePrices, fetchUsdToMyr, type Fundamentals } from "./market";
+import { buildTradeTimelineHtml, fetchFundamentals, fetchEtfComposition, fetchHistoricalPrices, calcRiskMetrics, getUsdToMyr, fetchLivePrices, fetchUsdToMyr, type Fundamentals } from "./market";
 import { exchangeRateOf, resolveExchangeCoverage, tradesWithExchangeCost } from "./currencyExchange";
 import { exchangesFromText, mergeExchanges } from "./exchangeImport";
 import { categoryTotals, filterLedgerTransactions, investmentAssetShare, ledgerTotals, monthlyLedgerTotals, normalizeLedgerAmount, openingFunds, type AccountBalance, type LedgerFilters } from "./ledger";
@@ -1135,7 +1135,8 @@ function etfTopHoldingsTemplate(selected: EtfHoldingsSymbol = "VOO"): string {
       <div><dt>Dividend yield</dt><dd data-fact="yield">${UNKNOWN}</dd></div>
       <div><dt>Fund size</dt><dd data-fact="aum">${UNKNOWN}</dd></div>
     </dl>
-    <div class="etf-holdings-summary" aria-live="polite"><span><strong id="etfHoldingsSymbol">${selected}</strong> · Top Holdings <b id="etfHoldingsTotal">${profile.topHoldingsTotalPercent}</b></span><small>Holdings as at <time id="etfHoldingsDate">${profile.updateDate}</time> · fixed snapshot, not live</small></div>
+    <div id="etfSectors" class="etf-sectors" hidden></div>
+    <div class="etf-holdings-summary" aria-live="polite"><span><strong id="etfHoldingsSymbol">${selected}</strong> · Top Holdings <b id="etfHoldingsTotal">${profile.topHoldingsTotalPercent}</b></span><small id="etfHoldingsDateWrap">Holdings as at <time id="etfHoldingsDate">${profile.updateDate}</time> · fixed snapshot, not live</small></div>
     <ol id="etfHoldingsList" class="etf-holdings-list">${etfHoldingsRowsTemplate(profile)}</ol>
   </section>`;
 }
@@ -1337,20 +1338,48 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
     }
   }
 
+  /** Percent from a 0..1 weight, at the precision holdings are published in. */
+  const weightText = (weight: number): string => (weight * 100).toFixed(2) + "%";
+
+  /** The provider keys sectors in snake_case; these are the names people use. */
+  const SECTOR_LABELS: Record<string, string> = {
+    realestate: "Real estate", consumer_cyclical: "Consumer cyclical",
+    basic_materials: "Basic materials", consumer_defensive: "Consumer defensive",
+    technology: "Technology", communication_services: "Communication services",
+    financial_services: "Financial services", utilities: "Utilities",
+    industrials: "Industrials", energy: "Energy", healthcare: "Healthcare",
+  };
+
+  function renderSectors(sectors: Array<{ sector: string; weight: number }>): void {
+    const host = root.querySelector<HTMLElement>("#etfSectors");
+    if (!host) return;
+    if (sectors.length === 0) {
+      host.hidden = true;
+      host.innerHTML = "";
+      return;
+    }
+    host.hidden = false;
+    const widest = sectors[0].weight || 1;
+    host.innerHTML = '<div class="etf-sectors-head">Sector weights</div>'
+      + sectors.map((entry) =>
+        '<div class="etf-sector-row"><span>' + escapeHtml(SECTOR_LABELS[entry.sector] ?? entry.sector)
+        + '</span><i style="width:' + Math.max(2, (entry.weight / widest) * 100).toFixed(1) + '%"></i>'
+        + '<b>' + weightText(entry.weight) + '</b></div>').join("");
+  }
+
   /**
    * Fill the live half of the Composition panel.
    *
-   * Holdings themselves are not available from any feed this app can reach —
-   * Yahoo's holdings endpoint is credential-gated and TradingView's scanner
-   * returns null for every holdings column — so what is fetched here is what
-   * genuinely is published: fee, yield and fund size. Anything missing shows a
-   * dash, so a fund with no data never borrows the previous fund's numbers.
+   * Fee, yield and fund size come from one provider; holdings and sector
+   * weights from another, which needs a session the server opens on our behalf.
+   * A fund that answers neither keeps the hand-typed snapshot, clearly
+   * labelled, rather than showing an empty panel.
    */
   function loadEtfLiveFacts(symbol: string): void {
     const facts = root.querySelector<HTMLElement>("#etfLiveFacts");
     if (!facts) return;
     const set = (key: string, value: string) => {
-      const cell = facts.querySelector<HTMLElement>(`[data-fact="${key}"]`);
+      const cell = facts.querySelector<HTMLElement>('[data-fact="' + key + '"]');
       if (cell) cell.textContent = value;
     };
     set("expense", UNKNOWN);
@@ -1367,13 +1396,47 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
     }).catch(() => { /* dashes stand */ });
   }
 
+  function loadEtfComposition(symbol: string): void {
+    const list = root.querySelector<HTMLOListElement>("#etfHoldingsList");
+    const totalEl = root.querySelector<HTMLElement>("#etfHoldingsTotal");
+    const dateWrap = root.querySelector<HTMLElement>("#etfHoldingsDateWrap");
+    const requested = symbol;
+    void fetchEtfComposition(symbol).then((composition) => {
+      if (requested !== currentEtfSymbol) return;
+      // Nothing published for this symbol: whatever is already on screen — the
+      // dated snapshot, or the "none on file" note — is the honest answer.
+      if (!composition) {
+        if (!(symbol in ETF_TOP_HOLDINGS) && list) {
+          if (dateWrap) dateWrap.textContent = "";
+          list.innerHTML = '<li class="etf-holdings-empty">No holdings published for '
+            + escapeHtml(symbol) + '. Single companies do not have any; the figures above are live.</li>';
+        }
+        return;
+      }
+      renderSectors(composition.sectors);
+      if (!list || composition.holdings.length === 0) return;
+      const total = composition.holdings.reduce((sum, holding) => sum + holding.weight, 0);
+      if (totalEl) totalEl.textContent = weightText(total);
+      if (dateWrap) dateWrap.textContent = "Live, from the fund's latest published holdings";
+      const widest = composition.holdings[0].weight || 1;
+      list.innerHTML = composition.holdings.map((holding, index) =>
+        '<li><span class="etf-rank">' + String(index + 1).padStart(2, "0") + '</span>'
+        + '<span class="etf-ticker">' + escapeHtml(holding.symbol) + '</span>'
+        + '<span class="etf-name">' + escapeHtml(holding.name) + '</span>'
+        + '<span class="etf-weight">' + weightText(holding.weight) + '</span>'
+        + '<span class="etf-bar"><i style="width:' + Math.min(100, (holding.weight / widest) * 100).toFixed(1) + '%"></i></span>'
+        + '</li>').join("");
+    }).catch(() => { /* whatever is on screen stands */ });
+  }
+
   function selectEtfHoldings(symbol: string): void {
     const profile = (ETF_TOP_HOLDINGS as Record<string, EtfHoldingsProfile | undefined>)[symbol];
     const list = root.querySelector<HTMLOListElement>("#etfHoldingsList");
     const symbolEl = root.querySelector<HTMLElement>("#etfHoldingsSymbol");
     const totalEl = root.querySelector<HTMLElement>("#etfHoldingsTotal");
     const dateEl = root.querySelector<HTMLTimeElement>("#etfHoldingsDate");
-    if (!list || !symbolEl || !totalEl || !dateEl) return;
+    const dateWrap = root.querySelector<HTMLElement>("#etfHoldingsDateWrap");
+    if (!list || !symbolEl || !totalEl) return;
 
     currentEtfSymbol = symbol;
     root.querySelectorAll<HTMLButtonElement>(".etf-holdings-tab").forEach((button) => {
@@ -1382,20 +1445,26 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
       button.setAttribute("aria-selected", String(active));
     });
     symbolEl.textContent = symbol;
+    renderSectors([]);
     loadEtfLiveFacts(symbol);
 
-    // No snapshot on file is a fact worth stating. Showing the previous fund's
-    // holdings under this fund's name would be the worst of both.
-    if (!profile) {
+    // Paint what is known synchronously so the panel is never blank while the
+    // network answers; live data replaces it a moment later.
+    if (profile) {
+      totalEl.textContent = profile.topHoldingsTotalPercent;
+      if (dateWrap && dateEl) {
+        dateWrap.textContent = "";
+        dateWrap.append("Holdings as at ", dateEl, " · fixed snapshot, not live");
+        dateEl.textContent = profile.updateDate;
+      }
+      list.innerHTML = etfHoldingsRowsTemplate(profile);
+    } else {
       totalEl.textContent = UNKNOWN;
-      dateEl.textContent = UNKNOWN;
-      list.innerHTML = '<li class="etf-holdings-empty">No holdings breakdown on file for '
-        + escapeHtml(symbol) + '. The figures above are live; a holdings list would have to be added by hand.</li>';
-      return;
+      if (dateWrap) dateWrap.textContent = "Fetching published holdings…";
+      list.innerHTML = '<li class="etf-holdings-empty">Loading holdings for '
+        + escapeHtml(symbol) + '…</li>';
     }
-    totalEl.textContent = profile.topHoldingsTotalPercent;
-    dateEl.textContent = profile.updateDate;
-    list.innerHTML = etfHoldingsRowsTemplate(profile);
+    loadEtfComposition(symbol);
   }
 
   function selectSymbol(btn: HTMLButtonElement): void {

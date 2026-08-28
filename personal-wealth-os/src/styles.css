@@ -2308,6 +2308,29 @@ textarea { padding-top: 12px; }
 .etf-live-facts dt { margin: 0 0 4px; color: var(--ink-3); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
 .etf-live-facts dd { margin: 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .etf-holdings-empty { color: var(--ink-3); font-size: 12px; line-height: 1.6; list-style: none; padding: 14px 0; }
+
+/* Sector weights: a compact bar chart, largest first. Its own block above the
+   holdings list, because a fund's shape is the thing you read first. */
+.etf-sectors { margin: 16px 0 8px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.etf-sectors-head { margin-bottom: 10px; color: var(--ink-3); font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; }
+.etf-sector-row { display: grid; grid-template-columns: 140px 1fr 56px; align-items: center; gap: 12px; padding: 4px 0; font-size: 12px; }
+.etf-sector-row span { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.etf-sector-row i { display: block; height: 5px; border-radius: 3px; background: var(--green); opacity: 0.75; }
+.etf-sector-row b { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* Live holdings rows. Same shape as the snapshot rows they replace, so the
+   panel does not visibly reflow when live data lands. */
+.etf-holdings-list li { display: grid; grid-template-columns: 26px 62px 1fr 62px; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.etf-holdings-list .etf-rank { color: var(--ink-3); font-size: 10px; font-variant-numeric: tabular-nums; }
+.etf-holdings-list .etf-ticker { font-weight: 600; font-size: 12px; }
+.etf-holdings-list .etf-name { color: var(--ink-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.etf-holdings-list .etf-weight { text-align: right; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.etf-holdings-list .etf-bar { grid-column: 2 / -1; height: 4px; border-radius: 2px; background: var(--line); }
+.etf-holdings-list .etf-bar i { display: block; height: 100%; border-radius: 2px; background: var(--green); }
+@media (max-width: 560px) {
+  .etf-sector-row { grid-template-columns: 104px 1fr 48px; gap: 8px; }
+  .etf-holdings-list li { grid-template-columns: 22px 54px 1fr 54px; gap: 8px; }
+}
 .data-card > strong { font-variant-numeric: tabular-nums; }
 .table-wrap { border-color: var(--line); border-radius: 14px; }
 table { font-variant-numeric: tabular-nums; }

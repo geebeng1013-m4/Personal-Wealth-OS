@@ -236,7 +236,7 @@ async function fetchWithProxy(url: string): Promise<string> {
  * where /api is not deployed; those proxies are unreliable, so a failure here
  * simply means the panel stays empty rather than showing invented data.
  */
-async function fetchMarketData(kind: "fundamentals" | "history", symbol: string, range?: string): Promise<string> {
+async function fetchMarketData(kind: "fundamentals" | "holdings" | "history", symbol: string, range?: string): Promise<string> {
   const query = new URLSearchParams({ kind, symbol });
   if (range) query.set("range", range);
   try {
@@ -772,6 +772,59 @@ const DIV_CACHE_TTL = 3600_000; // 1 hour
  * or P/E. Those stay 0/"" here, and the UI renders them as unknown rather than
  * inventing a value — a zero in this shape means "not reported", never "zero".
  */
+/** One line of an ETF's published holdings. */
+export interface EtfHolding {
+  symbol: string;
+  name: string;
+  /** Fraction of the fund, e.g. 0.0755 = 7.55%. */
+  weight: number;
+}
+
+/** What a fund actually owns, as the issuer last reported it. */
+export interface EtfComposition {
+  symbol: string;
+  holdings: EtfHolding[];
+  /** Sector weights, largest first. Empty when the provider gives none. */
+  sectors: Array<{ sector: string; weight: number }>;
+}
+
+/**
+ * Live holdings for an ETF.
+ *
+ * Returns null for anything that is not a fund — a single company has no
+ * holdings, and that is an answer rather than a failure the caller should
+ * retry. Cached for the same period as the other slow-moving fund data.
+ */
+export async function fetchEtfComposition(symbol: string): Promise<EtfComposition | null> {
+  const cacheKey = "holdings_" + symbol;
+  const cached = getCached(cacheKey, DIV_CACHE_TTL);
+  if (cached) return cached as EtfComposition;
+
+  let text: string;
+  try {
+    text = await fetchMarketData("holdings", symbol);
+  } catch {
+    return null;
+  }
+  const json = JSON.parse(text) as {
+    holdings?: unknown;
+    sectors?: unknown;
+  };
+  const holdings = (Array.isArray(json.holdings) ? json.holdings : [])
+    .filter((item): item is EtfHolding =>
+      Boolean(item) && typeof (item as EtfHolding).symbol === "string"
+      && typeof (item as EtfHolding).weight === "number");
+  const sectors = (Array.isArray(json.sectors) ? json.sectors : [])
+    .filter((item): item is { sector: string; weight: number } =>
+      Boolean(item) && typeof (item as { sector: string }).sector === "string"
+      && typeof (item as { weight: number }).weight === "number");
+  if (holdings.length === 0 && sectors.length === 0) return null;
+
+  const composition: EtfComposition = { symbol, holdings, sectors };
+  setCache(cacheKey, composition);
+  return composition;
+}
+
 export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
   const cacheKey = "fund_" + symbol;
   const cached = getCached(cacheKey, DIV_CACHE_TTL);
