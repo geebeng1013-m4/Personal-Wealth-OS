@@ -1,4 +1,5 @@
 import type { AdvisorRecommendation, LedgerAccountType, LedgerTransaction, LedgerTransactionType, RuleCardId, RuleNote, Ticker, Trade, TradeType, WealthState } from "./models";
+import { buildAssetHistory, triggerHistory, type AssetHistory } from "./drawdowns";
 import { createId, cloneDefaultState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, type Snapshot } from "./state";
 import {
   emergencyRatio,
@@ -1311,10 +1312,13 @@ function marketTemplate(state: WealthState): string {
     <!-- Calendar Tab -->
     <div class="market-tab-content" data-tab-content="calendar">
       <div id="calendarContent">
-        <div class="card" style="padding:16px;">
-          <div style="font-size:13px;font-weight:600;margin-bottom:4px;">📅 Recurring Economic Event Calendar</div>
-          <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px;">Illustrative recurring events, not live-fetched — check an official source (e.g. bls.gov, federalreserve.gov) for exact upcoming dates.</div>
-          <div id="calendar-events"></div>
+        <div class="card ctx-card">
+          <div class="ctx-head">
+            <div><span class="eyebrow">Historical Context</span><h3>How this has fallen before</h3></div>
+            <span class="ctx-range" id="ctxRange">—</span>
+          </div>
+          <p class="ctx-lede">Every decline of 10% or more on record, how long it took to come back, and what holding through it was worth. Computed from daily closes.</p>
+          <div id="ctxBody"><p class="empty-state">Loading price history…</p></div>
         </div>
       </div>
     </div>
@@ -1481,6 +1485,7 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
     updateTimeline(currentSymbol);
     updateStaticForSymbol(currentSymbol);
     selectEtfHoldings(currentSymbol);
+    loadContext(currentSymbol);
     loadDividends(currentSymbol);
     loadRisk(currentSymbol);
   }
@@ -1673,15 +1678,6 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
       ],
     };
 
-    // Calendar tab
-    const calendarEvents = [
-      { date: "Jul 15", event: "CPI (Inflation)", impact: "High" },
-      { date: "Jul 16", event: "Retail Sales", impact: "Medium" },
-      { date: "Jul 29", event: "FOMC Decision", impact: "High" },
-      { date: "Aug 1", event: "Non-Farm Payrolls", impact: "High" },
-      { date: "Aug 12", event: "CPI (Inflation)", impact: "High" },
-      { date: "Sep 17", event: "FOMC Decision", impact: "High" },
-    ];
 
     function updateForSymbol(sym: string) {
       // Risk
@@ -1710,19 +1706,6 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
         ).join("");
       }
 
-    }
-
-    // Calendar tab (static)
-    const calEl = root.querySelector<HTMLElement>("#calendar-events");
-    if (calEl) {
-      calEl.innerHTML = calendarEvents.map((e) => {
-        const impactColor = e.impact === "High" ? "var(--red)" : "var(--amber)";
-        return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);">' +
-          '<span style="width:60px;font-size:12px;color:var(--ink-3);">' + e.date + '</span>' +
-          '<span style="flex:1;font-size:13px;font-weight:500;">' + e.event + '</span>' +
-          '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:' + impactColor + '20;color:' + impactColor + ';">' + e.impact + '</span>' +
-        '</div>';
-      }).join("");
     }
 
     return updateForSymbol;
@@ -1864,6 +1847,104 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
         if (data) comparisonLive.set(symbol, data);
       } catch { /* a missing feed leaves that column dashed, never stale */ }
     })).then(() => renderStaticComparison());
+  }
+
+  /**
+   * Historical context for one asset: its declines, and what sitting through
+   * them was worth.
+   *
+   * This tab used to hold a hand-typed calendar of CPI and FOMC dates, which is
+   * an odd thing for a page whose own header asks the reader not to react to
+   * daily noise. What a monthly buyer actually needs to know is that declines
+   * are frequent, that they end, and roughly how long that takes.
+   */
+  function loadContext(symbol: string): void {
+    const body = root.querySelector<HTMLElement>("#ctxBody");
+    const range = root.querySelector<HTMLElement>("#ctxRange");
+    if (!body) return;
+    const requested = symbol;
+    body.innerHTML = '<p class="empty-state">Loading price history for ' + escapeHtml(symbol) + '…</p>';
+    if (range) range.textContent = "—";
+
+    void fetchHistoricalPrices(symbol, "10y").then((prices) => {
+      if (requested !== currentSymbol) return;
+      const history = buildAssetHistory(
+        prices.map((point) => ({ time: Date.parse(point.date), close: point.close })),
+        { threshold: 0.10, holdingYears: [1, 3, 5] },
+      );
+      if (!history) {
+        body.innerHTML = '<p class="empty-state">Not enough price history for ' + escapeHtml(symbol) + ' yet.</p>';
+        return;
+      }
+      renderContext(history, body, range);
+    }).catch(() => {
+      if (requested !== currentSymbol) return;
+      body.innerHTML = '<p class="empty-state">Could not load price history. The other tabs are unaffected.</p>';
+    });
+  }
+
+  function renderContext(history: AssetHistory, body: HTMLElement, range: HTMLElement | null): void {
+    const pct = (value: number, digits = 1) => (value * 100).toFixed(digits) + "%";
+    const when = (time: number) => new Date(time).toISOString().slice(0, 7);
+    const months = (days: number) => days >= 60 ? " (" + (days / 30.44).toFixed(1) + " months)" : "";
+
+    if (range) {
+      range.textContent = when(history.firstAt) + " – " + when(history.lastAt)
+        + " · " + history.observations.toLocaleString("en-MY") + " trading days";
+    }
+
+    const standing = history.currentDrawdown < -0.001
+      ? '<div class="ctx-standing ctx-standing--down"><span>Right now</span><strong>'
+        + pct(history.currentDrawdown) + ' below its high</strong></div>'
+      : '<div class="ctx-standing"><span>Right now</span><strong>At or near its high</strong></div>';
+
+    // Declines, worst first: the deepest one is the question people actually
+    // have, not the most recent.
+    const worstFirst = [...history.drawdowns].sort((a, b) => a.depth - b.depth);
+    const rows = worstFirst.map((item) => {
+      const recovery = item.daysToRecover === null
+        ? '<b class="ctx-open">still recovering</b>'
+        : '<b>' + item.daysToRecover + ' days' + months(item.daysToRecover) + '</b>';
+      return '<tr><td>' + when(item.startedAt) + '</td>'
+        + '<td class="ctx-depth">' + pct(item.depth) + '</td>'
+        + '<td>' + item.daysToTrough + ' days</td>'
+        + '<td>' + recovery + '</td></tr>';
+    }).join("");
+
+    const declines = history.drawdowns.length === 0
+      ? '<p class="empty-state">No decline of 10% or more in this period.</p>'
+      : '<div class="compare-table-wrap"><table class="ctx-table"><thead><tr>'
+        + '<th scope="col">Peak</th><th scope="col">Depth</th><th scope="col">To bottom</th><th scope="col">Back to even</th>'
+        + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+
+    // Holding outcomes. The loss rate is the line that matters, so it leads.
+    const outcomes = history.outcomes.map((outcome) =>
+      '<div class="ctx-outcome"><span>Held ' + outcome.years + (outcome.years === 1 ? ' year' : ' years') + '</span>'
+      + '<strong>' + pct(outcome.lossRate) + ' of start dates ended down</strong>'
+      + '<small>worst ' + pct(outcome.worst) + ' · median ' + pct(outcome.median) + ' · best ' + pct(outcome.best) + '</small></div>').join("");
+
+    // The user's own tranche thresholds, answered with this asset's record.
+    const thresholds = [...new Set(state.opportunity.tranches.map((tranche) => tranche.drawdown / 100))]
+      .filter((value) => value > 0)
+      .sort((a, b) => a - b);
+    const triggers = thresholds.map((threshold) => {
+      const hit = triggerHistory(history.drawdowns, threshold);
+      const recovery = hit.medianRecoveryDays === null
+        ? "no completed recovery on record"
+        : "median " + hit.medianRecoveryDays + " days back to even";
+      return '<div class="ctx-trigger"><span>−' + (threshold * 100).toFixed(0) + '%</span>'
+        + '<strong>' + hit.occurrences + (hit.occurrences === 1 ? ' time' : ' times') + '</strong>'
+        + '<small>' + recovery + '</small></div>';
+    }).join("");
+
+    body.innerHTML = standing
+      + '<h4 class="ctx-sub">Declines of 10% or more</h4>' + declines
+      + '<h4 class="ctx-sub">What holding through them was worth</h4>'
+      + '<div class="ctx-outcomes">' + outcomes + '</div>'
+      + (triggers === "" ? "" :
+        '<h4 class="ctx-sub">Your reserve triggers, against this record</h4>'
+        + '<div class="ctx-triggers">' + triggers + '</div>'
+        + '<p class="ctx-foot">Your Opportunity Reserve releases at these depths. How often they have actually been reached is what decides whether that cash is waiting for something common or something rare.</p>');
   }
 
   // Real risk metrics from Yahoo Finance historical prices
@@ -2083,6 +2164,7 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
   // live figures have to be fetched here too — otherwise the opening view is
   // the only one that never gets any.
   selectEtfHoldings(currentSymbol);
+  loadContext(currentSymbol);
 
   // Quotes arrive asynchronously, and go stale after PRICE_STALE_AFTER_MS if
   // this page stays open. Until a price lands the panel shows "--"; each
