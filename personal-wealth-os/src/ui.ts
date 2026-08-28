@@ -12,9 +12,11 @@ import {
 import { getAdvisorSnapshot, nextActions } from "./advisor";
 import { isRecommendationCompleted, markRecommendationDone } from "./actionRecords";
 import { buildTradeTimelineHtml, fetchFundamentals, fetchHistoricalPrices, calcRiskMetrics, getUsdToMyr, fetchLivePrices, fetchUsdToMyr } from "./market";
+import { exchangeRateOf, resolveExchangeCoverage, tradesWithExchangeCost } from "./currencyExchange";
+import { exchangesFromText, mergeExchanges } from "./exchangeImport";
 import { categoryTotals, filterLedgerTransactions, investmentAssetShare, ledgerTotals, monthlyLedgerTotals, normalizeLedgerAmount, openingFunds, type AccountBalance, type LedgerFilters } from "./ledger";
 import { getLedgerSnapshot } from "./ledgerSummary";
-import { getHolding, getPortfolioSnapshot, type PortfolioSnapshot, type ValuationInputs } from "./portfolioSummary";
+import { getHolding, getPortfolioSnapshot, type PortfolioHolding, type PortfolioSnapshot, type ValuationInputs } from "./portfolioSummary";
 import type { PriceMap } from "./marketPrices";
 import { getGoalsSnapshot } from "./goalSummary";
 import { getBudgetSnapshot } from "./budgetSummary";
@@ -361,9 +363,13 @@ function dashboardTemplate(state: WealthState): string {
               <dt>Invested</dt>
               <dd>${money(portfolio.totalInvestedMyr)} <span class="ov-detail-row__note">Capital contributed, at cost</span></dd>
             </div>
+            <div class="ov-detail-row" id="ovFeeRow"${portfolio.feesInCostBasisMyr > 0.005 ? "" : " hidden"}>
+              <dt>Trading costs</dt>
+              <dd id="ovFeeDrag">${feeRowHtml(portfolio)}</dd>
+            </div>
             <div class="ov-detail-row">
               <dt>Unrealised P&amp;L</dt>
-              <dd id="ovUnrealised" class="${pnlTone(portfolio.unrealizedPnlMyr)}">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} <span class="ov-detail-row__note">${portfolio.realizedPnlMyr !== 0 ? `Realised to date ${money(portfolio.realizedPnlMyr)}` : "Excludes realised gains"}</span></dd>
+              <dd id="ovUnrealised" class="${pnlTone(portfolio.unrealizedPnlMyr)}">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} <span class="ov-detail-row__note">${escapeHtml(joinNotes(usdPnlNote(portfolio), portfolio.realizedPnlMyr !== 0 ? `Realised to date ${money(portfolio.realizedPnlMyr)}` : "Excludes realised gains"))}</span></dd>
             </div>
           </dl>
         </section>
@@ -585,11 +591,160 @@ function moneyOrUnknown(value: number | null | undefined): string {
 }
 
 /** Format a canonical P&L: signed money plus signed percent, or "--". */
-function pnlText(amount: number | null | undefined, ratio: number | null | undefined): string {
+function pnlText(
+  amount: number | null | undefined,
+  ratio: number | null | undefined,
+  currency = "MYR",
+): string {
   if (amount == null) return UNKNOWN;
   const sign = amount >= 0 ? "+" : "−";
   const percentPart = ratio == null ? "" : ` (${sign}${percent(Math.abs(ratio), 2)})`;
-  return `${sign}${money(Math.abs(amount))}${percentPart}`;
+  return `${sign}${money(Math.abs(amount), currency)}${percentPart}`;
+}
+
+/** A conversion rate, at the precision the difference actually shows up in. */
+function rateText(rate: number): string {
+  return `MYR ${rate.toFixed(4)} / USD`;
+}
+
+/**
+ * One honest sentence about how much of the ringgit cost basis rests on a rate
+ * the user really paid.
+ *
+ * This is the panel's reason for existing, so it leads rather than hides in a
+ * tooltip. Without conversions the ringgit figures are built on the rate that
+ * happened to be live when a CSV was imported — a number from the wrong day,
+ * which the copy says plainly instead of implying the cost basis is solid.
+ */
+function conversionCoverageNote(state: WealthState): string {
+  const records = state.currencyExchanges ?? [];
+  if (records.length === 0) {
+    return "No conversions recorded. Ringgit costs currently use the rate that was live when each trade was imported, which is not a rate you paid — the dollar figures are unaffected.";
+  }
+  const coverage = resolveExchangeCoverage(state.trades, records);
+  const average = coverage.averageRecordedRate;
+  const rate = average === null ? "" : ` Average ${rateText(average)}.`;
+  const leftover = coverage.unspentUsd > 0.01
+    ? ` USD ${coverage.unspentUsd.toFixed(2)} converted but not yet invested.`
+    : "";
+  if (coverage.totalBuyUsd <= 0) {
+    return `${records.length} conversions recorded.${rate}${leftover}`;
+  }
+  if (coverage.coverage >= 0.9995) {
+    return `Every dollar of your cost basis is backed by a recorded conversion.${rate}${leftover}`;
+  }
+  return `${percent(coverage.coverage, 0)} of your cost basis is backed by a recorded conversion.${rate} The remaining ${percent(1 - coverage.coverage, 0)} still uses the rate stamped on those trades at import.${leftover}`;
+}
+
+/**
+ * Currency conversions: the only record of a real MYR/USD rate.
+ *
+ * The broker offers no export for these, so the input is whatever copying that
+ * on-screen list produces. Parsing is deliberately a two-step — read, then
+ * confirm — because a misread here silently rewrites the cost basis behind
+ * every holding.
+ */
+function currencyConversionsPanel(state: WealthState): string {
+  const records = [...(state.currencyExchanges ?? [])].reverse();
+  const rows = records.map((record) => {
+    const into = record.direction === "myr-to-usd";
+    return '<tr>'
+      + '<td>' + escapeHtml(record.date) + '</td>'
+      + '<td>' + (into ? "MYR → USD" : "USD → MYR") + '</td>'
+      // Statement amounts, so both columns keep two decimals: money() drops a
+      // trailing .00 and made a MYR column of exact figures look rounded.
+      + '<td>MYR ' + record.myrAmount.toFixed(2) + '</td>'
+      + '<td>USD ' + record.usdAmount.toFixed(2) + '</td>'
+      + '<td>' + exchangeRateOf(record).toFixed(4) + '</td>'
+      + '<td><button class="icon-button danger delete-exchange" data-id="' + escapeHtml(record.id) + '" type="button" aria-label="Delete conversion on ' + escapeHtml(record.date) + '">✕</button></td>'
+      + '</tr>';
+  }).join("");
+
+  return `
+    <article class="card panel">
+      <div class="panel-head">
+        <div><span class="eyebrow">Ringgit Cost Basis</span><h3>Currency conversions</h3></div>
+        <div class="panel-head-actions"><span class="panel-note">${records.length} records</span>${records.length > 0
+          ? '<button class="secondary-button danger-button clear-exchanges" type="button">Clear all</button>'
+          : ""}</div>
+      </div>
+      <p class="fx-coverage">${escapeHtml(conversionCoverageNote(state))}</p>
+      <div class="import-box">
+        <label>Paste your broker's exchange history
+          <textarea id="fxPaste" rows="4" placeholder="MYR&#10;USD&#10;Aug 9, 2026 22:06 MYT&#10;Completed&#10;4.85 USD&#10;20.00 MYR"></textarea>
+        </label>
+        <button class="primary-button" id="fxImport" type="button">Read conversions</button>
+        <small>Select the whole list in your broker app and paste it here — headings and dates included. Re-pasting a range you have already added updates it instead of duplicating it.</small>
+      </div>
+      <p id="fxImportStatus" class="form-error" role="alert"></p>
+      ${records.length > 0 ? `<div class="table-wrap financial-table">
+        <table>
+          <thead><tr><th>Date</th><th>Direction</th><th>MYR</th><th>USD</th><th>Rate</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>` : ""}
+    </article>`;
+}
+
+/**
+ * The same unrealised P&L, stated in USD.
+ *
+ * Shown next to the ringgit figure because users compare the ringgit one
+ * against their broker app, where it does not match — and the mismatch is real:
+ * the two are converted on different terms. The USD figure is the exact one,
+ * since units and prices come straight off the broker's own data, while the
+ * ringgit cost basis depends on the FX rate each trade happens to carry (see
+ * csvImport.ts for why that rate is weak on imported trades).
+ *
+ * Returns "" rather than "--" when unknown, so a caller can drop it into a
+ * separator-joined note without leaving a dangling placeholder.
+ */
+function usdPnlNote(portfolio: PortfolioSnapshot): string {
+  if (portfolio.unrealizedPnlUsd == null) return "";
+  return pnlText(portfolio.unrealizedPnlUsd, portfolio.unrealizedPnlPercent, "USD");
+}
+
+/**
+ * What the return would have been with no trading costs.
+ *
+ * Shown next to the headline because the two answer different questions and
+ * the user asked for both: the headline is what every ringgit handed over
+ * became, this is how the investment itself did. The gap between them is the
+ * broker's cut, which is otherwise invisible — buried inside the cost basis
+ * with nothing on screen to say so.
+ *
+ * Returns "" when unknown or when nothing was charged, so it can be dropped
+ * into a separator-joined note without leaving a stray placeholder.
+ */
+function feeFreeReturnNote(portfolio: PortfolioSnapshot): string {
+  if (portfolio.feesInCostBasisMyr <= 0.005) return "";
+  if (portfolio.unrealizedPnlMyrExFees === null) return "";
+  return `Before trading costs ${pnlText(portfolio.unrealizedPnlMyrExFees, portfolio.unrealizedPnlPercentMyrExFees)}`;
+}
+
+/** The Trading costs row's contents, shared by the first paint and the repaint. */
+function feeRowHtml(portfolio: PortfolioSnapshot): string {
+  const note = feeFreeReturnNote(portfolio) || "Commission paid, already inside the cost above";
+  return `${money(portfolio.feesInCostBasisMyr)} <span class="ov-detail-row__note">${escapeHtml(note)}</span>`;
+}
+
+/**
+ * The amount a holding's allocation percentage was actually computed from.
+ *
+ * Allocation moved to market value, so showing cost beside the percentage would
+ * make the panel argue with itself. Falls back to cost when that is what the
+ * weighting used, which allocationBasis already decided.
+ */
+function allocationAmount(portfolio: PortfolioSnapshot, holding: PortfolioHolding): string {
+  if (portfolio.allocationBasis === "market" && holding.marketValueMyr !== null) {
+    return money(holding.marketValueMyr);
+  }
+  return money(holding.investedMyr);
+}
+
+/** Join note fragments with the standard separator, dropping empty ones. */
+function joinNotes(...parts: string[]): string {
+  return parts.filter((part) => part !== "").join(" · ");
 }
 
 /** CSS modifier for a canonical P&L value. Neutral while unknown. */
@@ -639,7 +794,7 @@ function refreshLivePrices(state: WealthState, onUpdated: () => void): void {
 
   void Promise.all([
     fetchLivePrices(symbols),
-    fetchUsdToMyr(state.trades).catch(() => null),
+    fetchUsdToMyr(state.trades, state.currencyExchanges).catch(() => null),
   ]).then(([prices, rate]) => {
     priceFetchInFlight = false;
     if (prices.size === 0) return; // unknown stays unknown; do not overwrite a good price with nothing
@@ -657,11 +812,15 @@ function quoteAgeLabel(quotedAtMs: number | null): string {
   const ageMs = Date.now() - quotedAtMs;
   if (ageMs < 0) return "";
   const minutes = Math.floor(ageMs / 60_000);
-  if (minutes < 1) return "priced moments ago";
-  if (minutes < 60) return `priced ${minutes}m ago`;
+  // "priced" read as "the app last refreshed", which sent a user hunting for a
+  // bug during a normal US market close. The timestamp is the market's, not
+  // ours: the app re-asks every 30 seconds, and outside trading hours every
+  // answer is the same closing print. "last traded" says whose clock this is.
+  if (minutes < 1) return "last traded moments ago";
+  if (minutes < 60) return `last traded ${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `priced ${hours}h ago`;
-  return `priced ${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return `last traded ${hours}h ago`;
+  return `last traded ${Math.floor(hours / 24)}d ago`;
 }
 
 function leakInsightStrip(state: WealthState, categories: MoneyLeakCategory[], label: string): string {
@@ -811,7 +970,9 @@ function portfolioTemplate(state: WealthState): string {
     }).join("");
 
   const allocationHealth = portfolio.maxAbsoluteDrift <= 0.05 ? "Aligned" : portfolio.maxAbsoluteDrift <= 0.1 ? "Monitor" : "Rebalance";
-  const contributionPlan = rebalanceContributions(state);
+  // Fed the same snapshot the panels above render, so the plan and the weights
+  // it is closing can never disagree on screen.
+  const contributionPlan = rebalanceContributions(state, portfolio);
   const heldCount = portfolio.holdings.filter((position) => position.units > 0).length;
   return `
     <section class="portfolio-hero card">
@@ -823,14 +984,16 @@ function portfolioTemplate(state: WealthState): string {
         : "No contributions recorded yet · targets are configured but nothing is held"}</p></div>
       <!-- What it is worth now, beside what went in. Read from the canonical
            snapshot; unknown renders "--" and is never shown as zero. -->
-      <div class="portfolio-health" data-valuation-status="${portfolio.valuationStatus}"><span>Market value</span><strong id="pfMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)}</strong><small id="pfUnrealised" class="${pnlTone(portfolio.unrealizedPnlMyr)}">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} · ${escapeHtml(valuationNote(portfolio))}</small></div>
+      <div class="portfolio-health" data-valuation-status="${portfolio.valuationStatus}"><span>Market value</span><strong id="pfMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)}</strong><small id="pfUnrealised" class="${pnlTone(portfolio.unrealizedPnlMyr)}">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} · ${escapeHtml(joinNotes(usdPnlNote(portfolio), valuationNote(portfolio)))}</small>${portfolio.feesInCostBasisMyr > 0.005
+        ? `<small class="fee-drag">${escapeHtml(joinNotes(`${money(portfolio.feesInCostBasisMyr)} in trading costs`, feeFreeReturnNote(portfolio)))}</small>`
+        : ""}</div>
       <div class="portfolio-health"><span>Allocation health</span><strong>${allocationHealth}</strong><small>Largest drift ${percent(portfolio.maxAbsoluteDrift, 1)}</small></div>
     </section>
     <article class="card panel"><div class="panel-head"><div><span class="eyebrow">Next Contribution</span><h3>Rebalance with new money</h3></div><span class="panel-note">No selling required</span></div><div class="rebalance-plan">${contributionPlan.map((item) => `<div><strong>${escapeHtml(item.ticker)}</strong><span>${money(item.amount)}</span></div>`).join("")}</div></article>
     <div class="portfolio-command-grid">
       <article class="card panel portfolio-allocation-panel">
-        <div class="panel-head"><div><span class="eyebrow">Strategic Allocation</span><h3>Portfolio structure</h3></div><span class="status-pill ${portfolio.maxAbsoluteDrift <= 0.08 ? "positive" : "attention"}">${allocationHealth}</span></div>
-        ${portfolio.holdings.length ? `<div class="portfolio-positions">${portfolio.holdings.map((position, index) => `<div class="position-card"><div class="position-identity"><span class="position-index">${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(position.ticker)}</strong><small>${position.ticker === "VOO" ? "Core market exposure" : position.ticker === "QQQM" ? "Growth allocation" : "Portfolio holding"}</small></div></div><div class="position-value"><strong>${money(position.investedMyr)}</strong><small>${percent(position.actualAllocation)} of portfolio</small></div><div class="allocation-track"><span style="width:${Math.min(position.actualAllocation * 100, 100)}%"></span><i style="left:${Math.min(position.targetAllocation * 100, 100)}%" title="Target ${percent(position.targetAllocation)}"></i></div><div class="position-meta"><span>Target ${percent(position.targetAllocation)}</span><span class="${Math.abs(position.drift) > 0.08 ? "negative" : "positive"}">${position.drift >= 0 ? "+" : ""}${percent(position.drift, 1)} drift</span></div></div>`).join("")}</div>` : '<p class="empty-state">No portfolio positions yet. Record a contribution to establish your long-term allocation.</p>'}
+        <div class="panel-head"><div><span class="eyebrow">Strategic Allocation</span><h3>Portfolio structure</h3><small class="panel-note">${portfolio.allocationBasis === "market" ? "Weighted by market value" : "Weighted by cost — no live price yet"}</small></div><span class="status-pill ${portfolio.maxAbsoluteDrift <= 0.08 ? "positive" : "attention"}">${allocationHealth}</span></div>
+        ${portfolio.holdings.length ? `<div class="portfolio-positions">${portfolio.holdings.map((position, index) => `<div class="position-card"><div class="position-identity"><span class="position-index">${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(position.ticker)}</strong><small>${position.ticker === "VOO" ? "Core market exposure" : position.ticker === "QQQM" ? "Growth allocation" : "Portfolio holding"}</small></div></div><div class="position-value"><strong>${allocationAmount(portfolio, position)}</strong><small>${percent(position.actualAllocation)} of portfolio</small></div><div class="allocation-track"><span style="width:${Math.min(position.actualAllocation * 100, 100)}%"></span><i style="left:${Math.min(position.targetAllocation * 100, 100)}%" title="Target ${percent(position.targetAllocation)}"></i></div><div class="position-meta"><span>Target ${percent(position.targetAllocation)}</span><span class="${Math.abs(position.drift) > 0.08 ? "negative" : "positive"}">${position.drift >= 0 ? "+" : ""}${percent(position.drift, 1)} drift</span></div></div>`).join("")}</div>` : '<p class="empty-state">No portfolio positions yet. Record a contribution to establish your long-term allocation.</p>'}
       </article>
       <article class="card panel contribution-panel">
         <div class="panel-head"><div><span class="eyebrow">Contribution Record</span><h3>Add investment activity</h3></div><span class="panel-note">Cost basis</span></div>
@@ -853,6 +1016,7 @@ function portfolioTemplate(state: WealthState): string {
         </div>
       </article>
     </div>
+    ${currencyConversionsPanel(state)}
     <details class="card panel portfolio-details">
       <summary><div><span class="eyebrow">Position Detail</span><h3>Cost basis and allocation data</h3></div><span>${portfolio.holdings.length} holdings</span></summary>
       <div class="portfolio-details-content">
@@ -1328,7 +1492,7 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
     // Trade list
     const tradeListEl = el("#pnl-trades-list");
     if (tradeListEl) {
-      const tradesForTicker = state.trades.filter((t) => t.ticker === symbol);
+      const tradesForTicker = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? []).filter((t) => t.ticker === symbol);
       const rows = tradesForTicker.map((t) => {
         const isBuy = t.type !== "Sell";
         const units = tradeUnits(t).toFixed(4);
@@ -1354,7 +1518,7 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
       timelineEl.innerHTML = "";
       return;
     }
-    timelineEl.innerHTML = buildTradeTimelineHtml(state.trades, symbol, 0);
+    timelineEl.innerHTML = buildTradeTimelineHtml(tradesWithExchangeCost(state.trades, state.currencyExchanges ?? []), symbol, 0);
   }
 
   // Populate static data for tabs
@@ -2900,8 +3064,14 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
       }
       if (pnlEl) {
         pnlEl.className = pnlTone(portfolio.unrealizedPnlMyr);
-        pnlEl.innerHTML = `${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} <span class="ov-detail-row__note">${portfolio.realizedPnlMyr !== 0 ? `Realised to date ${escapeHtml(money(portfolio.realizedPnlMyr))}` : "Excludes realised gains"}</span>`;
+        pnlEl.innerHTML = `${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} <span class="ov-detail-row__note">${escapeHtml(joinNotes(usdPnlNote(portfolio), portfolio.realizedPnlMyr !== 0 ? `Realised to date ${money(portfolio.realizedPnlMyr)}` : "Excludes realised gains"))}</span>`;
       }
+      // The fee-free return moves with the price, so it is repainted with the
+      // rest. The fee itself does not, but the two live on one line.
+      const feeEl = root.querySelector<HTMLElement>("#ovFeeDrag");
+      const feeRow = root.querySelector<HTMLElement>("#ovFeeRow");
+      if (feeEl) feeEl.innerHTML = feeRowHtml(portfolio);
+      if (feeRow) feeRow.hidden = portfolio.feesInCostBasisMyr <= 0.005;
       root.querySelector<HTMLElement>(".ov-valuation")?.setAttribute("data-valuation-status", portfolio.valuationStatus);
     };
     refreshLivePrices(state, patchDashboardValuation);
@@ -3610,6 +3780,75 @@ function bindPortfolio(root: HTMLElement, state: WealthState, setState: Setter, 
     const records = recordsFromCsv(await file.text());
     const next = { ...state, trades: [...state.trades, ...records] };
     setState(next);
+    renderApp(root, next, setState, "portfolio", navigate);
+  });
+
+  // Read a pasted exchange history. Parsing is separated from committing: the
+  // summary states what was understood — how much money, over what span, at
+  // what average rate — so a misparse is caught before it rewrites the ringgit
+  // cost of every holding.
+  root.querySelector<HTMLButtonElement>("#fxImport")?.addEventListener("click", () => {
+    const box = root.querySelector<HTMLTextAreaElement>("#fxPaste");
+    const status = root.querySelector<HTMLElement>("#fxImportStatus");
+    if (!box || !status) return;
+    const parsed = exchangesFromText(box.value);
+    if (parsed.length === 0) {
+      status.textContent = "No conversions found. Paste the list exactly as it appears, including the MYR / USD lines above each date.";
+      return;
+    }
+    status.textContent = "";
+
+    const intoUsd = parsed.filter((record) => record.direction === "myr-to-usd");
+    const myr = intoUsd.reduce((sum, record) => sum + record.myrAmount, 0);
+    const usd = intoUsd.reduce((sum, record) => sum + record.usdAmount, 0);
+    const existing = state.currencyExchanges ?? [];
+    const merged = mergeExchanges(existing, parsed);
+    const added = merged.length - existing.length;
+    const back = parsed.length - intoUsd.length;
+
+    const confirmed = confirm(
+      `Found ${parsed.length} conversions, ${parsed[0].date} to ${parsed[parsed.length - 1].date}.\n\n` +
+      (intoUsd.length > 0
+        ? `Into USD: ${money(myr)} → USD ${usd.toFixed(2)}, average ${rateText(usd > 0 ? myr / usd : 0)}\n`
+        : "") +
+      (back > 0 ? `Back into MYR: ${back} ${back === 1 ? "record" : "records"}\n` : "") +
+      `\n${added} new, ${parsed.length - added} already recorded.\n\n` +
+      "Your ringgit cost basis will be rebuilt from these rates. Dollar figures are unaffected.",
+    );
+    if (!confirmed) return;
+
+    const next = { ...state, currencyExchanges: merged };
+    setState(next, "Imported currency conversions");
+    renderApp(root, next, setState, "portfolio", navigate);
+  });
+
+  root.querySelectorAll<HTMLButtonElement>(".delete-exchange").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.id;
+      if (!id) return;
+      const record = (state.currencyExchanges ?? []).find((item) => item.id === id);
+      if (!record) return;
+      const confirmed = confirm(
+        `Delete the ${record.date} conversion of ${money(record.myrAmount)} and USD ${record.usdAmount.toFixed(2)}?\n\n` +
+        "The ringgit cost of any holding it funded will fall back to the rate stamped on those trades at import.",
+      );
+      if (!confirmed) return;
+      const next = { ...state, currencyExchanges: (state.currencyExchanges ?? []).filter((item) => item.id !== id) };
+      setState(next, "Deleted currency conversion");
+      renderApp(root, next, setState, "portfolio", navigate);
+    });
+  });
+
+  root.querySelector<HTMLButtonElement>(".clear-exchanges")?.addEventListener("click", () => {
+    const count = (state.currencyExchanges ?? []).length;
+    if (count === 0) return;
+    const confirmed = confirm(
+      `Delete all ${count} currency ${count === 1 ? "conversion" : "conversions"}?\n\n` +
+      "Every ringgit cost basis goes back to the rate that was live when its trade was imported. Your trades and all dollar figures are untouched. This cannot be undone.",
+    );
+    if (!confirmed) return;
+    const next = { ...state, currencyExchanges: [] };
+    setState(next, "Cleared currency conversions");
     renderApp(root, next, setState, "portfolio", navigate);
   });
 

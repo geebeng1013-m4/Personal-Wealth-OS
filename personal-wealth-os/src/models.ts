@@ -84,6 +84,29 @@ export interface Trade {
   notes?: string;
 }
 
+/** Which way a conversion went. */
+export type ExchangeDirection = "myr-to-usd" | "usd-to-myr";
+
+/**
+ * One currency conversion, as it appears on the broker statement.
+ *
+ * This is the only place a real MYR/USD rate enters the system. A share order
+ * is priced purely in dollars, so without these records the ringgit cost of a
+ * holding can only be guessed at. Both amounts are stored and the rate is
+ * derived from them, so the rate can never drift out of agreement with the
+ * money — and it comes out inclusive of the spread actually paid.
+ */
+export interface CurrencyExchange {
+  id: string;
+  date: string;
+  direction: ExchangeDirection;
+  /** Ringgit side of the conversion. Always positive. */
+  myrAmount: number;
+  /** Dollar side of the conversion. Always positive. */
+  usdAmount: number;
+  notes?: string;
+}
+
 export interface Liability {
   id: string;
   name: string;
@@ -281,6 +304,8 @@ export interface WealthState {
   goals: Goal[];
   overviewGoalId: string;
   trades: Trade[];
+  /** MYR→USD conversions that funded the trades. The only source of real FX. */
+  currencyExchanges: CurrencyExchange[];
   reviews: Review[];
   customTickers: string[];
   ledgerCategories: LedgerCategory[];

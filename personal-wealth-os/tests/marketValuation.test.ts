@@ -225,7 +225,7 @@ test("valuation: without a usable FX rate the MYR figures stay unknown", () => {
 
 // --- Nothing else moved ----------------------------------------------------
 
-test("valuation: prices never change cost basis, allocation or drift", () => {
+test("valuation: prices never change cost basis, units or fees", () => {
   const state = cloneDefaultState();
   const without = getPortfolioSnapshot(state);
   const withPrices = getPortfolioSnapshot(state, NOW, {
@@ -240,17 +240,19 @@ test("valuation: prices never change cost basis, allocation or drift", () => {
   assert.equal(withPrices.totalInvestedMyr, without.totalInvestedMyr);
   assert.equal(withPrices.totalInvestedUsd, without.totalInvestedUsd);
   assert.equal(withPrices.totalUnits, without.totalUnits);
-  assert.equal(withPrices.maxAbsoluteDrift, without.maxAbsoluteDrift);
   assert.equal(withPrices.realizedPnlUsd, without.realizedPnlUsd);
   assert.equal(withPrices.totalFeesMyr, without.totalFeesMyr);
-  assert.deepEqual(withPrices.allocation, without.allocation);
   assert.deepEqual(withPrices.targetAllocation, without.targetAllocation);
   for (const holding of withPrices.holdings) {
     const before = getHolding(without, holding.ticker)!;
     assert.equal(holding.averageCostUsd, before.averageCostUsd, `${holding.ticker} average cost`);
     assert.equal(holding.units, before.units, `${holding.ticker} units`);
-    assert.equal(holding.drift, before.drift, `${holding.ticker} drift`);
+    assert.equal(holding.investedMyr, before.investedMyr, `${holding.ticker} invested`);
   }
+  // Allocation is deliberately NOT on that list: it describes exposure, which
+  // only a price can measure. See the allocationBasis tests below.
+  assert.equal(without.allocationBasis, "cost");
+  assert.equal(withPrices.allocationBasis, "market");
 });
 
 test("valuation: the Dashboard model is unaffected while prices are unknown", () => {

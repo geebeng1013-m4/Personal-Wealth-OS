@@ -1,4 +1,5 @@
 import type { PortfolioPosition, PortfolioSummary, Trade, WealthState } from "./models";
+import { tradesWithExchangeCost } from "./currencyExchange";
 
 export interface PositionCostBasis {
   ticker: string;
@@ -8,7 +9,17 @@ export interface PositionCostBasis {
   averageCostUsd: number;
   realizedPnlUsd: number;
   realizedPnlMyr: number;
+  /** Every fee ever paid on this ticker, including on units since sold. */
   feesMyr: number;
+  /**
+   * The portion of costBasisMyr that is fee rather than shares.
+   *
+   * Distinct from feesMyr: this follows the units. Selling half a position
+   * removes half its fees from the basis, because those fees left with the
+   * cost they were part of. feesMyr is the lifetime total and answers a
+   * different question — what this ticker has cost to trade.
+   */
+  feeBasisMyr: number;
 }
 
 export type CostBasisTrade = Pick<Trade, "ticker" | "date" | "type" | "amountUsd" | "amountMyr" | "priceUsd" | "units" | "feeMyr">;
@@ -63,6 +74,7 @@ export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: str
   let realizedPnlUsd = 0;
   let realizedPnlMyr = 0;
   let feesMyr = 0;
+  let feeBasisMyr = 0;
 
   matchingTrades.forEach(({ trade }) => {
     const unitsTraded = tradeUnits(trade);
@@ -73,6 +85,7 @@ export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: str
       units += unitsTraded;
       costBasisUsd += unitsTraded * trade.priceUsd;
       costBasisMyr += trade.amountMyr + trade.feeMyr;
+      feeBasisMyr += trade.feeMyr;
       return;
     }
 
@@ -90,11 +103,14 @@ export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: str
     units -= unitsSold;
     costBasisUsd -= removedCostUsd;
     costBasisMyr -= removedCostMyr;
+    // Fees ride out with the cost they are part of, at the same fraction.
+    feeBasisMyr -= feeBasisMyr * soldFraction;
 
     if (units < 1e-10) {
       units = 0;
       costBasisUsd = 0;
       costBasisMyr = 0;
+      feeBasisMyr = 0;
     }
   });
 
@@ -107,6 +123,7 @@ export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: str
     realizedPnlUsd,
     realizedPnlMyr,
     feesMyr,
+    feeBasisMyr,
   };
 }
 
@@ -119,11 +136,16 @@ export function portfolioSummary(
   state: WealthState,
   costBases: Map<string, PositionCostBasis> = new Map(),
 ): PortfolioSummary {
+  // Ringgit costs are restated from the conversions that actually funded each
+  // buy, so every figure below rests on a rate the user really got rather than
+  // one inferred from a trade date. With no conversions recorded this hands
+  // back the trades untouched and nothing changes.
+  const trades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? []);
   const tickerSet = new Set<string>(Object.keys(state.dca.targets));
-  state.trades.forEach((trade) => tickerSet.add(trade.ticker));
+  trades.forEach((trade) => tickerSet.add(trade.ticker));
   const tickers = Array.from(tickerSet);
   for (const ticker of tickers) {
-    if (!costBases.has(ticker)) costBases.set(ticker, calculatePositionCostBasis(state.trades, ticker));
+    if (!costBases.has(ticker)) costBases.set(ticker, calculatePositionCostBasis(trades, ticker));
   }
   const totalInvestedMyr = tickers.reduce((sum, ticker) => sum + costBases.get(ticker)!.costBasisMyr, 0);
   const totalInvestedUsd = tickers.reduce((sum, ticker) => sum + costBases.get(ticker)!.costBasisUsd, 0);

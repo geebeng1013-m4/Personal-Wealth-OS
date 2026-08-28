@@ -74,6 +74,10 @@ export const demoState: WealthState = {
     { id: "giving", name: "Giving Back", label: "Charity & Gifts 🎁", current: 120, target: 300, monthlyContribution: 20, note: "Monthly charity donations and birthday gifts for family." },
   ],
   overviewGoalId: "travel",
+  // No currency conversions recorded: the demo mirrors an account whose
+  // ringgit costs came from the trade rows themselves, which is the state
+  // every real user starts in.
+  currencyExchanges: [],
   trades: [
     // Early exploratory buys
     { id: "demo-t001", date: "2025-07-15", platform: "moomoo", ticker: "VOO", type: "Manual Buy", amountMyr: 500, amountUsd: 113.12, priceUsd: 535.20, feeMyr: 1.99 },

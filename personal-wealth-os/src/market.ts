@@ -4,25 +4,83 @@
 import { calculatePositionCostBasis, tradeUnits, type CostBasisTrade } from "./rules";
 import { isUsablePrice, normalizeQuotes, type PriceMap } from "./marketPrices";
 
-/** Default fallback USD→MYR rate when all dynamic sources fail. */
+/**
+ * Last-resort USD→MYR rate, used only when nothing better exists anywhere.
+ *
+ * Deliberately a poor answer: a constant cannot track a currency, and at the
+ * time of writing it is 5% away from the market. Every path below exists to
+ * avoid reaching it, and reaching it should be understood as "we know nothing".
+ */
 const DEFAULT_USD_MYR = 4.25;
 
-/** Cached USD→MYR exchange rate. */
+/** Live rate from the FX API. Only ever written by a successful fetch. */
 let cachedUsdToMyr: number | null = null;
 let cachedUsdToMyrTimestamp = 0;
 const FX_CACHE_TTL = 3600_000; // 1 hour
 
 /**
- * Fetch the current USD→MYR exchange rate.
- * Tries a free exchange-rate API with a 1-hour cache, then falls back to the
- * most-recent trade rate if available, then to DEFAULT_USD_MYR.
+ * Best rate derivable from the user's own records.
+ *
+ * Kept apart from cachedUsdToMyr on purpose. Writing a fallback into the live
+ * cache would suppress API retries for a full hour, so a single network blip
+ * would pin the whole session to an old rate. Held here, it serves the
+ * synchronous getter without ever standing in the way of a real quote.
  */
-export async function fetchUsdToMyr(trades?: { exchangeRate?: number; date: string }[]): Promise<number> {
-  // 1. Return cached if fresh
+let derivedUsdToMyr: number | null = null;
+
+/** A conversion the user actually made — the strongest evidence available. */
+export interface FxEvidence {
+  date: string;
+  direction: string;
+  myrAmount: number;
+  usdAmount: number;
+}
+
+/**
+ * The rate implied by the user's own records, newest first.
+ *
+ * Conversions outrank trades: a conversion IS an exchange rate, recorded as two
+ * amounts the broker actually moved, while a trade's exchangeRate is whatever a
+ * CSV import stamped on it and may be from the wrong day entirely.
+ */
+function rateFromRecords(
+  trades?: { exchangeRate?: number; date: string }[],
+  exchanges?: FxEvidence[],
+): number | null {
+  const conversions = (exchanges ?? [])
+    .filter((item) => item.usdAmount > 0 && item.myrAmount > 0)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const newest = conversions[0];
+  if (newest) return newest.myrAmount / newest.usdAmount;
+
+  const sorted = [...(trades ?? [])].sort((a, b) => b.date.localeCompare(a.date));
+  for (const trade of sorted) {
+    if (typeof trade.exchangeRate === "number" && trade.exchangeRate > 0) return trade.exchangeRate;
+  }
+  return null;
+}
+
+/**
+ * Fetch the current USD→MYR exchange rate.
+ *
+ * API first, then the user's own conversion and trade records, then the
+ * constant. Pass the records: without them a failed request drops straight to a
+ * number nobody has ever traded at, and every ringgit figure in the app shifts
+ * with it — silently, since a stale rate looks exactly like a fresh one.
+ */
+export async function fetchUsdToMyr(
+  trades?: { exchangeRate?: number; date: string }[],
+  exchanges?: FxEvidence[],
+): Promise<number> {
+  // Remember what the records imply even when the API answers, so the
+  // synchronous getter is never left with only the constant.
+  const derived = rateFromRecords(trades, exchanges);
+  if (derived !== null) derivedUsdToMyr = derived;
+
   if (cachedUsdToMyr !== null && Date.now() - cachedUsdToMyrTimestamp < FX_CACHE_TTL) {
     return cachedUsdToMyr;
   }
-  // 2. Try a free exchange-rate API
+
   try {
     const res = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
@@ -33,29 +91,27 @@ export async function fetchUsdToMyr(trades?: { exchangeRate?: number; date: stri
         return cachedUsdToMyr;
       }
     }
-  } catch { /* fall through */ }
+  } catch { /* fall through to the records */ }
 
-  // 3. Derive from the most recent trade that has a valid exchangeRate
-  if (trades && trades.length > 0) {
-    const sorted = [...trades].sort((a, b) => b.date.localeCompare(a.date));
-    for (const t of sorted) {
-      if (typeof t.exchangeRate === "number" && t.exchangeRate > 0) {
-        return t.exchangeRate;
-      }
-    }
-  }
-
-  // 4. Hard-coded last resort
-  return DEFAULT_USD_MYR;
+  return derivedUsdToMyr ?? DEFAULT_USD_MYR;
 }
 
 /**
- * Synchronous getter for the cached USD→MYR rate.
- * Returns the cached dynamic rate if available, otherwise falls back to DEFAULT_USD_MYR.
- * Call fetchUsdToMyr() early in the app lifecycle to populate the cache.
+ * Synchronous getter for the best USD→MYR rate currently known.
+ *
+ * Resolves in the same order as fetchUsdToMyr, so the two can never disagree
+ * about what today's rate is — they did before, and the sync path was the one
+ * handing out the hard-coded constant.
  */
 export function getUsdToMyr(): number {
-  return cachedUsdToMyr ?? DEFAULT_USD_MYR;
+  return cachedUsdToMyr ?? derivedUsdToMyr ?? DEFAULT_USD_MYR;
+}
+
+/** Test seam: forget every cached and derived rate. */
+export function resetUsdToMyrCache(): void {
+  cachedUsdToMyr = null;
+  cachedUsdToMyrTimestamp = 0;
+  derivedUsdToMyr = null;
 }
 
 /** Pure string HTML-escape — safe for non-DOM environments. */

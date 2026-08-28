@@ -1047,6 +1047,15 @@ textarea { resize: vertical; }
   display: grid; gap: 8px;
 }
 .import-box small { color: var(--ink-3); font-size: 11px; }
+.import-box label { display: grid; gap: 6px; font-size: 12px; color: var(--ink-2); }
+.import-box textarea { width: 100%; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+/* The coverage sentence is the panel's headline claim, so it reads as prose
+   rather than as another muted caption. */
+.fx-coverage { margin: 0; color: var(--ink-2); font-size: 12px; line-height: 1.5; }
+/* Trading costs sit under the headline return rather than beside it: they are
+   a different question, and crowding them onto the same line made four
+   consecutive figures nobody could read. */
+.fee-drag { display: block; margin-top: 2px; color: var(--ink-3); font-size: 11px; }
 
 /* ---- Market Tabs ---- */
 .market-tab-btn {

@@ -228,8 +228,10 @@ async function handleAuth(user: User | null): Promise<void> {
     state = loadState(user.uid);
     renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
 
-    // Warm exchange rate cache early so dashboard renders with current rates.
-    void fetchUsdToMyr().catch(() => {});
+    // Warm the exchange rate cache early so the dashboard renders with current
+    // rates — and hand it the user's own conversions, so a failed request falls
+    // back on a rate they really got rather than on a hard-coded constant.
+    void fetchUsdToMyr(state.trades, state.currencyExchanges).catch(() => {});
 
     try {
       const cloudState = await loadStateFromCloud();

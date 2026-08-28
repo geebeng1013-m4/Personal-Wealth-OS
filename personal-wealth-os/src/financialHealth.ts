@@ -2,6 +2,7 @@ import type { Goal, LedgerAccount, LedgerTransaction, Liability, RecurringTransa
 import { accountBalances } from "./ledger";
 import { getLedgerSnapshot, ledgerMonthTotals, sumPositiveBalances, type LedgerSnapshot } from "./ledgerSummary";
 import { calculatePositionCostBasis } from "./rules";
+import { tradesWithExchangeCost } from "./currencyExchange";
 import { getPortfolioSnapshot, type PortfolioSnapshot } from "./portfolioSummary";
 
 export interface MonthlyClose {
@@ -171,10 +172,30 @@ export function linkedGoalCurrent(goal: Goal, state: WealthState): number {
   return accountBalances(state.ledgerTransactions, state.ledgerAccounts).find((item) => item.account.id === goal.accountId)?.balance ?? goal.current;
 }
 
-export function rebalanceContributions(state: WealthState): Array<{ ticker: string; amount: number }> {
-  const positions = Object.keys(state.dca.targets).map((ticker) => calculatePositionCostBasis(state.trades, ticker));
-  const total = positions.reduce((sum, position) => sum + position.costBasisMyr, 0);
-  const gaps = positions.map((position) => ({ ticker: position.ticker, gap: Math.max(0, (state.dca.targets[position.ticker] ?? 0) * (total + state.dca.monthly) - position.costBasisMyr) }));
+/**
+ * Where next month's contribution should go to close the allocation gap.
+ *
+ * `portfolio` is optional and exists so this reads the SAME weights the
+ * Portfolio panel shows. Allocation is measured on market value once every
+ * holding is priced, and a rebalance plan computed on cost while the panel
+ * beside it reports market would send new money at the wrong holding and
+ * disagree on screen about which one is short. Omit it and the cost basis is
+ * used, which is the honest fallback when no price is available.
+ */
+export function rebalanceContributions(
+  state: WealthState,
+  portfolio?: Pick<PortfolioSnapshot, "allocationBasis" | "holdings">,
+): Array<{ ticker: string; amount: number }> {
+  const trades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? []);
+  const positions = Object.keys(state.dca.targets).map((ticker) => calculatePositionCostBasis(trades, ticker));
+  const useMarket = portfolio?.allocationBasis === "market";
+  const valueOf = (ticker: string, costBasisMyr: number): number => {
+    if (!useMarket) return costBasisMyr;
+    return portfolio?.holdings.find((holding) => holding.ticker === ticker)?.marketValueMyr ?? costBasisMyr;
+  };
+  const values = new Map(positions.map((position) => [position.ticker, valueOf(position.ticker, position.costBasisMyr)]));
+  const total = positions.reduce((sum, position) => sum + values.get(position.ticker)!, 0);
+  const gaps = positions.map((position) => ({ ticker: position.ticker, gap: Math.max(0, (state.dca.targets[position.ticker] ?? 0) * (total + state.dca.monthly) - values.get(position.ticker)!) }));
   const totalGap = gaps.reduce((sum, item) => sum + item.gap, 0);
   return gaps.map((item) => ({ ticker: item.ticker, amount: totalGap > 0 ? state.dca.monthly * item.gap / totalGap : state.dca.monthly * (state.dca.targets[item.ticker] ?? 0) }));
 }
