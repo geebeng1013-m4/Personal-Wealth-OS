@@ -11,7 +11,7 @@ import {
 } from "./rules";
 import { getAdvisorSnapshot, nextActions } from "./advisor";
 import { isRecommendationCompleted, markRecommendationDone } from "./actionRecords";
-import { buildTradeTimelineHtml, fetchFundamentals, fetchHistoricalPrices, calcRiskMetrics, getUsdToMyr, fetchLivePrices, fetchUsdToMyr } from "./market";
+import { buildTradeTimelineHtml, fetchFundamentals, fetchHistoricalPrices, calcRiskMetrics, getUsdToMyr, fetchLivePrices, fetchUsdToMyr, type Fundamentals } from "./market";
 import { exchangeRateOf, resolveExchangeCoverage, tradesWithExchangeCost } from "./currencyExchange";
 import { exchangesFromText, mergeExchanges } from "./exchangeImport";
 import { categoryTotals, filterLedgerTransactions, investmentAssetShare, ledgerTotals, monthlyLedgerTotals, normalizeLedgerAmount, openingFunds, type AccountBalance, type LedgerFilters } from "./ledger";
@@ -1293,7 +1293,7 @@ function marketTemplate(state: WealthState): string {
     <!-- Compare Tab -->
     <div class="market-tab-content" data-tab-content="compare">
       <div id="compareContent" class="stock-compare">
-        <div class="compare-intro"><span class="eyebrow">Asset Comparison</span><h3>Four reference assets, one consistent view</h3><p>Compare broad US exposure, growth concentration, international diversification, and a single-company position without relying on a live market-data request.</p></div>
+        <div class="compare-intro"><span class="eyebrow">Asset Comparison</span><h3>Your holdings, side by side</h3><p>Every asset you hold or watch, in one view. Fees, yields and fund sizes are fetched live; the descriptive rows are editorial and say what each instrument is for.</p></div>
         <div id="compareProfiles"></div>
         <div id="compareMatrix"></div>
       </div>
@@ -1612,7 +1612,6 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
     exposure: string;
     role: string;
     risk: string;
-    fee: string;
     diversification: string;
     income: string;
     fit: string;
@@ -1621,31 +1620,126 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
   };
 
   const comparisonAssets: StaticComparisonAsset[] = [
-    { symbol: "VXUS", name: "Vanguard Total International Stock ETF", category: "Global ex-US equity ETF", exposure: "Developed and emerging-market equities outside the United States.", role: "International diversifier", risk: "Market, currency and emerging-market exposure", fee: "0.07%", diversification: "Broad developed and emerging ex-US markets", income: "Quarterly dividends; yield about 3.0%", fit: "Reduce reliance on a single US equity market", accent: "gold", referenceSnapshot: "P/E 14.5 · P/B 1.7 · High liquidity · Moderate-to-low growth with valuation-recovery potential" },
-    { symbol: "AAPL", name: "Apple Inc.", category: "Single US company", exposure: "Consumer devices, services and a global hardware ecosystem.", role: "Concentrated satellite", risk: "Company-specific", fee: "No fund expense ratio", diversification: "Single issuer", income: "Quarterly dividends", fit: "High-conviction position", accent: "red" },
+    { symbol: "VOO", name: "Vanguard S&P 500 ETF", category: "US large-cap equity ETF", exposure: "The 500 largest US listed companies, weighted by market value.", role: "Core holding", risk: "US market risk, concentrated in the largest few names", diversification: "500 companies across every US sector", income: "Quarterly dividends, reinvested by hand", fit: "The long-term base a portfolio is built around", accent: "green" },
+    { symbol: "QQQM", name: "Invesco NASDAQ 100 ETF", category: "US growth equity ETF", exposure: "The 100 largest non-financial companies on the Nasdaq, tilted to technology.", role: "Growth satellite", risk: "Sector concentration — a technology drawdown hits it harder than the market", diversification: "100 companies, heavily weighted to a handful of technology names", income: "Quarterly dividends, small relative to price", fit: "Add growth on top of a broad core, in a size you can sit through", accent: "blue" },
+    { symbol: "VXUS", name: "Vanguard Total International Stock ETF", category: "Global ex-US equity ETF", exposure: "Developed and emerging-market equities outside the United States.", role: "International diversifier", risk: "Market, currency and emerging-market exposure", diversification: "Broad developed and emerging ex-US markets", income: "Quarterly dividends, the largest of the three", fit: "Reduce reliance on a single US equity market", accent: "gold", referenceSnapshot: "P/E 14.5 · P/B 1.7 · High liquidity · Moderate-to-low growth with valuation-recovery potential" },
+    { symbol: "AAPL", name: "Apple Inc.", category: "Single US company", exposure: "Consumer devices, services and a global hardware ecosystem.", role: "Concentrated satellite", risk: "Company-specific", diversification: "Single issuer", income: "Quarterly dividends", fit: "High-conviction position", accent: "red" },
   ];
+
+  /**
+   * Live figures for the compared assets, by symbol.
+   *
+   * Empty until the fetch lands. Every cell that reads from it degrades to a
+   * dash rather than to a stale hard-coded number — a wrong expense ratio is
+   * worse than an absent one, because it looks authoritative.
+   */
+  const comparisonLive = new Map<string, Fundamentals>();
+
+  /** The symbols actually being compared: the plan's targets plus the watchlist. */
+  function comparisonSymbols(): string[] {
+    return [...new Set([
+      ...Object.keys(state.dca.targets),
+      ...customTickers,
+    ])].filter(Boolean);
+  }
+
+  /** A fund-only ratio: absent or zero means the concept does not apply here,
+   *  which is the honest answer for a single company's "expense ratio". */
+  const fundPercentOrDash = (value: number | undefined, digits = 2): string =>
+    typeof value === "number" && Number.isFinite(value) && value > 0
+      ? `${(value * 100).toFixed(digits)}%`
+      : UNKNOWN;
+
+  /** Fund size in the units people actually say out loud. */
+  function fundSize(value: number | undefined): string {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return UNKNOWN;
+    if (value >= 1e12) return `USD ${(value / 1e12).toFixed(2)}T`;
+    if (value >= 1e9) return `USD ${(value / 1e9).toFixed(1)}B`;
+    if (value >= 1e6) return `USD ${(value / 1e6).toFixed(0)}M`;
+    return `USD ${value.toFixed(0)}`;
+  }
 
   function renderStaticComparison(): void {
     const profiles = root.querySelector<HTMLElement>("#compareProfiles");
     const matrix = root.querySelector<HTMLElement>("#compareMatrix");
     if (!profiles || !matrix) return;
-    profiles.innerHTML = '<div class="compare-profiles">' + comparisonAssets.map((asset) =>
-      '<article class="compare-profile compare-profile-' + asset.accent + '"><div class="compare-profile-head"><span class="compare-symbol">' + asset.symbol + '</span><span class="compare-category">' + asset.category + '</span></div><h4>' + asset.name + '</h4><p>' + asset.exposure + '</p><dl><div><dt>Portfolio role</dt><dd>' + asset.role + '</dd></div><div><dt>Best suited to</dt><dd>' + asset.fit + '</dd></div>' + (asset.referenceSnapshot ? '<div><dt>Reference snapshot</dt><dd>' + asset.referenceSnapshot + '</dd></div>' : '') + '</dl></article>'
-    ).join("") + '</div>';
 
-    const rows: Array<{ label: string; description: string; value: (asset: StaticComparisonAsset) => string }> = [
+    // Driven by what the user actually holds and watches, not a fixed four.
+    // Editorial copy exists for the assets we have written about; anything else
+    // still appears, carrying its live figures and blanks where prose is owed.
+    const symbols = comparisonSymbols();
+    const assets: StaticComparisonAsset[] = symbols.map((symbol) =>
+      comparisonAssets.find((asset) => asset.symbol === symbol)
+      ?? {
+        // Live figures still fill this column; the prose rows stay blank rather
+        // than inventing a description of an instrument nobody has written up.
+        symbol,
+        name: "Not yet described",
+        category: UNKNOWN, exposure: UNKNOWN, role: UNKNOWN, risk: UNKNOWN,
+        diversification: UNKNOWN, income: UNKNOWN, fit: UNKNOWN,
+        accent: "neutral",
+      });
+    if (assets.length === 0) return;
+
+    profiles.innerHTML = '<div class="compare-profiles">' + assets.map((asset) => {
+      const live = comparisonLive.get(asset.symbol);
+      const fee = fundPercentOrDash(live?.expenseRatio);
+      return '<article class="compare-profile compare-profile-' + asset.accent + '">'
+        + '<div class="compare-profile-head"><span class="compare-symbol">' + escapeHtml(asset.symbol) + '</span>'
+        + '<span class="compare-name">' + escapeHtml(asset.name) + '</span></div>'
+        + '<p>' + escapeHtml(asset.exposure) + '</p>'
+        + '<div class="compare-profile-live"><span>Ongoing fee</span><strong>' + fee + '</strong></div>'
+        + '</article>';
+    }).join("") + '</div>';
+
+    // Rows split into two kinds. The editorial ones describe what an instrument
+    // is for and cannot come from an API. The live ones are numbers a data feed
+    // owns, and were previously frozen prose — "0.07%" for VXUS, "yield about
+    // 3.0%" — which quietly went stale and disagreed with the Income tab.
+    const rows: Array<{ label: string; description: string; live?: true; value: (asset: StaticComparisonAsset) => string }> = [
       { label: "Structure", description: "What you own", value: (asset) => asset.category },
       { label: "Primary exposure", description: "Main source of return", value: (asset) => asset.exposure },
       { label: "Portfolio role", description: "How it can be used", value: (asset) => asset.role },
       { label: "Risk profile", description: "Main concentration trade-off", value: (asset) => asset.risk },
-      { label: "Ongoing fund fee", description: "Published expense ratio where applicable", value: (asset) => asset.fee },
+      { label: "Ongoing fund fee", description: "Expense ratio, live", live: true,
+        value: (asset) => fundPercentOrDash(comparisonLive.get(asset.symbol)?.expenseRatio) },
+      { label: "Dividend yield", description: "Trailing, live", live: true,
+        value: (asset) => fundPercentOrDash(comparisonLive.get(asset.symbol)?.dividendYield) },
+      { label: "Fund size", description: "Assets under management, live", live: true,
+        value: (asset) => fundSize(comparisonLive.get(asset.symbol)?.totalAssets) },
       { label: "Diversification", description: "Breadth of holdings", value: (asset) => asset.diversification },
       { label: "Income treatment", description: "How distributions are handled", value: (asset) => asset.income },
       { label: "Typical fit", description: "Most natural use case", value: (asset) => asset.fit },
     ];
-    const headers = comparisonAssets.map((asset) => '<th scope="col"><strong>' + asset.symbol + '</strong><span>' + asset.name + '</span></th>').join("");
-    const body = rows.map((row) => '<tr><th scope="row"><strong>' + row.label + '</strong><span>' + row.description + '</span></th>' + comparisonAssets.map((asset) => '<td>' + row.value(asset) + '</td>').join("") + '</tr>').join("");
-    matrix.innerHTML = '<div class="compare-context"><strong>Different instruments, different jobs</strong><span>ETF fees and structural descriptions are fixed reference data. Any valuation figures shown are reference snapshots, not live market data.</span></div><div class="table-wrap compare-table-wrap"><table class="compare-table"><thead><tr><th scope="col">Comparison lens</th>' + headers + '</tr></thead><tbody>' + body + '</tbody></table></div><p class="compare-footnote">Reference information only. VXUS is a US-listed distributing ETF focused on developed and emerging markets outside the United States; broker, tax and currency treatment depend on your jurisdiction and account.</p>';
+
+    const headers = assets.map((asset) =>
+      '<th scope="col"><strong>' + escapeHtml(asset.symbol) + '</strong><span>' + escapeHtml(asset.name) + '</span></th>').join("");
+    const body = rows.map((row) =>
+      '<tr' + (row.live ? ' class="compare-row-live"' : '') + '>'
+      + '<th scope="row"><strong>' + row.label + '</strong><span>' + row.description + '</span></th>'
+      + assets.map((asset) => '<td>' + escapeHtml(row.value(asset)) + '</td>').join("")
+      + '</tr>').join("");
+
+    const anyLive = assets.some((asset) => comparisonLive.has(asset.symbol));
+    matrix.innerHTML = '<div class="compare-context"><strong>Different instruments, different jobs</strong>'
+      + '<span>' + (anyLive
+        ? 'Fees, yields and fund sizes are fetched live. The descriptive rows are editorial and do not change with the market.'
+        : 'Live figures have not arrived yet — the descriptive rows below are editorial and do not depend on them.')
+      + '</span></div>'
+      + '<div class="compare-table-wrap"><table class="compare-table"><thead><tr><th scope="col">Measure</th>' + headers + '</tr></thead>'
+      + '<tbody>' + body + '</tbody></table></div>';
+  }
+
+  /** Fetch the live half of the comparison, then repaint it. */
+  function loadComparisonFundamentals(): void {
+    const symbols = comparisonSymbols();
+    if (symbols.length === 0) return;
+    void Promise.all(symbols.map(async (symbol) => {
+      try {
+        const data = await fetchFundamentals(symbol);
+        if (data) comparisonLive.set(symbol, data);
+      } catch { /* a missing feed leaves that column dashed, never stale */ }
+    })).then(() => renderStaticComparison());
   }
 
   // Real risk metrics from Yahoo Finance historical prices
@@ -1860,6 +1954,7 @@ function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): vo
   loadDividends(currentSymbol);
   loadRisk(currentSymbol);
   renderStaticComparison();
+  loadComparisonFundamentals();
 
   // Quotes arrive asynchronously, and go stale after PRICE_STALE_AFTER_MS if
   // this page stays open. Until a price lands the panel shows "--"; each

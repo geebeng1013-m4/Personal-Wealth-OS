@@ -533,9 +533,14 @@ export interface Fundamentals {
   trailingAnnualDividendYield: number;
   expenseRatio: number;        // e.g. 0.0003 = 0.03%
   totalAssets: number;         // AUM in USD
-  ytdReturn: number;           // e.g. 0.052 = 5.2%
-  threeYearReturn: number;
-  fiveYearReturn: number;
+  /**
+   * Trailing returns. Always null: the upstream this is built from does not
+   * publish them, and they were previously filled with 0 — a number that reads
+   * as "flat year" rather than "not available" and had already reached the UI.
+   */
+  ytdReturn: number | null;
+  threeYearReturn: number | null;
+  fiveYearReturn: number | null;
 }
 
 export interface StockComparisonData {
@@ -802,9 +807,9 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
     trailingAnnualDividendYield: dividendYield,
     expenseRatio: numeric(raw.expense_ratio) / 100,
     totalAssets: numeric(raw.aum),
-    ytdReturn: 0,
-    threeYearReturn: 0,
-    fiveYearReturn: 0,
+    ytdReturn: null,
+    threeYearReturn: null,
+    fiveYearReturn: null,
   };
 
   setCache(cacheKey, fund);
