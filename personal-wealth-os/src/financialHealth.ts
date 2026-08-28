@@ -20,7 +20,13 @@ export function monthlyClose(state: WealthState, month: string): MonthlyClose {
   // and discipline scoring below is unchanged.
   const totals = ledgerMonthTotals(state.ledgerTransactions, month);
   const trades = state.trades.filter((trade) => trade.date.slice(0, 7) === month && trade.type !== "Sell");
-  const dcaInvested = trades.reduce((sum, trade) => sum + trade.amountMyr + trade.feeMyr, 0);
+  // Rounded for the same reason the ledger totals are: summing cent-precise
+  // amounts in binary floating point drifts, and this figure is shown as money
+  // and compared against a target. This month's trades happen to sum cleanly,
+  // which is luck, not a guarantee.
+  const dcaInvested = Math.round(
+    trades.reduce((sum, trade) => sum + trade.amountMyr + trade.feeMyr, 0) * 100,
+  ) / 100;
   const target = Math.max(state.dca.monthly, 0);
   const savingsScore = totals.income > 0 ? Math.min(40, Math.max(0, totals.surplus / totals.income * 40)) : 0;
   const dcaScore = target <= 0 ? 30 : Math.min(30, dcaInvested / target * 30);

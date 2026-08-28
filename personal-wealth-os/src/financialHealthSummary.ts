@@ -103,9 +103,13 @@ export function worstStatus(statuses: HealthStatus[]): HealthStatus {
 /** Contributions recorded this calendar month (buys only, never sells). */
 function contributionsThisMonth(state: WealthState, now: Date): number {
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  return state.trades
+  // Rounded to the cent: this is shown as money on the Plan Status card and
+  // divided by the monthly target, and summing cent-precise amounts in binary
+  // floating point drifts into the far decimals.
+  const total = state.trades
     .filter((trade) => trade.type !== "Sell" && trade.date.slice(0, 7) === monthKey)
     .reduce((sum, trade) => sum + trade.amountMyr + trade.feeMyr, 0);
+  return Math.round(total * 100) / 100;
 }
 
 /**

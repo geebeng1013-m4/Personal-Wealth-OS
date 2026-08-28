@@ -76,6 +76,23 @@ export function filterLedgerTransactions(transactions: LedgerTransaction[], filt
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
 
+/**
+ * Round a money total to the cent.
+ *
+ * Amounts like 757.89 have no exact binary representation, so adding a few
+ * dozen of them drifts into the thirteenth decimal: a real month of the user's
+ * ledger summed to 757.8900000000002 and 681.3999999999999, and those went
+ * straight into the Monthly Review's number inputs — and would have been saved
+ * to the review record on submit.
+ *
+ * Rounding once at the end of a sum is safe. Rounding each addend would not be:
+ * the inputs are already cent-precise, and the drift only appears in the
+ * accumulator.
+ */
+function toCents(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 export function ledgerTotals(transactions: LedgerTransaction[]): LedgerTotals {
   const totals = transactions.reduce((result, transaction) => {
     if (transaction.type === "income") result.income += transaction.amount;
@@ -83,7 +100,12 @@ export function ledgerTotals(transactions: LedgerTransaction[]): LedgerTotals {
     if (transaction.type === "transfer") result.transfer += transaction.amount;
     return result;
   }, { income: 0, expense: 0, transfer: 0 });
-  return { ...totals, balance: totals.income - totals.expense };
+  const income = toCents(totals.income);
+  const expense = toCents(totals.expense);
+  // Derived from the rounded halves, so the three figures always agree on
+  // screen: a balance rounded independently could differ from income − expense
+  // by a cent.
+  return { income, expense, transfer: toCents(totals.transfer), balance: toCents(income - expense) };
 }
 
 export function openingFunds(accounts: LedgerAccount[]): number {
