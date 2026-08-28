@@ -291,7 +291,12 @@ function dashboardTemplate(state: WealthState): string {
     ${overview.priorityAction ? `
       <section class="ov-priority ov-priority--${overview.priorityAction.severity}" aria-labelledby="ovPriorityTitle">
         <p class="ov-priority__eyebrow">
-          <span class="ov-priority__mark" aria-hidden="true">${overview.priorityAction.severity === "action" ? "▲" : overview.priorityAction.severity === "watch" ? "!" : "✓"}</span>
+          <!-- A watch carries no glyph. The eyebrow is already coloured by
+               severity, and an exclamation mark made a standing reminder read
+               as an alarm. The span is omitted rather than left empty: the
+               eyebrow is an inline-flex with a gap, so an empty child would
+               hold open a space where the mark used to be. -->
+          ${overview.priorityAction.severity === "watch" ? "" : `<span class="ov-priority__mark" aria-hidden="true">${overview.priorityAction.severity === "action" ? "▲" : "✓"}</span>`}
           Priority ${escapeHtml(overview.priorityAction.severity === "positive" ? "status" : overview.priorityAction.severity)}
         </p>
         <h3 class="ov-priority__title" id="ovPriorityTitle">${escapeHtml(overview.priorityAction.title)}</h3>
