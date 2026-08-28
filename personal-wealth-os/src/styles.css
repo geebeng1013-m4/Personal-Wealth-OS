@@ -2301,6 +2301,34 @@ textarea { padding-top: 12px; }
    keeps this to exactly that pairing. */
 .form-grid + .settings-list, .category-form + .settings-list { margin-top: 16px; }
 
+/* Sidebar tools drawer. Only the account row stays visible when collapsed —
+   everything inside is occasional, and Reset in particular should take a
+   deliberate action to reach rather than sit permanently under a thumb. */
+/* No margin-top: .sidebar-actions is a flex column with its own gap, and
+   adding one here stacked two spacings into an uneven 18px. */
+.sidebar-tools { border-top: 1px solid var(--line); padding-top: 8px; }
+.sidebar-tools > summary {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  font-size: 12px; font-weight: 500; color: var(--ink-3);
+  list-style: none; user-select: none;
+}
+/* Both spellings: WebKit needs the pseudo-element, everything else honours list-style. */
+.sidebar-tools > summary::-webkit-details-marker { display: none; }
+.sidebar-tools > summary::marker { content: ""; }
+.sidebar-tools > summary:hover { background: var(--surface-2); color: var(--ink); }
+.sidebar-tools > summary:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.sidebar-tools__chevron { font-size: 15px; line-height: 1; transition: transform 0.18s ease; }
+.sidebar-tools[open] > summary { color: var(--ink); }
+.sidebar-tools[open] .sidebar-tools__chevron { transform: rotate(90deg); }
+/* Scoped to [open]: an unconditional display value overrides the hiding a
+   closed <details> does for itself, which left every button visible while the
+   element reported open=false. */
+.sidebar-tools[open] > .sidebar-tools__content { display: grid; gap: 8px; padding-top: 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-tools__chevron { transition: none; }
+}
+
 /* Live fund facts sit above the dated holdings list, so the split between
    what is fetched and what is a snapshot is visible rather than implied. */
 .etf-live-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 14px 0 4px; }

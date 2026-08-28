@@ -111,6 +111,7 @@ function getTheme(): string {
 function shellTemplate(activePage: string, state: WealthState, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }): string {
   const themeIcon = getTheme() === "dark" ? "☀️" : "🌙";
   const active = pages.find(([id]) => id === activePage);
+  const toolsOpen = sidebarToolsOpen();
   const userBadge = user ? `<div class="user-badge"><img src="${escapeHtml(user.photoURL || "")}" alt="" class="user-avatar" referrerpolicy="no-referrer"><span class="user-name">${escapeHtml(user.displayName || user.email || "User")}</span><button class="secondary-button logout-btn" type="button">Sign Out</button></div>` : "";
   return `
     <button class="hamburger" id="sidebarToggle" type="button" aria-label="Open navigation" aria-expanded="false">☰</button>
@@ -135,16 +136,25 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
       </div>
       <div class="sidebar-actions">
         ${userBadge}
-        <button class="secondary-button install-btn" id="installPwa" type="button">Add to Home Screen</button>
-        <div class="sidebar-actions-row">
-          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme" title="Toggle theme">${themeIcon}</button>
-          <button class="secondary-button" id="exportJson" type="button">Export</button>
-          <label class="file-button">Import<input id="importJson" type="file" accept="application/json"></label>
-        </div>
-        <div class="sidebar-actions-row">
-          <button class="secondary-button" id="versionHistory" type="button">Version History</button>
-          <button class="danger-button" id="resetData" type="button">Reset</button>
-        </div>
+        <!-- Everything below the account row is occasional: installing the app,
+             exporting, restoring a version, resetting. Collapsed by default so
+             the sidebar ends on the one row that is always relevant, and the
+             Reset button is not sitting under the user's thumb. -->
+        <details class="sidebar-tools" id="sidebarTools"${toolsOpen ? " open" : ""}>
+          <summary><span>Data &amp; tools</span><span class="sidebar-tools__chevron" aria-hidden="true">›</span></summary>
+          <div class="sidebar-tools__content">
+            <button class="secondary-button install-btn" id="installPwa" type="button">Add to Home Screen</button>
+            <div class="sidebar-actions-row">
+              <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme" title="Toggle theme">${themeIcon}</button>
+              <button class="secondary-button" id="exportJson" type="button">Export</button>
+              <label class="file-button">Import<input id="importJson" type="file" accept="application/json"></label>
+            </div>
+            <div class="sidebar-actions-row">
+              <button class="secondary-button" id="versionHistory" type="button">Version History</button>
+              <button class="danger-button" id="resetData" type="button">Reset</button>
+            </div>
+          </div>
+        </details>
       </div>
     </aside>
     <main id="main-content" class="main">
@@ -2214,6 +2224,32 @@ let ledgerEntryDraft = {
 let ledgerHistoryOpen = false;
 let ledgerCategoriesOpen = false;
 let ledgerAccountsOpen = false;
+
+/**
+ * Whether the sidebar's tools drawer is open.
+ *
+ * Kept in localStorage rather than in a module variable, because the point of
+ * remembering it is to survive a reload — a module variable only lasts until
+ * the tab is closed, which is exactly when the preference stops being useful.
+ * Every access is guarded: private windows and blocked site data make the
+ * accessor itself throw, and a sidebar that cannot render is a worse outcome
+ * than a drawer that forgets.
+ */
+const SIDEBAR_TOOLS_KEY = "wealthup-sidebar-tools-open";
+
+function sidebarToolsOpen(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_TOOLS_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function setSidebarToolsOpen(open: boolean): void {
+  try {
+    localStorage.setItem(SIDEBAR_TOOLS_KEY, String(open));
+  } catch { /* the drawer still works, it just will not be remembered */ }
+}
 const ledgerAccountGroupsOpen: Record<LedgerAccountType, boolean> = {
   bank: true,
   wallet: true,
@@ -3159,6 +3195,11 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
       closeSidebar(root);
       doNavigate(button.dataset.page ?? "dashboard");
     });
+  });
+
+  // Remember whether the tools drawer is open across reloads.
+  root.querySelector<HTMLDetailsElement>("#sidebarTools")?.addEventListener("toggle", (event) => {
+    setSidebarToolsOpen((event.currentTarget as HTMLDetailsElement).open);
   });
 
   root.querySelector<HTMLButtonElement>("#themeToggle")?.addEventListener("click", () => {
