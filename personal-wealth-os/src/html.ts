@@ -20,3 +20,15 @@ export function escapeHtml(value: string): string {
   el.textContent = value;
   return el.innerHTML;
 }
+
+/**
+ * A labelled number field, as used by the forms on nearly every page.
+ *
+ * Moved here unchanged, including the fact that it interpolates `label` and
+ * `value` without escaping them. That is safe only because all 31 call sites
+ * pass a literal label and a String(number) value; it would not survive a
+ * caller passing user text, and should gain escaping before one does.
+ */
+export function numberInput(name: string, label: string, value = "", step = "0.01"): string {
+  return `<label>${label}<input name="${name}" type="number" min="0" step="${step}" value="${value}"></label>`;
+}
