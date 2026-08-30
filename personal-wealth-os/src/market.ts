@@ -2,7 +2,7 @@
 // K-line chart powered by TradingView Widget
 
 import { calculatePositionCostBasis, tradeUnits, type CostBasisTrade } from "./rules";
-import { isUsablePrice, normalizeQuotes, type PriceMap } from "./marketPrices";
+import { normalizeQuotes, type PriceMap } from "./marketPrices";
 
 /**
  * Last-resort USD→MYR rate, used only when nothing better exists anywhere.
@@ -143,12 +143,6 @@ export interface MarketQuote {
   currency: string;
 }
 
-const CORS_PROXIES = [
-  "https://api.allorigins.win/raw?url=",
-  "https://corsproxy.io/?",
-  "https://api.codetabs.com/v1/proxy?quest=",
-];
-
 const CACHE_KEY = "pwo_market_cache";
 const CACHE_TTL = 30_000; // 30 seconds — fresher quotes for P&L accuracy
 
@@ -204,53 +198,29 @@ export function pruneMarketCache(): void {
 }
 
 /**
- * Fallback fetcher for the secondary market features (fundamentals, history).
- *
- * These public proxies are unreliable — corsproxy.io now rejects keyless
- * requests and the others frequently time out — so anything that must be
- * correct goes through the dedicated /api/quote route instead. This path is
- * deliberately NOT a general server-side proxy: forwarding arbitrary URLs from
- * the browser would be an open relay.
- */
-async function fetchWithProxy(url: string): Promise<string> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (res.ok) return await res.text();
-  } catch { /* fall through to proxy */ }
-
-  for (const proxy of CORS_PROXIES) {
-    try {
-      const res = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(15000) });
-      if (res.ok) return await res.text();
-    } catch { /* try next proxy */ }
-  }
-
-  throw new Error("Unable to fetch market data — network error");
-}
-
-/**
  * Fetch a secondary market dataset through the server-side route.
  *
- * The browser cannot call the upstream directly, so this is the only path that
- * works. It falls back to the old public-proxy chain purely for environments
- * where /api is not deployed; those proxies are unreliable, so a failure here
- * simply means the panel stays empty rather than showing invented data.
+ * /api/market is the only path that works. The browser cannot call the upstream
+ * directly (no CORS headers), and the anonymous proxies this used to fall back
+ * on have all stopped answering keyless requests — so the fallback could no
+ * longer rescue anything; it only spent up to 45 seconds of timeouts before
+ * reporting the failure the route had already reported.
+ *
+ * There is also no environment left for it to serve: Vercel runs api/ in
+ * production and vite.config.ts mounts the same handlers in dev, so /api is
+ * present wherever the app runs.
+ *
+ * A failure means the panel stays empty rather than showing invented data.
  */
 async function fetchMarketData(kind: "fundamentals" | "holdings" | "history", symbol: string, range?: string): Promise<string> {
   const query = new URLSearchParams({ kind, symbol });
   if (range) query.set("range", range);
-  try {
-    const response = await fetch(`/api/market?${query.toString()}`, {
-      signal: AbortSignal.timeout(12_000),
-      headers: { accept: "application/json" },
-    });
-    if (response.ok) return await response.text();
-  } catch { /* fall through to the legacy path */ }
-
-  const upstream = kind === "fundamentals"
-    ? `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryDetail,defaultKeyStatistics`
-    : `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range ?? "1y"}&interval=1d`;
-  return fetchWithProxy(upstream);
+  const response = await fetch(`/api/market?${query.toString()}`, {
+    signal: AbortSignal.timeout(12_000),
+    headers: { accept: "application/json" },
+  });
+  if (!response.ok) throw new Error(`No ${kind} for ${symbol} — upstream ${response.status}`);
+  return await response.text();
 }
 
 export async function fetchQuote(symbol: string): Promise<MarketQuote> {
@@ -280,38 +250,10 @@ export async function fetchQuote(symbol: string): Promise<MarketQuote> {
     return quote;
   }
 
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=5m`;
-  const text = await fetchWithProxy(url);
-  const json = JSON.parse(text);
-  const result = json?.chart?.result?.[0];
-  if (!result) throw new Error("No data for " + symbol);
-
-  const meta = result.meta;
-  // Strip exchange prefix (e.g. "AMEX:QQQM" → "QQQM")
-  const cleanSymbol = (meta.symbol ?? symbol).replace(/^[A-Z]+:/, "");
-  // A missing or non-positive price means "unknown", never "worth zero", so
-  // the quote is rejected rather than published with a fabricated 0.
-  if (!isUsablePrice(meta.regularMarketPrice)) throw new Error("No price for " + symbol);
-  const quote: MarketQuote = {
-    symbol: cleanSymbol,
-    price: meta.regularMarketPrice,
-    change: (meta.regularMarketPrice ?? 0) - (meta.chartPreviousClose ?? meta.previousClose ?? 0),
-    changePercent: 0,
-    open: meta.regularMarketOpen ?? 0,
-    high: meta.regularMarketDayHigh ?? 0,
-    low: meta.regularMarketDayLow ?? 0,
-    prevClose: meta.chartPreviousClose ?? meta.previousClose ?? 0,
-    volume: meta.regularMarketVolume ?? 0,
-    marketState: meta.marketState ?? "UNKNOWN",
-    shortName: meta.shortName ?? symbol,
-    currency: meta.currency ?? "USD",
-  };
-  if (quote.prevClose > 0) {
-    quote.changePercent = ((quote.price - quote.prevClose) / quote.prevClose) * 100;
-  }
-
-  setCache(cacheKey, quote);
-  return quote;
+  // /api/quote is the only quote path. When it returns nothing the price is
+  // unknown, and a rejection is how every caller already reads that — never a
+  // zero, which would be a fabricated price.
+  throw new Error("No price for " + symbol);
 }
 
 /**
