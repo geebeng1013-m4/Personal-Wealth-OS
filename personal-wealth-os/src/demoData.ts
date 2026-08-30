@@ -14,7 +14,11 @@ export const DEMO_USER_EMAIL = "demo@wealthup.cc";
 export const DEMO_USER_PHOTO = "";
 
 export const demoState: WealthState = {
-  version: 17,
+  // Kept level with CURRENT_VERSION so the fixture is read as written. Pinning
+  // it lower routes the demo through migrateState's field-merging, where any
+  // field a later version added is quietly filled from defaults — so the demo
+  // would show default values while appearing to show authored ones.
+  version: 19,
   profile: {
     name: "Alex Chen",
     age: 22,
@@ -74,10 +78,29 @@ export const demoState: WealthState = {
     { id: "giving", name: "Giving Back", label: "Charity & Gifts 🎁", current: 120, target: 300, monthlyContribution: 20, note: "Monthly charity donations and birthday gifts for family." },
   ],
   overviewGoalId: "travel",
-  // No currency conversions recorded: the demo mirrors an account whose
-  // ringgit costs came from the trade rows themselves, which is the state
-  // every real user starts in.
-  currencyExchanges: [],
+  /**
+   * Five real conversions against 42 buys — deliberately partial coverage.
+   *
+   * An earlier fixture recorded none at all, to mirror the state every user
+   * starts in. That showed the starting state honestly but left a reviewer
+   * unable to see the feature that answers it: with no conversions, every
+   * ringgit cost falls back on the trade rows and coverage is a flat 0%.
+   *
+   * Partial coverage shows both at once. Roughly four fifths of the dollars
+   * spent trace to a rate the user actually converted at; the rest stays
+   * openly marked "not covered" — which is the honest half of the feature and
+   * the half a full fixture would hide.
+   *
+   * Conversions come in lumps ahead of the DCA, because that is how the money
+   * actually moves: nobody converts per order.
+   */
+  currencyExchanges: [
+    { id: "demo-fx001", date: "2025-07-10", direction: "myr-to-usd", myrAmount: 800, usdAmount: 180.79, notes: "Initial funding" },
+    { id: "demo-fx002", date: "2025-09-08", direction: "myr-to-usd", myrAmount: 900, usdAmount: 204.31, notes: "Q4 DCA funding" },
+    { id: "demo-fx003", date: "2025-11-05", direction: "myr-to-usd", myrAmount: 700, usdAmount: 157.73 },
+    { id: "demo-fx004", date: "2026-01-12", direction: "myr-to-usd", myrAmount: 800, usdAmount: 179.69, notes: "Ringgit weak — smaller lot" },
+    { id: "demo-fx005", date: "2026-04-06", direction: "myr-to-usd", myrAmount: 600, usdAmount: 136.64 },
+  ],
   trades: [
     // Early exploratory buys
     { id: "demo-t001", date: "2025-07-15", platform: "moomoo", ticker: "VOO", type: "Manual Buy", amountMyr: 500, amountUsd: 113.12, priceUsd: 535.20, feeMyr: 1.99 },

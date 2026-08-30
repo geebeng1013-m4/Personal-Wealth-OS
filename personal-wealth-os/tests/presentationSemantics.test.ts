@@ -87,11 +87,11 @@ test("presentation: held positions are distinguishable from configured targets",
 
 test("presentation: none of these fixes moved a canonical figure", () => {
   const model = buildOverviewModel(demo(), NOW);
-  assert.equal(model.netWorth.toFixed(2), "7561.89"); // was 2823 pre-Step-26: net worth now folds in portfolio value (cost basis fallback)
+  assert.equal(model.netWorth.toFixed(2), "7564.23"); // was 2823 pre-Step-26: net worth now folds in portfolio value (cost basis fallback)
   assert.equal(model.cashFlow.income, 2300);
   assert.equal(model.cashFlow.expenses, 249);
   assert.equal(model.cashFlow.surplus, 2051);
-  assert.equal(model.portfolio.totalInvestedMyr.toFixed(2), "4738.89");
+  assert.equal(model.portfolio.totalInvestedMyr.toFixed(2), "4741.23");
   assert.equal(model.budget.plannedSurplus, 1100);
   assert.equal(model.advisor.priority?.id, "advisor:allocation-drift");
 });
