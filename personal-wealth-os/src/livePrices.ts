@@ -16,6 +16,17 @@ import type { PriceMap } from "./marketPrices";
 import type { ValuationInputs } from "./portfolioSummary";
 import { fetchLivePrices, fetchUsdToMyr } from "./market";
 
+/**
+ * Per-root teardown for the live-price poll.
+ *
+ * A page that starts a setInterval on mount registers its clearInterval here;
+ * renderApp calls it before painting the next page. Shared because the Market
+ * page starts its own poll from inside bindMarket, while the Dashboard and
+ * Portfolio polls are started by the bindPage dispatcher — all three need the
+ * same teardown map.
+ */
+export const priceRefreshCleanup = new WeakMap<HTMLElement, () => void>();
+
 // Quotes live here for the lifetime of the page and nowhere else. They are
 // deliberately NOT part of WealthState: a price is an observation about the
 // world, not something the user owns, and persisting it would mean a stale

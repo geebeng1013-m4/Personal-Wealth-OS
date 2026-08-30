@@ -32,3 +32,13 @@ export function escapeHtml(value: string): string {
 export function numberInput(name: string, label: string, value = "", step = "0.01"): string {
   return `<label>${label}<input name="${name}" type="number" min="0" step="${step}" value="${value}"></label>`;
 }
+
+/**
+ * The active theme, as the root element's data-theme (default "dark").
+ *
+ * A one-line DOM read, shared because the shell's theme toggle and the Market
+ * page's chart both branch on it and neither owns it.
+ */
+export function getTheme(): string {
+  return document.documentElement.getAttribute("data-theme") ?? "dark";
+}
