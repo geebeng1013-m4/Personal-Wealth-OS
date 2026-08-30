@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "./testHarness";
-import { ledgerTotals } from "../src/ledger";
+import { accountBalances, accountTypeBalance, categoryTotals, ledgerTotals, openingFunds } from "../src/ledger";
 import { monthlyClose } from "../src/financialHealth";
 import { getPlanExecution } from "../src/financialHealthSummary";
 import { migrateState } from "../src/state";
-import type { LedgerTransaction, Trade } from "../src/models";
+import type { LedgerAccount, LedgerTransaction, Trade } from "../src/models";
 
 /**
  * Money is summed in binary floating point, where 757.89 is really
@@ -107,4 +107,69 @@ test("rounding: rounding never turns a real contribution into nothing", () => {
   const plan = getPlanExecution(state, new Date(2026, 7, 20));
   assert.equal(plan.actualAmount, 0.01);
   assert.equal(plan.hasActual, true);
+});
+
+/**
+ * Account balances drift too, and they are read against a real wallet app.
+ *
+ * The first rounding pass fixed ledgerTotals and left the balance accumulators
+ * alone. They have the same defect for the same reason, and one more consequence:
+ * the Account Balances panel is where a user reconciles the app against Touch 'n
+ * Go or a bank statement, so a figure that is not exact to the cent is a figure
+ * that cannot do its job.
+ *
+ * The fixture is a real TNG e-wallet history — one opening balance and 119
+ * amounts — which accumulates to 202.37999999999903 without the fix.
+ */
+
+const TNG_OPENING = 620.87;
+const TNG_INCOME = [30, 30, 100, 0.08, 20, 19, 14, 0.09, 0.07, 0.11, 1.99, 0.07, 15,
+  0.12, 14, 0.05, 15, 90, 0.09, 0.04, 220, 0.04, 110, 0.04, 0.04, 0.05, 50, 0.03,
+  30, 100, 0.05, 9.5, 0.07, 0.06, 0.04, 0.05, 220, 63, 0.05, 9.3, 0.05, 9.3];
+const TNG_EXPENSE = [8.5, 20.35, 98.5, 22.3, 11.5, 6.77, 64, 3.5, 7, 49.02, 4, 4, 7,
+  13.4, 10.4, 19, 1.9, 16, 14, 72, 6.95, 1.99, 14.65, 56.55, 13.9, 50, 15, 5.35,
+  19.15, 30, 4, 2, 1.7, 2, 13.65, 14.9, 14, 6, 4, 2, 54, 55.62, 6, 110, 1, 23.4,
+  8.5, 143.57, 3.5, 26.6, 98.5, 4, 2.1, 2, 2, 14.75, 1.97, 8, 7.7, 7, 57.73, 4, 6,
+  16.2, 7.5, 10, 4, 3, 11.7, 3, 25, 19, 10, 62.5, 9.3, 13.5, 9.3, 7];
+
+const wallet: LedgerAccount = { id: "tng", name: "TNG ewallet", type: "wallet", openingBalance: TNG_OPENING };
+const spare: LedgerAccount = { id: "ryt", name: "Ryt bank", type: "bank", openingBalance: 0 };
+
+const walletTx = (): LedgerTransaction[] => [
+  ...TNG_INCOME.map((amount, i) => ({ id: `wi${i}`, type: "income", amount,
+    date: "2026-08-05T16:00:00.000Z", categoryId: "c", accountId: "tng" } as LedgerTransaction)),
+  ...TNG_EXPENSE.map((amount, i) => ({ id: `we${i}`, type: "expense", amount,
+    date: "2026-08-05T16:00:00.000Z", categoryId: "c", accountId: "tng" } as LedgerTransaction)),
+];
+
+test("rounding: an account balance is exact to the cent", () => {
+  // The fixture must really drift, or this test proves nothing.
+  let naive = TNG_OPENING;
+  TNG_INCOME.forEach((a) => { naive += a; });
+  TNG_EXPENSE.forEach((a) => { naive -= a; });
+  assert.notEqual(naive, Math.round(naive * 100) / 100, "the fixture must actually drift");
+
+  const [balance] = accountBalances(walletTx(), [wallet]);
+  assert.equal(balance.balance, Math.round(balance.balance * 100) / 100);
+  assert.equal(balance.balance, 202.38);
+});
+
+test("rounding: a group total equals the sum of the accounts shown under it", () => {
+  // The panel prints both. If they disagree by a cent the user cannot reconcile
+  // either one, because neither is the number their wallet app shows.
+  const transactions = walletTx();
+  const accounts = [wallet, spare];
+  const each = accountBalances(transactions, accounts).filter(({ account }) => account.type === "wallet");
+  const group = accountTypeBalance(transactions, accounts, "wallet");
+  assert.equal(group, Math.round(group * 100) / 100);
+  assert.equal(group, Math.round(each.reduce((sum, { balance }) => sum + balance, 0) * 100) / 100);
+});
+
+test("rounding: opening funds and category totals are clean", () => {
+  const funds = openingFunds([wallet, spare, { id: "x", name: "x", type: "bank", openingBalance: 0.07 }]);
+  assert.equal(funds, Math.round(funds * 100) / 100);
+
+  const categories = [{ id: "c", name: "Food", type: "expense", icon: "🍜" }] as never;
+  const [row] = categoryTotals(walletTx(), categories, "expense");
+  assert.equal(row.amount, Math.round(row.amount * 100) / 100);
 });
