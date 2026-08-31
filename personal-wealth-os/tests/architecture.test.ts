@@ -85,7 +85,7 @@ test("arch: the model's snapshots are the canonical ones, not parallel copies", 
   assert.deepEqual(model.portfolio, getPortfolioSnapshot(state));
   assert.deepEqual(model.goals, getGoalsSnapshot(state));
   assert.deepEqual(model.budget, getBudgetSnapshot(state, NOW));
-  assert.deepEqual(model.advisor, getAdvisorSnapshot(state));
+  assert.deepEqual(model.advisor, getAdvisorSnapshot(state, { now: NOW }));
 });
 
 test("arch: the Dashboard cannot need a second ranking — the model already ranks", () => {

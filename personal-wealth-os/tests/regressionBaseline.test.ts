@@ -173,7 +173,7 @@ test("regression: OverviewModel carries the canonical snapshots, not copies", ()
   assert.deepEqual(model.portfolio, getPortfolioSnapshot(state));
   assert.deepEqual(model.goals, getGoalsSnapshot(state));
   assert.deepEqual(model.budget, getBudgetSnapshot(state, NOW));
-  assert.deepEqual(model.advisor, getAdvisorSnapshot(state));
+  assert.deepEqual(model.advisor, getAdvisorSnapshot(state, { now: NOW }));
   assert.deepEqual(model.wealthHealth, getFinancialHealthSnapshot(state, NOW, {
     hasUrgentAdvice: model.advisor.recommendations.some((r) => r.severity === "action"),
   }));

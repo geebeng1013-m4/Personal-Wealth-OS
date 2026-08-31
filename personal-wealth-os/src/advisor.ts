@@ -75,6 +75,13 @@ function evidence(label: string, value: string): AdvisorEvidence {
  * are plain read-model types, and the Advisor never asks who assembled them.
  */
 export interface AdvisorInputs {
+  /**
+   * The instant to build against. Only used for a snapshot this call has to
+   * build itself — a passed `snapshot` / `portfolio` / `budget` already carries
+   * its own instant. Defaults to now, so production callers omit it; a test
+   * pins it so "this month" does not drift with the clock.
+   */
+  now?: Date;
   snapshot?: FinancialSnapshot;
   portfolio?: PortfolioSnapshot;
   budget?: BudgetSnapshot;
@@ -85,8 +92,8 @@ export interface AdvisorInputs {
  * Pure: the same state always produces the same recommendations in the same order.
  */
 export function advisorRecommendations(state: WealthState, inputs: AdvisorInputs = {}): AdvisorRecommendation[] {
-  const snapshot = inputs.snapshot ?? getFinancialSnapshot(state);
-  const portfolio = inputs.portfolio ?? getPortfolioSnapshot(state);
+  const snapshot = inputs.snapshot ?? getFinancialSnapshot(state, inputs.now);
+  const portfolio = inputs.portfolio ?? getPortfolioSnapshot(state, inputs.now);
   const recommendations: AdvisorRecommendation[] = [];
 
   // --- Emergency fund: structured emergency rule vs configured progress ---
@@ -205,7 +212,7 @@ export function advisorRecommendations(state: WealthState, inputs: AdvisorInputs
   // amount. This rule asks "does my plan add up?", not "what did I actually
   // spend?", so recorded surplus must not be substituted here.
   // Planned surplus comes from the canonical budget read model.
-  const surplus = (inputs.budget ?? getBudgetSnapshot(state)).plannedSurplus;
+  const surplus = (inputs.budget ?? getBudgetSnapshot(state, inputs.now)).plannedSurplus;
   const surplusCoversDca = surplus >= dcaMonthly;
   recommendations.push({
     id: ADVISOR_RECOMMENDATION_IDS.cashflowDiscipline,

@@ -125,7 +125,7 @@ test("composition: the Advisor on the model equals the standalone Advisor", () =
   // agree with the Dashboard's, or the two screens would disagree on priority.
   for (const state of [cloneDefaultState(), volatileState()]) {
     const model = buildOverviewModel(state, NOW);
-    assert.deepEqual(model.advisor, getAdvisorSnapshot(state));
+    assert.deepEqual(model.advisor, getAdvisorSnapshot(state, { now: NOW }));
   }
 });
 
