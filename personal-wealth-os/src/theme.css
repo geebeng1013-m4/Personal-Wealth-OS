@@ -19,7 +19,7 @@
  * `utilities`, so a bare `@layer components` would error here.
  */
 
-@layer wu-tokens, wu-base, wu-legacy, wu-components, wu-utilities;
+@layer wu-tokens, wu-base, wu-components, wu-utilities;
 
 @layer wu-tokens {
   :root {
@@ -179,5 +179,70 @@
       --dur-mid: 0ms;
       --dur-slow: 0ms;
     }
+  }
+}
+
+/* ====================================================================== *
+ *  BASE — the global reset the app used to inherit from styles.css        *
+ * ====================================================================== */
+
+@layer wu-base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.55;
+    background: var(--surface-bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, h5, h6, p, figure, dl, dd {
+    margin: 0;
+  }
+
+  button, input, select, textarea {
+    font: inherit;
+    color: inherit;
+  }
+  button {
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+
+  a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+
+  img, svg, video {
+    max-width: 100%;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+  }
+
+  [hidden] {
+    display: none !important;
   }
 }

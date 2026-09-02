@@ -1,0 +1,625 @@
+/*
+ * App shell chrome — sidebar, nav tree, top bar, decorative rays, mobile
+ * drawer — plus the sign-in screen. Ported out of the old styles.css onto the
+ * theme.css token set. Class names are unchanged: bindCommon / bindSidebar and
+ * the sidebar/login markup still target them.
+ *
+ * Not layered: this is current CSS, it loads after components.css and only ever
+ * matches shell/login markup, which carries no wu-* classes.
+ */
+
+/* ====================================================================== *
+ *  APP SHELL LAYOUT                                                       *
+ * ====================================================================== */
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+}
+
+/* ---- sidebar ---- */
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  width: 270px;
+  padding: 26px 18px 18px;
+  background: var(--surface-bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+.sidebar-scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 9px 24px;
+}
+.brand-copy {
+  min-width: 0;
+}
+.brand-mark {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 0;
+  border-radius: 24%;
+  background: #030403;
+  padding: 0;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur-mid) var(--ease-standard);
+}
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+.brand:hover .brand-mark {
+  transform: translateY(-1px);
+}
+.brand h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.brand p {
+  margin: 3px 0 0;
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+}
+
+/* ---- nav tree (flat: no connector line, no node dots) ---- */
+.nav {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 4px 0;
+}
+.line-sidebar::before,
+.nav-node {
+  display: none;
+}
+.nav-group {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 19px;
+}
+.nav-group-title {
+  padding: 0 12px 7px;
+  color: var(--text-faint);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+.nav-group-items {
+  position: relative;
+  display: grid;
+  gap: 3px;
+}
+.nav-item {
+  min-height: 52px;
+  height: auto;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-faint);
+  text-align: left;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-standard),
+    background var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+.nav-item:hover,
+.nav-item:focus-visible {
+  background: var(--surface);
+  color: var(--text);
+  border-color: transparent;
+  outline: none;
+}
+.nav-item:focus-visible {
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.nav-item.active {
+  background: var(--surface-raised);
+  border-color: var(--border);
+  color: var(--text);
+}
+.nav-label {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.nav-label strong {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.nav-label small,
+.nav-item small {
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+.nav-item.active .nav-label small,
+.nav-item.active small {
+  color: var(--text-muted);
+}
+
+/* ---- profile card ---- */
+.profile-card {
+  margin: 6px 4px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: transparent;
+  display: grid;
+  gap: 6px;
+}
+.profile-card .eyebrow {
+  margin-bottom: 2px;
+}
+.profile-card strong {
+  font-size: 12px;
+  color: var(--text);
+}
+.profile-card small {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+/* ---- sidebar actions / tools drawer ---- */
+.sidebar-actions {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sidebar-actions-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.sidebar-actions-row button,
+.sidebar-actions-row .file-button {
+  flex: 1;
+  min-height: 0;
+}
+.sidebar-actions .user-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.sidebar-actions .user-badge .user-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  object-fit: cover;
+}
+.sidebar-actions .user-badge .user-name {
+  font-size: 12px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-actions .user-badge .logout-btn {
+  flex: none;
+}
+.sidebar-tools {
+  border: none;
+}
+.sidebar-tools > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.sidebar-tools > summary::-webkit-details-marker {
+  display: none;
+}
+.sidebar-tools__chevron {
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+.sidebar-tools[open] .sidebar-tools__chevron {
+  transform: rotate(90deg);
+}
+.sidebar-tools__content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 2px;
+}
+.theme-toggle {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.theme-toggle:hover {
+  background: var(--surface-hover);
+}
+.file-button {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* ---- main column ---- */
+.main {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  padding: 44px clamp(28px, 4vw, 68px) 80px;
+  background: var(--surface-bg);
+  overflow: hidden;
+}
+.main.quick-view-main {
+  padding: calc(64px + env(safe-area-inset-top)) 20px calc(32px + env(safe-area-inset-bottom));
+}
+.side-rays {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  right: 0;
+  width: 100%;
+  height: 600px;
+  pointer-events: none;
+  opacity: 0.09;
+  filter: grayscale(1);
+  overflow: hidden;
+}
+.side-rays-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  pointer-events: none;
+  overflow: hidden;
+}
+.side-rays::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 35%, var(--surface-bg) 100%);
+}
+.side-rays-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-end;
+  margin-bottom: 32px;
+}
+.topbar h2 {
+  display: flex;
+  gap: 11px;
+  align-items: baseline;
+  margin: 7px 0 0;
+  font-size: clamp(30px, 3.5vw, 44px);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  color: var(--text);
+}
+.topbar h2 span {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-faint);
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 999;
+  padding: 10px 16px;
+  background: var(--surface-raised);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+}
+.skip-link:focus {
+  left: 16px;
+  top: 16px;
+}
+
+/* ---- mobile hamburger + drawer ---- */
+.hamburger {
+  display: none;
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 200;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: var(--surface-overlay);
+  z-index: 140;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+.sidebar-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (max-width: 720px) {
+  body.sidebar-menu-open {
+    overflow: hidden;
+  }
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .hamburger {
+    display: flex;
+    top: calc(20px + env(safe-area-inset-top));
+    left: calc(20px + env(safe-area-inset-left));
+    width: 48px;
+    height: 48px;
+    align-items: center;
+    justify-content: center;
+  }
+  .sidebar-overlay {
+    display: block;
+  }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: min(86vw, 320px);
+    height: 100dvh;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 150;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+    gap: 12px;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .brand {
+    padding: 0;
+    gap: 10px;
+  }
+  .brand p {
+    display: none;
+  }
+  .profile-card {
+    display: none;
+  }
+  .main {
+    min-height: 100dvh;
+    padding: calc(84px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
+  }
+  .side-rays {
+    height: 360px;
+  }
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .topbar h2 {
+    font-size: 26px;
+  }
+  .topbar h2 span {
+    display: block;
+    font-size: 15px;
+  }
+}
+
+/* ====================================================================== *
+ *  SIGN-IN SCREEN (dark, self-contained)                                  *
+ * ====================================================================== */
+
+.login-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(16px, 3vh, 24px);
+  background: #050706;
+  color: rgba(255, 255, 255, 0.94);
+  color-scheme: dark;
+}
+.login-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+.login-card {
+  background: #090b0a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+  width: 100%;
+  max-width: 432px;
+}
+.login-brand {
+  text-align: center;
+  padding: 24px 28px 21px;
+  background: #080a09;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.login-logo-frame {
+  width: 104px;
+  aspect-ratio: 1;
+  margin: 0 auto 14px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 24%;
+  background: #030403;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
+}
+.brand-logo-login {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.login-brand-copy {
+  margin-bottom: 10px;
+}
+.login-brand h1 {
+  margin: 0;
+  font-size: clamp(28px, 7vw, 34px);
+  font-weight: 760;
+  line-height: 1;
+  letter-spacing: -0.045em;
+  color: rgba(255, 255, 255, 0.94);
+}
+.login-tagline {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.055em;
+}
+.login-tagline span {
+  margin-inline: 0.22em;
+  color: rgba(87, 167, 143, 0.9);
+}
+.login-body {
+  padding: 22px 28px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.login-desc {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.55;
+}
+.google-signin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 22px;
+  background: #111412;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 14px;
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.google-signin-btn:hover {
+  background: #171b18;
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+.google-signin-btn:focus-visible {
+  outline: 2px solid rgba(87, 167, 143, 0.9);
+  outline-offset: 3px;
+}
+.google-signin-btn:active {
+  transform: translateY(0);
+}
+.google-signin-btn:disabled {
+  color: rgba(255, 255, 255, 0.52);
+  cursor: wait;
+  opacity: 0.72;
+  transform: none;
+}
+.google-signin-btn svg {
+  flex-shrink: 0;
+}
+
+/* ---- shared brand-logo helpers ---- */
+.brand-logo {
+  display: block;
+  width: 190px;
+  max-width: 100%;
+  height: auto;
+}
+.brand-logo-dialog {
+  width: min(165px, 58vw);
+  margin: 0 auto 14px;
+}

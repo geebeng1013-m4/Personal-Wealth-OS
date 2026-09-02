@@ -161,7 +161,7 @@ export function InvestmentGrowthCalculator() {
         <div className="calc-mb-6">
           <p className="calc-mb-2 calc-text-xs calc-font-bold calc-uppercase calc-tracking-[0.18em] calc-text-emerald-500">Growth assumptions</p>
           <h3 id="calculatorInputsTitle" className="calc-m-0 calc-text-xl calc-font-bold">Investment inputs</h3>
-          <p className="calc-mt-2 calc-text-sm calc-leading-6" style={{ color: "var(--ink-2)" }}>Model regular contributions and compound growth in MYR. Estimates are planning aids, not guaranteed returns.</p>
+          <p className="calc-mt-2 calc-text-sm calc-leading-6" style={{ color: "var(--text-muted)" }}>Model regular contributions and compound growth in MYR. Estimates are planning aids, not guaranteed returns.</p>
         </div>
 
         <div className="calc-grid calc-gap-5">
@@ -179,7 +179,7 @@ export function InvestmentGrowthCalculator() {
           <div>
             <p className="calc-mb-2 calc-text-xs calc-font-bold calc-uppercase calc-tracking-[0.18em] calc-text-blue-500">Projected value</p>
             <h3 id="growthProjectionTitle" className="calc-m-0 calc-font-mono calc-text-3xl calc-font-extrabold calc-tracking-tight calc-tabular-nums sm:calc-text-4xl">{currency.format(result.totalBalance)}</h3>
-            <p className="calc-mt-2 calc-text-sm" style={{ color: "var(--ink-2)" }}>Estimated balance after {years} {years === 1 ? "year" : "years"}</p>
+            <p className="calc-mt-2 calc-text-sm" style={{ color: "var(--text-muted)" }}>Estimated balance after {years} {years === 1 ? "year" : "years"}</p>
           </div>
           <div className="calc-grid calc-grid-cols-2 calc-gap-3">
             <div className="calc-rounded-xl calc-border calc-border-blue-500/20 calc-bg-blue-500/10 calc-p-3">
@@ -213,8 +213,8 @@ export function InvestmentGrowthCalculator() {
                 <linearGradient id="interestFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#22c55e" stopOpacity={0.44} /><stop offset="55%" stopColor="#22c55e" stopOpacity={0.16} /><stop offset="100%" stopColor="#22c55e" stopOpacity={0} /></linearGradient>
               </defs>
               <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 6" vertical={false} />
-              <XAxis dataKey="month" type="number" domain={[0, years * 12]} ticks={yearTicks} stroke="var(--ink-3)" tickLine={false} axisLine={false} tickFormatter={(value: number) => value === 0 ? "0" : `${value / 12}Y`} minTickGap={30} />
-              <YAxis stroke="var(--ink-3)" tickLine={false} axisLine={false} tickFormatter={compactMoney} width={52} />
+              <XAxis dataKey="month" type="number" domain={[0, years * 12]} ticks={yearTicks} stroke="var(--text-faint)" tickLine={false} axisLine={false} tickFormatter={(value: number) => value === 0 ? "0" : `${value / 12}Y`} minTickGap={30} />
+              <YAxis stroke="var(--text-faint)" tickLine={false} axisLine={false} tickFormatter={compactMoney} width={52} />
               <Tooltip content={GrowthTooltip} cursor={{ stroke: "var(--chart-cursor)", strokeWidth: 1, strokeDasharray: "4 4" }} />
               <Area type="monotone" dataKey="principal" name="principal" stackId="growth" stroke="#3b82f6" fill="url(#principalFill)" strokeWidth={3} activeDot={{ r: 5, strokeWidth: 2, fill: "#101820" }} />
               <Area type="monotone" dataKey="interest" name="interest" stackId="growth" stroke="#22c55e" fill="url(#interestFill)" strokeWidth={3} activeDot={{ r: 5, strokeWidth: 2, fill: "#101820" }} />
