@@ -1,18 +1,26 @@
 /**
- * Advisor page — rules-based guidance and the dip-buy scenario check.
+ * Advisor page — rules-based guidance and the dip-buy deployment ladder.
  *
- * Every card is read straight from AdvisorSnapshot: the same recommendations,
- * in the same canonical order, each carrying its own execution state. The UI
- * ranks nothing and re-words nothing. Marking one done writes an ActionRecord
- * and leaves the recommendation exactly where it was.
+ * The guidance cards are read straight from AdvisorSnapshot: same
+ * recommendations, same canonical order, each carrying its own execution
+ * state. The UI ranks nothing and re-words nothing.
+ *
+ * The dip-buy ladder is a record, not a calculator: it lists the reserve's
+ * drawdown tranches, marks each against VOO's live distance below its
+ * all-time high (fetched from the same source Market → Context uses), and
+ * lets the user record a tranche as deployed — which moves its amount into
+ * the reserve's Used total. Everything persists in state.opportunity.
  */
 
-import type { AdvisorRecommendation, WealthState } from "../models";
+import type { WealthState, OpportunityTranche } from "../models";
+import type { AdvisorRecommendation } from "../models";
 import { createId } from "../state";
-import { money, percent, trancheStatus } from "../rules";
+import { money } from "../rules";
 import { escapeHtml } from "../html";
 import { getAdvisorSnapshot } from "../advisor";
 import { isRecommendationCompleted, markRecommendationDone } from "../actionRecords";
+import { fetchHistoricalPrices } from "../market";
+import { buildAssetHistory } from "../drawdowns";
 import { leakInsightStrip } from "../components/leakInsightStrip";
 import { pageHeader } from "../components/pageHeader";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
@@ -56,17 +64,25 @@ function advisorRecommendationCard(state: WealthState, recommendation: AdvisorRe
     </div>`;
 }
 
-export function advisorPageTemplate(state: WealthState): string {
-  const trancheRows = state.opportunity.tranches.map((tranche) => {
-    return '<tr>' +
-      '<td>-' + tranche.drawdown + '%</td>' +
-      '<td>' + percent(tranche.percent) + '</td>' +
-      '<td>' + money(tranche.amount) + '</td>' +
-      '<td>' + money(tranche.amount / 2) + ' / ' + money(tranche.amount / 2) + '</td>' +
-      '<td class="tranche-status">—</td>' +
-      '</tr>';
-  }).join("");
+function dipTrancheCard(tranche: OpportunityTranche, index: number): string {
+  const half = tranche.amount / 2;
+  return `<div class="wu-card wu-card--inset wu-card--pad-sm${tranche.deployed ? " wu-card--positive" : ""}">
+    <div class="wu-row wu-row--between" style="align-items:flex-start">
+      <div class="wu-stack wu-stack--sm">
+        <strong class="t-subheading">−${tranche.drawdown}% · deploy ${money(tranche.amount)}</strong>
+        <span class="t-caption t-faint">VOO ${money(half)} / QQQM ${money(half)}</span>
+      </div>
+      <div class="wu-stack wu-stack--sm" style="align-items:flex-end;flex:none">
+        <span class="t-caption dip-status${tranche.deployed ? " wu-metric__value--positive" : ""}" data-tranche="${index}">${tranche.deployed ? "✓ Deployed" : "—"}</span>
+        ${tranche.deployed
+          ? `<button class="wu-btn wu-btn--ghost wu-btn--sm dip-undo" data-tranche="${index}" type="button">Undo</button>`
+          : `<button class="wu-btn wu-btn--secondary wu-btn--sm dip-deploy" data-tranche="${index}" type="button">Mark deployed</button>`}
+      </div>
+    </div>
+  </div>`;
+}
 
+export function advisorPageTemplate(state: WealthState): string {
   return `<div class="wu">
     ${pageHeader({
       eyebrow: "Guidance & Scenarios",
@@ -91,23 +107,20 @@ export function advisorPageTemplate(state: WealthState): string {
       </article>
       <article class="wu-card">
         <div class="wu-card__header">
-          <div class="wu-stack wu-stack--sm"><span class="wu-label">Scenario Check</span><h3 class="wu-card__title t-heading">Dip-Buy Trigger</h3></div>
-          <span class="wu-badge wu-badge--neutral">Bear Market Plan</span>
+          <div class="wu-stack wu-stack--sm"><span class="wu-label">Bear Market Plan</span><h3 class="wu-card__title t-heading">Dip-Buy Ladder</h3></div>
+          <span class="wu-badge wu-badge--neutral">${state.opportunity.tranches.filter((t) => t.deployed).length}/${state.opportunity.tranches.length} deployed</span>
         </div>
         <div class="wu-stack wu-stack--lg">
           <div class="wu-grid wu-grid--3">
-            <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">🎯 Opportunity Reserve</span><span class="wu-metric__value t-num wu-metric__value--positive">${money(state.opportunity.total)}</span><span class="wu-metric__note t-caption">Used ${money(state.opportunity.used)} · Remaining ${money(state.opportunity.total - state.opportunity.used)}</span></div></div>
-            <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">📊 VOO Allocation</span><span class="wu-metric__value t-num">${money(state.opportunity.allocation.VOO)}</span></div></div>
-            <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">📊 QQQM Allocation</span><span class="wu-metric__value t-num">${money(state.opportunity.allocation.QQQM)}</span></div></div>
+            <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">🎯 Reserve remaining</span><span class="wu-metric__value t-num wu-metric__value--positive">${money(state.opportunity.total - state.opportunity.used)}</span><span class="wu-metric__note t-caption">of ${money(state.opportunity.total)} · ${money(state.opportunity.used)} deployed</span></div></div>
+            <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">📊 VOO allocation</span><span class="wu-metric__value t-num">${money(state.opportunity.allocation.VOO)}</span></div></div>
+            <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">📊 QQQM allocation</span><span class="wu-metric__value t-num">${money(state.opportunity.allocation.QQQM)}</span></div></div>
           </div>
-          <form id="drawdownForm" class="wu-row">
-            <label class="wu-field-row"><span class="wu-field-row__label">Market Drawdown %</span><input class="wu-field" id="drawdownInput" type="number" min="0" max="80" step="1" value="0"></label>
-            <button class="wu-btn wu-btn--primary wu-btn--sm wu-self-end" type="submit">Check Rule</button>
-          </form>
-          <div id="drawdownResult" class="wu-card wu-card--inset wu-card--pad-sm t-body-sm t-muted">Enter the market drawdown from its peak to check whether reserve deployment is triggered.</div>
-          <div class="wu-table-wrap">
-            <table class="wu-table"><thead><tr><th>Trigger</th><th>Reserve %</th><th>Amount</th><th>VOO / QQQM</th><th>Status</th></tr></thead><tbody>${trancheRows}</tbody></table>
+          <div id="dipDrawdown" class="wu-card wu-card--inset wu-card--pad-sm t-body-sm t-muted">Checking VOO's distance below its all-time high…</div>
+          <div class="wu-stack wu-stack--sm">
+            ${state.opportunity.tranches.map((tranche, index) => dipTrancheCard(tranche, index)).join("")}
           </div>
+          <p class="t-caption t-faint">Marking a tranche deployed moves its amount into the reserve's Used total. The status against VOO's live level is a prompt, not a rule — you decide when you actually buy.</p>
         </div>
       </article>
     </div>
@@ -141,54 +154,59 @@ export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Set
     });
   });
 
-  root.querySelector<HTMLFormElement>("#drawdownForm")?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const drawdown = Number(root.querySelector<HTMLInputElement>("#drawdownInput")?.value) || 0;
-    const allTranches = trancheStatus(state, drawdown);
-    const triggered = allTranches.filter((tranche) => drawdown >= tranche.drawdown);
-    const result = root.querySelector<HTMLElement>("#drawdownResult");
+  // --- Dip-buy ladder: record a tranche as deployed (or undo it). The amount
+  // moves into opportunity.used; the tranche keeps its own deployed flag. Both
+  // already persist in WealthState — nothing else read here changes shape.
+  const setTrancheDeployed = (index: number, deployed: boolean): void => {
+    const tranche = state.opportunity.tranches[index];
+    if (!tranche || tranche.deployed === deployed) return;
+    const delta = deployed ? tranche.amount : -tranche.amount;
+    const next: WealthState = {
+      ...state,
+      opportunity: {
+        ...state.opportunity,
+        used: Math.max(0, Math.min(state.opportunity.total, state.opportunity.used + delta)),
+        tranches: state.opportunity.tranches.map((item, i) => i === index ? { ...item, deployed } : item),
+      },
+    };
+    setState(next, deployed ? "Marked dip-buy tranche deployed" : "Undid dip-buy tranche");
+    rerender(root, next, setState, "advisor", navigate);
+  };
+  root.querySelectorAll<HTMLButtonElement>(".dip-deploy").forEach((button) =>
+    button.addEventListener("click", () => setTrancheDeployed(Number(button.dataset.tranche), true)));
+  root.querySelectorAll<HTMLButtonElement>(".dip-undo").forEach((button) =>
+    button.addEventListener("click", () => setTrancheDeployed(Number(button.dataset.tranche), false)));
 
-    // Update tranche status column in the table
-    const statusCells = root.querySelectorAll<HTMLElement>(".tranche-status");
-    allTranches.forEach((tranche, i) => {
-      if (statusCells[i]) {
-        const statusColor = tranche.deployed ? "var(--text-faint)" : drawdown >= tranche.drawdown ? "var(--positive)" : "var(--text-faint)";
-        statusCells[i].textContent = tranche.status;
-        statusCells[i].style.color = statusColor;
-      }
-    });
-
-    if (!result) return;
-    if (triggered.length === 0) {
-      const remaining = state.opportunity.total - state.opportunity.used;
-      result.innerHTML = '<div style="margin-bottom:8px;">No tranche triggered at -' + drawdown + '%.</div>' +
-        '<div style="font-size:12px;color:var(--text-faint);">Continue DCA and preserve the Opportunity Reserve of ' + money(remaining) + '.</div>';
+  // VOO's live distance below its all-time high — the same series Market →
+  // Context reads. It is a prompt beside each tranche, never an automatic
+  // trigger; a failed fetch just leaves the row at "—".
+  const drawdownBox = root.querySelector<HTMLElement>("#dipDrawdown");
+  void fetchHistoricalPrices("VOO", "10y").then((prices) => {
+    const history = buildAssetHistory(
+      prices.map((point) => ({ time: Date.parse(point.date), close: point.close })),
+      { threshold: 0.1 },
+    );
+    if (!history) {
+      if (drawdownBox) drawdownBox.textContent = "VOO price history unavailable — mark tranches by hand.";
       return;
     }
-    const totalDeploy = triggered.reduce((sum, t) => sum + t.amount, 0);
-    const totalVoo = triggered.reduce((sum, t) => sum + t.suggestedVoo, 0);
-    const totalQqqm = triggered.reduce((sum, t) => sum + t.suggestedQqqm, 0);
-    result.innerHTML = '<div style="font-size:14px;font-weight:700;color:var(--warning);margin-bottom:8px;">🐻 -' + drawdown + '% Drawdown: Deploy ' + money(totalDeploy) + '</div>' +
-      '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
-        '<div style="flex:1;background:var(--surface-raised);border-radius:6px;padding:8px;text-align:center;">' +
-          '<div style="font-size:11px;color:var(--text-faint);">VOO</div>' +
-          '<div style="font-size:14px;font-weight:700;color:var(--accent);">' + money(totalVoo) + '</div>' +
-        '</div>' +
-        '<div style="flex:1;background:var(--surface-raised);border-radius:6px;padding:8px;text-align:center;">' +
-          '<div style="font-size:11px;color:var(--text-faint);">QQQM</div>' +
-          '<div style="font-size:14px;font-weight:700;color:var(--highlight);">' + money(totalQqqm) + '</div>' +
-        '</div>' +
-      '</div>' +
-      '<div style="font-size:12px;">' +
-        '<div style="font-weight:600;margin-bottom:4px;">Deployment Rules:</div>' +
-        allTranches.map((t) => {
-          const isTriggered = drawdown >= t.drawdown;
-          const icon = t.deployed ? '✅' : isTriggered ? '🟢' : '⬜';
-          const color = t.deployed ? 'var(--text-faint)' : isTriggered ? 'var(--positive)' : 'var(--text-faint)';
-          return '<div style="display:flex;justify-content:space-between;padding:4px 0;color:' + color + ';">' +
-            '<span>' + icon + ' -' + t.drawdown + '% → ' + money(t.amount) + ' (VOO ' + money(t.suggestedVoo) + ' / QQQM ' + money(t.suggestedQqqm) + ')</span>' +
-            '<span>' + t.status + '</span></div>';
-        }).join('') +
-      '</div>';
+    const pointsBelow = -history.currentDrawdown * 100; // e.g. 2.1 = 2.1% below the ATH
+    if (drawdownBox) {
+      drawdownBox.innerHTML = pointsBelow < 0.1
+        ? "VOO is <strong>at or near its all-time high</strong> — no tranche is in range."
+        : `VOO is <strong>${pointsBelow.toFixed(1)}% below its all-time high</strong>.`;
+    }
+    root.querySelectorAll<HTMLElement>(".dip-status").forEach((cell) => {
+      const tranche = state.opportunity.tranches[Number(cell.dataset.tranche)];
+      if (!tranche || tranche.deployed) return;
+      if (pointsBelow >= tranche.drawdown) {
+        cell.textContent = "Reached — deploy now";
+        cell.classList.add("wu-metric__value--negative");
+      } else {
+        cell.textContent = `${(tranche.drawdown - pointsBelow).toFixed(1)}pp to go`;
+      }
+    });
+  }).catch(() => {
+    if (drawdownBox) drawdownBox.textContent = "Could not load VOO price history — mark tranches by hand.";
   });
 }
