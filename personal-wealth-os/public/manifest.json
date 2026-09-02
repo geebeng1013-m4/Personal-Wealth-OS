@@ -1,13 +1,13 @@
 {
-  "name": "Personal Wealth OS",
-  "short_name": "Wealth OS",
+  "name": "WealthUp",
+  "short_name": "WealthUp",
   "description": "Investment discipline, cash flow, and goal tracking",
   "id": "/",
   "start_url": "/#quick",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0a0f14",
-  "theme_color": "#0a0f14",
+  "background_color": "#141310",
+  "theme_color": "#141310",
   "orientation": "any",
   "icons": [
     {

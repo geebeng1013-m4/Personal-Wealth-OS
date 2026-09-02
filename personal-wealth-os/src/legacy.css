@@ -1,0 +1,16 @@
+/*
+ * The two pre-existing stylesheets, dropped into the `legacy` cascade layer.
+ *
+ * theme.css pre-declares  @layer wu-tokens, wu-base, wu-legacy, wu-components, wu-utilities;
+ * so everything here sits BELOW the wu-* / t-* rules. Un-migrated pages keep
+ * their exact look (their classes are untouched); a migrated page's wu-* rules
+ * win with no specificity fights.
+ *
+ * As each page moves to wu-*, the legacy CSS it orphans is deleted from the two
+ * files below in the same commit. When every page is migrated this file and
+ * both imports are removed and the `wu-legacy` layer is dropped from the @layer
+ * line in theme.css.
+ */
+
+@import url("./design-system.css") layer(wu-legacy);
+@import url("./styles.css") layer(wu-legacy);

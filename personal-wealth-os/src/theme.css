@@ -1,0 +1,183 @@
+/*
+ * WealthUp design tokens — "quiet wealth".
+ *
+ * Two layers: a raw palette (change a hue in one place) feeding semantic tokens
+ * that components read directly. No component-token layer — the app is ~12
+ * pages with one maintainer; a third level is indirection with no payoff.
+ *
+ * Semantic tokens live on bare :root (= dark, the app default). main.ts always
+ * sets data-theme on <html>, so :root[data-theme="light"] is the light override.
+ *
+ * The @layer order below is the whole migration strategy: legacy.css drops the
+ * two old stylesheets into `wu-legacy`, which sits BELOW the component/utility
+ * layers, so a `wu-*` rule always wins over a legacy rule without specificity
+ * fights and without editing 4,800 lines of old CSS. Un-migrated pages keep
+ * working because their old classes are untouched.
+ *
+ * Layer names are `wu-` prefixed on purpose: Tailwind's PostCSS plugin (global,
+ * for the calculator) hijacks the reserved names `base` / `components` /
+ * `utilities`, so a bare `@layer components` would error here.
+ */
+
+@layer wu-tokens, wu-base, wu-legacy, wu-components, wu-utilities;
+
+@layer wu-tokens {
+  :root {
+    /* ---- raw palette (theme-independent) ------------------------------- */
+    --c-sand-50: #fbfaf6;
+    --c-sand-100: #f4f1ea;
+    --c-sand-200: #eeeae0;
+    --c-sand-300: #d9d3c6;
+    --c-sand-500: #928b7c;
+    --c-sand-600: #5e584c;
+    --c-sand-800: #262420;
+    --c-sand-900: #1c1a16;
+    --c-ink-950: #141310;
+    --c-green-400: #66b79e;
+    --c-green-500: #57a78f;
+    --c-green-700: #1f6f5c;
+    --c-green-800: #1a5c4c;
+    --c-bronze-400: #c79b57;
+    --c-bronze-600: #9a6f22;
+    --c-clay-400: #dc8b7d;
+    --c-clay-600: #a5453b;
+
+    /* ---- semantic — DARK --------------------------------------------------- */
+    --surface-bg: #141310;
+    --surface: #1c1a16;
+    --surface-raised: #232019;
+    --surface-hover: #2a2720;
+    --surface-overlay: rgba(10, 9, 7, 0.6);
+
+    --border-subtle: rgba(240, 235, 224, 0.05);
+    --border: rgba(240, 235, 224, 0.1);
+    --border-strong: rgba(240, 235, 224, 0.18);
+
+    --text: #ece7dd; /* deliberately not #fff — lower contrast */
+    --text-muted: #a39c8d; /* AA for body */
+    --text-faint: #6e685c; /* labels / decoration only, never body copy */
+
+    --accent: #57a78f;
+    --accent-hover: #66b79e;
+    --accent-contrast: #12241e;
+    --accent-soft: rgba(87, 167, 143, 0.14);
+    --accent-line: rgba(87, 167, 143, 0.3);
+
+    --highlight: #c79b57; /* bronze — the single "wealth marker" hue */
+    --highlight-soft: rgba(199, 155, 87, 0.14);
+
+    --positive: #57a78f; /* = accent */
+    --positive-soft: rgba(87, 167, 143, 0.14);
+    --negative: #dc8b7d;
+    --negative-soft: rgba(220, 139, 125, 0.14);
+    --warning: #c79b57; /* = highlight; bronze doubles as the warning hue */
+    --warning-soft: rgba(199, 155, 87, 0.14);
+
+    --focus: var(--accent-soft);
+
+    --shadow-xs: none;
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.45); /* overlays / menus only */
+
+    /* ---- radius --------------------------------------------------------- */
+    --radius-xs: 4px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-pill: 999px;
+
+    /* ---- spacing (4px grid) ------------------------------------------------ */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    /* ---- motion ------------------------------------------------------------ */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --dur-fast: 120ms;
+    --dur-mid: 200ms;
+    --dur-slow: 320ms;
+
+    /* ---- type ------------------------------------------------------------ */
+    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --weight-regular: 400;
+    --weight-medium: 500;
+    --weight-semibold: 600;
+    --weight-bold: 700;
+
+    --leading-tight: 1.15;
+    --leading-snug: 1.3;
+    --leading-normal: 1.55;
+
+    --tracking-tight: -0.02em;
+    --tracking-normal: 0;
+    --tracking-wide: 0.08em;
+
+    /* size tokens so components don't hard-code px (see utilities .t-* too) */
+    --text-display: 2.25rem;
+    --text-title: 1.5rem;
+    --text-heading: 1.125rem;
+    --text-subheading: 0.9375rem;
+    --text-body: 0.875rem;
+    --text-body-sm: 0.8125rem;
+    --text-caption: 0.75rem;
+    --text-overline: 0.6875rem;
+    --text-num-lg: 1.5rem;
+    --text-num-xl: 2.25rem;
+  }
+
+  /* ---- semantic — LIGHT -------------------------------------------------- */
+  :root[data-theme="light"] {
+    --surface-bg: #f4f1ea;
+    --surface: #fbfaf6;
+    --surface-raised: #ffffff;
+    --surface-hover: #eeeae0;
+    --surface-overlay: rgba(38, 34, 28, 0.35);
+
+    --border-subtle: rgba(38, 34, 28, 0.06);
+    --border: rgba(38, 34, 28, 0.12);
+    --border-strong: rgba(38, 34, 28, 0.2);
+
+    --text: #262420;
+    --text-muted: #5e584c;
+    --text-faint: #928b7c;
+
+    --accent: #1f6f5c;
+    --accent-hover: #1a5c4c;
+    --accent-contrast: #ffffff;
+    --accent-soft: rgba(31, 111, 92, 0.1);
+    --accent-line: rgba(31, 111, 92, 0.24);
+
+    --highlight: #9a6f22;
+    --highlight-soft: rgba(154, 111, 34, 0.1);
+
+    --positive: #1f6f5c;
+    --positive-soft: rgba(31, 111, 92, 0.1);
+    --negative: #a5453b;
+    --negative-soft: rgba(165, 69, 59, 0.1);
+    --warning: #9a6f22;
+    --warning-soft: rgba(154, 111, 34, 0.1);
+
+    --shadow-xs: 0 1px 2px rgba(38, 34, 28, 0.04);
+    --shadow-sm: 0 2px 8px rgba(38, 34, 28, 0.06);
+    --shadow-md: 0 12px 32px rgba(38, 34, 28, 0.12);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --dur-fast: 0ms;
+      --dur-mid: 0ms;
+      --dur-slow: 0ms;
+    }
+  }
+}
