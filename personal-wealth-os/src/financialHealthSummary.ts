@@ -23,7 +23,7 @@ import { emergencyRatio } from "./rules";
 
 export type HealthStatus = "healthy" | "watch" | "action";
 
-export type HealthFactorId = "safetyBuffer" | "cashFlow" | "planExecution" | "debtLoad";
+export type HealthFactorId = "safetyBuffer" | "cashFlow" | "budget" | "planExecution" | "debtLoad";
 
 export interface HealthFactor {
   id: HealthFactorId;
@@ -52,7 +52,7 @@ export interface FinancialHealthSnapshot {
   /** Plain-language status, so meaning never depends on colour alone. */
   label: string;
   summary: string;
-  /** Ordered for display: safety, cash flow, plan, debt. */
+  /** Ordered for display: safety, cash flow, budget, plan, debt. */
   factors: HealthFactor[];
   /** The figures the factors are derived from, for UI that shows detail. */
   supportingFacts: {
@@ -60,6 +60,9 @@ export interface FinancialHealthSnapshot {
     emergencyCurrent: number;
     emergencyTarget: number;
     currentMonthSurplus: number;
+    currentMonthExpenses: number;
+    /** The monthly-spending-limit rule amount, or 0 when no limit is set. */
+    monthlySpendingLimit: number;
     totalAssets: number;
     totalLiabilities: number;
     plannedContribution: number;
@@ -103,9 +106,13 @@ export function worstStatus(statuses: HealthStatus[]): HealthStatus {
 /** Contributions recorded this calendar month (buys only, never sells). */
 function contributionsThisMonth(state: WealthState, now: Date): number {
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  return state.trades
+  // Rounded to the cent: this is shown as money on the Plan Status card and
+  // divided by the monthly target, and summing cent-precise amounts in binary
+  // floating point drifts into the far decimals.
+  const total = state.trades
     .filter((trade) => trade.type !== "Sell" && trade.date.slice(0, 7) === monthKey)
     .reduce((sum, trade) => sum + trade.amountMyr + trade.feeMyr, 0);
+  return Math.round(total * 100) / 100;
 }
 
 /**
@@ -139,6 +146,7 @@ function planExecutionLabel(plan: PlanExecution): string {
  * Thresholds are unchanged from the original implementation:
  *   safety     >= 100% healthy, >= 50% watch, else action
  *   cash flow  surplus > 0 healthy, == 0 watch, < 0 action
+ *   budget     no limit set or spending within it healthy, over it action
  *   plan       on track healthy, else watch
  *   debt       none healthy, exceeding assets action, else watch
  */
@@ -173,7 +181,28 @@ export function getFinancialHealthSnapshot(
     target: 0,
   };
 
-  // 3. Plan execution
+  // 3. Spending limit vs recorded spending
+  // A fact — "12% over limit" — never the advice to fix it. Mirrors the
+  // Advisor's monthly-spending-limit check so the two cards never disagree:
+  // recorded spending above the limit is an action, anything else is fine.
+  const spendingRule = getFinancialRule(state, "monthly-spending-limit");
+  const spendingLimit = spendingRule?.enabled ? spendingRule.limitAmount : 0;
+  const recordedSpend = snapshot.currentMonthExpenses;
+  const overBudget = spendingLimit > 0 && recordedSpend > spendingLimit;
+  const budget: HealthFactor = {
+    id: "budget",
+    label: "Budget",
+    status: overBudget ? "action" : "healthy",
+    detail: spendingLimit <= 0
+      ? "No limit set"
+      : overBudget
+        ? `${Math.round((recordedSpend / spendingLimit - 1) * 100)}% over limit`
+        : `${Math.round((recordedSpend / spendingLimit) * 100)}% of limit`,
+    value: spendingLimit > 0 ? recordedSpend : null,
+    target: spendingLimit > 0 ? spendingLimit : null,
+  };
+
+  // 4. Plan execution
   const planExecution: HealthFactor = {
     id: "planExecution",
     label: "Plan execution",
@@ -183,7 +212,7 @@ export function getFinancialHealthSnapshot(
     target: plan.plannedAmount,
   };
 
-  // 4. Debt load
+  // 5. Debt load
   const debtLoad: HealthFactor = {
     id: "debtLoad",
     label: "Debt load",
@@ -195,7 +224,7 @@ export function getFinancialHealthSnapshot(
     target: snapshot.totalAssets,
   };
 
-  const factors = [safetyBuffer, cashFlow, planExecution, debtLoad];
+  const factors = [safetyBuffer, cashFlow, budget, planExecution, debtLoad];
 
   const status = worstStatus([
     ...factors.map((factor) => factor.status),
@@ -219,6 +248,8 @@ export function getFinancialHealthSnapshot(
       emergencyCurrent: state.emergency.current,
       emergencyTarget: state.emergency.target,
       currentMonthSurplus: surplus,
+      currentMonthExpenses: recordedSpend,
+      monthlySpendingLimit: spendingLimit,
       totalAssets: snapshot.totalAssets,
       totalLiabilities: snapshot.totalLiabilities,
       plannedContribution: plan.plannedAmount,

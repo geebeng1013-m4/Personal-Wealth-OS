@@ -76,6 +76,23 @@ export function filterLedgerTransactions(transactions: LedgerTransaction[], filt
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
 
+/**
+ * Round a money total to the cent.
+ *
+ * Amounts like 757.89 have no exact binary representation, so adding a few
+ * dozen of them drifts into the thirteenth decimal: a real month of the user's
+ * ledger summed to 757.8900000000002 and 681.3999999999999, and those went
+ * straight into the Monthly Review's number inputs — and would have been saved
+ * to the review record on submit.
+ *
+ * Rounding once at the end of a sum is safe. Rounding each addend would not be:
+ * the inputs are already cent-precise, and the drift only appears in the
+ * accumulator.
+ */
+function toCents(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 export function ledgerTotals(transactions: LedgerTransaction[]): LedgerTotals {
   const totals = transactions.reduce((result, transaction) => {
     if (transaction.type === "income") result.income += transaction.amount;
@@ -83,11 +100,16 @@ export function ledgerTotals(transactions: LedgerTransaction[]): LedgerTotals {
     if (transaction.type === "transfer") result.transfer += transaction.amount;
     return result;
   }, { income: 0, expense: 0, transfer: 0 });
-  return { ...totals, balance: totals.income - totals.expense };
+  const income = toCents(totals.income);
+  const expense = toCents(totals.expense);
+  // Derived from the rounded halves, so the three figures always agree on
+  // screen: a balance rounded independently could differ from income − expense
+  // by a cent.
+  return { income, expense, transfer: toCents(totals.transfer), balance: toCents(income - expense) };
 }
 
 export function openingFunds(accounts: LedgerAccount[]): number {
-  return accounts.reduce((total, account) => total + account.openingBalance, 0);
+  return toCents(accounts.reduce((total, account) => total + account.openingBalance, 0));
 }
 
 // currentNetAssets() removed in Step 15: it had no consumer in src or tests,
@@ -98,10 +120,13 @@ export function categoryTotals(transactions: LedgerTransaction[], categories: Le
   for (const transaction of transactions) {
     if (transaction.type === type && transaction.categoryId) amounts.set(transaction.categoryId, (amounts.get(transaction.categoryId) ?? 0) + transaction.amount);
   }
-  const total = [...amounts.values()].reduce((sum, amount) => sum + amount, 0);
+  const total = toCents([...amounts.values()].reduce((sum, amount) => sum + amount, 0));
   return categories
     .filter((category) => category.type === type && (amounts.get(category.id) ?? 0) > 0)
-    .map((category) => ({ category, amount: amounts.get(category.id) ?? 0, share: total > 0 ? (amounts.get(category.id) ?? 0) / total : 0 }))
+    .map((category) => {
+      const amount = toCents(amounts.get(category.id) ?? 0);
+      return { category, amount, share: total > 0 ? amount / total : 0 };
+    })
     .sort((a, b) => b.amount - a.amount);
 }
 
@@ -115,7 +140,11 @@ export function accountBalances(transactions: LedgerTransaction[], accounts: Led
       if (transaction.toAccountId) balances.set(transaction.toAccountId, (balances.get(transaction.toAccountId) ?? 0) + transaction.amount);
     }
   }
-  return accounts.map((account) => ({ account, balance: balances.get(account.id) ?? 0 }));
+  // Rounded once, after the whole history has been replayed. A balance is a
+  // running sum of cent-exact amounts, so only the accumulator drifts — and it
+  // drifts onto the Account Balances panel, where the figure is read against a
+  // real bank or wallet app to the cent.
+  return accounts.map((account) => ({ account, balance: toCents(balances.get(account.id) ?? 0) }));
 }
 
 /**
@@ -129,9 +158,9 @@ export function accountTypeBalance(
   type: LedgerAccount["type"],
   balances: AccountBalance[] = accountBalances(transactions, accounts),
 ): number {
-  return balances
+  return toCents(balances
     .filter(({ account }) => account.type === type)
-    .reduce((total, { balance }) => total + balance, 0);
+    .reduce((total, { balance }) => total + balance, 0));
 }
 
 export interface InvestmentAssetShare {
@@ -149,10 +178,10 @@ function isMoneyMarketFundAccount(account: LedgerAccount): boolean {
 
 export function investmentAssetShare(transactions: LedgerTransaction[], accounts: LedgerAccount[]): InvestmentAssetShare {
   const balances = accountBalances(transactions, accounts);
-  const totalAssets = balances.reduce((total, { balance }) => total + balance, 0);
-  const investmentAssets = balances
+  const totalAssets = toCents(balances.reduce((total, { balance }) => total + balance, 0));
+  const investmentAssets = toCents(balances
     .filter(({ account }) => account.type === "investment" && !isMoneyMarketFundAccount(account))
-    .reduce((total, { balance }) => total + balance, 0);
+    .reduce((total, { balance }) => total + balance, 0));
 
   return {
     totalAssets,

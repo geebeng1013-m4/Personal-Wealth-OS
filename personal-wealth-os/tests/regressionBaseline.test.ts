@@ -36,11 +36,11 @@ function demo(): WealthState {
 test("baseline: dashboard headline figures", () => {
   // Net Worth now folds in the portfolio's value: live price when available,
   // cost basis otherwise (never omitted, never zero). With no market prices
-  // supplied here it falls back to cost basis (MYR 4,738.89), so Net Worth and
+  // supplied here it falls back to cost basis (MYR 4,741.23), so Net Worth and
   // Total Assets moved up from the pre-Step-26 figures by exactly that amount.
   const model = buildOverviewModel(demo(), NOW);
-  assert.equal(model.netWorth.toFixed(2), "7561.89");
-  assert.equal(model.totalAssets.toFixed(2), "20411.89");
+  assert.equal(model.netWorth.toFixed(2), "7564.23");
+  assert.equal(model.totalAssets.toFixed(2), "20414.23");
   assert.equal(model.totalLiabilities, 12850);
   assert.equal(model.netWorth, model.totalAssets - model.totalLiabilities);
   assert.equal(model.snapshot.portfolioValueMyr.toFixed(2), model.portfolio.totalInvestedMyr.toFixed(2),
@@ -55,11 +55,17 @@ test("baseline: dashboard headline figures", () => {
 });
 
 test("baseline: portfolio facts, with valuation still unknown", () => {
+  // The ringgit figures below carry the demo's five currency conversions: the
+  // dollars they cover are translated at the rate the user actually converted
+  // at, the rest at the rate each trade row implies. The dollar facts —
+  // totalInvestedUsd, units, average cost, fees — are identical either way,
+  // which is the point: a conversion record changes the translation, never the
+  // trade.
   const portfolio = getPortfolioSnapshot(demo());
   assert.equal(portfolio.totalUnits.toFixed(6), "4.006747");
-  assert.equal(portfolio.totalInvestedMyr.toFixed(2), "4738.89");
+  assert.equal(portfolio.totalInvestedMyr.toFixed(2), "4741.23");
   assert.equal(portfolio.totalInvestedUsd.toFixed(2), "1066.93");
-  assert.equal(portfolio.maxAbsoluteDrift.toFixed(6), "0.096141");
+  assert.equal(portfolio.maxAbsoluteDrift.toFixed(6), "0.096721");
   assert.equal(portfolio.realizedPnlMyr, 0);
   assert.equal(portfolio.totalFeesMyr.toFixed(2), "28.89");
   // The Step 18 fix depends on these staying null rather than becoming 0.
@@ -67,9 +73,9 @@ test("baseline: portfolio facts, with valuation still unknown", () => {
   assert.equal(portfolio.unrealizedPnlMyr, null);
 
   const expected = [
-    { ticker: "VOO", units: "1.261434", avg: "547.12", target: 0.55, drift: "0.096141" },
-    { ticker: "QQQM", units: "1.295536", avg: "222.54", target: 0.25, drift: "0.020739" },
-    { ticker: "VXUS", units: "1.449778", avg: "61.02", target: 0.1, drift: "-0.016879" },
+    { ticker: "VOO", units: "1.261434", avg: "547.12", target: 0.55, drift: "0.096721" },
+    { ticker: "QQQM", units: "1.295536", avg: "222.54", target: 0.25, drift: "0.020147" },
+    { ticker: "VXUS", units: "1.449778", avg: "61.02", target: 0.1, drift: "-0.016868" },
   ];
   assert.equal(portfolio.holdings.length, expected.length);
   for (const want of expected) {
@@ -167,7 +173,7 @@ test("regression: OverviewModel carries the canonical snapshots, not copies", ()
   assert.deepEqual(model.portfolio, getPortfolioSnapshot(state));
   assert.deepEqual(model.goals, getGoalsSnapshot(state));
   assert.deepEqual(model.budget, getBudgetSnapshot(state, NOW));
-  assert.deepEqual(model.advisor, getAdvisorSnapshot(state));
+  assert.deepEqual(model.advisor, getAdvisorSnapshot(state, { now: NOW }));
   assert.deepEqual(model.wealthHealth, getFinancialHealthSnapshot(state, NOW, {
     hasUrgentAdvice: model.advisor.recommendations.some((r) => r.severity === "action"),
   }));

@@ -131,7 +131,7 @@ test("flow/D: plan progress is not recomputed by the Dashboard", () => {
 test("flow/E: Priority Action id equals AdvisorSnapshot.priority.id", () => {
   for (const state of [cloneDefaultState(), richState(), emptyState()]) {
     const model = buildOverviewModel(state, NOW);
-    const advisor = getAdvisorSnapshot(state);
+    const advisor = getAdvisorSnapshot(state, { now: NOW });
     assert.equal(model.priorityAction!.recommendationId, advisor.priority!.id);
     assert.equal(model.priorityAction!.title, advisor.priority!.title);
     assert.equal(model.priorityAction!.actionLabel, advisor.priority!.action);
@@ -146,7 +146,7 @@ test("flow/H: the Dashboard does not re-rank recommendations", () => {
     dca: { monthly: 500, targets: { VOO: 0.99, QQQM: 0.01 } },
   });
   const model = buildOverviewModel(state, NOW);
-  const advisor = getAdvisorSnapshot(state);
+  const advisor = getAdvisorSnapshot(state, { now: NOW });
   // The model's list IS the ranked list, in the same order.
   assert.deepEqual(model.advisor.recommendations.map((r) => r.id), advisor.recommendations.map((r) => r.id));
   assert.equal(model.priorityAction!.recommendationId, advisor.recommendations[0].id);
@@ -327,5 +327,5 @@ test("flow: every canonical snapshot the model exposes is the real one", () => {
   assert.deepEqual(model.portfolio, getPortfolioSnapshot(state));
   assert.deepEqual(model.goals, getGoalsSnapshot(state));
   assert.deepEqual(model.budget, getBudgetSnapshot(state, NOW));
-  assert.deepEqual(model.advisor, getAdvisorSnapshot(state));
+  assert.deepEqual(model.advisor, getAdvisorSnapshot(state, { now: NOW }));
 });

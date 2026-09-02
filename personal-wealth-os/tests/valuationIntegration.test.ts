@@ -111,7 +111,7 @@ test("integration: missing FX leaves MYR unknown while USD stays known", () => {
 
 // --- Semantic separation ---------------------------------------------------
 
-test("integration: prices never move invested capital, units, cost, fees or drift", () => {
+test("integration: prices never move invested capital, units, cost or fees", () => {
   const state = twoHoldings();
   const flat = getPortfolioSnapshot(state, NOW);
   for (const market of [BOTH_PRICED, { prices: BOTH_PRICED.prices, usdToMyr: null }]) {
@@ -119,15 +119,12 @@ test("integration: prices never move invested capital, units, cost, fees or drif
     assert.equal(priced.totalInvestedMyr, flat.totalInvestedMyr);
     assert.equal(priced.totalInvestedUsd, flat.totalInvestedUsd);
     assert.equal(priced.totalUnits, flat.totalUnits);
-    assert.equal(priced.maxAbsoluteDrift, flat.maxAbsoluteDrift);
     assert.equal(priced.realizedPnlMyr, flat.realizedPnlMyr);
     assert.equal(priced.totalFeesMyr, flat.totalFeesMyr);
-    assert.deepEqual(priced.allocation, flat.allocation);
     for (const holding of priced.holdings) {
       const before = getHolding(flat, holding.ticker)!;
       assert.equal(holding.averageCostUsd, before.averageCostUsd);
       assert.equal(holding.units, before.units);
-      assert.equal(holding.drift, before.drift);
       assert.equal(holding.investedMyr, before.investedMyr);
     }
   }

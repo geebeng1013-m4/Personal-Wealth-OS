@@ -211,7 +211,7 @@ test("leaks: no finding ever carries a non-finite or missing number", () => {
 
 // --- Persistence -----------------------------------------------------------
 
-test("leaks: findings stay derived and the schema stays at v17", () => {
+test("leaks: findings stay derived and the schema version is untouched", () => {
   const state = demo();
   const withRecord: WealthState = {
     ...state,

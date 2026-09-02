@@ -1,28 +1,86 @@
 // Market data module — fetches VOO/QQQM quotes from Yahoo Finance
 // K-line chart powered by TradingView Widget
 
-import { calculatePositionCostBasis, tradeUnits, type CostBasisTrade } from "./rules";
-import { isUsablePrice, normalizeQuotes, type PriceMap } from "./marketPrices";
+import { calculatePositionCostBasis, type CostBasisTrade } from "./rules";
+import { normalizeQuotes, type PriceMap } from "./marketPrices";
 
-/** Default fallback USD→MYR rate when all dynamic sources fail. */
+/**
+ * Last-resort USD→MYR rate, used only when nothing better exists anywhere.
+ *
+ * Deliberately a poor answer: a constant cannot track a currency, and at the
+ * time of writing it is 5% away from the market. Every path below exists to
+ * avoid reaching it, and reaching it should be understood as "we know nothing".
+ */
 const DEFAULT_USD_MYR = 4.25;
 
-/** Cached USD→MYR exchange rate. */
+/** Live rate from the FX API. Only ever written by a successful fetch. */
 let cachedUsdToMyr: number | null = null;
 let cachedUsdToMyrTimestamp = 0;
 const FX_CACHE_TTL = 3600_000; // 1 hour
 
 /**
- * Fetch the current USD→MYR exchange rate.
- * Tries a free exchange-rate API with a 1-hour cache, then falls back to the
- * most-recent trade rate if available, then to DEFAULT_USD_MYR.
+ * Best rate derivable from the user's own records.
+ *
+ * Kept apart from cachedUsdToMyr on purpose. Writing a fallback into the live
+ * cache would suppress API retries for a full hour, so a single network blip
+ * would pin the whole session to an old rate. Held here, it serves the
+ * synchronous getter without ever standing in the way of a real quote.
  */
-export async function fetchUsdToMyr(trades?: { exchangeRate?: number; date: string }[]): Promise<number> {
-  // 1. Return cached if fresh
+let derivedUsdToMyr: number | null = null;
+
+/** A conversion the user actually made — the strongest evidence available. */
+export interface FxEvidence {
+  date: string;
+  direction: string;
+  myrAmount: number;
+  usdAmount: number;
+}
+
+/**
+ * The rate implied by the user's own records, newest first.
+ *
+ * Conversions outrank trades: a conversion IS an exchange rate, recorded as two
+ * amounts the broker actually moved, while a trade's exchangeRate is whatever a
+ * CSV import stamped on it and may be from the wrong day entirely.
+ */
+function rateFromRecords(
+  trades?: { exchangeRate?: number; date: string }[],
+  exchanges?: FxEvidence[],
+): number | null {
+  const conversions = (exchanges ?? [])
+    .filter((item) => item.usdAmount > 0 && item.myrAmount > 0)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const newest = conversions[0];
+  if (newest) return newest.myrAmount / newest.usdAmount;
+
+  const sorted = [...(trades ?? [])].sort((a, b) => b.date.localeCompare(a.date));
+  for (const trade of sorted) {
+    if (typeof trade.exchangeRate === "number" && trade.exchangeRate > 0) return trade.exchangeRate;
+  }
+  return null;
+}
+
+/**
+ * Fetch the current USD→MYR exchange rate.
+ *
+ * API first, then the user's own conversion and trade records, then the
+ * constant. Pass the records: without them a failed request drops straight to a
+ * number nobody has ever traded at, and every ringgit figure in the app shifts
+ * with it — silently, since a stale rate looks exactly like a fresh one.
+ */
+export async function fetchUsdToMyr(
+  trades?: { exchangeRate?: number; date: string }[],
+  exchanges?: FxEvidence[],
+): Promise<number> {
+  // Remember what the records imply even when the API answers, so the
+  // synchronous getter is never left with only the constant.
+  const derived = rateFromRecords(trades, exchanges);
+  if (derived !== null) derivedUsdToMyr = derived;
+
   if (cachedUsdToMyr !== null && Date.now() - cachedUsdToMyrTimestamp < FX_CACHE_TTL) {
     return cachedUsdToMyr;
   }
-  // 2. Try a free exchange-rate API
+
   try {
     const res = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
@@ -33,43 +91,27 @@ export async function fetchUsdToMyr(trades?: { exchangeRate?: number; date: stri
         return cachedUsdToMyr;
       }
     }
-  } catch { /* fall through */ }
+  } catch { /* fall through to the records */ }
 
-  // 3. Derive from the most recent trade that has a valid exchangeRate
-  if (trades && trades.length > 0) {
-    const sorted = [...trades].sort((a, b) => b.date.localeCompare(a.date));
-    for (const t of sorted) {
-      if (typeof t.exchangeRate === "number" && t.exchangeRate > 0) {
-        return t.exchangeRate;
-      }
-    }
-  }
-
-  // 4. Hard-coded last resort
-  return DEFAULT_USD_MYR;
+  return derivedUsdToMyr ?? DEFAULT_USD_MYR;
 }
 
 /**
- * Synchronous getter for the cached USD→MYR rate.
- * Returns the cached dynamic rate if available, otherwise falls back to DEFAULT_USD_MYR.
- * Call fetchUsdToMyr() early in the app lifecycle to populate the cache.
+ * Synchronous getter for the best USD→MYR rate currently known.
+ *
+ * Resolves in the same order as fetchUsdToMyr, so the two can never disagree
+ * about what today's rate is — they did before, and the sync path was the one
+ * handing out the hard-coded constant.
  */
 export function getUsdToMyr(): number {
-  return cachedUsdToMyr ?? DEFAULT_USD_MYR;
+  return cachedUsdToMyr ?? derivedUsdToMyr ?? DEFAULT_USD_MYR;
 }
 
-/** Pure string HTML-escape — safe for non-DOM environments. */
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (ch) => {
-    switch (ch) {
-      case "\x26": return "\x26amp;";
-      case "<": return "\x26lt;";
-      case ">": return "\x26gt;";
-      case "\x22": return "\x26quot;";
-      case "\x27": return "\x26#39;";
-      default: return ch;
-    }
-  });
+/** Test seam: forget every cached and derived rate. */
+export function resetUsdToMyrCache(): void {
+  cachedUsdToMyr = null;
+  cachedUsdToMyrTimestamp = 0;
+  derivedUsdToMyr = null;
 }
 
 export interface MarketQuote {
@@ -86,12 +128,6 @@ export interface MarketQuote {
   shortName: string;
   currency: string;
 }
-
-const CORS_PROXIES = [
-  "https://api.allorigins.win/raw?url=",
-  "https://corsproxy.io/?",
-  "https://api.codetabs.com/v1/proxy?quest=",
-];
 
 const CACHE_KEY = "pwo_market_cache";
 const CACHE_TTL = 30_000; // 30 seconds — fresher quotes for P&L accuracy
@@ -148,53 +184,29 @@ export function pruneMarketCache(): void {
 }
 
 /**
- * Fallback fetcher for the secondary market features (fundamentals, history).
- *
- * These public proxies are unreliable — corsproxy.io now rejects keyless
- * requests and the others frequently time out — so anything that must be
- * correct goes through the dedicated /api/quote route instead. This path is
- * deliberately NOT a general server-side proxy: forwarding arbitrary URLs from
- * the browser would be an open relay.
- */
-async function fetchWithProxy(url: string): Promise<string> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (res.ok) return await res.text();
-  } catch { /* fall through to proxy */ }
-
-  for (const proxy of CORS_PROXIES) {
-    try {
-      const res = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(15000) });
-      if (res.ok) return await res.text();
-    } catch { /* try next proxy */ }
-  }
-
-  throw new Error("Unable to fetch market data — network error");
-}
-
-/**
  * Fetch a secondary market dataset through the server-side route.
  *
- * The browser cannot call the upstream directly, so this is the only path that
- * works. It falls back to the old public-proxy chain purely for environments
- * where /api is not deployed; those proxies are unreliable, so a failure here
- * simply means the panel stays empty rather than showing invented data.
+ * /api/market is the only path that works. The browser cannot call the upstream
+ * directly (no CORS headers), and the anonymous proxies this used to fall back
+ * on have all stopped answering keyless requests — so the fallback could no
+ * longer rescue anything; it only spent up to 45 seconds of timeouts before
+ * reporting the failure the route had already reported.
+ *
+ * There is also no environment left for it to serve: Vercel runs api/ in
+ * production and vite.config.ts mounts the same handlers in dev, so /api is
+ * present wherever the app runs.
+ *
+ * A failure means the panel stays empty rather than showing invented data.
  */
-async function fetchMarketData(kind: "fundamentals" | "history", symbol: string, range?: string): Promise<string> {
+async function fetchMarketData(kind: "fundamentals" | "holdings" | "history", symbol: string, range?: string): Promise<string> {
   const query = new URLSearchParams({ kind, symbol });
   if (range) query.set("range", range);
-  try {
-    const response = await fetch(`/api/market?${query.toString()}`, {
-      signal: AbortSignal.timeout(12_000),
-      headers: { accept: "application/json" },
-    });
-    if (response.ok) return await response.text();
-  } catch { /* fall through to the legacy path */ }
-
-  const upstream = kind === "fundamentals"
-    ? `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryDetail,defaultKeyStatistics`
-    : `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range ?? "1y"}&interval=1d`;
-  return fetchWithProxy(upstream);
+  const response = await fetch(`/api/market?${query.toString()}`, {
+    signal: AbortSignal.timeout(12_000),
+    headers: { accept: "application/json" },
+  });
+  if (!response.ok) throw new Error(`No ${kind} for ${symbol} — upstream ${response.status}`);
+  return await response.text();
 }
 
 export async function fetchQuote(symbol: string): Promise<MarketQuote> {
@@ -224,38 +236,10 @@ export async function fetchQuote(symbol: string): Promise<MarketQuote> {
     return quote;
   }
 
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=5m`;
-  const text = await fetchWithProxy(url);
-  const json = JSON.parse(text);
-  const result = json?.chart?.result?.[0];
-  if (!result) throw new Error("No data for " + symbol);
-
-  const meta = result.meta;
-  // Strip exchange prefix (e.g. "AMEX:QQQM" → "QQQM")
-  const cleanSymbol = (meta.symbol ?? symbol).replace(/^[A-Z]+:/, "");
-  // A missing or non-positive price means "unknown", never "worth zero", so
-  // the quote is rejected rather than published with a fabricated 0.
-  if (!isUsablePrice(meta.regularMarketPrice)) throw new Error("No price for " + symbol);
-  const quote: MarketQuote = {
-    symbol: cleanSymbol,
-    price: meta.regularMarketPrice,
-    change: (meta.regularMarketPrice ?? 0) - (meta.chartPreviousClose ?? meta.previousClose ?? 0),
-    changePercent: 0,
-    open: meta.regularMarketOpen ?? 0,
-    high: meta.regularMarketDayHigh ?? 0,
-    low: meta.regularMarketDayLow ?? 0,
-    prevClose: meta.chartPreviousClose ?? meta.previousClose ?? 0,
-    volume: meta.regularMarketVolume ?? 0,
-    marketState: meta.marketState ?? "UNKNOWN",
-    shortName: meta.shortName ?? symbol,
-    currency: meta.currency ?? "USD",
-  };
-  if (quote.prevClose > 0) {
-    quote.changePercent = ((quote.price - quote.prevClose) / quote.prevClose) * 100;
-  }
-
-  setCache(cacheKey, quote);
-  return quote;
+  // /api/quote is the only quote path. When it returns nothing the price is
+  // unknown, and a rejection is how every caller already reads that — never a
+  // zero, which would be a fabricated price.
+  throw new Error("No price for " + symbol);
 }
 
 /**
@@ -376,91 +360,6 @@ export function calcPnLForTicker(
   };
 }
 
-// --- Trade Timeline HTML ---
-
-interface TradeForTimeline {
-  ticker: string;
-  date: string;
-  type: CostBasisTrade["type"];
-  priceUsd: number;
-  amountUsd: number;
-  amountMyr: number;
-  units?: number;
-  feeMyr: number;
-}
-
-function timelineDate(raw: string, dateOnlyTime: string): Date {
-  return new Date(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T${dateOnlyTime}Z` : raw);
-}
-
-export function buildTradeTimelineHtml(
-  trades: TradeForTimeline[],
-  ticker: string,
-  currentPriceUsd: number,
-): string {
-  const filtered = trades.filter((t) => t.ticker === ticker);
-  if (filtered.length === 0) return "";
-
-  const pnl = calcPnLForTicker(trades, ticker, currentPriceUsd, getUsdToMyr());
-  const sorted = [...filtered].sort((a, b) => a.date.localeCompare(b.date));
-  const minDate = timelineDate(sorted[0].date, "00:00:00");
-  const maxDate = timelineDate(sorted[sorted.length - 1].date, "00:00:00");
-
-  // Add some padding
-  const padMs = Math.max((maxDate.getTime() - minDate.getTime()) * 0.05, 86400000 * 3);
-  const startMs = minDate.getTime() - padMs;
-  const endMs = maxDate.getTime() + padMs;
-  const rangeMs = endMs - startMs;
-
-  // Cost line position (based on price range)
-  const allPrices = sorted.map((t) => t.priceUsd);
-  allPrices.push(currentPriceUsd);
-  const minPrice = Math.min(...allPrices) * 0.95;
-  const maxPrice = Math.max(...allPrices) * 1.05;
-  const priceRange = maxPrice - minPrice;
-
-  const costLineTopPct = priceRange > 0 ? ((maxPrice - pnl.averageCostUsd) / priceRange) * 100 : 50;
-
-  // Trade markers
-  const safeTicker = escapeHtml(ticker);
-  const markers = sorted.map((t) => {
-    const isBuy = t.type !== "Sell";
-    const posMs = timelineDate(t.date, "16:00:00").getTime();
-    const leftPct = rangeMs > 0 ? ((posMs - startMs) / rangeMs) * 100 : 50;
-    const priceTopPct = priceRange > 0 ? ((maxPrice - t.priceUsd) / priceRange) * 100 : 50;
-    const units = tradeUnits(t).toFixed(4);
-    const safeDate = escapeHtml(t.date);
-
-    return `<div class="tl-marker" style="left:${leftPct.toFixed(1)}%;top:${priceTopPct.toFixed(1)}%;" title="${safeDate}\n${isBuy ? "Buy" : "Sell"} ${units} units @ $${t.priceUsd.toFixed(2)}">
-      <span class="tl-dot ${isBuy ? "tl-buy" : "tl-sell"}">${isBuy ? "\u2191" : "\u2193"}</span>
-      <span class="tl-label">${isBuy ? "B" : "S"} ${units} @ $${t.priceUsd.toFixed(0)}</span>
-    </div>`;
-  }).join("");
-
-  // Date labels
-  const dateLabels = sorted.map((t) => {
-    const posMs = timelineDate(t.date, "16:00:00").getTime();
-    const leftPct = rangeMs > 0 ? ((posMs - startMs) / rangeMs) * 100 : 50;
-    const d = timelineDate(t.date, "00:00:00");
-    const label = (d.getUTCMonth() + 1) + "/" + d.getUTCDate();
-    return `<span class="tl-date-label" style="left:${leftPct.toFixed(1)}%">${label}</span>`;
-  }).join("");
-
-  return `<div class="trade-timeline">
-    <div class="tl-header">
-      <span class="tl-title">\ud83d\udcca Trade Timeline \u2014 ${safeTicker}</span>
-      <span class="tl-cost-label">Avg Cost $${pnl.averageCostUsd.toFixed(2)}</span>
-    </div>
-    <div class="tl-body">
-      <div class="tl-track">
-        <div class="tl-cost-line" style="top:${costLineTopPct.toFixed(1)}%"></div>
-        ${markers}
-      </div>
-      <div class="tl-dates">${dateLabels}</div>
-    </div>
-  </div>`;
-}
-
 // --- Fundamentals (Dividend, P/E, etc.) ---
 
 export interface Fundamentals {
@@ -477,9 +376,14 @@ export interface Fundamentals {
   trailingAnnualDividendYield: number;
   expenseRatio: number;        // e.g. 0.0003 = 0.03%
   totalAssets: number;         // AUM in USD
-  ytdReturn: number;           // e.g. 0.052 = 5.2%
-  threeYearReturn: number;
-  fiveYearReturn: number;
+  /**
+   * Trailing returns. Always null: the upstream this is built from does not
+   * publish them, and they were previously filled with 0 — a number that reads
+   * as "flat year" rather than "not available" and had already reached the UI.
+   */
+  ytdReturn: number | null;
+  threeYearReturn: number | null;
+  fiveYearReturn: number | null;
 }
 
 export interface StockComparisonData {
@@ -711,6 +615,59 @@ const DIV_CACHE_TTL = 3600_000; // 1 hour
  * or P/E. Those stay 0/"" here, and the UI renders them as unknown rather than
  * inventing a value — a zero in this shape means "not reported", never "zero".
  */
+/** One line of an ETF's published holdings. */
+export interface EtfHolding {
+  symbol: string;
+  name: string;
+  /** Fraction of the fund, e.g. 0.0755 = 7.55%. */
+  weight: number;
+}
+
+/** What a fund actually owns, as the issuer last reported it. */
+export interface EtfComposition {
+  symbol: string;
+  holdings: EtfHolding[];
+  /** Sector weights, largest first. Empty when the provider gives none. */
+  sectors: Array<{ sector: string; weight: number }>;
+}
+
+/**
+ * Live holdings for an ETF.
+ *
+ * Returns null for anything that is not a fund — a single company has no
+ * holdings, and that is an answer rather than a failure the caller should
+ * retry. Cached for the same period as the other slow-moving fund data.
+ */
+export async function fetchEtfComposition(symbol: string): Promise<EtfComposition | null> {
+  const cacheKey = "holdings_" + symbol;
+  const cached = getCached(cacheKey, DIV_CACHE_TTL);
+  if (cached) return cached as EtfComposition;
+
+  let text: string;
+  try {
+    text = await fetchMarketData("holdings", symbol);
+  } catch {
+    return null;
+  }
+  const json = JSON.parse(text) as {
+    holdings?: unknown;
+    sectors?: unknown;
+  };
+  const holdings = (Array.isArray(json.holdings) ? json.holdings : [])
+    .filter((item): item is EtfHolding =>
+      Boolean(item) && typeof (item as EtfHolding).symbol === "string"
+      && typeof (item as EtfHolding).weight === "number");
+  const sectors = (Array.isArray(json.sectors) ? json.sectors : [])
+    .filter((item): item is { sector: string; weight: number } =>
+      Boolean(item) && typeof (item as { sector: string }).sector === "string"
+      && typeof (item as { weight: number }).weight === "number");
+  if (holdings.length === 0 && sectors.length === 0) return null;
+
+  const composition: EtfComposition = { symbol, holdings, sectors };
+  setCache(cacheKey, composition);
+  return composition;
+}
+
 export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
   const cacheKey = "fund_" + symbol;
   const cached = getCached(cacheKey, DIV_CACHE_TTL);
@@ -746,9 +703,9 @@ export async function fetchFundamentals(symbol: string): Promise<Fundamentals> {
     trailingAnnualDividendYield: dividendYield,
     expenseRatio: numeric(raw.expense_ratio) / 100,
     totalAssets: numeric(raw.aum),
-    ytdReturn: 0,
-    threeYearReturn: 0,
-    fiveYearReturn: 0,
+    ytdReturn: null,
+    threeYearReturn: null,
+    fiveYearReturn: null,
   };
 
   setCache(cacheKey, fund);

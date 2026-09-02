@@ -1,6 +1,7 @@
 import type { LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
 import { getDefaultFinancialRules, normalizeFinancialRules } from "./financialRules";
 import { normalizeActionRecords } from "./actionRecords";
+import { normalizeCurrencyExchanges } from "./currencyExchange";
 import {
   saveToFirestore,
   loadFromFirestore,
@@ -8,7 +9,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 18;
+export const CURRENT_VERSION = 19;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -154,6 +155,7 @@ export const defaultState: WealthState = {
   hiddenRuleIds: [],
   financialRules: [],
   actionRecords: [],
+  currencyExchanges: [],
 };
 
 // Derived from defaultState's own planning config so the seed rules and the
@@ -249,6 +251,7 @@ export function emptyState(): WealthState {
     hiddenRuleIds: [],
     financialRules: [],
     actionRecords: [],
+    currencyExchanges: [],
   };
   // A brand-new user has no planning values yet, so these seed rules are
   // mostly disabled placeholders — present and valid, but asserting nothing.
@@ -511,6 +514,11 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   // and an existing array is normalized rather than replaced. Malformed
   // entries are dropped individually so the rest of the state survives.
   merged.actionRecords = normalizeActionRecords(candidate.actionRecords);
+
+  // v19: currency conversions. The only record of a real MYR/USD rate, so a
+  // state without them keeps whatever ringgit figures its trades already
+  // carry. Purely additive: absent means an empty list, never a guessed rate.
+  merged.currencyExchanges = normalizeCurrencyExchanges(candidate.currencyExchanges);
   const requestedOverviewGoalId = typeof candidate.overviewGoalId === "string" ? candidate.overviewGoalId : "";
   merged.overviewGoalId = merged.goals.some((goal) => goal.id === requestedOverviewGoalId)
     ? requestedOverviewGoalId

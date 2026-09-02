@@ -17,7 +17,7 @@ import type { LedgerAccount, LedgerTransaction, Trade, WealthState } from "../sr
 
 const NOW = new Date(2026, 7, 15, 12, 0, 0); // 2026-08-15 local
 const STATUSES = new Set(["healthy", "watch", "action"]);
-const FACTOR_IDS: HealthFactorId[] = ["safetyBuffer", "cashFlow", "planExecution", "debtLoad"];
+const FACTOR_IDS: HealthFactorId[] = ["safetyBuffer", "cashFlow", "budget", "planExecution", "debtLoad"];
 
 function iso(year: number, monthIndex: number, day: number): string {
   return new Date(year, monthIndex, day, 12, 0, 0).toISOString();
@@ -38,8 +38,8 @@ test("health/A: a snapshot builds from state with the expected shape", () => {
   assert.ok(STATUSES.has(snapshot.status));
   assert.ok(snapshot.label.length > 0);
   assert.ok(snapshot.summary.length > 0);
-  assert.equal(snapshot.factors.length, 4);
-  assert.deepEqual(snapshot.factors.map((f) => f.id), FACTOR_IDS, "ordered safety, cash flow, plan, debt");
+  assert.equal(snapshot.factors.length, 5);
+  assert.deepEqual(snapshot.factors.map((f) => f.id), FACTOR_IDS, "ordered safety, cash flow, budget, plan, debt");
   for (const factor of snapshot.factors) {
     assert.ok(STATUSES.has(factor.status), `${factor.id} bad status`);
     assert.ok(factor.label.length > 0);
@@ -59,7 +59,7 @@ test("health/B: overall status is the worst factor status", () => {
 });
 
 test("health/B: an urgent Advisor signal escalates the overall status", () => {
-  // All four factors healthy on their own...
+  // All five factors healthy on their own...
   const healthyState = stateWith({
     emergency: { current: 5000, target: 5000, annualYield: 0, monthlyTopUp: 0 },
     dca: { monthly: 0, targets: { VOO: 1 } },
@@ -261,10 +261,10 @@ test("health/G: the Overview model's wealthHealth IS the canonical snapshot", ()
   }
 });
 
-test("health/G: the Dashboard still shows the four expected factors", () => {
+test("health/G: the Dashboard still shows the five expected factors", () => {
   const model = buildOverviewModel(cloneDefaultState(), NOW);
   assert.deepEqual(model.wealthHealth.factors.map((f) => f.label),
-    ["Safety buffer", "Cash flow", "Plan execution", "Debt load"]);
+    ["Safety buffer", "Cash flow", "Budget", "Plan execution", "Debt load"]);
 });
 
 // --- H & I. no advice leaks in ----------------------------------------------
@@ -320,7 +320,7 @@ test("health/J: empty and partial states do not crash", () => {
   for (const [label, state] of [["empty", emptyState()], ["partial", partial], ["default", cloneDefaultState()]] as const) {
     const snapshot = getFinancialHealthSnapshot(state, NOW);
     assert.ok(STATUSES.has(snapshot.status), `${label} bad status`);
-    assert.equal(snapshot.factors.length, 4, `${label} missing factors`);
+    assert.equal(snapshot.factors.length, 5, `${label} missing factors`);
     for (const [key, value] of Object.entries(snapshot.supportingFacts)) {
       assert.ok(Number.isFinite(value), `${label}: ${key} is not finite`);
     }

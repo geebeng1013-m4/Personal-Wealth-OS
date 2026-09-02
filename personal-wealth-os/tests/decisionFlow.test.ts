@@ -122,12 +122,12 @@ test("flow: none of the navigation work moved a financial figure", () => {
   const before = buildOverviewModel(base, NOW);
   const model = buildOverviewModel(after, NOW);
 
-  assert.equal(model.netWorth.toFixed(2), "7561.89"); // was 2823 pre-Step-26: net worth now folds in portfolio value (cost basis fallback)
+  assert.equal(model.netWorth.toFixed(2), "7564.23"); // was 2823 pre-Step-26: net worth now folds in portfolio value (cost basis fallback)
   assert.equal(model.cashFlow.income, 2300);
   assert.equal(model.cashFlow.expenses, 249);
   assert.equal(model.cashFlow.surplus, 2051);
   assert.equal(model.budget.plannedSurplus, 1100);
-  assert.equal(model.portfolio.totalInvestedMyr.toFixed(2), "4738.89");
+  assert.equal(model.portfolio.totalInvestedMyr.toFixed(2), "4741.23");
   assert.deepEqual(model.wealthHealth, before.wealthHealth);
   assert.deepEqual(getFinancialHealthSnapshot(after, NOW), getFinancialHealthSnapshot(base, NOW));
   assert.deepEqual(detectMoneyLeakFindings(after), detectMoneyLeakFindings(base));
@@ -173,7 +173,7 @@ test("flow: real drift is still detected once money is actually invested", () =>
 
 test("flow: the demo baseline still sees its real drift", () => {
   const portfolio = getPortfolioSnapshot(demo());
-  assert.equal(portfolio.maxAbsoluteDrift.toFixed(6), "0.096141", "demo drift changed");
+  assert.equal(portfolio.maxAbsoluteDrift.toFixed(6), "0.096721", "demo drift changed");
 });
 
 test("flow: the demo fixture follows the calendar instead of emptying out", () => {

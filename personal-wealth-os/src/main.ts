@@ -1,5 +1,7 @@
-import "./design-system.css";
-import "./styles.css";
+import "./theme.css";
+import "./components.css";
+import "./shell.css";
+import "./legacy-tail.css";
 import type { WealthState } from "./models";
 import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState } from "./state";
 import { renderApp } from "./ui";
@@ -33,16 +35,16 @@ function isStandalone(): boolean {
 
 function showIOSInstructions(): void {
   const overlay = document.createElement("div");
-  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;";
+  overlay.style.cssText = "position:fixed;inset:0;background:var(--surface-overlay);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;";
   overlay.innerHTML = `
-    <div style="background:var(--surface-solid);border-radius:16px;padding:24px;max-width:320px;text-align:center;">
-      <h3 style="margin:0 0 16px;font-size:18px;">Install Wealth OS</h3>
-      <div style="text-align:left;font-size:14px;line-height:1.8;color:var(--ink-2);">
+    <div class="wu wu-card" style="max-width:320px;text-align:center;">
+      <h3 class="t-heading" style="margin:0 0 16px;">Install Wealth OS</h3>
+      <div class="t-body-sm t-muted" style="text-align:left;line-height:1.8;">
         <p>1. Tap the <strong>Share</strong> button <span style="font-size:18px;">⬆️</span> at the bottom of Safari</p>
         <p>2. Scroll down and tap <strong>"Add to Home Screen"</strong></p>
         <p>3. Tap <strong>"Add"</strong> in the top right</p>
       </div>
-      <button id="closeInstallGuide" style="margin-top:16px;padding:10px 24px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--ink);font-size:14px;cursor:pointer;">Got it</button>
+      <button class="wu-btn wu-btn--secondary wu-btn--sm" id="closeInstallGuide" style="margin-top:16px;">Got it</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -85,8 +87,13 @@ type Theme = "dark" | "light";
 
 function getStoredTheme(): Theme {
   const t = localStorage.getItem("pwo-theme");
-  if (t === "light") return "light";
-  return "dark";
+  if (t === "light" || t === "dark") return t;
+  // First load: follow the OS. Once the user toggles, the stored value wins.
+  try {
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
 }
 
 function applyTheme(theme: Theme): void {
@@ -228,8 +235,10 @@ async function handleAuth(user: User | null): Promise<void> {
     state = loadState(user.uid);
     renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
 
-    // Warm exchange rate cache early so dashboard renders with current rates.
-    void fetchUsdToMyr().catch(() => {});
+    // Warm the exchange rate cache early so the dashboard renders with current
+    // rates — and hand it the user's own conversions, so a failed request falls
+    // back on a rate they really got rather than on a hard-coded constant.
+    void fetchUsdToMyr(state.trades, state.currencyExchanges).catch(() => {});
 
     try {
       const cloudState = await loadStateFromCloud();

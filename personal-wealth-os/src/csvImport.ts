@@ -77,6 +77,19 @@ export function recordsFromCsv(text: string): Trade[] {
   const isMoomooFormat = normalized.includes("symbol") && normalized.includes("side");
 
   if (isMoomooFormat) {
+    // KNOWN LIMITATION: one rate for the whole file.
+    //
+    // Moomoo's order export is pure USD — it has no FX column, because the
+    // ringgit conversion happens in a separate currency-exchange record. So
+    // every row here is converted at the live rate on the day of the import,
+    // not the rate that applied on the day of the trade. A file spanning eight
+    // months of DCA comes out as if all of it settled this morning.
+    //
+    // The consequence is visible: the MYR cost basis (and therefore the MYR
+    // return) shifts depending on WHEN the user imported, while the USD figures
+    // stay exact because units and prices come straight off the CSV. Treat the
+    // USD side as the truth and the MYR side as an approximation until each
+    // trade carries its own historical rate.
     const USD_TO_MYR = getUsdToMyr(); // dynamic rate, prefetched in main.ts
     return rows
       .filter((row) => {

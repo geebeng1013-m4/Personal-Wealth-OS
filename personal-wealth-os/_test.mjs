@@ -30,9 +30,14 @@ const firebaseStubPlugin = {
   },
 };
 
-const entrySource = testFiles
-  .map((name) => `import ${JSON.stringify(`./tests/${name}`)};`)
-  .join("\n");
+// The flush import comes last so every file has registered its tests before
+// the runner waits on them, and the await is what makes an async failure
+// count instead of surfacing after the summary.
+const entrySource = [
+  ...testFiles.map((name) => `import ${JSON.stringify(`./tests/${name}`)};`),
+  `import { flush } from "./tests/testHarness";`,
+  `await flush();`,
+].join("\n");
 const result = await build({
   stdin: {
     contents: entrySource,

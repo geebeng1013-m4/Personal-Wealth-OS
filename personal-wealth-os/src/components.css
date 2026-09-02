@@ -1,0 +1,1109 @@
+/*
+ * WealthUp component primitives (wu-*) and type utilities (t-*).
+ *
+ * Loaded after theme.css, which pre-declares the layer order
+ *   @layer wu-tokens, wu-base, wu-legacy, wu-components, wu-utilities;
+ * so everything here outranks the old stylesheets in `legacy` without
+ * specificity games. Nothing outside a migrated template carries a `wu-*` /
+ * `t-*` class, so adding this file is a visual no-op until a page opts in.
+ */
+
+/* ====================================================================== *
+ *  TYPE UTILITIES                                                         *
+ * ====================================================================== */
+
+@layer wu-utilities {
+  .t-display {
+    font: var(--weight-semibold) var(--text-display) / var(--leading-tight) var(--font-sans);
+    letter-spacing: var(--tracking-tight);
+  }
+  .t-title {
+    font: var(--weight-semibold) var(--text-title) / 1.2 var(--font-sans);
+    letter-spacing: var(--tracking-tight);
+  }
+  .t-heading {
+    font: var(--weight-semibold) var(--text-heading) / var(--leading-snug) var(--font-sans);
+    letter-spacing: -0.01em;
+  }
+  .t-subheading {
+    font: var(--weight-semibold) var(--text-subheading) / 1.4 var(--font-sans);
+    letter-spacing: -0.005em;
+  }
+  .t-body {
+    font: var(--weight-regular) var(--text-body) / var(--leading-normal) var(--font-sans);
+  }
+  .t-body-sm {
+    font: var(--weight-regular) var(--text-body-sm) / 1.5 var(--font-sans);
+  }
+  .t-caption {
+    font: var(--weight-regular) var(--text-caption) / 1.4 var(--font-sans);
+  }
+  .t-overline {
+    font: var(--weight-semibold) var(--text-overline) / 1.3 var(--font-sans);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+  }
+  .t-num {
+    font-family: var(--font-mono);
+    font-weight: var(--weight-medium);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+  }
+  .t-muted {
+    color: var(--text-muted);
+  }
+  .t-faint {
+    color: var(--text-faint);
+  }
+  .wu-self-end {
+    align-self: end;
+  }
+  .t-prewrap {
+    white-space: pre-wrap;
+  }
+  /* an input with a small unit addon glued to its left edge */
+  .wu-affix {
+    display: flex;
+    align-items: stretch;
+  }
+  .wu-affix > :first-child {
+    display: flex;
+    align-items: center;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-right: none;
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    background: var(--surface-hover);
+    color: var(--text-faint);
+    font: var(--weight-medium) var(--text-caption) / 1 var(--font-sans);
+    white-space: nowrap;
+  }
+  .wu-affix > .wu-field {
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    min-width: 0;
+  }
+  /* TVM solver row: label · input · solve button */
+  .tvm-row {
+    display: grid;
+    grid-template-columns: 118px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .tvm-row > .tvm-row__label {
+    text-align: right;
+  }
+  @media (max-width: 640px) {
+    .tvm-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .tvm-row > .tvm-row__label {
+      grid-column: 1 / -1;
+      text-align: left;
+    }
+  }
+  .t-num-lg {
+    font-family: var(--font-mono);
+    font-weight: var(--weight-semibold);
+    font-size: var(--text-num-lg);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  .t-num-xl {
+    font-family: var(--font-mono);
+    font-weight: var(--weight-semibold);
+    font-size: var(--text-num-xl);
+    line-height: 1.1;
+    letter-spacing: var(--tracking-tight);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ====================================================================== *
+ *  COMPONENTS                                                             *
+ * ====================================================================== */
+
+@layer wu-components {
+  /* ---- scope root ---------------------------------------------------- */
+  /* A migrated page wraps its content in .wu so it inherits the new base
+     font + text colour. Deliberately shallow — text elements still carry
+     explicit .t-* classes; this is only a floor. */
+  .wu {
+    font-family: var(--font-sans);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .wu :where(h1, h2, h3, h4, h5, p) {
+    margin: 0;
+  }
+
+  /* ---- layout helpers --------------------------------------------------- */
+  .wu-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .wu-row--between {
+    justify-content: space-between;
+  }
+  .wu-row--tight {
+    gap: var(--space-1);
+  }
+  .wu-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--wu-stack-gap, var(--space-3));
+  }
+  .wu-stack--sm {
+    --wu-stack-gap: var(--space-2);
+  }
+  .wu-stack--lg {
+    --wu-stack-gap: var(--space-4);
+  }
+  .wu-stack--xl {
+    --wu-stack-gap: var(--space-8);
+  }
+  .is-hidden {
+    display: none !important;
+  }
+  /* The bare `hidden` attribute must still win inside a migrated page, where
+     wu-* layout classes (display:flex/grid) would otherwise override it. */
+  .wu [hidden] {
+    display: none !important;
+  }
+  .wu-grid {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: repeat(auto-fill, minmax(var(--wu-grid-min, 260px), 1fr));
+  }
+  .wu-grid--2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .wu-grid--3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .wu-grid--4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .wu-grid--wide {
+    --wu-grid-min: 340px;
+  }
+  .wu-grid--top {
+    align-items: start;
+  }
+  @media (max-width: 1080px) {
+    .wu-grid--3,
+    .wu-grid--4 {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+  @media (max-width: 720px) {
+    .wu-grid--2,
+    .wu-grid--3,
+    .wu-grid--4 {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* ---- page header --------------------------------------------------- */
+  .wu-page-header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: var(--space-6);
+  }
+  .wu-page-header__eyebrow {
+    color: var(--text-faint);
+  }
+  .wu-page-header__bar {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-4);
+  }
+  .wu-page-header__title {
+    color: var(--text);
+  }
+  .wu-page-header__badge {
+    flex: none;
+    color: var(--text-muted);
+    font: var(--weight-medium) var(--text-caption) / 1 var(--font-sans);
+  }
+  .wu-page-header__sub {
+    color: var(--text-muted);
+    max-width: 62ch;
+  }
+  .wu-page-header__actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-top: var(--space-1);
+  }
+
+  /* ---- button ----------------------------------------------------------- */
+  .wu-btn {
+    --_bg: transparent;
+    --_fg: var(--text);
+    --_bd: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: 36px;
+    padding: 0 var(--space-4);
+    border: 1px solid var(--_bd);
+    border-radius: var(--radius-sm);
+    background: var(--_bg);
+    color: var(--_fg);
+    font: var(--weight-semibold) 0.8125rem / 1 var(--font-sans);
+    letter-spacing: -0.005em;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--dur-fast) var(--ease-standard),
+      border-color var(--dur-fast) var(--ease-standard),
+      color var(--dur-fast) var(--ease-standard);
+  }
+  .wu-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+  .wu-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .wu-btn--primary {
+    --_bg: var(--accent);
+    --_fg: var(--accent-contrast);
+  }
+  .wu-btn--primary:hover {
+    --_bg: var(--accent-hover);
+  }
+  .wu-btn--secondary {
+    --_bg: var(--surface);
+    --_fg: var(--text);
+    --_bd: var(--border-strong);
+  }
+  .wu-btn--secondary:hover {
+    --_bg: var(--surface-hover);
+  }
+  .wu-btn--ghost {
+    --_fg: var(--text-muted);
+  }
+  .wu-btn--ghost:hover {
+    --_bg: var(--surface-hover);
+    --_fg: var(--text);
+  }
+  .wu-btn--danger {
+    --_fg: var(--negative);
+    --_bd: var(--border);
+  }
+  .wu-btn--danger:hover {
+    --_bg: var(--negative-soft);
+  }
+  .wu-btn--sm {
+    min-height: 30px;
+    padding: 0 var(--space-3);
+    font-size: 0.75rem;
+  }
+  .wu-btn--icon {
+    min-height: 32px;
+    width: 32px;
+    padding: 0;
+  }
+  .wu-btn--block {
+    display: flex;
+    width: 100%;
+  }
+
+  /* ---- fields --------------------------------------------------------- */
+  .wu-field {
+    width: 100%;
+    min-height: 36px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font: var(--weight-regular) 0.8125rem / 1.4 var(--font-sans);
+    transition: border-color var(--dur-fast) var(--ease-standard);
+  }
+  textarea.wu-field {
+    min-height: 72px;
+    padding: var(--space-2) var(--space-3);
+    resize: vertical;
+  }
+  .wu-field:hover {
+    border-color: var(--border-strong);
+  }
+  .wu-field:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+  .wu-field.is-invalid {
+    border-color: var(--negative);
+  }
+  .wu-field::placeholder {
+    color: var(--text-faint);
+  }
+  .wu-field-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .wu-field-row--wide {
+    grid-column: 1 / -1;
+  }
+  .wu-field-row__label {
+    font: var(--weight-medium) var(--text-caption) / 1.3 var(--font-sans);
+    color: var(--text-muted);
+  }
+  .wu-field-row__hint {
+    font: var(--weight-regular) var(--text-overline) / 1.3 var(--font-sans);
+    color: var(--text-faint);
+  }
+  .wu-field-row__error {
+    font: var(--weight-medium) var(--text-overline) / 1.3 var(--font-sans);
+    color: var(--negative);
+  }
+  .wu-field-row__error.is-ok {
+    color: var(--positive);
+  }
+
+  /* ---- switch (styled checkbox) ---------------------------------------- */
+  .wu-switch {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    cursor: pointer;
+    font: var(--weight-regular) var(--text-body-sm) / 1.4 var(--font-sans);
+    color: var(--text);
+  }
+  .wu-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .wu-switch__track {
+    flex: none;
+    width: 36px;
+    height: 20px;
+    border-radius: var(--radius-pill);
+    background: var(--border);
+    transition: background var(--dur-fast) var(--ease-standard);
+    position: relative;
+  }
+  .wu-switch__track::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--surface-raised);
+    transition: transform var(--dur-fast) var(--ease-standard);
+  }
+  .wu-switch input:checked + .wu-switch__track {
+    background: var(--accent);
+  }
+  .wu-switch input:checked + .wu-switch__track::after {
+    transform: translateX(16px);
+  }
+  .wu-switch input:focus-visible + .wu-switch__track {
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+
+  /* ---- pick (a selectable list row, as a button) ---------------------- */
+  .wu-pick {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-left: 3px solid transparent;
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+      background var(--dur-fast) var(--ease-standard);
+  }
+  .wu-pick:hover {
+    border-color: var(--border-strong);
+  }
+  .wu-pick:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+  .wu-pick.is-selected {
+    border-left-color: var(--accent);
+    background: var(--surface-raised);
+  }
+
+  /* ---- chip (compact radio / toggle pill) --------------------------- */
+  .wu-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    color: var(--text-muted);
+    font: var(--weight-medium) var(--text-body-sm) / 1.3 var(--font-sans);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+      background var(--dur-fast) var(--ease-standard),
+      color var(--dur-fast) var(--ease-standard);
+  }
+  .wu-chip:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+  .wu-chip input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .wu-chip:has(input:checked) {
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .wu-chip:has(input:focus-visible) {
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+
+  /* ---- list (label / value / action rows) ---------------------------- */
+  .wu-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .wu-list__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-top: 1px solid var(--border-subtle);
+    font: var(--weight-regular) var(--text-body-sm) / 1.4 var(--font-sans);
+  }
+  .wu-list__row:first-child {
+    border-top: none;
+  }
+  .wu-list__row > :first-child {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-muted);
+  }
+
+  /* ---- details (collapsible card) ------------------------------------- */
+  .wu-details {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .wu-details__summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    cursor: pointer;
+    list-style: none;
+    color: var(--text);
+  }
+  .wu-details__summary::-webkit-details-marker {
+    display: none;
+  }
+  .wu-details__summary::after {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-right: 1.5px solid var(--text-faint);
+    border-bottom: 1.5px solid var(--text-faint);
+    transform: rotate(45deg);
+    transition: transform var(--dur-fast) var(--ease-standard);
+    flex: none;
+  }
+  .wu-details[open] > .wu-details__summary::after {
+    transform: rotate(-135deg);
+  }
+  .wu-details__summary:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 3px var(--focus);
+  }
+  .wu-details > :not(.wu-details__summary) {
+    padding: 0 var(--space-5) var(--space-5);
+  }
+  .wu-details > .wu-list {
+    padding-top: 0;
+  }
+
+  /* ---- table ------------------------------------------------------------- */
+  .wu-table-wrap {
+    overflow-x: auto;
+  }
+  .wu-table {
+    width: 100%;
+    border-collapse: collapse;
+    font: var(--weight-regular) var(--text-body-sm) / 1.4 var(--font-sans);
+  }
+  .wu-table th,
+  .wu-table td {
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+    border-bottom: 1px solid var(--border-subtle);
+    white-space: nowrap;
+  }
+  .wu-table th {
+    font: var(--weight-semibold) var(--text-overline) / 1.3 var(--font-sans);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .wu-table td {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .wu-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* A caption hung under a figure — where the number came from, or what
+     qualifies it. Sits inside a <dd> or beside a value, so it claims its own
+     line rather than a block of its own. */
+  .wu-note {
+    display: block;
+    margin-top: 2px;
+    font: var(--weight-regular) var(--text-caption) / 1.4 var(--font-sans);
+    color: var(--text-faint);
+  }
+  .wu-list__row:has(dt) {
+    align-items: start;
+  }
+  .wu-list__row:has(dt) > dt {
+    flex: none;
+    color: var(--text-muted);
+  }
+  .wu-list__row:has(dt) > dd {
+    flex: 1;
+    margin: 0;
+    text-align: right;
+    color: var(--text);
+    min-width: 0;
+  }
+
+  /* ---- legacy-name aliases (still emitted by a few binds / components) --- */
+  .eyebrow {
+    display: inline-block;
+    font: var(--weight-semibold) var(--text-overline) / 1.3 var(--font-sans);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .form-error {
+    display: block;
+    min-height: 1em;
+    font: var(--weight-medium) var(--text-overline) / 1.3 var(--font-sans);
+    color: var(--negative);
+  }
+  .empty-state {
+    padding: var(--space-6);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    color: var(--text-muted);
+    font: var(--weight-regular) var(--text-body-sm) / 1.55 var(--font-sans);
+    text-align: center;
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Privacy mode: main.ts / ui.ts toggle .mask-financial-amounts on <body>.
+     Every headline figure is a wu-metric__value and every inline amount is a
+     .t-num, so blurring those covers the money on screen. */
+  .mask-financial-amounts .wu-metric__value,
+  .mask-financial-amounts .wu-metric__note,
+  .mask-financial-amounts .t-num,
+  .mask-financial-amounts .t-num-lg,
+  .mask-financial-amounts .t-num-xl,
+  .mask-financial-amounts .wu-list__row > dd,
+  .mask-financial-amounts .wu-note {
+    filter: blur(7px);
+    user-select: none;
+  }
+
+  /* ---- empty state ------------------------------------------------------- */
+  .wu-empty {
+    padding: var(--space-6);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-lg);
+    color: var(--text-muted);
+    font: var(--weight-regular) var(--text-body-sm) / 1.55 var(--font-sans);
+    text-align: center;
+  }
+
+  /* ---- card ---------------------------------------------------------- */
+  .wu-card {
+    display: block;
+    padding: var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    color: var(--text);
+  }
+  .wu-card--pad-sm {
+    padding: var(--space-4);
+  }
+  .wu-card--inset {
+    background: var(--surface-raised);
+  }
+  .wu-card--bare {
+    padding: 0;
+    border: none;
+    background: none;
+  }
+  .wu-card--positive {
+    border-left: 3px solid var(--positive);
+  }
+  .wu-card--warning {
+    border-left: 3px solid var(--warning);
+  }
+  .wu-card--negative {
+    border-left: 3px solid var(--negative);
+  }
+  .wu-card--accent {
+    border-left: 3px solid var(--accent);
+  }
+  /* An "add" affordance: a real <button> that reads as a card. */
+  .wu-add {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    min-height: 132px;
+    width: 100%;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-lg);
+    background: none;
+    color: var(--text-faint);
+    font: var(--weight-medium) var(--text-body-sm) / 1.3 var(--font-sans);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+      color var(--dur-fast) var(--ease-standard);
+  }
+  .wu-add:hover {
+    border-color: var(--accent-line);
+    color: var(--text-muted);
+  }
+  .wu-add:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+  .wu-add__plus {
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+  .wu-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+  .wu-card__title {
+    color: var(--text);
+  }
+  .wu-card__footer {
+    margin-top: var(--space-4);
+  }
+
+  /* ---- label (micro caption) --------------------------------------------- */
+  .wu-label {
+    display: inline-block;
+    font: var(--weight-semibold) var(--text-overline) / 1.3 var(--font-sans);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .wu-label--plain {
+    letter-spacing: 0;
+    text-transform: none;
+    font-weight: var(--weight-regular);
+  }
+
+  /* ---- metric ------------------------------------------------------------ */
+  .wu-metric {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .wu-metric__value {
+    font-family: var(--font-mono);
+    font-weight: var(--weight-semibold);
+    font-size: var(--text-num-lg);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+  .wu-metric--hero .wu-metric__value {
+    font-size: var(--text-num-xl);
+    line-height: 1.1;
+    letter-spacing: var(--tracking-tight);
+  }
+  .wu-metric__value--positive {
+    color: var(--positive);
+  }
+  .wu-metric__value--negative {
+    color: var(--negative);
+  }
+  .wu-metric__delta {
+    font: var(--weight-medium) var(--text-caption) / 1 var(--font-sans);
+    color: var(--text-muted);
+  }
+  .wu-metric__delta--up {
+    color: var(--positive);
+  }
+  .wu-metric__delta--down {
+    color: var(--negative);
+  }
+  .wu-metric__note {
+    color: var(--text-muted);
+  }
+  .wu-metric--end {
+    align-items: flex-end;
+    text-align: right;
+  }
+  /* strip the user-agent fieldset chrome when it only groups form controls */
+  .wu-fieldset {
+    border: none;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+  }
+  .wu-fieldset > legend {
+    padding: 0;
+    margin-bottom: var(--space-1);
+  }
+
+  /* ---- segmented tabs -------------------------------------------------- */
+  .wu-segmented {
+    display: inline-flex;
+    align-self: flex-start; /* hug content when it's a flex-item (e.g. in wu-stack) */
+    gap: 2px;
+    padding: 3px;
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .wu-segmented__option {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    padding: var(--space-1) var(--space-3);
+    border-radius: calc(var(--radius-md) - 4px);
+    font: var(--weight-semibold) 0.75rem / 1 var(--font-sans);
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard),
+      color var(--dur-fast) var(--ease-standard);
+  }
+  .wu-segmented__option:hover {
+    color: var(--text);
+  }
+  .wu-segmented__option.is-active {
+    background: var(--surface-raised);
+    color: var(--text);
+    box-shadow: var(--shadow-xs);
+  }
+  .wu-segmented__option:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+
+  /* ---- badge --------------------------------------------------------- */
+  .wu-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    flex: none;
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-pill);
+    font: var(--weight-semibold) var(--text-overline) / 1.4 var(--font-sans);
+    white-space: nowrap;
+    background: var(--surface-hover);
+    color: var(--text-muted);
+  }
+  .wu-badge--positive {
+    background: var(--positive-soft);
+    color: var(--positive);
+  }
+  .wu-badge--warning {
+    background: var(--warning-soft);
+    color: var(--warning);
+  }
+  .wu-badge--negative {
+    background: var(--negative-soft);
+    color: var(--negative);
+  }
+  .wu-badge--accent {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .wu-badge--neutral {
+    background: var(--surface-hover);
+    color: var(--text-muted);
+  }
+
+  /* ---- ledger page layout ------------------------------------------------ */
+  /* The entry form is a sticky sidebar; everything else is the main column. */
+  .wu-ledger-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+    gap: var(--space-4);
+    align-items: start;
+  }
+  .wu-ledger-entry {
+    position: sticky;
+    top: var(--space-4);
+  }
+  .wu-ledger-filter-fields .custom-date {
+    display: none;
+  }
+  .wu-ledger-filter-fields.show-custom .custom-date {
+    display: flex;
+  }
+  @media (max-width: 1100px) {
+    .wu-ledger-layout {
+      grid-template-columns: 1fr;
+    }
+    .wu-ledger-entry {
+      position: static;
+    }
+  }
+
+  /* ---- market page controls -------------------------------------------- */
+  /* bindMarket manages the .active state on these itself (it patches the DOM
+     instead of re-rendering), so the class names and the .active hook stay;
+     only the look is brought into the wu idiom. */
+  .market-tabs,
+  .market-intervals,
+  .etf-holdings-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    width: fit-content;
+    max-width: 100%;
+  }
+  .market-tab-btn,
+  .interval-btn,
+  .etf-holdings-tab {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    padding: var(--space-1) var(--space-3);
+    border-radius: calc(var(--radius-md) - 4px);
+    font: var(--weight-semibold) 0.75rem / 1 var(--font-sans);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--dur-fast) var(--ease-standard),
+      color var(--dur-fast) var(--ease-standard);
+  }
+  .market-tab-btn:hover,
+  .interval-btn:hover,
+  .etf-holdings-tab:hover {
+    color: var(--text);
+  }
+  .market-tab-btn.active,
+  .interval-btn.active,
+  .etf-holdings-tab.active {
+    background: var(--surface-raised);
+    color: var(--text);
+    box-shadow: var(--shadow-xs);
+  }
+  .market-tab-btn:focus-visible,
+  .interval-btn:focus-visible,
+  .etf-holdings-tab:focus-visible,
+  .market-symbol-btn:focus-visible,
+  .market-symbol-remove:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+  .market-tab-content {
+    display: none;
+  }
+  .market-tab-content.active {
+    display: block;
+  }
+  .market-symbols {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+  .market-custom-symbol {
+    display: inline-flex;
+    align-items: stretch;
+    flex: none;
+  }
+  .market-symbol-btn {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 2px;
+    min-width: 120px;
+    min-height: 0;
+    height: auto;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+      background var(--dur-fast) var(--ease-standard);
+  }
+  .market-symbol-btn:hover {
+    border-color: var(--border-strong);
+  }
+  .market-symbol-btn strong {
+    font: var(--weight-semibold) var(--text-subheading) / 1 var(--font-sans);
+  }
+  .market-symbol-btn small {
+    font: var(--weight-regular) var(--text-overline) / 1.2 var(--font-sans);
+    color: var(--text-faint);
+  }
+  .market-symbol-btn.active {
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+  }
+  .market-symbol-btn.active strong {
+    color: var(--accent);
+  }
+  .market-custom-symbol .market-symbol-btn {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .market-symbol-remove {
+    border: 1px solid var(--border);
+    border-left: none;
+    border-top-right-radius: var(--radius-sm);
+    border-bottom-right-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-faint);
+    padding: 0 var(--space-2);
+    cursor: pointer;
+    transition: color var(--dur-fast) var(--ease-standard),
+      background var(--dur-fast) var(--ease-standard);
+  }
+  .market-symbol-remove:hover {
+    color: var(--negative);
+    background: var(--negative-soft);
+  }
+  .etf-holding-track {
+    height: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--border);
+    overflow: hidden;
+  }
+  .etf-holding-track > i {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    border-radius: inherit;
+  }
+
+  /* ---- Rules → How WealthUp works ---------------------------------------
+     Explanatory rows, not figures: the term and its explanation stack and the
+     text runs full width, where a wu-list row would otherwise push a value to
+     the right and squeeze a sentence into a column. */
+  /* Two classes deep on purpose: .wu-list__row:has(dt) > dd right-aligns the
+     value, which is right for a figure and wrong for a sentence. */
+  .wu-list__row.guide-row {
+    display: block;
+    padding: var(--space-3) 0;
+  }
+  .wu-list__row.guide-row > dt {
+    margin-bottom: var(--space-1);
+    color: var(--text);
+  }
+  .wu-list__row.guide-row > dd {
+    max-width: 68ch;
+    text-align: left;
+  }
+  .rules-guide .guide-steps {
+    margin: 0;
+    padding-left: var(--space-5);
+  }
+  .rules-guide .guide-steps > li {
+    padding-left: var(--space-1);
+  }
+  .rules-guide .guide-steps > li::marker {
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * Buy/sell direction arrow in the Market trade list. Fixed width so the
+   * dates below it line up whichever way the trade went.
+   */
+  .market-trade-dir {
+    flex: none;
+    width: 1em;
+    font-weight: var(--weight-semibold);
+  }
+  .market-trade-dir.is-buy {
+    color: var(--positive);
+  }
+  .market-trade-dir.is-sell {
+    color: var(--negative);
+  }
+
+  /* ---- progress bar ------------------------------------------------------ */
+  .wu-bar {
+    width: 100%;
+    height: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--border);
+    overflow: hidden;
+  }
+  .wu-bar__fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width var(--dur-slow) var(--ease-out);
+  }
+  .wu-bar__fill--warning {
+    background: var(--warning);
+  }
+  .wu-bar__fill--faint {
+    background: var(--text-faint);
+  }
+}
