@@ -13,71 +13,120 @@
 import type { WealthState } from "../models";
 import { createId } from "../state";
 import { money } from "../rules";
-import { escapeHtml, numberInput } from "../html";
+import { escapeHtml } from "../html";
+import { pageHeader } from "../components/pageHeader";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
+/** A labelled control in a settings form's 2-col grid. */
+function field(label: string, control: string, wide = false): string {
+  return `<label class="wu-field-row${wide ? " wu-field-row--wide" : ""}"><span class="wu-field-row__label">${label}</span>${control}</label>`;
+}
+
+/** A number field pre-filled from state. */
+function num(name: string, label: string, value: string, step: string, wide = false): string {
+  return field(label, `<input class="wu-field" name="${name}" type="number" step="${step}" value="${value}">`, wide);
+}
+
+function settingsCard(title: string, formId: string, saveLabel: string, body: string): string {
+  return `<div class="wu-card">
+    <div class="wu-card__header"><h3 class="wu-card__title t-heading">${title}</h3></div>
+    <form id="${formId}" class="wu-grid wu-grid--2">
+      ${body}
+      <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">${saveLabel}</button></div>
+    </form>
+  </div>`;
+}
+
 export function settingsTemplate(state: WealthState): string {
+  const opt = (v: string, sel: boolean) => `<option${sel ? " selected" : ""}>${v}</option>`;
+
+  const profile = settingsCard("Investor Profile", "profileForm", "Save Profile",
+    field("Name", `<input class="wu-field" name="name" type="text" value="${escapeHtml(state.profile.name)}">`) +
+    field("Age", `<input class="wu-field" name="age" type="number" min="16" max="100" step="1" value="${state.profile.age}">`) +
+    field("Risk Tolerance", `<select class="wu-field" name="riskTolerance">${opt("High", state.profile.riskTolerance === "High")}${opt("Medium", state.profile.riskTolerance === "Medium")}${opt("Low", state.profile.riskTolerance === "Low")}</select>`) +
+    field("Stage", `<select class="wu-field" name="stage">${opt("Student", state.profile.stage === "Student")}${opt("Early Career", state.profile.stage === "Early Career")}${opt("Mid Career", state.profile.stage === "Mid Career")}${opt("Pre-Retirement", state.profile.stage === "Pre-Retirement")}</select>`) +
+    num("investmentHorizonYears", "Investment Horizon (years)", String(state.profile.investmentHorizonYears), "1") +
+    field("Base Currency", `<select class="wu-field" name="baseCurrency">${opt("MYR", state.profile.baseCurrency === "MYR")}${opt("USD", state.profile.baseCurrency === "USD")}</select>`));
+
+  const recurringRows = state.recurringTransactions.map((item) =>
+    `<li class="wu-list__row"><span>${escapeHtml(item.label)} &middot; ${item.type} &middot; day ${item.dayOfMonth}${item.dayOfMonth >= 29 ? " &middot; short-month fallback" : ""}</span><strong class="t-num">${money(item.amount)}</strong><button class="wu-btn wu-btn--ghost wu-btn--icon delete-recurring" data-id="${escapeHtml(item.id)}" type="button" aria-label="Delete recurring item">&times;</button></li>`).join("");
+  const recurring = `<div class="wu-card">
+    <div class="wu-card__header"><h3 class="wu-card__title t-heading">Recurring Cash Flow</h3></div>
+    <form id="recurringForm" class="wu-grid wu-grid--2">
+      ${field("Label", `<input class="wu-field" name="label" maxlength="60" required>`)}
+      ${num("amount", "Amount MYR", "", "0.01")}
+      ${field("Type", `<select class="wu-field" name="type"><option value="expense">Expense</option><option value="income">Income</option></select>`)}
+      ${field("Day of month", `<input class="wu-field" name="dayOfMonth" type="number" min="1" max="31" value="1" required>`)}
+      <p class="wu-field-row--wide t-caption t-faint">If a month is shorter, it runs on the last day.</p>
+      <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Add recurring item</button></div>
+    </form>
+    <ul class="wu-list">${recurringRows}</ul>
+    ${state.recurringTransactions.length === 0 ? `<p class="wu-empty">No recurring items.</p>` : ""}
+  </div>`;
+
+  const liabilityRows = state.liabilities.map((item) =>
+    `<li class="wu-list__row"><span>${escapeHtml(item.name)} &middot; ${item.annualRate.toFixed(2)}%</span><strong class="t-num">${money(item.balance)}</strong><button class="wu-btn wu-btn--ghost wu-btn--icon delete-liability" data-id="${escapeHtml(item.id)}" type="button" aria-label="Delete liability">&times;</button></li>`).join("");
+  const liabilities = `<div class="wu-card">
+    <div class="wu-card__header"><h3 class="wu-card__title t-heading">Liabilities</h3></div>
+    <form id="liabilityForm" class="wu-grid wu-grid--2">
+      ${field("Name", `<input class="wu-field" name="name" maxlength="60" required>`)}
+      ${num("balance", "Balance MYR", "", "0.01")}
+      ${num("annualRate", "Annual rate %", "0", "0.01")}
+      ${num("minimumPayment", "Minimum payment MYR", "0", "0.01")}
+      <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Add liability</button></div>
+    </form>
+    <ul class="wu-list">${liabilityRows}</ul>
+    ${state.liabilities.length === 0 ? `<p class="wu-empty">No liabilities recorded.</p>` : ""}
+  </div>`;
+
+  const sw = (name: string, checked: boolean, label: string) =>
+    `<label class="wu-switch"><input name="${name}" type="checkbox"${checked ? " checked" : ""}><span class="wu-switch__track"></span><span class="wu-switch__label">${label}</span></label>`;
+  const privacy = `<div class="wu-card">
+    <div class="wu-card__header"><h3 class="wu-card__title t-heading">Privacy</h3></div>
+    <form id="privacyForm" class="wu-stack">
+      ${sw("maskAmounts", state.privacy.maskAmounts, "Mask financial amounts on screen")}
+      ${sw("requireExportConfirmation", state.privacy.requireExportConfirmation, "Confirm before exporting financial data")}
+      <div class="wu-row"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save privacy</button></div>
+    </form>
+  </div>`;
+
+  const cashflow = settingsCard("Cashflow &amp; DCA", "cashflowForm", "Save Cashflow",
+    num("allowance", "Monthly Allowance MYR", String(state.cashflow.allowance), "1") +
+    num("transport", "Transport MYR", String(state.cashflow.transport), "1") +
+    num("food", "Food MYR", String(state.cashflow.food), "1") +
+    num("otherFixed", "Other Fixed MYR", String(state.cashflow.otherFixed), "1") +
+    num("irregularIncome", "Irregular Income MYR", String(state.cashflow.irregularIncome), "1") +
+    num("dcaMonthly", "DCA Monthly MYR", String(state.dca.monthly), "1"));
+
+  const emergency = settingsCard("Emergency Fund", "emergencyForm", "Save Emergency",
+    num("current", "Current Emergency MYR", String(state.emergency.current), "1") +
+    num("target", "Target Emergency MYR", String(state.emergency.target), "1") +
+    num("monthlyTopUp", "Monthly Top-Up MYR", String(state.emergency.monthlyTopUp), "1") +
+    num("annualYield", "Annual Yield %", String(Math.round(state.emergency.annualYield * 10000) / 100), "0.01"));
+
+  const targets = settingsCard("DCA Targets", "targetsForm", "Save Targets",
+    num("vooTarget", "VOO Target %", String(Math.round(state.dca.targets.VOO * 100)), "1") +
+    num("qqqmTarget", "QQQM Target %", String(Math.round(state.dca.targets.QQQM * 100)), "1") +
+    num("opportunityTotal", "Opportunity Reserve MYR", String(state.opportunity.total), "1") +
+    num("vooAlloc", "Opportunity VOO MYR", String(state.opportunity.allocation.VOO), "1") +
+    num("qqqmAlloc", "Opportunity QQQM MYR", String(state.opportunity.allocation.QQQM), "1"));
+
   return `
-    <div class="section-title"><span class="eyebrow">Configuration</span><h3>Profile and Parameters</h3><p>Adjust your investor profile, cash flow, and investment parameters.</p></div>
-    <div class="settings-grid">
-      <article class="card settings-section">
-        <h3>👤 Investor Profile</h3>
-        <form id="profileForm" class="form-grid">
-          <label>Name<input name="name" type="text" value="${escapeHtml(state.profile.name)}"></label>
-          <label>Age<input name="age" type="number" min="16" max="100" step="1" value="${state.profile.age}"></label>
-          <label>Risk Tolerance<select name="riskTolerance"><option${state.profile.riskTolerance === "High" ? " selected" : ""}>High</option><option${state.profile.riskTolerance === "Medium" ? " selected" : ""}>Medium</option><option${state.profile.riskTolerance === "Low" ? " selected" : ""}>Low</option></select></label>
-          <label>Stage<select name="stage"><option${state.profile.stage === "Student" ? " selected" : ""}>Student</option><option${state.profile.stage === "Early Career" ? " selected" : ""}>Early Career</option><option${state.profile.stage === "Mid Career" ? " selected" : ""}>Mid Career</option><option${state.profile.stage === "Pre-Retirement" ? " selected" : ""}>Pre-Retirement</option></select></label>
-          ${numberInput("investmentHorizonYears", "Investment Horizon (years)", String(state.profile.investmentHorizonYears), "1")}
-          <label>Base Currency<select name="baseCurrency"><option${state.profile.baseCurrency === "MYR" ? " selected" : ""}>MYR</option><option${state.profile.baseCurrency === "USD" ? " selected" : ""}>USD</option></select></label>
-          <button class="primary-button" type="submit">Save Profile</button>
-        </form>
-      </article>
-      <article class="card settings-section">
-        <h3>Recurring Cash Flow</h3>
-        <form id="recurringForm" class="form-grid"><label>Label<input name="label" maxlength="60" required></label>${numberInput("amount", "Amount MYR", "", "0.01")}<label>Type<select name="type"><option value="expense">Expense</option><option value="income">Income</option></select></label><label>Day of month<input name="dayOfMonth" type="number" min="1" max="31" value="1" required><small class="field-hint">If a month is shorter, it runs on the last day.</small></label><button class="primary-button" type="submit">Add recurring item</button></form>
-        <div class="settings-list">${state.recurringTransactions.map((item) => `<div><span>${escapeHtml(item.label)} · ${item.type} · day ${item.dayOfMonth}${item.dayOfMonth >= 29 ? " · short-month fallback" : ""}</span><strong>${money(item.amount)}</strong><button class="icon-button danger delete-recurring" data-id="${escapeHtml(item.id)}" aria-label="Delete recurring item">✕</button></div>`).join("") || '<p class="empty-state">No recurring items.</p>'}</div>
-      </article>
-      <article class="card settings-section">
-        <h3>Liabilities</h3>
-        <form id="liabilityForm" class="form-grid"><label>Name<input name="name" maxlength="60" required></label>${numberInput("balance", "Balance MYR", "", "0.01")}${numberInput("annualRate", "Annual rate %", "0", "0.01")}${numberInput("minimumPayment", "Minimum payment MYR", "0", "0.01")}<button class="primary-button" type="submit">Add liability</button></form>
-        <div class="settings-list">${state.liabilities.map((item) => `<div><span>${escapeHtml(item.name)} · ${item.annualRate.toFixed(2)}%</span><strong>${money(item.balance)}</strong><button class="icon-button danger delete-liability" data-id="${escapeHtml(item.id)}" aria-label="Delete liability">✕</button></div>`).join("") || '<p class="empty-state">No liabilities recorded.</p>'}</div>
-      </article>
-      <article class="card settings-section">
-        <h3>Privacy</h3><form id="privacyForm"><label class="setting-check"><input name="maskAmounts" type="checkbox"${state.privacy.maskAmounts ? " checked" : ""}>Mask financial amounts on screen</label><label class="setting-check"><input name="requireExportConfirmation" type="checkbox"${state.privacy.requireExportConfirmation ? " checked" : ""}>Confirm before exporting financial data</label><button class="primary-button" type="submit">Save privacy</button></form>
-      </article>
-      <article class="card settings-section">
-        <h3>💰 Cashflow & DCA</h3>
-        <form id="cashflowForm" class="form-grid">
-          ${numberInput("allowance", "Monthly Allowance MYR", String(state.cashflow.allowance), "1")}
-          ${numberInput("transport", "Transport MYR", String(state.cashflow.transport), "1")}
-          ${numberInput("food", "Food MYR", String(state.cashflow.food), "1")}
-          ${numberInput("otherFixed", "Other Fixed MYR", String(state.cashflow.otherFixed), "1")}
-          ${numberInput("irregularIncome", "Irregular Income MYR", String(state.cashflow.irregularIncome), "1")}
-          ${numberInput("dcaMonthly", "DCA Monthly MYR", String(state.dca.monthly), "1")}
-          <button class="primary-button" type="submit">Save Cashflow</button>
-        </form>
-      </article>
-      <article class="card settings-section">
-        <h3>🛡️ Emergency Fund</h3>
-        <form id="emergencyForm" class="form-grid">
-          ${numberInput("current", "Current Emergency MYR", String(state.emergency.current), "1")}
-          ${numberInput("target", "Target Emergency MYR", String(state.emergency.target), "1")}
-          ${numberInput("monthlyTopUp", "Monthly Top-Up MYR", String(state.emergency.monthlyTopUp), "1")}
-          ${numberInput("annualYield", "Annual Yield %", String(state.emergency.annualYield * 100), "0.01")}
-          <button class="primary-button" type="submit">Save Emergency</button>
-        </form>
-      </article>
-      <article class="card settings-section">
-        <h3>🎯 DCA Targets</h3>
-        <form id="targetsForm" class="form-grid">
-          ${numberInput("vooTarget", "VOO Target %", String(Math.round(state.dca.targets.VOO * 100)), "1")}
-          ${numberInput("qqqmTarget", "QQQM Target %", String(Math.round(state.dca.targets.QQQM * 100)), "1")}
-          ${numberInput("opportunityTotal", "Opportunity Reserve MYR", String(state.opportunity.total), "1")}
-          ${numberInput("vooAlloc", "Opportunity VOO MYR", String(state.opportunity.allocation.VOO), "1")}
-          ${numberInput("qqqmAlloc", "Opportunity QQQM MYR", String(state.opportunity.allocation.QQQM), "1")}
-          <button class="primary-button" type="submit">Save Targets</button>
-        </form>
-      </article>
+    <div class="wu">
+      ${pageHeader({
+        eyebrow: "Configuration",
+        title: "Profile and Parameters",
+        sub: "Adjust your investor profile, cash flow, and investment parameters.",
+      })}
+      <div class="wu-grid wu-grid--wide">
+        ${profile}
+        ${recurring}
+        ${liabilities}
+        ${privacy}
+        ${cashflow}
+        ${emergency}
+        ${targets}
+      </div>
     </div>
   `;
 }
