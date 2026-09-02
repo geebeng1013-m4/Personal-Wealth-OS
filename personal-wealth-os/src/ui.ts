@@ -79,7 +79,7 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
   const themeIcon = getTheme() === "dark" ? "☀️" : "🌙";
   const active = pages.find(([id]) => id === activePage);
   const toolsOpen = sidebarToolsOpen();
-  const userBadge = user ? `<div class="user-badge"><img src="${escapeHtml(user.photoURL || "")}" alt="" class="user-avatar" referrerpolicy="no-referrer"><span class="user-name">${escapeHtml(user.displayName || user.email || "User")}</span><button class="secondary-button logout-btn" type="button">Sign Out</button></div>` : "";
+  const userBadge = user ? `<div class="user-badge"><img src="${escapeHtml(user.photoURL || "")}" alt="" class="user-avatar" referrerpolicy="no-referrer"><span class="user-name">${escapeHtml(user.displayName || user.email || "User")}</span><button class="wu-btn wu-btn--ghost wu-btn--sm logout-btn" type="button">Sign Out</button></div>` : "";
   return `
     <button class="hamburger" id="sidebarToggle" type="button" aria-label="Open navigation" aria-expanded="false">☰</button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -110,15 +110,15 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
         <details class="sidebar-tools" id="sidebarTools"${toolsOpen ? " open" : ""}>
           <summary><span>Data &amp; tools</span><span class="sidebar-tools__chevron" aria-hidden="true">›</span></summary>
           <div class="sidebar-tools__content">
-            <button class="secondary-button install-btn" id="installPwa" type="button">Add to Home Screen</button>
+            <button class="wu-btn wu-btn--secondary wu-btn--sm wu-btn--block install-btn" id="installPwa" type="button">Add to Home Screen</button>
             <div class="sidebar-actions-row">
               <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme" title="Toggle theme">${themeIcon}</button>
-              <button class="secondary-button" id="exportJson" type="button">Export</button>
-              <label class="file-button">Import<input id="importJson" type="file" accept="application/json"></label>
+              <button class="wu-btn wu-btn--secondary wu-btn--sm" id="exportJson" type="button">Export</button>
+              <label class="wu-btn wu-btn--secondary wu-btn--sm file-button">Import<input id="importJson" type="file" accept="application/json"></label>
             </div>
             <div class="sidebar-actions-row">
-              <button class="secondary-button" id="versionHistory" type="button">Version History</button>
-              <button class="danger-button" id="resetData" type="button">Reset</button>
+              <button class="wu-btn wu-btn--secondary wu-btn--sm" id="versionHistory" type="button">Version History</button>
+              <button class="wu-btn wu-btn--danger wu-btn--sm" id="resetData" type="button">Reset</button>
             </div>
           </div>
         </details>
@@ -130,7 +130,7 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
       </div>
       <header class="topbar">
         <div>
-          <span class="eyebrow">Personal CFO Operating System</span>
+          <span class="eyebrow t-overline">Personal CFO Operating System</span>
           <h2>${active?.[1] ?? "Overview"}<span>${active?.[2] ?? "Dashboard"}</span></h2>
         </div>
       </header>
@@ -191,41 +191,26 @@ export function quickViewTemplate(state: WealthState): string {
   // and the Dashboard can never disagree about how funded a goal is.
   const targetRows = getGoalsSnapshot(state).ordered.map((g) => {
     const pct = Math.round(g.progress * 100);
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);">' +
-      '<span style="font-size:13px;color:var(--ink-2);">' + escapeHtml(g.label) + '</span>' +
-      '<span style="font-size:13px;font-weight:600;color:' + (pct >= 80 ? 'var(--green)' : 'var(--ink)') + ';">' + pct + '%</span>' +
-    '</div>';
-  }).join('');
+    return `<div class="wu-list__row"><span>${escapeHtml(g.label)}</span><strong class="t-num${pct >= 80 ? " wu-metric__value--positive" : ""}">${pct}%</strong></div>`;
+  }).join("");
 
   return `
-    <div style="max-width:400px;margin:0 auto;">
-      <div style="text-align:center;margin-bottom:20px;">
+    <div class="wu wu-stack" style="max-width:400px;margin:0 auto">
+      <div style="text-align:center">
         <img class="brand-logo brand-logo-dialog" src="/brand/wealthup-logo.png" alt="WEALTHUP Personal Wealth OS">
-        <p style="font-size:12px;color:var(--ink-3);margin:4px 0 0;">Quick Overview</p>
+        <p class="t-caption t-faint">Quick Overview</p>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
-        <div style="background:var(--surface);border-radius:12px;padding:14px;text-align:center;">
-          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">INVESTED</div>
-          <div style="font-size:20px;font-weight:700;color:var(--green);">${money(investedMyr)}</div>
-        </div>
-        <div style="background:var(--surface);border-radius:12px;padding:14px;text-align:center;">
-          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">EMERGENCY</div>
-          <div style="font-size:20px;font-weight:700;color:${emergency >= 0.8 ? 'var(--green)' : 'var(--ink)'};">${percent(emergency)}</div>
-        </div>
-        <div style="background:var(--surface);border-radius:12px;padding:14px;text-align:center;">
-          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">PLANNED SURPLUS</div>
-          <div style="font-size:20px;font-weight:700;">${money(surplus)}</div>
-        </div>
-        <div style="background:var(--surface);border-radius:12px;padding:14px;text-align:center;">
-          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">DCA / MONTH</div>
-          <div style="font-size:20px;font-weight:700;">${money(state.dca.monthly)}</div>
-        </div>
+      <div class="wu-grid wu-grid--2">
+        <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">Invested</span><span class="wu-metric__value t-num wu-metric__value--positive">${money(investedMyr)}</span></div></div>
+        <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">Emergency</span><span class="wu-metric__value t-num${emergency >= 0.8 ? " wu-metric__value--positive" : ""}">${percent(emergency)}</span></div></div>
+        <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">Planned Surplus</span><span class="wu-metric__value t-num">${money(surplus)}</span></div></div>
+        <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">DCA / Month</span><span class="wu-metric__value t-num">${money(state.dca.monthly)}</span></div></div>
       </div>
 
-      ${state.goals.length > 0 ? '<div style="background:var(--surface);border-radius:12px;padding:14px;margin-bottom:16px;"><div style="font-size:11px;color:var(--ink-3);margin-bottom:8px;">GOALS</div>' + targetRows + '</div>' : ''}
+      ${state.goals.length > 0 ? `<div class="wu-card wu-card--inset wu-card--pad-sm"><span class="wu-label">Goals</span><div class="wu-list">${targetRows}</div></div>` : ""}
 
-      <button class="primary-button" id="openFullApp" type="button" style="width:100%;padding:14px;font-size:14px;">Open Full App</button>
+      <button class="wu-btn wu-btn--primary wu-btn--block" id="openFullApp" type="button">Open Full App</button>
     </div>
   `;
 }
@@ -432,34 +417,29 @@ function renderVersionHistoryModal(root: HTMLElement, setState: Setter, snapshot
   }
 
   const listHtml = snapshots.length === 0
-    ? '<div style="text-align:center;padding:40px 20px;color:var(--ink-3);"><div style="font-size:32px;margin-bottom:8px;">📋</div><p>No version history yet.</p><small>Changes are automatically saved when you modify data.</small></div>'
-    : snapshots.map((snap, i) =>
-      '<div class="history-item" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);' + (i === 0 ? 'background:var(--surface);' : '') + '">' +
-        '<div style="flex:1;">' +
-          '<div style="font-size:13px;font-weight:600;">' + escapeHtml(snap.label) + '</div>' +
-          '<div style="font-size:11px;color:var(--ink-3);">' + formatTime(snap.timestamp) + '</div>' +
-        '</div>' +
-        '<button class="secondary-button restore-snap" data-id="' + snap.id + '" style="font-size:11px;padding:4px 12px;white-space:nowrap;">Restore</button>' +
+    ? '<p class="wu-empty" style="margin:var(--space-4)">No version history yet. Changes are saved automatically when you modify data.</p>'
+    : '<div class="wu-list" style="padding:0 var(--space-5)">' + snapshots.map((snap) =>
+      '<div class="wu-list__row history-item">' +
+        '<span class="wu-stack wu-stack--sm"><strong class="t-subheading">' + escapeHtml(snap.label) + '</strong><span class="t-caption t-faint">' + formatTime(snap.timestamp) + '</span></span>' +
+        '<button class="wu-btn wu-btn--secondary wu-btn--sm restore-snap" data-id="' + snap.id + '" type="button">Restore</button>' +
       '</div>'
-    ).join("");
+    ).join("") + '</div>';
 
   const modal = document.createElement("div");
   modal.id = "versionHistoryModal";
-  modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);";
+  modal.className = "wu";
+  modal.style.cssText = "position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:var(--surface-overlay);backdrop-filter:blur(4px);";
   modal.innerHTML =
-    '<div style="background:var(--surface-2);border:1px solid var(--line);border-radius:16px;width:90%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line);">' +
-        '<div>' +
-          '<div style="font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.5px;">Version History</div>' +
-          '<div style="font-size:16px;font-weight:700;">📋 Version History</div>' +
-        '</div>' +
-        '<div style="display:flex;gap:8px;align-items:center;">' +
-          (snapshots.length > 0 ? '<button class="danger-button" id="clearAllSnapshots" style="font-size:11px;padding:4px 10px;">Clear All</button>' : '') +
-          '<button class="secondary-button" id="closeHistoryModal" style="font-size:18px;padding:2px 8px;line-height:1;">✕</button>' +
+    '<div class="wu-card" style="width:90%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;padding:0">' +
+      '<div class="wu-card__header" style="margin:0;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border)">' +
+        '<div class="wu-stack wu-stack--sm"><span class="wu-label">Version History</span><strong class="t-heading">📋 Version History</strong></div>' +
+        '<div class="wu-row wu-row--tight">' +
+          (snapshots.length > 0 ? '<button class="wu-btn wu-btn--danger wu-btn--sm" id="clearAllSnapshots" type="button">Clear All</button>' : '') +
+          '<button class="wu-btn wu-btn--ghost wu-btn--icon" id="closeHistoryModal" type="button" aria-label="Close">✕</button>' +
         '</div>' +
       '</div>' +
-      '<div style="flex:1;overflow-y:auto;">' + listHtml + '</div>' +
-      '<div style="padding:10px 20px;border-top:1px solid var(--line);font-size:11px;color:var(--ink-3);text-align:center;">' +
+      '<div style="flex:1;overflow-y:auto;padding:var(--space-3) 0">' + listHtml + '</div>' +
+      '<div class="t-caption t-faint" style="padding:var(--space-3) var(--space-5);border-top:1px solid var(--border);text-align:center">' +
         'Auto-saved on every change · Max 20 versions' +
       '</div>' +
     '</div>';
