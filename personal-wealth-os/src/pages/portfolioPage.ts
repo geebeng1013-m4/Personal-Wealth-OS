@@ -194,15 +194,17 @@ export function portfolioTemplate(state: WealthState): string {
     })}
     <div class="wu-stack wu-stack--lg">
       <section class="wu-card">
-        <div class="wu-grid wu-grid--3">
+        <div class="wu-row" style="align-items:stretch;gap:var(--space-5)">
           <!-- Count only positions actually held. -->
-          <div class="wu-metric"><span class="wu-metric__label wu-label">Long-term Investment Portfolio</span><span class="wu-metric__value t-num">${money(portfolio.totalInvestedMyr)}</span><span class="wu-metric__note t-caption">${heldCount > 0
+          <div class="wu-metric" style="flex:1;min-width:0"><span class="wu-metric__label wu-label">Long-term Investment Portfolio</span><span class="wu-metric__value t-num">${money(portfolio.totalInvestedMyr)}</span><span class="wu-metric__note t-caption">${heldCount > 0
             ? `Capital contributed across ${heldCount} ${heldCount === 1 ? "holding" : "holdings"} · USD ${portfolio.totalInvestedUsd.toFixed(2)} cost basis`
             : "No contributions recorded yet · targets are configured but nothing is held"}</span></div>
-          <div class="wu-metric ov-valuation" data-valuation-status="${portfolio.valuationStatus}"><span class="wu-metric__label wu-label">Market value</span><span class="wu-metric__value t-num" id="pfMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)}</span><span class="wu-metric__note t-caption ${pnlTone(portfolio.unrealizedPnlMyr)}" id="pfUnrealised">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)}${portfolio.valuationStatus !== "complete" ? ` · ${escapeHtml(valuationNote(portfolio))}` : ""}</span>${portfolio.feesInCostBasisMyr > 0.005
+          <span aria-hidden="true" style="width:1px;background:var(--border);flex:none"></span>
+          <div class="wu-metric ov-valuation" data-valuation-status="${portfolio.valuationStatus}" style="flex:1;min-width:0"><span class="wu-metric__label wu-label">Market value</span><span class="wu-metric__value t-num" id="pfMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)}</span><span class="wu-metric__note t-caption ${pnlTone(portfolio.unrealizedPnlMyr)}" id="pfUnrealised">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)}${portfolio.valuationStatus !== "complete" ? ` · ${escapeHtml(valuationNote(portfolio))}` : ""}</span>${portfolio.feesInCostBasisMyr > 0.005
             ? `<span class="wu-metric__note t-caption">${escapeHtml([`${money(portfolio.feesInCostBasisMyr)} fees`, feeFreeReturnNote(portfolio)].filter(Boolean).join(" · "))}</span>`
             : ""}</div>
-          <div class="wu-metric"><span class="wu-metric__label wu-label">Allocation health</span><span class="wu-metric__value t-num">${allocationHealth}</span><span class="wu-metric__note t-caption">Largest drift ${percent(portfolio.maxAbsoluteDrift, 1)}</span></div>
+          <span aria-hidden="true" style="width:1px;background:var(--border);flex:none"></span>
+          <div class="wu-metric" style="flex:1;min-width:0"><span class="wu-metric__label wu-label">Allocation health</span><span class="wu-metric__value t-num">${allocationHealth}</span><span class="wu-metric__note t-caption">Largest drift ${percent(portfolio.maxAbsoluteDrift, 1)}</span></div>
         </div>
       </section>
 
