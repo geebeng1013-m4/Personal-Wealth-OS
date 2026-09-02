@@ -245,6 +245,60 @@
   list-style: none;
   padding: 14px 0;
 }
+
+/* The Top Holdings list — same rows for the static first paint and
+   bindMarket's live rebuild (etfHoldingRow). */
+#etfHoldingsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#etfHoldingsList li {
+  display: grid;
+  grid-template-columns: 2.4ch auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-subtle);
+  font: var(--weight-regular) var(--text-body-sm) / 1.4 var(--font-sans);
+}
+#etfHoldingsList li:first-child {
+  border-top: none;
+}
+.etf-rank {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.etf-ticker {
+  font-weight: 600;
+  color: var(--text);
+}
+.etf-name {
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.etf-weight {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: right;
+}
+.etf-bar {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  overflow: hidden;
+}
+.etf-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+}
 .etf-sectors {
   margin: 16px 0 8px;
   padding: 14px 16px;

@@ -98,15 +98,25 @@ const ETF_TOP_HOLDINGS = {
 
 type EtfHoldingsSymbol = keyof typeof ETF_TOP_HOLDINGS;
 
+/** One holdings row. Shared by the static first paint and bindMarket's live
+ *  rebuild so the two never disagree on markup. `weight` and `widest` are in
+ *  the same unit (both percent, or both fraction) — only their ratio is used. */
+export function etfHoldingRow(index: number, symbol: string, name: string, weightLabel: string, weight: number, widest: number): string {
+  const barWidth = Math.min(100, Math.max((weight / (widest || 1)) * 100, 2)).toFixed(1);
+  return '<li>'
+    + '<span class="etf-rank">' + String(index + 1).padStart(2, "0") + '</span>'
+    + '<span class="etf-ticker">' + escapeHtml(symbol) + '</span>'
+    + '<span class="etf-name">' + escapeHtml(name) + '</span>'
+    + '<span class="etf-weight">' + escapeHtml(weightLabel) + '</span>'
+    + '<span class="etf-bar"><i style="width:' + barWidth + '%"></i></span>'
+    + '</li>';
+}
+
 function etfHoldingsRowsTemplate(profile: EtfHoldingsProfile): string {
-  const maxWeight = Math.max(...profile.holdings.map((holding) => holding.weight), 1);
-  return profile.holdings.map((holding, index) => {
-    const barWidth = Math.max((holding.weight / maxWeight) * 100, 2);
-    return `<li class="etf-holding-row" style="display:grid;gap:var(--space-1);padding:var(--space-2) 0;border-top:1px solid var(--border-subtle)">
-      <div class="wu-row wu-row--tight t-body-sm"><span class="t-num t-faint">${String(index + 1).padStart(2, "0")}</span><strong class="t-subheading">${escapeHtml(holding.symbol)}</strong><span class="t-faint">${escapeHtml(holding.name)}</span><b class="t-num" style="margin-left:auto">${holding.weight.toFixed(2)}%</b></div>
-      <div class="etf-holding-track" role="meter" aria-label="${escapeHtml(holding.symbol)} portfolio weight" aria-valuemin="0" aria-valuemax="${maxWeight}" aria-valuenow="${holding.weight}"><i style="width:${barWidth.toFixed(2)}%"></i></div>
-    </li>`;
-  }).join("");
+  const widest = profile.holdings[0]?.weight || 1;
+  return profile.holdings.map((holding, index) =>
+    etfHoldingRow(index, holding.symbol, holding.name, holding.weight.toFixed(2) + "%", holding.weight, widest),
+  ).join("");
 }
 
 export function etfTopHoldingsTemplate(selected: EtfHoldingsSymbol = "VOO"): string {
@@ -373,12 +383,8 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       if (dateWrap) dateWrap.textContent = "Live, from the fund's latest published holdings";
       const widest = composition.holdings[0].weight || 1;
       list.innerHTML = composition.holdings.map((holding, index) =>
-        '<li><span class="etf-rank">' + String(index + 1).padStart(2, "0") + '</span>'
-        + '<span class="etf-ticker">' + escapeHtml(holding.symbol) + '</span>'
-        + '<span class="etf-name">' + escapeHtml(holding.name) + '</span>'
-        + '<span class="etf-weight">' + weightText(holding.weight) + '</span>'
-        + '<span class="etf-bar"><i style="width:' + Math.min(100, (holding.weight / widest) * 100).toFixed(1) + '%"></i></span>'
-        + '</li>').join("");
+        etfHoldingRow(index, holding.symbol, holding.name, weightText(holding.weight), holding.weight, widest),
+      ).join("");
     }).catch(() => { /* whatever is on screen stands */ });
   }
 

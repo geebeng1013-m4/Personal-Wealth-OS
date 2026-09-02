@@ -42,20 +42,20 @@
     --c-clay-400: #dc8b7d;
     --c-clay-600: #a5453b;
 
-    /* ---- semantic — DARK --------------------------------------------------- */
-    --surface-bg: #141310;
-    --surface: #1c1a16;
-    --surface-raised: #232019;
-    --surface-hover: #2a2720;
-    --surface-overlay: rgba(10, 9, 7, 0.6);
+    /* ---- semantic — DARK (neutral near-black ground) --------------------- */
+    --surface-bg: #0b0b0c;
+    --surface: #151517;
+    --surface-raised: #1d1d20;
+    --surface-hover: #26262a;
+    --surface-overlay: rgba(0, 0, 0, 0.62);
 
-    --border-subtle: rgba(240, 235, 224, 0.05);
-    --border: rgba(240, 235, 224, 0.1);
-    --border-strong: rgba(240, 235, 224, 0.18);
+    --border-subtle: rgba(255, 255, 255, 0.05);
+    --border: rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.18);
 
-    --text: #ece7dd; /* deliberately not #fff — lower contrast */
-    --text-muted: #a39c8d; /* AA for body */
-    --text-faint: #6e685c; /* labels / decoration only, never body copy */
+    --text: #ededf0; /* near-white, slightly cool — deliberately not #fff */
+    --text-muted: #9b9ba3; /* AA for body */
+    --text-faint: #6a6a72; /* labels / decoration only, never body copy */
 
     --accent: #57a78f;
     --accent-hover: #66b79e;
