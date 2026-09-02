@@ -15,7 +15,8 @@
 import type { Trade, TradeType, WealthState } from "../models";
 import { createId } from "../state";
 import { money, percent, tradeUnits } from "../rules";
-import { escapeHtml, numberInput } from "../html";
+import { escapeHtml } from "../html";
+import { pageHeader } from "../components/pageHeader";
 import { livePriceInputs } from "../livePrices";
 import {
   UNKNOWN,
@@ -93,33 +94,33 @@ function currencyConversionsPanel(state: WealthState): string {
       + '<td>MYR ' + record.myrAmount.toFixed(2) + '</td>'
       + '<td>USD ' + record.usdAmount.toFixed(2) + '</td>'
       + '<td>' + exchangeRateOf(record).toFixed(4) + '</td>'
-      + '<td><button class="icon-button danger delete-exchange" data-id="' + escapeHtml(record.id) + '" type="button" aria-label="Delete conversion on ' + escapeHtml(record.date) + '">✕</button></td>'
+      + '<td><button class="wu-btn wu-btn--ghost wu-btn--icon delete-exchange" data-id="' + escapeHtml(record.id) + '" type="button" aria-label="Delete conversion on ' + escapeHtml(record.date) + '">✕</button></td>'
       + '</tr>';
   }).join("");
 
   return `
-    <article class="card panel">
-      <div class="panel-head">
-        <div><span class="eyebrow">Ringgit Cost Basis</span><h3>Currency conversions</h3></div>
-        <div class="panel-head-actions"><span class="panel-note">${records.length} records</span>${records.length > 0
-          ? '<button class="secondary-button danger-button clear-exchanges" type="button">Clear all</button>'
+    <article class="wu-card">
+      <div class="wu-card__header">
+        <div class="wu-stack wu-stack--sm"><span class="wu-label">Ringgit Cost Basis</span><h3 class="wu-card__title t-heading">Currency conversions</h3></div>
+        <div class="wu-row wu-row--tight"><span class="t-caption t-faint">${records.length} records</span>${records.length > 0
+          ? '<button class="wu-btn wu-btn--danger wu-btn--sm clear-exchanges" type="button">Clear all</button>'
           : ""}</div>
       </div>
-      <p class="fx-coverage">${escapeHtml(conversionCoverageNote(state))}</p>
-      <div class="import-box">
-        <label>Paste your broker's exchange history
-          <textarea id="fxPaste" rows="4" placeholder="MYR&#10;USD&#10;Aug 9, 2026 22:06 MYT&#10;Completed&#10;4.85 USD&#10;20.00 MYR"></textarea>
+      <div class="wu-stack">
+        <p class="t-body-sm t-muted">${escapeHtml(conversionCoverageNote(state))}</p>
+        <label class="wu-field-row"><span class="wu-field-row__label">Paste your broker's exchange history</span>
+          <textarea class="wu-field" id="fxPaste" rows="4" placeholder="MYR&#10;USD&#10;Aug 9, 2026 22:06 MYT&#10;Completed&#10;4.85 USD&#10;20.00 MYR"></textarea>
         </label>
-        <button class="primary-button" id="fxImport" type="button">Read conversions</button>
-        <small>Select the whole list in your broker app and paste it here — headings and dates included. Re-pasting a range you have already added updates it instead of duplicating it.</small>
+        <div class="wu-row"><button class="wu-btn wu-btn--primary wu-btn--sm" id="fxImport" type="button">Read conversions</button></div>
+        <small class="t-caption t-faint">Select the whole list in your broker app and paste it here — headings and dates included. Re-pasting a range you have already added updates it instead of duplicating it.</small>
+        <p id="fxImportStatus" class="wu-field-row__error" role="alert"></p>
+        ${records.length > 0 ? `<div class="wu-table-wrap">
+          <table class="wu-table">
+            <thead><tr><th>Date</th><th>Direction</th><th>MYR</th><th>USD</th><th>Rate</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>` : ""}
       </div>
-      <p id="fxImportStatus" class="form-error" role="alert"></p>
-      ${records.length > 0 ? `<div class="table-wrap financial-table">
-        <table>
-          <thead><tr><th>Date</th><th>Direction</th><th>MYR</th><th>USD</th><th>Rate</th><th></th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>` : ""}
     </article>`;
 }
 
@@ -146,17 +147,19 @@ export function portfolioTemplate(state: WealthState): string {
     // no usable quote shows "--" rather than being valued at zero.
     const pnlClass = position.unrealizedPnlMyr == null
       ? "" : position.unrealizedPnlMyr >= 0 ? "positive" : "negative";
+    const pnlToneClass = pnlClass === "positive" ? "ov-metric__value--positive" : pnlClass === "negative" ? "ov-metric__value--negative" : "";
+    const driftToneClass = driftClass === "negative" ? "ov-metric__value--negative" : "ov-metric__value--positive";
     return '<tr>' +
-      '<td><span class="ticker-badge">' + position.ticker + '</span></td>' +
+      '<td><span class="wu-badge wu-badge--neutral">' + position.ticker + '</span></td>' +
       '<td>' + money(position.investedMyr) + '</td>' +
       '<td>USD ' + position.investedUsd.toFixed(2) + '</td>' +
       '<td>' + position.units.toFixed(5) + '</td>' +
       '<td>USD ' + position.averageCostUsd.toFixed(2) + '</td>' +
       '<td>' + (position.priceUsd == null ? UNKNOWN : 'USD ' + position.priceUsd.toFixed(2)) + '</td>' +
       '<td>' + moneyOrUnknown(position.marketValueMyr) + '</td>' +
-      '<td class="' + pnlClass + '">' + pnlText(position.unrealizedPnlMyr, position.unrealizedPnlPercentMyr) + '</td>' +
+      '<td class="' + pnlToneClass + '">' + pnlText(position.unrealizedPnlMyr, position.unrealizedPnlPercentMyr) + '</td>' +
       '<td>' + percent(position.actualAllocation) + ' / ' + percent(position.targetAllocation) + '</td>' +
-      '<td class="' + driftClass + '">' + driftSign + percent(position.drift, 1) + '</td>' +
+      '<td class="' + driftToneClass + '">' + driftSign + percent(position.drift, 1) + '</td>' +
       '</tr>';
   }).join("");
 
@@ -166,14 +169,14 @@ export function portfolioTemplate(state: WealthState): string {
       return '<tr>' +
         '<td>' + escapeHtml(trade.date) + '</td>' +
         '<td>' + escapeHtml(trade.platform) + '</td>' +
-        '<td><span class="ticker-badge">' + trade.ticker + '</span></td>' +
-        '<td><span class="type-badge" style="background:' + tradeTypeColor(trade.type) + ';color:' + tradeTypeTextColor(trade.type) + ';">' + trade.type + '</span></td>' +
+        '<td><span class="wu-badge wu-badge--neutral">' + trade.ticker + '</span></td>' +
+        '<td><span class="' + tradeTypeBadge(trade.type) + '">' + trade.type + '</span></td>' +
         '<td>' + money(trade.amountMyr) + '</td>' +
         '<td>USD ' + trade.amountUsd.toFixed(2) + '</td>' +
         '<td>USD ' + trade.priceUsd.toFixed(2) + '</td>' +
         '<td>' + tradeExchangeRate(trade).toFixed(4) + '</td>' +
         '<td>' + tradeUnits(trade).toFixed(5) + '</td>' +
-        '<td><button class="icon-button danger delete-trade" data-id="' + trade.id + '" type="button" aria-label="Delete trade" title="Delete trade">✕</button></td>' +
+        '<td><button class="wu-btn wu-btn--ghost wu-btn--icon delete-trade" data-id="' + trade.id + '" type="button" aria-label="Delete trade" title="Delete trade">✕</button></td>' +
         '</tr>';
     }).join("");
 
@@ -182,91 +185,92 @@ export function portfolioTemplate(state: WealthState): string {
   // it is closing can never disagree on screen.
   const contributionPlan = rebalanceContributions(state, portfolio);
   const heldCount = portfolio.holdings.filter((position) => position.units > 0).length;
-  return `
-    <section class="portfolio-hero card">
-      <!-- Count only positions actually held. The holdings list also carries
-           target tickers with zero units, so the raw length would claim
-           holdings the user does not own. Figures themselves are unchanged. -->
-      <div><span class="eyebrow">Long-term Investment Portfolio</span><strong>${money(portfolio.totalInvestedMyr)}</strong><p>${heldCount > 0
-        ? `Capital contributed across ${heldCount} ${heldCount === 1 ? "holding" : "holdings"} · USD ${portfolio.totalInvestedUsd.toFixed(2)} cost basis`
-        : "No contributions recorded yet · targets are configured but nothing is held"}</p></div>
-      <!-- What it is worth now, beside what went in. Read from the canonical
-           snapshot; unknown renders "--" and is never shown as zero. -->
-      <div class="portfolio-health" data-valuation-status="${portfolio.valuationStatus}"><span>Market value</span><strong id="pfMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)}</strong><small id="pfUnrealised" class="${pnlTone(portfolio.unrealizedPnlMyr)}">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} · ${escapeHtml(joinNotes(usdPnlNote(portfolio), valuationNote(portfolio)))}</small>${portfolio.feesInCostBasisMyr > 0.005
-        ? `<small class="fee-drag">${escapeHtml(joinNotes(`${money(portfolio.feesInCostBasisMyr)} in trading costs`, feeFreeReturnNote(portfolio)))}</small>`
-        : ""}</div>
-      <div class="portfolio-health"><span>Allocation health</span><strong>${allocationHealth}</strong><small>Largest drift ${percent(portfolio.maxAbsoluteDrift, 1)}</small></div>
-    </section>
-    <article class="card panel"><div class="panel-head"><div><span class="eyebrow">Next Contribution</span><h3>Rebalance with new money</h3></div><span class="panel-note">No selling required</span></div><div class="rebalance-plan">${contributionPlan.map((item) => `<div><strong>${escapeHtml(item.ticker)}</strong><span>${money(item.amount)}</span></div>`).join("")}</div></article>
-    <div class="portfolio-command-grid">
-      <article class="card panel portfolio-allocation-panel">
-        <div class="panel-head"><div><span class="eyebrow">Strategic Allocation</span><h3>Portfolio structure</h3><small class="panel-note">${portfolio.allocationBasis === "market" ? "Weighted by market value" : "Weighted by cost — no live price yet"}</small></div><span class="status-pill ${portfolio.maxAbsoluteDrift <= 0.08 ? "positive" : "attention"}">${allocationHealth}</span></div>
-        ${portfolio.holdings.length ? `<div class="portfolio-positions">${portfolio.holdings.map((position, index) => `<div class="position-card"><div class="position-identity"><span class="position-index">${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(position.ticker)}</strong><small>${position.ticker === "VOO" ? "Core market exposure" : position.ticker === "QQQM" ? "Growth allocation" : "Portfolio holding"}</small></div></div><div class="position-value"><strong>${allocationAmount(portfolio, position)}</strong><small>${percent(position.actualAllocation)} of portfolio</small></div><div class="allocation-track"><span style="width:${Math.min(position.actualAllocation * 100, 100)}%"></span><i style="left:${Math.min(position.targetAllocation * 100, 100)}%" title="Target ${percent(position.targetAllocation)}"></i></div><div class="position-meta"><span>Target ${percent(position.targetAllocation)}</span><span class="${Math.abs(position.drift) > 0.08 ? "negative" : "positive"}">${position.drift >= 0 ? "+" : ""}${percent(position.drift, 1)} drift</span></div></div>`).join("")}</div>` : '<p class="empty-state">No portfolio positions yet. Record a contribution to establish your long-term allocation.</p>'}
-      </article>
-      <article class="card panel contribution-panel">
-        <div class="panel-head"><div><span class="eyebrow">Contribution Record</span><h3>Add investment activity</h3></div><span class="panel-note">Cost basis</span></div>
-        <form id="tradeForm" class="form-grid">
-          <label>Date<input name="date" type="date" required></label>
-          <label>Ticker<select name="ticker" id="tickerSelect"><option>VOO</option><option>QQQM</option>${state.customTickers.map((t) => '<option>' + escapeHtml(t) + '</option>').join('')}<option value="__custom__">+ Custom</option></select></label>
-          <div id="customTickerWrap" style="display:none;"><label>Custom Ticker<input name="customTicker" id="customTickerInput" type="text" placeholder="e.g. AAPL" style="text-transform:uppercase;"></label></div>
-          <label>Type<select name="type"><option>DCA</option><option>Dip Buy</option><option>Manual Buy</option><option>Sell</option></select></label>
-          ${numberInput("amountMyr", "Amount MYR")}
-          ${numberInput("amountUsd", "Amount USD")}
-          ${numberInput("priceUsd", "Price / Unit USD")}
-          ${numberInput("units", "Filled Quantity")}
-          ${numberInput("feeMyr", "Fee MYR", "0")}
-          <label>Notes<input name="notes" type="text" placeholder="Optional"></label>
-          <button class="primary-button" type="submit">Record contribution</button>
-        </form>
-        <div class="import-box">
-          <label class="file-button">Import broker CSV<input id="csvInput" type="file" accept=".csv"></label>
-          <small>Moomoo and custom transaction exports are supported.</small>
+  return `<div class="wu">
+    ${pageHeader({
+      eyebrow: "Long-term Investment Portfolio",
+      title: "Portfolio",
+      sub: "Market value, cost basis and drift — every figure from the canonical snapshot.",
+    })}
+    <div class="wu-stack wu-stack--lg">
+      <section class="wu-card">
+        <div class="wu-grid wu-grid--3">
+          <!-- Count only positions actually held. -->
+          <div class="wu-metric"><span class="wu-metric__label wu-label">Long-term Investment Portfolio</span><span class="wu-metric__value t-num">${money(portfolio.totalInvestedMyr)}</span><span class="wu-metric__note t-caption">${heldCount > 0
+            ? `Capital contributed across ${heldCount} ${heldCount === 1 ? "holding" : "holdings"} · USD ${portfolio.totalInvestedUsd.toFixed(2)} cost basis`
+            : "No contributions recorded yet · targets are configured but nothing is held"}</span></div>
+          <div class="wu-metric ov-valuation" data-valuation-status="${portfolio.valuationStatus}"><span class="wu-metric__label wu-label">Market value</span><span class="wu-metric__value t-num" id="pfMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)}</span><span class="wu-metric__note t-caption ${pnlTone(portfolio.unrealizedPnlMyr)}" id="pfUnrealised">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} · ${escapeHtml(joinNotes(usdPnlNote(portfolio), valuationNote(portfolio)))}</span>${portfolio.feesInCostBasisMyr > 0.005
+            ? `<span class="wu-metric__note t-caption">${escapeHtml(joinNotes(`${money(portfolio.feesInCostBasisMyr)} in trading costs`, feeFreeReturnNote(portfolio)))}</span>`
+            : ""}</div>
+          <div class="wu-metric"><span class="wu-metric__label wu-label">Allocation health</span><span class="wu-metric__value t-num">${allocationHealth}</span><span class="wu-metric__note t-caption">Largest drift ${percent(portfolio.maxAbsoluteDrift, 1)}</span></div>
         </div>
+      </section>
+
+      <article class="wu-card">
+        <div class="wu-card__header"><div class="wu-stack wu-stack--sm"><span class="wu-label">Next Contribution</span><h3 class="wu-card__title t-heading">Rebalance with new money</h3></div><span class="wu-badge wu-badge--neutral">No selling required</span></div>
+        <div class="wu-grid wu-grid--wide">${contributionPlan.map((item) => `<div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">${escapeHtml(item.ticker)}</span><span class="wu-metric__value t-num">${money(item.amount)}</span></div></div>`).join("")}</div>
       </article>
-    </div>
-    ${currencyConversionsPanel(state)}
-    <details class="card panel portfolio-details">
-      <summary><div><span class="eyebrow">Position Detail</span><h3>Cost basis and allocation data</h3></div><span>${portfolio.holdings.length} holdings</span></summary>
-      <div class="portfolio-details-content">
-        <div class="table-wrap compact-table financial-table">
-          <table>
+
+      <div class="wu-grid wu-grid--2 wu-grid--top">
+        <article class="wu-card">
+          <div class="wu-card__header"><div class="wu-stack wu-stack--sm"><span class="wu-label">Strategic Allocation</span><h3 class="wu-card__title t-heading">Portfolio structure</h3><small class="t-caption t-faint">${portfolio.allocationBasis === "market" ? "Weighted by market value" : "Weighted by cost — no live price yet"}</small></div><span class="wu-badge wu-badge--${portfolio.maxAbsoluteDrift <= 0.08 ? "positive" : "warning"}">${allocationHealth}</span></div>
+          ${portfolio.holdings.length ? `<div class="wu-stack">${portfolio.holdings.map((position, index) => `<div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-stack wu-stack--sm"><div class="wu-row wu-row--between"><span class="wu-row wu-row--tight"><span class="t-num t-faint">${String(index + 1).padStart(2, "0")}</span><span class="wu-stack wu-stack--sm"><strong class="t-subheading">${escapeHtml(position.ticker)}</strong><small class="t-caption t-faint">${position.ticker === "VOO" ? "Core market exposure" : position.ticker === "QQQM" ? "Growth allocation" : "Portfolio holding"}</small></span></span><span class="wu-metric wu-metric--end"><span class="t-subheading t-num">${allocationAmount(portfolio, position)}</span><span class="t-caption t-faint">${percent(position.actualAllocation)} of portfolio</span></span></div><div class="allocation-track"><span style="width:${Math.min(position.actualAllocation * 100, 100)}%"></span><i style="left:${Math.min(position.targetAllocation * 100, 100)}%" title="Target ${percent(position.targetAllocation)}"></i></div><div class="wu-row wu-row--between t-caption"><span class="t-faint">Target ${percent(position.targetAllocation)}</span><span class="${Math.abs(position.drift) > 0.08 ? "ov-metric__value--negative" : "ov-metric__value--positive"}">${position.drift >= 0 ? "+" : ""}${percent(position.drift, 1)} drift</span></div></div></div>`).join("")}</div>` : `<p class="wu-empty">No portfolio positions yet. Record a contribution to establish your long-term allocation.</p>`}
+        </article>
+        <article class="wu-card">
+          <div class="wu-card__header"><div class="wu-stack wu-stack--sm"><span class="wu-label">Contribution Record</span><h3 class="wu-card__title t-heading">Add investment activity</h3></div><span class="wu-badge wu-badge--neutral">Cost basis</span></div>
+          <form id="tradeForm" class="wu-grid wu-grid--2">
+            <label class="wu-field-row"><span class="wu-field-row__label">Date</span><input class="wu-field" name="date" type="date" required></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Ticker</span><select class="wu-field" name="ticker" id="tickerSelect"><option>VOO</option><option>QQQM</option>${state.customTickers.map((t) => "<option>" + escapeHtml(t) + "</option>").join("")}<option value="__custom__">+ Custom</option></select></label>
+            <div id="customTickerWrap" class="wu-field-row--wide" style="display:none;"><label class="wu-field-row"><span class="wu-field-row__label">Custom Ticker</span><input class="wu-field" name="customTicker" id="customTickerInput" type="text" placeholder="e.g. AAPL" style="text-transform:uppercase"></label></div>
+            <label class="wu-field-row"><span class="wu-field-row__label">Type</span><select class="wu-field" name="type"><option>DCA</option><option>Dip Buy</option><option>Manual Buy</option><option>Sell</option></select></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Amount MYR</span><input class="wu-field" name="amountMyr" type="number" min="0" step="0.01"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Amount USD</span><input class="wu-field" name="amountUsd" type="number" min="0" step="0.01"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Price / Unit USD</span><input class="wu-field" name="priceUsd" type="number" min="0" step="0.01"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Filled Quantity</span><input class="wu-field" name="units" type="number" min="0" step="0.01"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Fee MYR</span><input class="wu-field" name="feeMyr" type="number" min="0" step="0"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Notes</span><input class="wu-field" name="notes" type="text" placeholder="Optional"></label>
+            <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Record contribution</button></div>
+          </form>
+          <div class="wu-card__footer wu-stack wu-stack--sm">
+            <label class="wu-btn wu-btn--secondary wu-btn--sm file-button">Import broker CSV<input id="csvInput" type="file" accept=".csv" style="display:none"></label>
+            <small class="t-caption t-faint">Moomoo and custom transaction exports are supported.</small>
+          </div>
+        </article>
+      </div>
+
+      ${currencyConversionsPanel(state)}
+
+      <details class="wu-details portfolio-details">
+        <summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-heading">Position Detail</strong><span class="t-caption t-faint">${portfolio.holdings.length} holdings</span></span></summary>
+        <div class="wu-table-wrap">
+          <table class="wu-table">
             <thead><tr><th>Ticker</th><th>Invested MYR</th><th>Invested USD</th><th>Units</th><th>Avg Cost</th><th>Market Price</th><th>Market Value</th><th>Unrealised P&amp;L</th><th>Actual / Target</th><th>Drift</th></tr></thead>
             <tbody>${positionRows}</tbody>
           </table>
         </div>
-      </div>
-    </details>
-    <article class="card panel portfolio-activity">
-      <div class="panel-head"><div><span class="eyebrow">Portfolio Activity</span><h3>Contribution history</h3></div><div class="panel-head-actions"><span class="panel-note">${state.trades.length} records</span>${state.trades.length > 0
-        ? '<button class="secondary-button danger-button clear-trades" type="button">Clear all</button>'
-        : ""}</div></div>
-      <div class="table-wrap financial-table">
-        <table>
-          <thead><tr><th>Date</th><th>Platform</th><th>Ticker</th><th>Type</th><th>Amount MYR</th><th>Amount USD</th><th>Price USD</th><th>FX</th><th>Units</th><th></th></tr></thead>
-          <tbody>${tradeRows || '<tr><td colspan="10" class="empty-state">No transactions yet. Add your first transaction to begin tracking.</td></tr>'}</tbody>
-        </table>
-      </div>
-    </article>
-  `;
+      </details>
+
+      <article class="wu-card">
+        <div class="wu-card__header"><div class="wu-stack wu-stack--sm"><span class="wu-label">Portfolio Activity</span><h3 class="wu-card__title t-heading">Contribution history</h3></div><div class="wu-row wu-row--tight"><span class="t-caption t-faint">${state.trades.length} records</span>${state.trades.length > 0
+          ? '<button class="wu-btn wu-btn--danger wu-btn--sm clear-trades" type="button">Clear all</button>'
+          : ""}</div></div>
+        <div class="wu-table-wrap">
+          <table class="wu-table">
+            <thead><tr><th>Date</th><th>Platform</th><th>Ticker</th><th>Type</th><th>Amount MYR</th><th>Amount USD</th><th>Price USD</th><th>FX</th><th>Units</th><th></th></tr></thead>
+            <tbody>${tradeRows || `<tr><td colspan="10"><p class="wu-empty">No transactions yet. Add your first transaction to begin tracking.</p></td></tr>`}</tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  </div>`;
 }
 
-function tradeTypeColor(type: string): string {
+function tradeTypeBadge(type: string): string {
   switch (type) {
-    case "DCA": return "var(--green-dim)";
-    case "Dip Buy": return "var(--blue-dim)";
-    case "Manual Buy": return "var(--purple-dim)";
-    case "Sell": return "var(--red-dim)";
-    default: return "var(--surface-2)";
-  }
-}
-
-function tradeTypeTextColor(type: string): string {
-  switch (type) {
-    case "DCA": return "var(--green)";
-    case "Dip Buy": return "var(--blue)";
-    case "Manual Buy": return "var(--purple)";
-    case "Sell": return "var(--red)";
-    default: return "var(--ink-2)";
+    case "DCA": return "wu-badge wu-badge--positive";
+    case "Dip Buy": return "wu-badge wu-badge--accent";
+    case "Manual Buy": return "wu-badge wu-badge--warning";
+    case "Sell": return "wu-badge wu-badge--negative";
+    default: return "wu-badge wu-badge--neutral";
   }
 }
 
