@@ -9,8 +9,9 @@
 import type { WealthState } from "../models";
 import { createId } from "../state";
 import { money } from "../rules";
-import { escapeHtml, numberInput } from "../html";
+import { escapeHtml } from "../html";
 import { leakInsightStrip } from "../components/leakInsightStrip";
+import { pageHeader } from "../components/pageHeader";
 import { getBudgetSnapshot } from "../budgetSummary";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
@@ -19,45 +20,53 @@ export function bucketsTemplate(state: WealthState): string {
   const bucketCards = getBudgetSnapshot(state).buckets.map((bucket) => {
     const index = bucket.index;
     const width = bucket.allocationRatio * 100;
-    return '<article class="card data-card">' +
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
-        '<span class="eyebrow">' + escapeHtml(bucket.name) + '</span>' +
-        '<button class="edit-bucket secondary-button" data-index="' + index + '" type="button" style="font-size:11px;padding:4px 8px;">Edit</button>' +
-      '</div>' +
-      '<h3>' + escapeHtml(bucket.label) + '</h3>' +
-      '<strong>' + money(bucket.amount) + '</strong>' +
-      '<div class="bar"><span style="width:' + width + '%"></span></div>' +
-      '<small style="color:var(--ink-3);">' + (bucket.cadence === "monthly" ? "Monthly" : "One-time") + ' · ' + escapeHtml(bucket.note) + '</small>' +
-      '<div class="bucket-edit-form" id="bucketEdit' + index + '" style="display:none;margin-top:12px;">' +
-        '<form class="form-grid bucketForm" data-index="' + index + '">' +
-          '<label>Name<input name="name" type="text" value="' + escapeHtml(bucket.name) + '"></label>' +
-          '<label>Label<input name="label" type="text" value="' + escapeHtml(bucket.label) + '"></label>' +
-          '<label>Cadence<select name="cadence"><option value="monthly"' + (bucket.cadence === "monthly" ? " selected" : "") + '>Monthly</option><option value="one-time"' + (bucket.cadence === "one-time" ? " selected" : "") + '>One-time</option></select></label>' +
-          numberInput("amount", "Amount MYR", String(bucket.amount), "1") +
-          '<label>Note<textarea name="note" rows="2">' + escapeHtml(bucket.note) + '</textarea></label>' +
-          '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
-            '<button class="primary-button" type="submit" style="font-size:12px;padding:5px 10px;">Save</button>' +
-            '<button class="secondary-button cancel-bucket-edit" type="button" data-index="' + index + '" style="font-size:12px;padding:5px 10px;">Cancel</button>' +
-            '<button class="danger-button delete-bucket" type="button" data-index="' + index + '" style="font-size:12px;padding:5px 10px;">Delete</button>' +
-          '</div>' +
-        '</form>' +
-      '</div>' +
-      '</article>';
+    const cadence = bucket.cadence === "monthly" ? "Monthly" : "One-time";
+    return `<article class="wu-card">
+      <div class="wu-stack">
+        <div class="wu-row wu-row--between">
+          <span class="wu-label">${escapeHtml(bucket.name)}</span>
+          <button class="wu-btn wu-btn--ghost wu-btn--sm edit-bucket" data-index="${index}" type="button">Edit</button>
+        </div>
+        <div class="wu-stack wu-stack--sm">
+          <h3 class="t-heading">${escapeHtml(bucket.label)}</h3>
+          <span class="wu-metric__value t-num">${money(bucket.amount)}</span>
+          <div class="wu-bar"><span class="wu-bar__fill" style="width:${width}%"></span></div>
+          <span class="wu-label--plain t-caption">${cadence} &middot; ${escapeHtml(bucket.note)}</span>
+        </div>
+        <div class="bucket-edit-form is-hidden" id="bucketEdit${index}">
+          <form class="wu-stack bucketForm" data-index="${index}">
+            <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="name" type="text" value="${escapeHtml(bucket.name)}"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Label</span><input class="wu-field" name="label" type="text" value="${escapeHtml(bucket.label)}"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Cadence</span><select class="wu-field" name="cadence"><option value="monthly"${bucket.cadence === "monthly" ? " selected" : ""}>Monthly</option><option value="one-time"${bucket.cadence === "one-time" ? " selected" : ""}>One-time</option></select></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Amount MYR</span><input class="wu-field" name="amount" type="number" min="0" step="1" value="${bucket.amount}"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Note</span><textarea class="wu-field" name="note" rows="2">${escapeHtml(bucket.note)}</textarea></label>
+            <div class="wu-row">
+              <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button>
+              <button class="wu-btn wu-btn--secondary wu-btn--sm cancel-bucket-edit" data-index="${index}" type="button">Cancel</button>
+              <button class="wu-btn wu-btn--danger wu-btn--sm delete-bucket" data-index="${index}" type="button">Delete</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </article>`;
   }).join("");
 
-  const addBucketCard = '<article class="card data-card" style="display:flex;align-items:center;justify-content:center;min-height:120px;border-style:dashed;cursor:pointer;" id="addBucketBtn">' +
-    '<div style="text-align:center;color:var(--ink-3);">' +
-      '<div style="font-size:24px;margin-bottom:4px;">+</div>' +
-      '<span>Add Bucket</span>' +
-    '</div>' +
-  '</article>';
+  const addBucketCard =
+    `<button class="wu-add" id="addBucketBtn" type="button">` +
+    `<span class="wu-add__plus" aria-hidden="true">+</span><span>Add Bucket</span></button>`;
 
   return `
-    <div class="section-title"><span class="eyebrow">Capital Routing</span><h3>Monthly Fund Allocation Matrix</h3><p>Give every ringgit a clear purpose to reduce emotional spending and impulsive investing.</p></div>
-    ${leakInsightStrip(state, ["budget"], "Budget signal")}
-    <div class="three-col-grid">
-      ${bucketCards}
-      ${addBucketCard}
+    <div class="wu">
+      ${pageHeader({
+        eyebrow: "Capital Routing",
+        title: "Monthly Fund Allocation Matrix",
+        sub: "Give every ringgit a clear purpose to reduce emotional spending and impulsive investing.",
+      })}
+      ${leakInsightStrip(state, ["budget"], "Budget signal")}
+      <div class="wu-grid wu-grid--3">
+        ${bucketCards}
+        ${addBucketCard}
+      </div>
     </div>
   `;
 }
@@ -68,16 +77,14 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
   root.querySelectorAll<HTMLButtonElement>(".edit-bucket").forEach((button) => {
     button.addEventListener("click", () => {
       const index = button.dataset.index;
-      const form = root.querySelector<HTMLElement>("#bucketEdit" + index);
-      if (form) form.style.display = form.style.display === "none" ? "block" : "none";
+      root.querySelector<HTMLElement>("#bucketEdit" + index)?.classList.toggle("is-hidden");
     });
   });
 
   root.querySelectorAll<HTMLButtonElement>(".cancel-bucket-edit").forEach((button) => {
     button.addEventListener("click", () => {
       const index = button.dataset.index;
-      const form = root.querySelector<HTMLElement>("#bucketEdit" + index);
-      if (form) form.style.display = "none";
+      root.querySelector<HTMLElement>("#bucketEdit" + index)?.classList.add("is-hidden");
     });
   });
 
