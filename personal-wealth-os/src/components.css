@@ -645,6 +645,20 @@
     border: 0;
   }
 
+  /* Privacy mode: main.ts / ui.ts toggle .mask-financial-amounts on <body>.
+     Every headline figure is a wu-metric__value and every inline amount is a
+     .t-num, so blurring those covers the money on screen. */
+  .mask-financial-amounts .wu-metric__value,
+  .mask-financial-amounts .wu-metric__note,
+  .mask-financial-amounts .t-num,
+  .mask-financial-amounts .t-num-lg,
+  .mask-financial-amounts .t-num-xl,
+  .mask-financial-amounts .wu-list__row > dd,
+  .mask-financial-amounts .ov-detail-row__note {
+    filter: blur(7px);
+    user-select: none;
+  }
+
   /* ---- empty state ------------------------------------------------------- */
   .wu-empty {
     padding: var(--space-6);

@@ -13,6 +13,21 @@
 .income { color: var(--positive); }
 .expense { color: var(--negative); }
 
+/* ---- privacy mode: blur the money that isn't a wu .t-num ---- */
+.mask-financial-amounts .ledger-donut > span,
+.mask-financial-amounts .ledger-legend strong,
+.mask-financial-amounts .ledger-bars strong,
+.mask-financial-amounts .etf-weight,
+.mask-financial-amounts .compare-profile > div strong,
+.mask-financial-amounts .compare-table td strong,
+.mask-financial-amounts .ctx-outcome strong,
+.mask-financial-amounts .ctx-trigger strong,
+.mask-financial-amounts .v2-allocation__legend-item strong,
+.mask-financial-amounts .v2-allocation__center strong {
+  filter: blur(7px);
+  user-select: none;
+}
+
 /* ====================================================================== *
  *  LEDGER CHARTS                                                          *
  * ====================================================================== */
