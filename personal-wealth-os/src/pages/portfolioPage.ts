@@ -238,8 +238,6 @@ export function portfolioTemplate(state: WealthState): string {
         </article>
       </div>
 
-      ${currencyConversionsPanel(state)}
-
       <details class="wu-details portfolio-details">
         <summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-heading">Position Detail</strong><span class="t-caption t-faint">${portfolio.holdings.length} holdings</span></span></summary>
         <div class="wu-table-wrap">
@@ -249,6 +247,8 @@ export function portfolioTemplate(state: WealthState): string {
           </table>
         </div>
       </details>
+
+      ${currencyConversionsPanel(state)}
 
       <article class="wu-card">
         <div class="wu-card__header"><div class="wu-stack wu-stack--sm"><span class="wu-label">Portfolio Activity</span><h3 class="wu-card__title t-heading">Contribution history</h3></div><div class="wu-row wu-row--tight"><span class="t-caption t-faint">${state.trades.length} records</span>${state.trades.length > 0
