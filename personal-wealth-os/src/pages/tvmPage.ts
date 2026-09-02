@@ -143,12 +143,12 @@ function tvmInflationTemplate(): string {
   ];
 
   return `
-    <section class="card panel tvm-card" aria-labelledby="tvmInflationTitle">
-      <div class="panel-head">
-        <div>
-          <span class="eyebrow">Planning Tool</span>
-          <h3 id="tvmInflationTitle">Inflation Adjustment</h3>
-          <p class="card-sub">What a future amount is worth in today's money.</p>
+    <section class="wu-card tvm-card" aria-labelledby="tvmInflationTitle">
+      <div class="wu-card__header">
+        <div class="wu-stack wu-stack--sm">
+          <span class="wu-label">Planning Tool</span>
+          <h3 class="wu-card__title t-heading" id="tvmInflationTitle">Inflation Adjustment</h3>
+          <p class="t-body-sm t-muted">What a future amount is worth in today's money.</p>
         </div>
       </div>
       <div class="tvm-layout">
@@ -189,19 +189,19 @@ function tvmInflationTemplate(): string {
 
 export function tvmCalculatorTemplate(): string {
   // Wrapper so Reset can re-render just the calculator, not the page shell.
-  return `<div id="tvmRoot">${tvmCardsTemplate()}</div>`;
+  return `<div id="tvmRoot" class="wu wu-stack wu-stack--lg">${tvmCardsTemplate()}</div>`;
 }
 
 function tvmCardsTemplate(): string {
   return `
-    <section class="card panel tvm-card" aria-labelledby="tvmTitle">
-      <div class="panel-head">
-        <div>
-          <span class="eyebrow">Planning Tool</span>
-          <h3 id="tvmTitle">TVM Calculator</h3>
-          <p class="card-sub">Fill in any four values, then solve for the fifth.</p>
+    <section class="wu-card tvm-card" aria-labelledby="tvmTitle">
+      <div class="wu-card__header">
+        <div class="wu-stack wu-stack--sm">
+          <span class="wu-label">Planning Tool</span>
+          <h3 class="wu-card__title t-heading" id="tvmTitle">TVM Calculator</h3>
+          <p class="t-body-sm t-muted">Fill in any four values, then solve for the fifth.</p>
         </div>
-        <button class="secondary-button" type="button" id="tvmReset">Reset</button>
+        <button class="wu-btn wu-btn--secondary wu-btn--sm" type="button" id="tvmReset">Reset</button>
       </div>
 
       <div class="tvm-options">
@@ -233,14 +233,14 @@ function tvmCardsTemplate(): string {
                      step="${row.step}" value="${escapeHtml(tvmValues[row.name])}"
                      data-tvm-input="${row.name}" aria-describedby="tvmSignNote">
             </span>
-            <button class="v2-btn v2-btn--secondary v2-btn--sm tvm-solve" type="button"
+            <button class="wu-btn wu-btn--secondary wu-btn--sm tvm-solve" type="button"
                     data-tvm-solve="${row.name}"
                     aria-label="Solve for ${escapeHtml(row.label)}">${escapeHtml(row.button)}</button>
           </div>`).join("")}
 
         <div class="tvm-row tvm-row--select">
           <label class="tvm-row__label" for="tvmFrequency">Compounding</label>
-          <select class="v2-input tvm-select" id="tvmFrequency" data-tvm-frequency>
+          <select class="wu-field tvm-select" id="tvmFrequency" data-tvm-frequency>
             ${(Object.keys(COMPOUNDING_LABELS) as CompoundingFrequency[]).map((key) => `
               <option value="${key}"${key === tvmFrequency ? " selected" : ""}>${escapeHtml(COMPOUNDING_LABELS[key])}</option>`).join("")}
           </select>
