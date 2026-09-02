@@ -351,7 +351,12 @@
  *  MARKET — COMPARE                                                       *
  * ====================================================================== */
 
-.stock-compare { display: grid; gap: 24px; }
+/* #compareContent also carries .wu-stack (flex column + gap); .stock-compare
+   only needs to keep its children from overflowing the page width. Giving it
+   display:grid here made an implicit auto column that grew to the wide
+   comparison table's min-width and pushed the 4th symbol off-screen. */
+.stock-compare { min-width: 0; }
+.stock-compare > * { min-width: 0; }
 .compare-intro { display: grid; gap: 8px; max-width: 860px; }
 .compare-intro h3 { font-size: 20px; line-height: 1.3; color: var(--text); }
 .compare-intro p { max-width: 780px; color: var(--text-muted); font-size: 12px; line-height: 1.7; }
