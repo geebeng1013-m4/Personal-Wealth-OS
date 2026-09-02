@@ -116,8 +116,9 @@ export function dashboardTemplate(state: WealthState): string {
             <span aria-hidden="true">${overview.planStatus.onTrack ? "✓" : "!"}</span>
             ${escapeHtml(overview.planStatus.label)}
           </p>
-          <div class="wu-row" style="gap:var(--space-6);margin:var(--space-3) 0">
+          <div class="wu-row" style="gap:var(--space-5);margin:var(--space-3) 0;align-items:stretch">
             <div class="wu-metric"><span class="wu-metric__label wu-label">Planned</span><span class="wu-metric__value t-num">${money(overview.planStatus.plannedAmount)}</span></div>
+            <span aria-hidden="true" style="width:1px;background:var(--border)"></span>
             <div class="wu-metric"><span class="wu-metric__label wu-label">Contributed</span><span class="wu-metric__value t-num">${money(overview.planStatus.actualAmount)}</span></div>
           </div>
           ${overview.planStatus.progress !== null ? `
