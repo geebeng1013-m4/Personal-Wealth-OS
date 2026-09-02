@@ -11,8 +11,9 @@
 import type { WealthState } from "../models";
 import { createId } from "../state";
 import { money, percent } from "../rules";
-import { escapeHtml, numberInput } from "../html";
+import { escapeHtml } from "../html";
 import { leakInsightStrip } from "../components/leakInsightStrip";
+import { pageHeader } from "../components/pageHeader";
 import { getGoalsSnapshot } from "../goalSummary";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
@@ -25,62 +26,71 @@ export function goalsTemplate(state: WealthState): string {
     const linkedAccount = snapshot.linkedAccountName;
     const ratio = snapshot.progress;
     const months = snapshot.estimatedMonthsToTarget;
-    const color = ratio >= 0.8 ? "var(--green)" : ratio >= 0.4 ? "var(--amber)" : "var(--ink)";
-    const barColor = ratio >= 0.8 ? "var(--green)" : ratio >= 0.4 ? "var(--amber)" : "var(--blue)";
-    const extra = months ? " · " + months + " months" : "";
-    return '<article class="card data-card">' +
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;">' +
-        '<span class="eyebrow">' + escapeHtml(goal.name) + '</span>' +
-        '<button class="edit-goal secondary-button" data-index="' + originalIndex + '" type="button" style="font-size:11px;padding:4px 8px;">Edit</button>' +
-      '</div>' +
-      '<h3>' + escapeHtml(goal.label) + '</h3>' +
-      '<strong style="color:' + color + ';">' + percent(ratio) + '</strong>' +
-      '<div class="bar"><span style="width:' + Math.round(ratio * 100) + '%;background:' + barColor + ';"></span></div>' +
-      '<small style="color:var(--ink-3);">' + money(current) + ' / ' + money(goal.target) + extra + '</small>' +
-      '<small class="goal-account-link" style="color:var(--ink-3);">' + (linkedAccount ? 'Linked account: ' + escapeHtml(linkedAccount) : snapshot.isAccountLinked ? 'Linked account: Account unavailable' : 'Progress: Manual') + '</small>' +
-      '<p>' + escapeHtml(goal.note) + '</p>' +
-      '<div class="goal-edit-form" id="goalEdit' + originalIndex + '" style="display:none;margin-top:12px;">' +
-        '<form class="form-grid goalForm" data-index="' + originalIndex + '">' +
-          '<label>Name<input name="name" type="text" value="' + escapeHtml(goal.name) + '"></label>' +
-          '<label>Label<input name="label" type="text" value="' + escapeHtml(goal.label) + '"></label>' +
-          numberInput("current", "Current MYR", String(goal.current), "1") +
-          numberInput("target", "Target MYR", String(goal.target), "1") +
-          numberInput("monthlyContribution", "Monthly MYR", String(goal.monthlyContribution), "1") +
-          '<label>Linked account<select name="accountId"><option value="">Manual progress</option>' + state.ledgerAccounts.map((account) => '<option value="' + escapeHtml(account.id) + '"' + (account.id === goal.accountId ? ' selected' : '') + '>' + escapeHtml(account.name) + '</option>').join('') + '</select></label>' +
-          '<label>Note<textarea name="note" rows="2">' + escapeHtml(goal.note) + '</textarea></label>' +
-          '<p class="form-error goal-form-error" role="alert" hidden></p>' +
-          '<div style="display:flex;gap:8px;">' +
-            '<button class="primary-button save-goal" type="button">Save</button>' +
-            '<button class="secondary-button cancel-goal-edit" type="button" data-index="' + originalIndex + '">Cancel</button>' +
-            '<button class="danger-button delete-goal" type="button" data-index="' + originalIndex + '">Delete</button>' +
-          '</div>' +
-        '</form>' +
-      '</div>' +
-      '</article>';
+    // Three-way pace status: on track, part-way, early.
+    const valueTone = ratio >= 0.8 ? " wu-metric__value--positive" : "";
+    const barTone = ratio >= 0.8 ? "" : ratio >= 0.4 ? " wu-bar__fill--warning" : " wu-bar__fill--faint";
+    const extra = months ? " &middot; " + months + " months" : "";
+    const accountLine = linkedAccount
+      ? "Linked account: " + escapeHtml(linkedAccount)
+      : snapshot.isAccountLinked
+        ? "Linked account: Account unavailable"
+        : "Progress: Manual";
+    return `<article class="wu-card">
+      <div class="wu-stack">
+        <div class="wu-row wu-row--between">
+          <span class="wu-label">${escapeHtml(goal.name)}</span>
+          <button class="wu-btn wu-btn--ghost wu-btn--sm edit-goal" data-index="${originalIndex}" type="button">Edit</button>
+        </div>
+        <div class="wu-stack wu-stack--sm">
+          <h3 class="t-heading">${escapeHtml(goal.label)}</h3>
+          <span class="wu-metric__value t-num${valueTone}">${percent(ratio)}</span>
+          <div class="wu-bar"><span class="wu-bar__fill${barTone}" style="width:${Math.round(ratio * 100)}%"></span></div>
+          <span class="wu-label--plain t-caption">${money(current)} / ${money(goal.target)}${extra}</span>
+          <span class="wu-label--plain t-caption">${accountLine}</span>
+        </div>
+        <p class="t-body-sm t-muted">${escapeHtml(goal.note)}</p>
+        <div class="goal-edit-form is-hidden" id="goalEdit${originalIndex}">
+          <form class="wu-stack goalForm" data-index="${originalIndex}">
+            <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="name" type="text" value="${escapeHtml(goal.name)}"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Label</span><input class="wu-field" name="label" type="text" value="${escapeHtml(goal.label)}"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Current MYR</span><input class="wu-field" name="current" type="number" min="0" step="1" value="${goal.current}"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Target MYR</span><input class="wu-field" name="target" type="number" min="0" step="1" value="${goal.target}"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Monthly MYR</span><input class="wu-field" name="monthlyContribution" type="number" min="0" step="1" value="${goal.monthlyContribution}"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Linked account</span><select class="wu-field" name="accountId"><option value="">Manual progress</option>${state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}"${account.id === goal.accountId ? " selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}</select></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Note</span><textarea class="wu-field" name="note" rows="2">${escapeHtml(goal.note)}</textarea></label>
+            <p class="wu-field-row__error goal-form-error" role="alert" hidden></p>
+            <div class="wu-row">
+              <button class="wu-btn wu-btn--primary wu-btn--sm save-goal" type="button">Save</button>
+              <button class="wu-btn wu-btn--secondary wu-btn--sm cancel-goal-edit" data-index="${originalIndex}" type="button">Cancel</button>
+              <button class="wu-btn wu-btn--danger wu-btn--sm delete-goal" data-index="${originalIndex}" type="button">Delete</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </article>`;
   }).join("");
 
-  // A real button: the card was previously an <article> with a click handler,
-  // so it could not be reached or activated from the keyboard.
-  const addGoalCard = '<button class="card data-card" type="button" style="display:flex;align-items:center;justify-content:center;min-height:120px;border-style:dashed;cursor:pointer;width:100%;" id="addGoalBtn">' +
-    '<div style="text-align:center;color:var(--ink-3);">' +
-      '<div style="font-size:24px;margin-bottom:4px;" aria-hidden="true">+</div>' +
-      '<span>Add Goal</span>' +
-    '</div>' +
-  '</button>';
+  const addGoalCard =
+    `<button class="wu-add" id="addGoalBtn" type="button">` +
+    `<span class="wu-add__plus" aria-hidden="true">+</span><span>Add Goal</span></button>`;
 
-  // With no goals the page was otherwise blank: no explanation of what a goal
-  // is for, and nothing but a dashed card to click.
   const goalsEmptyState = state.goals.length === 0
-    ? '<p class="empty-state">No goals yet. A goal gives a specific amount of money a job — a trip, a purchase, a buffer — so surplus stops drifting. Add one to start tracking progress against a target.</p>'
+    ? `<p class="wu-empty">No goals yet. A goal gives a specific amount of money a job &mdash; a trip, a purchase, a buffer &mdash; so surplus stops drifting. Add one to start tracking progress against a target.</p>`
     : "";
 
   return `
-    <div class="section-title"><span class="eyebrow">Goal System</span><h3>Goals and Wishlist</h3><p>Goals do not restrict your life; they give every ringgit a clear direction.</p></div>
-    ${leakInsightStrip(state, ["goal"], "Goal pace")}
-    ${goalsEmptyState}
-    <div class="two-col-grid">
-      ${goalCards}
-      ${addGoalCard}
+    <div class="wu">
+      ${pageHeader({
+        eyebrow: "Goal System",
+        title: "Goals and Wishlist",
+        sub: "Goals do not restrict your life; they give every ringgit a clear direction.",
+      })}
+      ${leakInsightStrip(state, ["goal"], "Goal pace")}
+      ${goalsEmptyState}
+      <div class="wu-grid wu-grid--2">
+        ${goalCards}
+        ${addGoalCard}
+      </div>
     </div>
   `;
 }
@@ -92,8 +102,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
   root.querySelectorAll<HTMLButtonElement>(".edit-goal").forEach((button) => {
     button.addEventListener("click", () => {
       const index = button.dataset.index;
-      const form = root.querySelector<HTMLElement>("#goalEdit" + index);
-      if (form) form.style.display = form.style.display === "none" ? "block" : "none";
+      root.querySelector<HTMLElement>("#goalEdit" + index)?.classList.toggle("is-hidden");
     });
   });
 
@@ -101,8 +110,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
   root.querySelectorAll<HTMLButtonElement>(".cancel-goal-edit").forEach((button) => {
     button.addEventListener("click", () => {
       const index = button.dataset.index;
-      const form = root.querySelector<HTMLElement>("#goalEdit" + index);
-      if (form) form.style.display = "none";
+      root.querySelector<HTMLElement>("#goalEdit" + index)?.classList.add("is-hidden");
     });
   });
 
@@ -151,7 +159,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
       if (saved) {
         saved.textContent = "Saved";
         saved.hidden = false;
-        saved.classList.add("form-success");
+        saved.classList.add("is-ok");
       }
       rerender(root, next, setState, "goals", navigate);
     };
