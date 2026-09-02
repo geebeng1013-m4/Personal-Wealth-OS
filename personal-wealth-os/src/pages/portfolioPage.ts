@@ -23,10 +23,7 @@ import {
   moneyOrUnknown,
   pnlText,
   pnlTone,
-  joinNotes,
-  usdPnlNote,
   valuationNote,
-  feeFreeReturnNote,
 } from "./valuationFormat";
 import {
   getPortfolioSnapshot,
@@ -198,9 +195,7 @@ export function portfolioTemplate(state: WealthState): string {
           <div class="wu-metric"><span class="wu-metric__label wu-label">Long-term Investment Portfolio</span><span class="wu-metric__value t-num">${money(portfolio.totalInvestedMyr)}</span><span class="wu-metric__note t-caption">${heldCount > 0
             ? `Capital contributed across ${heldCount} ${heldCount === 1 ? "holding" : "holdings"} · USD ${portfolio.totalInvestedUsd.toFixed(2)} cost basis`
             : "No contributions recorded yet · targets are configured but nothing is held"}</span></div>
-          <div class="wu-metric ov-valuation" data-valuation-status="${portfolio.valuationStatus}"><span class="wu-metric__label wu-label">Market value</span><span class="wu-metric__value t-num" id="pfMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)}</span><span class="wu-metric__note t-caption ${pnlTone(portfolio.unrealizedPnlMyr)}" id="pfUnrealised">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} · ${escapeHtml(joinNotes(usdPnlNote(portfolio), valuationNote(portfolio)))}</span>${portfolio.feesInCostBasisMyr > 0.005
-            ? `<span class="wu-metric__note t-caption">${escapeHtml(joinNotes(`${money(portfolio.feesInCostBasisMyr)} in trading costs`, feeFreeReturnNote(portfolio)))}</span>`
-            : ""}</div>
+          <div class="wu-metric ov-valuation" data-valuation-status="${portfolio.valuationStatus}"><span class="wu-metric__label wu-label">Market value</span><span class="wu-metric__value t-num" id="pfMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)}</span><span class="wu-metric__note t-caption ${pnlTone(portfolio.unrealizedPnlMyr)}" id="pfUnrealised">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)}${portfolio.feesInCostBasisMyr > 0.005 ? ` · ${money(portfolio.feesInCostBasisMyr)} fees` : ""}${portfolio.valuationStatus !== "complete" ? ` · ${escapeHtml(valuationNote(portfolio))}` : ""}</span></div>
           <div class="wu-metric"><span class="wu-metric__label wu-label">Allocation health</span><span class="wu-metric__value t-num">${allocationHealth}</span><span class="wu-metric__note t-caption">Largest drift ${percent(portfolio.maxAbsoluteDrift, 1)}</span></div>
         </div>
       </section>
