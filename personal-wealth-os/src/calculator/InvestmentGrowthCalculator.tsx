@@ -159,8 +159,8 @@ export function InvestmentGrowthCalculator() {
     <div className="calc-grid calc-gap-4 lg:calc-grid-cols-[minmax(280px,0.36fr)_minmax(0,0.64fr)]">
       <section className="calc-card calc-self-start" aria-labelledby="calculatorInputsTitle">
         <div className="calc-mb-6">
-          <p className="calc-mb-2 calc-text-xs calc-font-bold calc-uppercase calc-tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Growth assumptions</p>
-          <h3 id="calculatorInputsTitle" className="calc-m-0 calc-text-xl calc-font-bold">Investment inputs</h3>
+          <p className="calc-mb-2 calc-text-xs calc-font-semibold calc-uppercase calc-tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Growth assumptions</p>
+          <h3 id="calculatorInputsTitle" className="calc-m-0 calc-text-xl calc-font-semibold">Investment inputs</h3>
           <p className="calc-mt-2 calc-text-sm calc-leading-6" style={{ color: "var(--text-muted)" }}>Model regular contributions and compound growth in MYR. Estimates are planning aids, not guaranteed returns.</p>
         </div>
 
@@ -177,18 +177,18 @@ export function InvestmentGrowthCalculator() {
       <section className="calc-card calc-min-w-0" aria-labelledby="growthProjectionTitle">
         <div className="calc-flex calc-flex-col calc-gap-4 sm:calc-flex-row sm:calc-items-end sm:calc-justify-between">
           <div>
-            <p className="calc-mb-2 calc-text-xs calc-font-bold calc-uppercase calc-tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Projected value</p>
-            <h3 id="growthProjectionTitle" className="calc-m-0 calc-font-mono calc-text-3xl calc-font-extrabold calc-tracking-tight calc-tabular-nums sm:calc-text-4xl">{currency.format(result.totalBalance)}</h3>
+            <p className="calc-mb-2 calc-text-xs calc-font-semibold calc-uppercase calc-tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Projected value</p>
+            <h3 id="growthProjectionTitle" className="calc-m-0 calc-font-mono calc-text-3xl calc-font-semibold calc-tracking-tight calc-tabular-nums sm:calc-text-4xl">{currency.format(result.totalBalance)}</h3>
             <p className="calc-mt-2 calc-text-sm" style={{ color: "var(--text-muted)" }}>Estimated balance after {years} {years === 1 ? "year" : "years"}</p>
           </div>
           <div className="calc-grid calc-grid-cols-2 calc-gap-3">
             <div className="calc-rounded-xl calc-border calc-p-3" style={{ borderColor: "var(--highlight-soft)", background: "var(--highlight-soft)" }}>
               <span className="calc-block calc-text-xs" style={{ color: "var(--highlight)" }}>Principal</span>
-              <strong className="calc-mt-1 calc-block calc-font-mono calc-text-base calc-tabular-nums">{currency.format(result.totalPrincipal)}</strong>
+              <strong className="calc-mt-1 calc-block calc-font-mono calc-text-base calc-font-semibold calc-tabular-nums">{currency.format(result.totalPrincipal)}</strong>
             </div>
             <div className="calc-rounded-xl calc-border calc-p-3" style={{ borderColor: "var(--accent-soft)", background: "var(--accent-soft)" }}>
               <span className="calc-block calc-text-xs" style={{ color: "var(--accent)" }}>Interest</span>
-              <strong className="calc-mt-1 calc-block calc-font-mono calc-text-base calc-tabular-nums">{currency.format(result.totalInterest)}</strong>
+              <strong className="calc-mt-1 calc-block calc-font-mono calc-text-base calc-font-semibold calc-tabular-nums">{currency.format(result.totalInterest)}</strong>
             </div>
           </div>
         </div>

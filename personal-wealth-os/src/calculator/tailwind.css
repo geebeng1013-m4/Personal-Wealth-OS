@@ -59,7 +59,7 @@
   }
 
   .calc-chart-eyebrow {
-    @apply calc-block calc-text-[10px] calc-font-bold calc-uppercase calc-tracking-[0.18em];
+    @apply calc-block calc-text-[10px] calc-font-semibold calc-uppercase calc-tracking-[0.18em];
     color: var(--text-faint);
   }
 
@@ -119,7 +119,7 @@
   }
 
   .calc-chart-tooltip-title {
-    @apply calc-mb-3 calc-text-xs calc-font-bold calc-uppercase calc-tracking-[0.12em];
+    @apply calc-mb-3 calc-text-xs calc-font-semibold calc-uppercase calc-tracking-[0.12em];
     color: var(--text-faint);
   }
 
@@ -144,8 +144,14 @@
     @apply calc-block calc-h-2 calc-w-2 calc-rounded-full;
   }
 
+  /*
+   * <strong> defaults to 700, and Geist Mono is only loaded at 400/500/600 —
+   * the browser would fake the extra weight. Pin every number to a weight that
+   * actually ships, matching .t-num-lg elsewhere in the app.
+   */
   .calc-chart-tooltip-row strong,
   .calc-chart-tooltip-total strong {
+    font-weight: var(--weight-semibold);
     font-variant-numeric: tabular-nums;
   }
 
