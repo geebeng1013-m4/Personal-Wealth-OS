@@ -74,7 +74,7 @@ export function feeFreeReturnNote(portfolio: PortfolioSnapshot): string {
 /** The Trading costs row's contents, shared by the first paint and the repaint. */
 export function feeRowHtml(portfolio: PortfolioSnapshot): string {
   const note = feeFreeReturnNote(portfolio) || "Commission paid, already inside the cost above";
-  return `${money(portfolio.feesInCostBasisMyr)} <span class="ov-detail-row__note">${escapeHtml(note)}</span>`;
+  return `${money(portfolio.feesInCostBasisMyr)} <span class="wu-note">${escapeHtml(note)}</span>`;
 }
 
 /** Join note fragments with the standard separator, dropping empty ones. */
@@ -85,7 +85,7 @@ export function joinNotes(...parts: string[]): string {
 /** CSS modifier for a canonical P&L value. Neutral while unknown. */
 export function pnlTone(amount: number | null | undefined): string {
   if (amount == null) return "";
-  return amount >= 0 ? "ov-metric__value--positive" : "ov-metric__value--negative";
+  return amount >= 0 ? "wu-metric__value--positive" : "wu-metric__value--negative";
 }
 
 /**

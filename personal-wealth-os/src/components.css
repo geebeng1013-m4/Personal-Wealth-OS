@@ -578,23 +578,14 @@
     border-bottom: none;
   }
 
-  /* ---- shared valuation-row classes ---------------------------------------
-     valuationFormat.ts and bindDashboard's live-price patch both emit
-     `<span class="ov-detail-row__note">` and pnlTone() returns
-     `ov-metric__value--{tone}`. Keeping these as stable class names means
-     those strings need no edit and the not-yet-migrated Portfolio page keeps
-     rendering the same block. Fold away once Portfolio/Market migrate. */
-  .ov-detail-row__note {
+  /* A caption hung under a figure — where the number came from, or what
+     qualifies it. Sits inside a <dd> or beside a value, so it claims its own
+     line rather than a block of its own. */
+  .wu-note {
     display: block;
     margin-top: 2px;
     font: var(--weight-regular) var(--text-caption) / 1.4 var(--font-sans);
     color: var(--text-faint);
-  }
-  .ov-metric__value--positive {
-    color: var(--positive);
-  }
-  .ov-metric__value--negative {
-    color: var(--negative);
   }
   .wu-list__row:has(dt) {
     align-items: start;
@@ -654,7 +645,7 @@
   .mask-financial-amounts .t-num-lg,
   .mask-financial-amounts .t-num-xl,
   .mask-financial-amounts .wu-list__row > dd,
-  .mask-financial-amounts .ov-detail-row__note {
+  .mask-financial-amounts .wu-note {
     filter: blur(7px);
     user-select: none;
   }
@@ -1046,6 +1037,22 @@
     height: 100%;
     background: var(--accent);
     border-radius: inherit;
+  }
+
+  /*
+   * Buy/sell direction arrow in the Market trade list. Fixed width so the
+   * dates below it line up whichever way the trade went.
+   */
+  .market-trade-dir {
+    flex: none;
+    width: 1em;
+    font-weight: var(--weight-semibold);
+  }
+  .market-trade-dir.is-buy {
+    color: var(--positive);
+  }
+  .market-trade-dir.is-sell {
+    color: var(--negative);
   }
 
   /* ---- progress bar ------------------------------------------------------ */

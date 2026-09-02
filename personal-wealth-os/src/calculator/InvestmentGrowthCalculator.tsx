@@ -160,7 +160,7 @@ export function InvestmentGrowthCalculator() {
       <section className="calc-card calc-self-start" aria-labelledby="calculatorInputsTitle">
         <div className="calc-mb-6">
           <p className="calc-mb-2 calc-text-xs calc-font-semibold calc-uppercase calc-tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Growth assumptions</p>
-          <h3 id="calculatorInputsTitle" className="calc-m-0 calc-text-xl calc-font-semibold">Investment inputs</h3>
+          <h3 id="calculatorInputsTitle" className="calc-m-0 calc-text-lg calc-font-semibold">Investment inputs</h3>
           <p className="calc-mt-2 calc-text-sm calc-leading-6" style={{ color: "var(--text-muted)" }}>Model regular contributions and compound growth in MYR. Estimates are planning aids, not guaranteed returns.</p>
         </div>
 

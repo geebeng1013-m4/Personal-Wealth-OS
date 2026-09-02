@@ -1,7 +1,7 @@
 // Market data module — fetches VOO/QQQM quotes from Yahoo Finance
 // K-line chart powered by TradingView Widget
 
-import { calculatePositionCostBasis, tradeUnits, type CostBasisTrade } from "./rules";
+import { calculatePositionCostBasis, type CostBasisTrade } from "./rules";
 import { normalizeQuotes, type PriceMap } from "./marketPrices";
 
 /**
@@ -112,20 +112,6 @@ export function resetUsdToMyrCache(): void {
   cachedUsdToMyr = null;
   cachedUsdToMyrTimestamp = 0;
   derivedUsdToMyr = null;
-}
-
-/** Pure string HTML-escape — safe for non-DOM environments. */
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (ch) => {
-    switch (ch) {
-      case "\x26": return "\x26amp;";
-      case "<": return "\x26lt;";
-      case ">": return "\x26gt;";
-      case "\x22": return "\x26quot;";
-      case "\x27": return "\x26#39;";
-      default: return ch;
-    }
-  });
 }
 
 export interface MarketQuote {
@@ -372,91 +358,6 @@ export function calcPnLForTicker(
     realizedPnlMyr: round2(costBasis.realizedPnlMyr),
     feeMyr: round2(costBasis.feesMyr),
   };
-}
-
-// --- Trade Timeline HTML ---
-
-interface TradeForTimeline {
-  ticker: string;
-  date: string;
-  type: CostBasisTrade["type"];
-  priceUsd: number;
-  amountUsd: number;
-  amountMyr: number;
-  units?: number;
-  feeMyr: number;
-}
-
-function timelineDate(raw: string, dateOnlyTime: string): Date {
-  return new Date(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T${dateOnlyTime}Z` : raw);
-}
-
-export function buildTradeTimelineHtml(
-  trades: TradeForTimeline[],
-  ticker: string,
-  currentPriceUsd: number,
-): string {
-  const filtered = trades.filter((t) => t.ticker === ticker);
-  if (filtered.length === 0) return "";
-
-  const pnl = calcPnLForTicker(trades, ticker, currentPriceUsd, getUsdToMyr());
-  const sorted = [...filtered].sort((a, b) => a.date.localeCompare(b.date));
-  const minDate = timelineDate(sorted[0].date, "00:00:00");
-  const maxDate = timelineDate(sorted[sorted.length - 1].date, "00:00:00");
-
-  // Add some padding
-  const padMs = Math.max((maxDate.getTime() - minDate.getTime()) * 0.05, 86400000 * 3);
-  const startMs = minDate.getTime() - padMs;
-  const endMs = maxDate.getTime() + padMs;
-  const rangeMs = endMs - startMs;
-
-  // Cost line position (based on price range)
-  const allPrices = sorted.map((t) => t.priceUsd);
-  allPrices.push(currentPriceUsd);
-  const minPrice = Math.min(...allPrices) * 0.95;
-  const maxPrice = Math.max(...allPrices) * 1.05;
-  const priceRange = maxPrice - minPrice;
-
-  const costLineTopPct = priceRange > 0 ? ((maxPrice - pnl.averageCostUsd) / priceRange) * 100 : 50;
-
-  // Trade markers
-  const safeTicker = escapeHtml(ticker);
-  const markers = sorted.map((t) => {
-    const isBuy = t.type !== "Sell";
-    const posMs = timelineDate(t.date, "16:00:00").getTime();
-    const leftPct = rangeMs > 0 ? ((posMs - startMs) / rangeMs) * 100 : 50;
-    const priceTopPct = priceRange > 0 ? ((maxPrice - t.priceUsd) / priceRange) * 100 : 50;
-    const units = tradeUnits(t).toFixed(4);
-    const safeDate = escapeHtml(t.date);
-
-    return `<div class="tl-marker" style="left:${leftPct.toFixed(1)}%;top:${priceTopPct.toFixed(1)}%;" title="${safeDate}\n${isBuy ? "Buy" : "Sell"} ${units} units @ $${t.priceUsd.toFixed(2)}">
-      <span class="tl-dot ${isBuy ? "tl-buy" : "tl-sell"}">${isBuy ? "\u2191" : "\u2193"}</span>
-      <span class="tl-label">${isBuy ? "B" : "S"} ${units} @ $${t.priceUsd.toFixed(0)}</span>
-    </div>`;
-  }).join("");
-
-  // Date labels
-  const dateLabels = sorted.map((t) => {
-    const posMs = timelineDate(t.date, "16:00:00").getTime();
-    const leftPct = rangeMs > 0 ? ((posMs - startMs) / rangeMs) * 100 : 50;
-    const d = timelineDate(t.date, "00:00:00");
-    const label = (d.getUTCMonth() + 1) + "/" + d.getUTCDate();
-    return `<span class="tl-date-label" style="left:${leftPct.toFixed(1)}%">${label}</span>`;
-  }).join("");
-
-  return `<div class="trade-timeline">
-    <div class="tl-header">
-      <span class="tl-title">\ud83d\udcca Trade Timeline \u2014 ${safeTicker}</span>
-      <span class="tl-cost-label">Avg Cost $${pnl.averageCostUsd.toFixed(2)}</span>
-    </div>
-    <div class="tl-body">
-      <div class="tl-track">
-        <div class="tl-cost-line" style="top:${costLineTopPct.toFixed(1)}%"></div>
-        ${markers}
-      </div>
-      <div class="tl-dates">${dateLabels}</div>
-    </div>
-  </div>`;
 }
 
 // --- Fundamentals (Dividend, P/E, etc.) ---

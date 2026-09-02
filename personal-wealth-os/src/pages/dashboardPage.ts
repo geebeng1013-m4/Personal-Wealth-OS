@@ -186,23 +186,23 @@ export function dashboardTemplate(state: WealthState): string {
                   <div class="v2-allocation__legend-item"><span class="v2-allocation__legend-dot" style="background:var(--text-faint)"></span>Reserve <strong>${money(opportunity)}</strong></div>
                 </div>
               </div>
-              <dl class="wu-list ov-valuation" data-valuation-status="${portfolio.valuationStatus}">
-                <div class="wu-list__row"><dt>Market value</dt><dd id="ovMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)} <span class="ov-detail-row__note">${escapeHtml(valuationNote(portfolio))}</span></dd></div>
-                <div class="wu-list__row"><dt>Invested</dt><dd>${money(portfolio.totalInvestedMyr)} <span class="ov-detail-row__note">Capital contributed, at cost</span></dd></div>
+              <dl class="wu-list wu-valuation" data-valuation-status="${portfolio.valuationStatus}">
+                <div class="wu-list__row"><dt>Market value</dt><dd id="ovMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)} <span class="wu-note">${escapeHtml(valuationNote(portfolio))}</span></dd></div>
+                <div class="wu-list__row"><dt>Invested</dt><dd>${money(portfolio.totalInvestedMyr)} <span class="wu-note">Capital contributed, at cost</span></dd></div>
                 <div class="wu-list__row" id="ovFeeRow"${portfolio.feesInCostBasisMyr > 0.005 ? "" : " hidden"}><dt>Trading costs</dt><dd id="ovFeeDrag">${feeRowHtml(portfolio)}</dd></div>
-                <div class="wu-list__row"><dt>Unrealised P&amp;L</dt><dd id="ovUnrealised" class="${pnlTone(portfolio.unrealizedPnlMyr)}">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} <span class="ov-detail-row__note">${escapeHtml(joinNotes(usdPnlNote(portfolio), portfolio.realizedPnlMyr !== 0 ? `Realised to date ${money(portfolio.realizedPnlMyr)}` : "Excludes realised gains"))}</span></dd></div>
+                <div class="wu-list__row"><dt>Unrealised P&amp;L</dt><dd id="ovUnrealised" class="${pnlTone(portfolio.unrealizedPnlMyr)}">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} <span class="wu-note">${escapeHtml(joinNotes(usdPnlNote(portfolio), portfolio.realizedPnlMyr !== 0 ? `Realised to date ${money(portfolio.realizedPnlMyr)}` : "Excludes realised gains"))}</span></dd></div>
               </dl>
             </section>
 
             <section class="wu-card wu-card--pad-sm" aria-label="Financial health breakdown">
               <h5 class="t-subheading" style="margin-bottom:var(--space-3)">Financial Health</h5>
               <dl class="wu-list">
-                <div class="wu-list__row"><dt>Safety reserve</dt><dd>${percent(emergency)} <span class="ov-detail-row__note">${state.emergency.target > 0
+                <div class="wu-list__row"><dt>Safety reserve</dt><dd>${percent(emergency)} <span class="wu-note">${state.emergency.target > 0
                   ? `${money(state.emergency.current)} of ${money(state.emergency.target)}${Number.isFinite(emergencyMonths) && emergencyMonths > 0 ? ` · ${emergencyMonths}mo to target` : emergency >= 1 ? " · fully funded" : ""}`
                   : "No emergency-fund target set"}</span></dd></div>
-                <div class="wu-list__row"><dt>Recurring forecast</dt><dd>${money(forecast.surplus)} <span class="ov-detail-row__note">${money(forecast.income)} in · ${money(forecast.expense)} out${nextRecurring ? ` · Next ${nextRecurring.date.toLocaleDateString("en-MY", { day: "numeric", month: "short" })}` : ""}</span></dd></div>
-                <div class="wu-list__row"><dt>DCA mandate</dt><dd>${money(budget.plannedDcaAmount)} <span class="ov-detail-row__note">${portfolio.tradeCount} contributions recorded</span></dd></div>
-                <div class="wu-list__row"><dt>Investment accounts</dt><dd>${assetShare.ratio === null ? "N/A" : percent(assetShare.ratio)} <span class="ov-detail-row__note">${assetShare.ratio === null ? `No account balances recorded` : `${money(assetShare.investmentAssets)} of ${money(assetShare.totalAssets)} account balances`}</span></dd></div>
+                <div class="wu-list__row"><dt>Recurring forecast</dt><dd>${money(forecast.surplus)} <span class="wu-note">${money(forecast.income)} in · ${money(forecast.expense)} out${nextRecurring ? ` · Next ${nextRecurring.date.toLocaleDateString("en-MY", { day: "numeric", month: "short" })}` : ""}</span></dd></div>
+                <div class="wu-list__row"><dt>DCA mandate</dt><dd>${money(budget.plannedDcaAmount)} <span class="wu-note">${portfolio.tradeCount} contributions recorded</span></dd></div>
+                <div class="wu-list__row"><dt>Investment accounts</dt><dd>${assetShare.ratio === null ? "N/A" : percent(assetShare.ratio)} <span class="wu-note">${assetShare.ratio === null ? `No account balances recorded` : `${money(assetShare.investmentAssets)} of ${money(assetShare.totalAssets)} account balances`}</span></dd></div>
               </dl>
               <div class="wu-card__footer"><button class="wu-btn wu-btn--ghost wu-btn--sm dashboard-nav" data-page="advisor" type="button">See what to do →</button></div>
             </section>
@@ -215,9 +215,9 @@ export function dashboardTemplate(state: WealthState): string {
           <div class="wu-grid wu-grid--2 wu-grid--top">
             <section class="wu-card wu-card--pad-sm" aria-labelledby="overviewLeakTitle">
               <div class="wu-card__header"><h5 class="t-subheading" id="overviewLeakTitle">Money Leaks</h5><span class="wu-badge wu-badge--${leakSummary.highCount > 0 ? "negative" : "warning"}">${leakSummary.leaks.length} detected</span></div>
-              <p class="t-body"><strong class="t-num">${money(leakSummary.monthlyImpact)}</strong><span class="ov-detail-row__note">/mo across ${leakSummary.categoryCount} ${leakSummary.categoryCount === 1 ? "category" : "categories"}</span></p>
+              <p class="t-body"><strong class="t-num">${money(leakSummary.monthlyImpact)}</strong><span class="wu-note">/mo across ${leakSummary.categoryCount} ${leakSummary.categoryCount === 1 ? "category" : "categories"}</span></p>
               <dl class="wu-list">
-                <div class="wu-list__row"><dt>Highest impact</dt><dd>${escapeHtml(leakSummary.topLeak?.title ?? "No material leak detected")} <span class="ov-detail-row__note">${escapeHtml(leakSummary.topLeak?.recommendation ?? "Keep transactions and recurring payments current to improve coverage.")}</span></dd></div>
+                <div class="wu-list__row"><dt>Highest impact</dt><dd>${escapeHtml(leakSummary.topLeak?.title ?? "No material leak detected")} <span class="wu-note">${escapeHtml(leakSummary.topLeak?.recommendation ?? "Keep transactions and recurring payments current to improve coverage.")}</span></dd></div>
               </dl>
               <div class="wu-card__footer"><button class="wu-btn wu-btn--ghost wu-btn--sm dashboard-nav" data-page="money-leaks" type="button">Review findings →</button></div>
             </section>
@@ -225,9 +225,9 @@ export function dashboardTemplate(state: WealthState): string {
             <section class="wu-card wu-card--pad-sm" aria-label="Monthly financial position">
               <h5 class="t-subheading" style="margin-bottom:var(--space-3)">Monthly Position</h5>
               <dl class="wu-list">
-                <div class="wu-list__row"><dt>Recorded spending</dt><dd>${money(snapshot.currentMonthExpenses)} <span class="ov-detail-row__note">${expenseChange !== null ? `${expenseChange <= 0 ? "↓" : "↑"} ${percent(Math.abs(expenseChange), 0)} month over month` : "A second month unlocks trend comparison"}</span></dd></div>
-                <div class="wu-list__row"><dt>Assignable surplus (planned)</dt><dd>${money(surplus)} <span class="ov-detail-row__note">${planOnTrack ? "Current DCA mandate is covered" : `DCA funding gap: ${money(budget.plannedDcaAmount - surplus)}`}</span></dd></div>
-                <div class="wu-list__row"><dt>Opportunity liquidity</dt><dd>${money(opportunity)} <span class="ov-detail-row__note">${state.opportunity.used > 0 ? `${money(state.opportunity.used)} deployed under your rules` : "Held for predefined deployment conditions"}</span></dd></div>
+                <div class="wu-list__row"><dt>Recorded spending</dt><dd>${money(snapshot.currentMonthExpenses)} <span class="wu-note">${expenseChange !== null ? `${expenseChange <= 0 ? "↓" : "↑"} ${percent(Math.abs(expenseChange), 0)} month over month` : "A second month unlocks trend comparison"}</span></dd></div>
+                <div class="wu-list__row"><dt>Assignable surplus (planned)</dt><dd>${money(surplus)} <span class="wu-note">${planOnTrack ? "Current DCA mandate is covered" : `DCA funding gap: ${money(budget.plannedDcaAmount - surplus)}`}</span></dd></div>
+                <div class="wu-list__row"><dt>Opportunity liquidity</dt><dd>${money(opportunity)} <span class="wu-note">${state.opportunity.used > 0 ? `${money(state.opportunity.used)} deployed under your rules` : "Held for predefined deployment conditions"}</span></dd></div>
               </dl>
               <div class="wu-card__footer"><button class="wu-btn wu-btn--ghost wu-btn--sm dashboard-nav" data-page="ledger" type="button">Open activity →</button></div>
             </section>
@@ -342,11 +342,11 @@ export function bindDashboard(
     const valueEl = root.querySelector<HTMLElement>("#ovMarketValue");
     const pnlEl = root.querySelector<HTMLElement>("#ovUnrealised");
     if (valueEl) {
-      valueEl.innerHTML = `${moneyOrUnknown(portfolio.totalInvestmentValueMyr)} <span class="ov-detail-row__note">${escapeHtml(valuationNote(portfolio))}</span>`;
+      valueEl.innerHTML = `${moneyOrUnknown(portfolio.totalInvestmentValueMyr)} <span class="wu-note">${escapeHtml(valuationNote(portfolio))}</span>`;
     }
     if (pnlEl) {
       pnlEl.className = pnlTone(portfolio.unrealizedPnlMyr);
-      pnlEl.innerHTML = `${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} <span class="ov-detail-row__note">${escapeHtml(joinNotes(usdPnlNote(portfolio), portfolio.realizedPnlMyr !== 0 ? `Realised to date ${money(portfolio.realizedPnlMyr)}` : "Excludes realised gains"))}</span>`;
+      pnlEl.innerHTML = `${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)} <span class="wu-note">${escapeHtml(joinNotes(usdPnlNote(portfolio), portfolio.realizedPnlMyr !== 0 ? `Realised to date ${money(portfolio.realizedPnlMyr)}` : "Excludes realised gains"))}</span>`;
     }
     // The fee-free return moves with the price, so it is repainted with the
     // rest. The fee itself does not, but the two live on one line.
@@ -354,7 +354,7 @@ export function bindDashboard(
     const feeRow = root.querySelector<HTMLElement>("#ovFeeRow");
     if (feeEl) feeEl.innerHTML = feeRowHtml(portfolio);
     if (feeRow) feeRow.hidden = portfolio.feesInCostBasisMyr <= 0.005;
-    root.querySelector<HTMLElement>(".ov-valuation")?.setAttribute("data-valuation-status", portfolio.valuationStatus);
+    root.querySelector<HTMLElement>(".wu-valuation")?.setAttribute("data-valuation-status", portfolio.valuationStatus);
   };
   refreshLivePrices(state, patchDashboardValuation);
   // Keep asking while this Dashboard stays on screen, so a tab left open

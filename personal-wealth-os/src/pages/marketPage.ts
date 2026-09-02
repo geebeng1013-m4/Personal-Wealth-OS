@@ -21,7 +21,6 @@ import { tradeUnits } from "../rules";
 import { tradesWithExchangeCost } from "../currencyExchange";
 import { buildAssetHistory, triggerHistory, type AssetHistory } from "../drawdowns";
 import {
-  buildTradeTimelineHtml,
   fetchFundamentals,
   fetchEtfComposition,
   fetchHistoricalPrices,
@@ -219,7 +218,6 @@ export function marketTemplate(state: WealthState): string {
           <div id="pnl-trades-list" style="margin-top:var(--space-3)"></div>
         </div>
         <div id="pnl-empty" class="wu-empty">No trades for this ticker</div>
-        <div id="tradeTimeline" style="margin-top:var(--space-4)"></div>
       </div>
 
       <!-- Risk Tab -->
@@ -237,7 +235,7 @@ export function marketTemplate(state: WealthState): string {
       <!-- Dividends Tab -->
       <div class="market-tab-content" data-tab-content="dividends">
         <div id="dividendsContent" class="wu-stack">
-          <p id="div-source" class="ov-detail-row__note"></p>
+          <p id="div-source" class="wu-note"></p>
           <div class="wu-grid wu-grid--wide">
             ${stat("div-yield", "💰 Dividend Yield")}
             ${stat("div-frequency", "📅 Frequency")}
@@ -433,7 +431,6 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     });
     createWidget(currentSymbol, currentInterval);
     updatePnL(currentSymbol);
-    updateTimeline(currentSymbol);
     updateStaticForSymbol(currentSymbol);
     selectEtfHoldings(currentSymbol);
     loadContext(currentSymbol);
@@ -576,29 +573,19 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       const rows = tradesForTicker.map((t) => {
         const isBuy = t.type !== "Sell";
         const units = tradeUnits(t).toFixed(4);
-        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface);border-radius:6px;margin-bottom:4px;font-size:12px;">' +
-          '<span style="display:flex;gap:8px;align-items:center;">' +
-            '<span style="color:' + (isBuy ? 'var(--positive)' : 'var(--negative)') + ';font-weight:700;width:20px;">' + (isBuy ? '↑' : '↓') + '</span>' +
-            '<span>' + escapeHtml(t.date) + '</span>' +
-            '<span style="color:var(--text-faint);">' + t.type + '</span>' +
-          '</span>' +
-          '<span>' + units + ' units @ $' + t.priceUsd.toFixed(2) + '</span>' +
+        return '<div class="wu-list__row">' +
+          '<dt class="wu-row wu-row--tight">' +
+            '<span class="market-trade-dir ' + (isBuy ? "is-buy" : "is-sell") + '" aria-hidden="true">' + (isBuy ? "↑" : "↓") + '</span>' +
+            '<span class="t-num">' + escapeHtml(t.date) + '</span>' +
+            '<span class="t-faint">' + escapeHtml(t.type) + '</span>' +
+          '</dt>' +
+          '<dd class="t-num">' + units + ' units @ $' + t.priceUsd.toFixed(2) + '</dd>' +
         '</div>';
       }).join("");
-      tradeListEl.innerHTML = rows ? '<div style="font-size:12px;color:var(--text-faint);margin-bottom:6px;font-weight:600;">Trade Details — ' + symbol + '</div>' + rows : "";
+      tradeListEl.innerHTML = rows
+        ? '<p class="wu-label">Trade detail — ' + escapeHtml(symbol) + '</p><dl class="wu-list">' + rows + '</dl>'
+        : "";
     }
-  }
-
-  // Update trade timeline
-  function updateTimeline(symbol: string) {
-    const timelineEl = root.querySelector<HTMLElement>("#tradeTimeline");
-    if (!timelineEl) return;
-    const hasTrades = state.trades.some((t) => t.ticker === symbol);
-    if (!hasTrades) {
-      timelineEl.innerHTML = "";
-      return;
-    }
-    timelineEl.innerHTML = buildTradeTimelineHtml(tradesWithExchangeCost(state.trades, state.currencyExchanges ?? []), symbol, 0);
   }
 
   // Populate static data for tabs
@@ -650,10 +637,10 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       const historyEl = root.querySelector<HTMLElement>("#div-history");
       if (historyEl) {
         const dh = divHistory[sym] || divHistory.VOO;
-        historyEl.innerHTML = dh.map((d) =>
-          '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">' +
-            '<span>' + d.date + '</span><span style="font-weight:600;">' + d.amount + '</span></div>'
-        ).join("");
+        historyEl.innerHTML = '<dl class="wu-list">' + dh.map((d) =>
+          '<div class="wu-list__row"><dt>' + escapeHtml(d.date) + '</dt>' +
+            '<dd class="t-num">' + escapeHtml(d.amount) + '</dd></div>'
+        ).join("") + '</dl>';
       }
 
     }
@@ -978,18 +965,16 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       // ex-dividend date this source does not carry.
       const historyEl = root.querySelector<HTMLElement>("#div-history");
       if (historyEl) {
-        const row = (label: string, value: string, last = false) =>
-          '<div style="display:flex;justify-content:space-between;padding:8px 0;' +
-          (last ? "" : "border-bottom:1px solid var(--border);") +
-          'font-size:13px;"><span>' + escapeHtml(label) + '</span>' +
-          '<span style="font-weight:600;">' + escapeHtml(value) + '</span></div>';
+        const row = (label: string, value: string) =>
+          '<div class="wu-list__row"><dt>' + escapeHtml(label) + '</dt>' +
+          '<dd class="t-num">' + escapeHtml(value) + '</dd></div>';
         const rows: string[] = [];
         if (fund.expenseRatio > 0) rows.push(row("Expense ratio", (fund.expenseRatio * 100).toFixed(2) + "%"));
         if (fund.totalAssets > 0) rows.push(row("Fund size (AUM)", "USD " + (fund.totalAssets / 1e9).toFixed(1) + "B"));
         if (fund.exDividendDate) rows.push(row("Next Ex-Dividend", fund.exDividendDate));
         if (fund.trailingAnnualDividendRate > 0) rows.push(row("Annual dividend / share", "$" + fund.trailingAnnualDividendRate.toFixed(2)));
         historyEl.innerHTML = rows.length > 0
-          ? rows.join("")
+          ? '<dl class="wu-list">' + rows.join("") + '</dl>'
           : '<div class="empty-state">No further fund detail is reported for ' + escapeHtml(symbol) + '.</div>';
       }
     } catch (err) {
@@ -1016,13 +1001,14 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       setT("#div-pe", sd.pe);
       const historyEl = root.querySelector<HTMLElement>("#div-history");
       if (historyEl) {
-        historyEl.innerHTML =
-          '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">' +
-            '<span>Next Ex-Dividend</span><span style="font-weight:600;">' + sd.exDiv + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">' +
-            '<span>5Y Avg Yield</span><span style="font-weight:600;">' + sd.avgYield + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;">' +
-            '<span>Annual Dividend</span><span style="font-weight:600;">' + sd.annual + '</span></div>';
+        const row = (label: string, value: string) =>
+          '<div class="wu-list__row"><dt>' + label + '</dt>' +
+          '<dd class="t-num">' + escapeHtml(value) + '</dd></div>';
+        historyEl.innerHTML = '<dl class="wu-list">' +
+          row("Next Ex-Dividend", sd.exDiv) +
+          row("5Y Avg Yield", sd.avgYield) +
+          row("Annual Dividend", sd.annual) +
+        '</dl>';
       }
     }
   }
@@ -1104,7 +1090,6 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
   // Initial load
   createWidget(currentSymbol, currentInterval);
   updatePnL(currentSymbol);
-  updateTimeline(currentSymbol);
   updateStaticForSymbol(currentSymbol);
   loadDividends(currentSymbol);
   loadRisk(currentSymbol);
