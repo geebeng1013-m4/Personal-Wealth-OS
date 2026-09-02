@@ -141,17 +141,25 @@
   .wu-grid--3 {
     grid-template-columns: repeat(3, 1fr);
   }
+  .wu-grid--4 {
+    grid-template-columns: repeat(4, 1fr);
+  }
   .wu-grid--wide {
     --wu-grid-min: 340px;
   }
+  .wu-grid--top {
+    align-items: start;
+  }
   @media (max-width: 1080px) {
-    .wu-grid--3 {
+    .wu-grid--3,
+    .wu-grid--4 {
       grid-template-columns: repeat(2, 1fr);
     }
   }
   @media (max-width: 720px) {
     .wu-grid--2,
-    .wu-grid--3 {
+    .wu-grid--3,
+    .wu-grid--4 {
       grid-template-columns: 1fr;
     }
   }
@@ -525,6 +533,39 @@
   }
   .wu-table tbody tr:last-child td {
     border-bottom: none;
+  }
+
+  /* ---- shared valuation-row classes ---------------------------------------
+     valuationFormat.ts and bindDashboard's live-price patch both emit
+     `<span class="ov-detail-row__note">` and pnlTone() returns
+     `ov-metric__value--{tone}`. Keeping these as stable class names means
+     those strings need no edit and the not-yet-migrated Portfolio page keeps
+     rendering the same block. Fold away once Portfolio/Market migrate. */
+  .ov-detail-row__note {
+    display: block;
+    margin-top: 2px;
+    font: var(--weight-regular) var(--text-caption) / 1.4 var(--font-sans);
+    color: var(--text-faint);
+  }
+  .ov-metric__value--positive {
+    color: var(--positive);
+  }
+  .ov-metric__value--negative {
+    color: var(--negative);
+  }
+  .wu-list__row:has(dt) {
+    align-items: start;
+  }
+  .wu-list__row:has(dt) > dt {
+    flex: none;
+    color: var(--text-muted);
+  }
+  .wu-list__row:has(dt) > dd {
+    flex: 1;
+    margin: 0;
+    text-align: right;
+    color: var(--text);
+    min-width: 0;
   }
 
   /* ---- empty state ------------------------------------------------------- */
