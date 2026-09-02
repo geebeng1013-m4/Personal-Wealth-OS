@@ -1039,6 +1039,36 @@
     border-radius: inherit;
   }
 
+  /* ---- Rules → How WealthUp works ---------------------------------------
+     Explanatory rows, not figures: the term and its explanation stack and the
+     text runs full width, where a wu-list row would otherwise push a value to
+     the right and squeeze a sentence into a column. */
+  /* Two classes deep on purpose: .wu-list__row:has(dt) > dd right-aligns the
+     value, which is right for a figure and wrong for a sentence. */
+  .wu-list__row.guide-row {
+    display: block;
+    padding: var(--space-3) 0;
+  }
+  .wu-list__row.guide-row > dt {
+    margin-bottom: var(--space-1);
+    color: var(--text);
+  }
+  .wu-list__row.guide-row > dd {
+    max-width: 68ch;
+    text-align: left;
+  }
+  .rules-guide .guide-steps {
+    margin: 0;
+    padding-left: var(--space-5);
+  }
+  .rules-guide .guide-steps > li {
+    padding-left: var(--space-1);
+  }
+  .rules-guide .guide-steps > li::marker {
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
   /*
    * Buy/sell direction arrow in the Market trade list. Fixed width so the
    * dates below it line up whichever way the trade went.

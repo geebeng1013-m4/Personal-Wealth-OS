@@ -1,11 +1,17 @@
 /**
- * Rules page — the rule cards and the personal notes beneath them.
+ * Rules page — the rule cards and the personal notes beneath them, plus the
+ * "How WealthUp works" guide.
  *
  * Seven cards are generated from the user's own policy figures rather than
  * stored as prose, so a card never drifts from the rule it describes. Each can
  * be overridden or hidden per user (ruleCardOverrides / hiddenRuleIds), and the
  * override is stored, not the generated text — an edited card keeps its own
  * words while an untouched one keeps following the figures.
+ *
+ * The two categories share this page because they answer the same question —
+ * what governs a decision here — and because a first-time user needs somewhere
+ * to read what the app is for that they can find again later. The guide is
+ * authored copy, not state: switching to it changes no data.
  */
 
 import type { RuleCardId, RuleNote, WealthState } from "../models";
@@ -14,7 +20,15 @@ import { escapeHtml } from "../html";
 import { leakInsightStrip } from "../components/leakInsightStrip";
 import { pageHeader } from "../components/pageHeader";
 import { getBudgetSnapshot } from "../budgetSummary";
+import { rulesGuideTemplate } from "./rulesGuide";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
+
+/**
+ * Which category is showing. Module-level, like the Ledger page's filter, so
+ * that editing a rule card — which re-renders the page — doesn't bounce the
+ * user back to the other tab. It lives until the tab is closed.
+ */
+let activeCategory: "rules" | "guide" = "rules";
 
 export function rulesTemplate(state: WealthState): string {
   const rulesBudget = getBudgetSnapshot(state);
@@ -67,29 +81,41 @@ export function rulesTemplate(state: WealthState): string {
       `<button class="wu-btn wu-btn--secondary wu-btn--sm edit-rule-notes" type="button" aria-label="Edit personal rule notes">Edit</button><button class="wu-btn wu-btn--ghost wu-btn--icon delete-rule-notes" type="button" aria-label="Delete personal rule notes" title="Delete rule">&times;</button>`,
     ));
   }
+  const onRules = activeCategory === "rules";
+  const tab = (id: "rules" | "guide", label: string): string =>
+    `<button class="wu-segmented__option rules-category${activeCategory === id ? " is-active" : ""}" data-category="${id}" type="button" role="tab" aria-selected="${activeCategory === id}" aria-controls="rulesPanel-${id}">${label}</button>`;
+
   return `<div class="wu">
     ${pageHeader({
       eyebrow: "Decision Framework",
       title: "Rules",
-      sub: "Seven cards generated from your own policy figures, plus any personal notes you add.",
+      sub: "The rules you have set for yourself, and how the rest of WealthUp works.",
     })}
     ${leakInsightStrip(state, ["debt", "budget", "goal"], "Rule check")}
     <div class="wu-stack wu-stack--lg">
-    <div class="wu-grid wu-grid--3">${cards.join("") || `<p class="wu-empty">No rule cards remain. Add personal notes below to create a new rule.</p>`}</div>
-    <article class="wu-card">
-      <div class="wu-card__header">
-        <div class="wu-stack wu-stack--sm"><span class="wu-label">Custom Rules</span><h3 class="wu-card__title t-heading">Rule Notes</h3></div>
-        <span class="wu-badge wu-badge--neutral">Up to 5,000 characters</span>
-      </div>
-      <form id="ruleNotesForm" class="wu-stack">
-        <label class="wu-field-row"><span class="wu-field-row__label">Title</span><input class="wu-field" id="ruleNoteTitle" name="ruleNoteTitle" maxlength="80" value="" placeholder="e.g. Monthly Cashflow"></label>
-        <label class="wu-field-row"><span class="wu-field-row__label">Add reminders, principles, or action items to your rules</span><textarea class="wu-field" id="ruleNotes" name="ruleNotes" maxlength="5000" rows="8" placeholder="Write your personal rules here..."></textarea></label>
-        <div class="wu-row">
-          <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save Notes</button>
-          <span id="ruleNotesStatus" class="wu-field-row__error is-ok" role="status"></span>
+    <div class="wu-segmented" role="tablist" aria-label="Rules category">
+      ${tab("rules", "Your rules")}${tab("guide", "How WealthUp works")}
+    </div>
+
+    <div id="rulesPanel-rules" role="tabpanel" class="wu-stack wu-stack--lg"${onRules ? "" : " hidden"}>
+      <div class="wu-grid wu-grid--3">${cards.join("") || `<p class="wu-empty">No rule cards remain. Add personal notes below to create a new rule.</p>`}</div>
+      <article class="wu-card">
+        <div class="wu-card__header">
+          <div class="wu-stack wu-stack--sm"><span class="wu-label">Custom Rules</span><h3 class="wu-card__title t-heading">Rule Notes</h3></div>
+          <span class="wu-badge wu-badge--neutral">Up to 5,000 characters</span>
         </div>
-      </form>
-    </article>
+        <form id="ruleNotesForm" class="wu-stack">
+          <label class="wu-field-row"><span class="wu-field-row__label">Title</span><input class="wu-field" id="ruleNoteTitle" name="ruleNoteTitle" maxlength="80" value="" placeholder="e.g. Monthly Cashflow"></label>
+          <label class="wu-field-row"><span class="wu-field-row__label">Add reminders, principles, or action items to your rules</span><textarea class="wu-field" id="ruleNotes" name="ruleNotes" maxlength="5000" rows="8" placeholder="Write your personal rules here..."></textarea></label>
+          <div class="wu-row">
+            <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save Notes</button>
+            <span id="ruleNotesStatus" class="wu-field-row__error is-ok" role="status"></span>
+          </div>
+        </form>
+      </article>
+    </div>
+
+    <div id="rulesPanel-guide" role="tabpanel"${onRules ? " hidden" : ""}>${rulesGuideTemplate()}</div>
     </div>
   </div>`;
 }
@@ -100,6 +126,26 @@ export function bindRules(root: HTMLElement, state: WealthState, setState: Sette
     if (navigate) navigate("rules");
     else rerender(root, next, setState, "rules");
   };
+
+  // Category switch. Shows and hides in place rather than re-rendering: the
+  // guide is static copy, and a re-render would discard whatever the user had
+  // typed into the rule-notes form.
+  root.querySelectorAll<HTMLButtonElement>(".rules-category").forEach((button) => {
+    button.addEventListener("click", () => {
+      const next = button.dataset.category === "guide" ? "guide" : "rules";
+      if (next === activeCategory) return;
+      activeCategory = next;
+      root.querySelectorAll<HTMLButtonElement>(".rules-category").forEach((other) => {
+        const isActive = other.dataset.category === activeCategory;
+        other.classList.toggle("is-active", isActive);
+        other.setAttribute("aria-selected", String(isActive));
+      });
+      const rulesPanel = root.querySelector<HTMLElement>("#rulesPanel-rules");
+      const guidePanel = root.querySelector<HTMLElement>("#rulesPanel-guide");
+      if (rulesPanel) rulesPanel.hidden = activeCategory !== "rules";
+      if (guidePanel) guidePanel.hidden = activeCategory !== "guide";
+    });
+  });
 
   root.querySelectorAll<HTMLButtonElement>(".edit-rule").forEach((button) => {
     button.addEventListener("click", () => {
