@@ -803,6 +803,7 @@
   /* ---- segmented tabs -------------------------------------------------- */
   .wu-segmented {
     display: inline-flex;
+    align-self: flex-start; /* hug content when it's a flex-item (e.g. in wu-stack) */
     gap: 2px;
     padding: 3px;
     border-radius: var(--radius-md);
