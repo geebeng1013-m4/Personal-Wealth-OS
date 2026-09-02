@@ -136,10 +136,10 @@ export function dashboardTemplate(state: WealthState): string {
           <span class="wu-badge wu-badge--${statusTone(overview.priorityAction.severity)}">Priority ${escapeHtml(overview.priorityAction.severity === "positive" ? "status" : overview.priorityAction.severity)}</span>
           <h3 class="t-heading" id="ovPriorityTitle" style="margin:var(--space-3) 0">${escapeHtml(overview.priorityAction.title)}</h3>
           <div class="wu-stack wu-stack--sm">
-            <p class="t-body-sm"><span class="wu-label" style="display:inline-block;min-width:44px">Why</span>${escapeHtml(overview.priorityAction.explanation)}</p>
-            <p class="t-body-sm"><span class="wu-label" style="display:inline-block;min-width:44px">Do</span>${escapeHtml(overview.priorityAction.actionLabel)}</p>
+            <p class="t-body-sm"><span class="wu-label" style="display:inline-block;min-width:44px;margin-right:var(--space-3)">Why</span>${escapeHtml(overview.priorityAction.explanation)}</p>
+            <p class="t-body-sm"><span class="wu-label" style="display:inline-block;min-width:44px;margin-right:var(--space-3)">Do</span>${escapeHtml(overview.priorityAction.actionLabel)}</p>
             ${isRecommendationCompleted(state, overview.priorityAction.recommendationId)
-              ? '<p class="t-body-sm"><span class="wu-label" style="display:inline-block;min-width:44px">Status</span><span class="wu-badge wu-badge--positive"><span aria-hidden="true">✓</span> You marked this done</span></p>'
+              ? '<p class="t-body-sm"><span class="wu-label" style="display:inline-block;min-width:44px;margin-right:var(--space-3)">Status</span><span class="wu-badge wu-badge--positive"><span aria-hidden="true">✓</span> You marked this done</span></p>'
               : ""}
           </div>
           <div class="wu-card__footer wu-row">
@@ -153,7 +153,7 @@ export function dashboardTemplate(state: WealthState): string {
         <section class="wu-card wu-card--positive" aria-labelledby="ovPriorityTitle">
           <span class="wu-badge wu-badge--positive"><span aria-hidden="true">✓</span> Priority status</span>
           <h3 class="t-heading" id="ovPriorityTitle" style="margin:var(--space-3) 0">Nothing needs your attention</h3>
-          <p class="t-body-sm"><span class="wu-label" style="display:inline-block;min-width:44px">Why</span>No exceptions were detected against your configured rules.</p>
+          <p class="t-body-sm"><span class="wu-label" style="display:inline-block;min-width:44px;margin-right:var(--space-3)">Why</span>No exceptions were detected against your configured rules.</p>
         </section>
       `}
 
