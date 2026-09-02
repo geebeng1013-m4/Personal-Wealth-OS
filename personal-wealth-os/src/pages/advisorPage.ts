@@ -6,10 +6,13 @@
  * state. The UI ranks nothing and re-words nothing.
  *
  * The dip-buy ladder is a record, not a calculator: it lists the reserve's
- * drawdown tranches, marks each against VOO's live distance below its
- * all-time high (fetched from the same source Market → Context uses), and
- * lets the user record a tranche as deployed — which moves its amount into
- * the reserve's Used total. Everything persists in state.opportunity.
+ * drawdown tranches and marks each against how far VOO and QQQM are below
+ * their all-time highs (fetched from the same source Market → Context uses;
+ * a tranche is "reached" when either half is down by its step). The user
+ * records a tranche as deployed, which moves its amount into the reserve's
+ * Used total. Everything persists in state.opportunity. The check is passive
+ * — the Dashboard surfaces a reached, undeployed tranche the next time it
+ * loads; nothing runs while the app is closed.
  */
 
 import type { WealthState, OpportunityTranche } from "../models";
@@ -19,8 +22,7 @@ import { money } from "../rules";
 import { escapeHtml } from "../html";
 import { getAdvisorSnapshot } from "../advisor";
 import { isRecommendationCompleted, markRecommendationDone } from "../actionRecords";
-import { fetchHistoricalPrices } from "../market";
-import { buildAssetHistory } from "../drawdowns";
+import { assetDrawdownBelow } from "../drawdowns";
 import { leakInsightStrip } from "../components/leakInsightStrip";
 import { pageHeader } from "../components/pageHeader";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
@@ -116,7 +118,7 @@ export function advisorPageTemplate(state: WealthState): string {
             <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">📊 VOO allocation</span><span class="wu-metric__value t-num">${money(state.opportunity.allocation.VOO)}</span></div></div>
             <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">📊 QQQM allocation</span><span class="wu-metric__value t-num">${money(state.opportunity.allocation.QQQM)}</span></div></div>
           </div>
-          <div id="dipDrawdown" class="wu-card wu-card--inset wu-card--pad-sm t-body-sm t-muted">Checking VOO's distance below its all-time high…</div>
+          <div id="dipDrawdown" class="wu-card wu-card--inset wu-card--pad-sm t-body-sm t-muted">Checking VOO and QQQM against their all-time highs…</div>
           <div class="wu-stack wu-stack--sm">
             ${state.opportunity.tranches.map((tranche, index) => dipTrancheCard(tranche, index)).join("")}
           </div>
@@ -177,36 +179,36 @@ export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Set
   root.querySelectorAll<HTMLButtonElement>(".dip-undo").forEach((button) =>
     button.addEventListener("click", () => setTrancheDeployed(Number(button.dataset.tranche), false)));
 
-  // VOO's live distance below its all-time high — the same series Market →
-  // Context reads. It is a prompt beside each tranche, never an automatic
-  // trigger; a failed fetch just leaves the row at "—".
+  // Live distance below all-time high for both halves of the reserve, from the
+  // same series Market → Context reads. A tranche is "reached" when EITHER VOO
+  // or QQQM is down by its step — the reserve buys both, so a genuine drop in
+  // the growth half counts. It is a prompt beside each row, never an automatic
+  // trigger; a failed fetch just leaves the rows at "—".
   const drawdownBox = root.querySelector<HTMLElement>("#dipDrawdown");
-  void fetchHistoricalPrices("VOO", "10y").then((prices) => {
-    const history = buildAssetHistory(
-      prices.map((point) => ({ time: Date.parse(point.date), close: point.close })),
-      { threshold: 0.1 },
-    );
-    if (!history) {
-      if (drawdownBox) drawdownBox.textContent = "VOO price history unavailable — mark tranches by hand.";
+  void Promise.all([assetDrawdownBelow("VOO"), assetDrawdownBelow("QQQM")]).then(([voo, qqqm]) => {
+    if (voo === null && qqqm === null) {
+      if (drawdownBox) drawdownBox.textContent = "Price history unavailable — mark tranches by hand.";
       return;
     }
-    const pointsBelow = -history.currentDrawdown * 100; // e.g. 2.1 = 2.1% below the ATH
+    const worst = Math.max(voo ?? 0, qqqm ?? 0);
+    const part = (label: string, value: number | null): string =>
+      value === null ? `${label} —` : `${label} <strong>−${value.toFixed(1)}%</strong>`;
     if (drawdownBox) {
-      drawdownBox.innerHTML = pointsBelow < 0.1
-        ? "VOO is <strong>at or near its all-time high</strong> — no tranche is in range."
-        : `VOO is <strong>${pointsBelow.toFixed(1)}% below its all-time high</strong>.`;
+      drawdownBox.innerHTML = worst < 0.1
+        ? "VOO and QQQM are <strong>at or near their all-time highs</strong> — no tranche is in range."
+        : `${part("VOO", voo)} · ${part("QQQM", qqqm)} below their highs.`;
     }
     root.querySelectorAll<HTMLElement>(".dip-status").forEach((cell) => {
       const tranche = state.opportunity.tranches[Number(cell.dataset.tranche)];
       if (!tranche || tranche.deployed) return;
-      if (pointsBelow >= tranche.drawdown) {
+      if (worst >= tranche.drawdown) {
         cell.textContent = "Reached — deploy now";
         cell.classList.add("wu-metric__value--negative");
       } else {
-        cell.textContent = `${(tranche.drawdown - pointsBelow).toFixed(1)}pp to go`;
+        cell.textContent = `${(tranche.drawdown - worst).toFixed(1)}pp to go`;
       }
     });
   }).catch(() => {
-    if (drawdownBox) drawdownBox.textContent = "Could not load VOO price history — mark tranches by hand.";
+    if (drawdownBox) drawdownBox.textContent = "Could not load price history — mark tranches by hand.";
   });
 }

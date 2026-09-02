@@ -13,6 +13,7 @@ import { createId } from "../state";
 import { money, percent, monthsToEmergencyTarget } from "../rules";
 import { escapeHtml } from "../html";
 import { buildOverviewModel } from "../overview";
+import { assetDrawdownBelow } from "../drawdowns";
 import { pageHeader } from "../components/pageHeader";
 import { detectMoneyLeaks, nextActions } from "../advisor";
 import { investmentAssetShare } from "../ledger";
@@ -83,6 +84,10 @@ export function dashboardTemplate(state: WealthState): string {
     })}
 
     <div class="wu-stack wu-stack--lg">
+      <!-- Filled by bindDashboard after an async price check: shown only when a
+           dip-buy tranche is reached and not yet deployed. -->
+      <div id="dipAlert" hidden></div>
+
       <!-- SECTION 1 — FINANCIAL SNAPSHOT -->
       <section aria-labelledby="ovSnapshotTitle" class="wu-stack wu-stack--sm">
         <div class="wu-stack wu-stack--sm"><h3 class="t-heading" id="ovSnapshotTitle">Financial Snapshot</h3><p class="t-body-sm t-muted">Recorded position and this month's cash flow</p></div>
@@ -366,6 +371,35 @@ export function bindDashboard(
     clearInterval(dashboardPriceTimer);
     document.removeEventListener("visibilitychange", onDashboardVisible);
   });
+
+  // Dip-buy watch: this is as close to "notify me" as a client-only PWA gets —
+  // when the Dashboard loads, check how far VOO / QQQM are below their highs
+  // and, if an undeployed tranche is now in range, surface it here. Nothing
+  // runs while the app is closed.
+  const pending = state.opportunity.tranches.filter((tranche) => !tranche.deployed);
+  const dipAlert = root.querySelector<HTMLElement>("#dipAlert");
+  if (dipAlert && pending.length > 0) {
+    void Promise.all([assetDrawdownBelow("VOO"), assetDrawdownBelow("QQQM")]).then(([voo, qqqm]) => {
+      if (voo === null && qqqm === null) return;
+      const worst = Math.max(voo ?? 0, qqqm ?? 0);
+      const reached = pending.filter((tranche) => worst >= tranche.drawdown);
+      if (reached.length === 0) return;
+      const amount = reached.reduce((sum, tranche) => sum + tranche.amount, 0);
+      const steps = reached.map((tranche) => `−${tranche.drawdown}%`).join(", ");
+      const part = (label: string, value: number | null): string => value === null ? "" : `${label} −${value.toFixed(1)}%`;
+      const levels = [part("VOO", voo), part("QQQM", qqqm)].filter(Boolean).join(" · ");
+      dipAlert.className = "wu-card wu-card--pad-sm wu-card--negative";
+      dipAlert.innerHTML = `<div class="wu-row wu-row--between" style="align-items:flex-start;gap:var(--space-4)">
+        <div class="wu-stack wu-stack--sm">
+          <span class="wu-label">Dip-buy plan</span>
+          <strong class="t-subheading">${reached.length === 1 ? "A tranche is" : `${reached.length} tranches are`} in range — deploy ${money(amount)}</strong>
+          <span class="t-caption t-muted">${steps} reached · ${levels} below all-time highs</span>
+        </div>
+        <button class="wu-btn wu-btn--secondary wu-btn--sm dashboard-nav" data-page="advisor" type="button">Open Advisor →</button>
+      </div>`;
+      dipAlert.hidden = false;
+    }).catch(() => { /* the banner just stays hidden */ });
+  }
 
   root.querySelector<HTMLSelectElement>("#overviewGoalSelect")?.addEventListener("change", (event) => {
     const overviewGoalId = (event.currentTarget as HTMLSelectElement).value;

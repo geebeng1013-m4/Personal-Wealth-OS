@@ -17,9 +17,12 @@
  * it is the difference between reserving cash for something that happens every
  * few years and reserving it for something that never comes.
  *
- * Pure: a price series in, facts out. No fetching, no formatting, no clock
- * beyond the timestamps supplied.
+ * The core is pure: a price series in, facts out — no formatting, no clock
+ * beyond the timestamps supplied. The one exception is assetDrawdownBelow()
+ * at the end, a convenience that fetches the series first.
  */
+
+import { fetchHistoricalPrices } from "./market";
 
 /** One close, as the price history provides it. */
 export interface PricePoint {
@@ -221,4 +224,25 @@ export function buildAssetHistory(
     lastAt: clean[clean.length - 1].time,
     observations: clean.length,
   };
+}
+
+// --- One-call helper for pages that only need the current drawdown ---------
+
+/**
+ * How far an asset is below its all-time high right now, as a positive number
+ * of percentage points (2.1 = 2.1% below the peak). null on a failed fetch or
+ * too little history. Same series the Context panel reads; used by the
+ * Advisor dip-buy ladder and the Dashboard's dip-buy watch.
+ */
+export async function assetDrawdownBelow(symbol: string): Promise<number | null> {
+  try {
+    const prices = await fetchHistoricalPrices(symbol, "10y");
+    const history = buildAssetHistory(
+      prices.map((point) => ({ time: Date.parse(point.date), close: point.close })),
+      { threshold: 0.1 },
+    );
+    return history ? -history.currentDrawdown * 100 : null;
+  } catch {
+    return null;
+  }
 }
