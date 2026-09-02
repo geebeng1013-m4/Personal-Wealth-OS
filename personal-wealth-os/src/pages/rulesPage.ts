@@ -31,8 +31,8 @@ export function rulesTemplate(state: WealthState): string {
 
   const ruleCard = (title: string, body: string, actions: string, editForm = ""): string => `<article class="wu-card rule-card">
     <div class="wu-card__header">
-      <span class="wu-label">${escapeHtml(title)}</span>
-      <div class="wu-row wu-row--tight">${actions}</div>
+      <span class="wu-label" style="flex:1;min-width:0">${escapeHtml(title)}</span>
+      <div class="wu-row wu-row--tight" style="flex:none;flex-wrap:nowrap">${actions}</div>
     </div>
     <p class="t-body t-prewrap">${escapeHtml(body)}</p>
     ${editForm}
