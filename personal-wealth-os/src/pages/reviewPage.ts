@@ -14,6 +14,7 @@ import { escapeHtml } from "../html";
 import { leakInsightStrip } from "../components/leakInsightStrip";
 import { pageHeader } from "../components/pageHeader";
 import { getFinancialSnapshot, monthlyClose } from "../financialHealth";
+import { ledgerMonthTotals } from "../ledgerSummary";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
 export function reviewTemplate(state: WealthState): string {
@@ -54,7 +55,7 @@ export function reviewTemplate(state: WealthState): string {
             <label class="wu-field-row"><span class="wu-field-row__label">Income MYR</span><input class="wu-field" name="income" type="number" min="0" step="1" value="${snapshot.currentMonthIncome}"></label>
             <label class="wu-field-row"><span class="wu-field-row__label">Spending MYR</span><input class="wu-field" name="spending" type="number" min="0" step="1" value="${snapshot.currentMonthExpenses}"></label>
             <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Discipline Score</span><input class="wu-field" name="disciplineScore" type="number" min="0" step="1" value="${close.disciplineScore}"></label>
-            <p class="wu-field-row--wide t-caption t-faint">Calculated from ${money(snapshot.currentMonthIncome)} income, ${money(snapshot.currentMonthExpenses)} spending and ${money(close.dcaInvested)} invested this month.</p>
+            <p class="wu-field-row--wide t-caption t-faint" id="reviewCalcNote">Calculated from ${money(snapshot.currentMonthIncome)} income, ${money(snapshot.currentMonthExpenses)} spending and ${money(close.dcaInvested)} invested that month.</p>
             <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Notes</span><textarea class="wu-field" name="notes" rows="4" placeholder="This month's cash flow, investment discipline, and next month's actions"></textarea></label>
             <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save Review</button></div>
           </form>
@@ -72,7 +73,30 @@ export function reviewTemplate(state: WealthState): string {
 }
 
 export function bindReview(root: HTMLElement, state: WealthState, setState: Setter, navigate: Navigate | undefined, rerender: RenderApp): void {
-  root.querySelector<HTMLFormElement>("#reviewForm")?.addEventListener("submit", (event) => {
+  const form = root.querySelector<HTMLFormElement>("#reviewForm");
+
+  // Re-seed Income / Spending / Discipline / DCA from the ledger for whatever
+  // month is now selected, so switching months shows that month's recorded
+  // figures instead of leaving the current month's on screen.
+  form?.querySelector<HTMLInputElement>('input[name="month"]')?.addEventListener("change", (event) => {
+    const month = (event.currentTarget as HTMLInputElement).value;
+    if (!/^\d{4}-\d{2}$/.test(month) || !form) return;
+    const totals = ledgerMonthTotals(state.ledgerTransactions, month);
+    const close = monthlyClose(state, month);
+    const setNum = (name: string, value: number): void => {
+      const field = form.querySelector<HTMLInputElement>(`input[name="${name}"]`);
+      if (field) field.value = String(Math.round(value));
+    };
+    setNum("income", totals.income);
+    setNum("spending", totals.expenses);
+    setNum("disciplineScore", close.disciplineScore);
+    const dcaSelect = form.querySelector<HTMLSelectElement>('select[name="dcaDone"]');
+    if (dcaSelect) dcaSelect.value = close.dcaDone ? "true" : "false";
+    const note = root.querySelector<HTMLElement>("#reviewCalcNote");
+    if (note) note.textContent = `Calculated from ${money(totals.income)} income, ${money(totals.expenses)} spending and ${money(close.dcaInvested)} invested that month.`;
+  });
+
+  form?.addEventListener("submit", (event) => {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;
     const data = new FormData(form);
