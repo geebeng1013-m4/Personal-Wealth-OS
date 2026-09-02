@@ -34,16 +34,16 @@ function isStandalone(): boolean {
 
 function showIOSInstructions(): void {
   const overlay = document.createElement("div");
-  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;";
+  overlay.style.cssText = "position:fixed;inset:0;background:var(--surface-overlay);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;";
   overlay.innerHTML = `
-    <div style="background:var(--surface-solid);border-radius:16px;padding:24px;max-width:320px;text-align:center;">
-      <h3 style="margin:0 0 16px;font-size:18px;">Install Wealth OS</h3>
-      <div style="text-align:left;font-size:14px;line-height:1.8;color:var(--ink-2);">
+    <div class="wu wu-card" style="max-width:320px;text-align:center;">
+      <h3 class="t-heading" style="margin:0 0 16px;">Install Wealth OS</h3>
+      <div class="t-body-sm t-muted" style="text-align:left;line-height:1.8;">
         <p>1. Tap the <strong>Share</strong> button <span style="font-size:18px;">⬆️</span> at the bottom of Safari</p>
         <p>2. Scroll down and tap <strong>"Add to Home Screen"</strong></p>
         <p>3. Tap <strong>"Add"</strong> in the top right</p>
       </div>
-      <button id="closeInstallGuide" style="margin-top:16px;padding:10px 24px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--ink);font-size:14px;cursor:pointer;">Got it</button>
+      <button class="wu-btn wu-btn--secondary wu-btn--sm" id="closeInstallGuide" style="margin-top:16px;">Got it</button>
     </div>
   `;
   document.body.appendChild(overlay);

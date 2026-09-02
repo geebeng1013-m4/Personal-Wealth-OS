@@ -507,7 +507,7 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
         .catch((error: unknown) => {
           console.error("[Calculator] Failed to load", error);
           if (!cancelled && mount.isConnected) {
-            mount.innerHTML = '<article class="card panel"><p class="form-error" role="alert">Calculator could not be loaded. Please refresh and try again.</p></article>';
+            mount.innerHTML = '<article class="wu wu-card"><p class="wu-field-row__error" role="alert">Calculator could not be loaded. Please refresh and try again.</p></article>';
           }
         });
     }
