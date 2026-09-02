@@ -168,13 +168,13 @@ export function marketTemplate(state: WealthState): string {
       title: "Market",
       sub: "Research with a long-term lens — ownership, risk and valuation, not daily noise.",
     })}
-    <div class="wu-stack wu-stack--lg">
+    <div class="wu-stack wu-stack--xl">
       <div class="wu-card wu-card--pad-sm wu-row wu-row--between">
         <span class="wu-label">Current principle</span>
         <span class="wu-row wu-row--tight"><strong class="t-subheading">Context before action</strong><span class="t-caption t-faint">Review the mandate before changing allocation.</span></span>
       </div>
 
-      <div class="wu-stack">
+      <div class="wu-stack wu-stack--lg">
         <div class="market-symbols" role="group" aria-label="Select investment">
           <button class="market-symbol-btn active" data-symbol="VOO" type="button"><strong>VOO</strong><small>Core market</small></button>
           <button class="market-symbol-btn" data-symbol="QQQM" type="button"><strong>QQQM</strong><small>Growth allocation</small></button>
