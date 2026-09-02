@@ -87,8 +87,13 @@ type Theme = "dark" | "light";
 
 function getStoredTheme(): Theme {
   const t = localStorage.getItem("pwo-theme");
-  if (t === "light") return "light";
-  return "dark";
+  if (t === "light" || t === "dark") return t;
+  // First load: follow the OS. Once the user toggles, the stored value wins.
+  try {
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
 }
 
 function applyTheme(theme: Theme): void {

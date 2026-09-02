@@ -180,18 +180,6 @@ export function portfolioSummary(
   };
 }
 
-export function trancheStatus(state: WealthState, drawdown: number) {
-  return state.opportunity.tranches.map((tranche) => {
-    const triggered = drawdown >= tranche.drawdown;
-    return {
-      ...tranche,
-      status: tranche.deployed ? "Deployed" : triggered ? "Triggered" : "Not Triggered",
-      suggestedVoo: tranche.amount / 2,
-      suggestedQqqm: tranche.amount / 2,
-    };
-  });
-}
-
 // advisorMessages() and nextActions() moved to advisor.ts, which layers the
 // FACT → RULE → IMPACT → ACTION contract over these calculations. They cannot
 // live here: financialHealth.ts imports this module, so importing
