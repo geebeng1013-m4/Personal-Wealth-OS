@@ -96,9 +96,9 @@ export function advisorPageTemplate(state: WealthState): string {
         </div>
         <div class="wu-stack wu-stack--lg">
           <div class="wu-grid wu-grid--3">
-            <div class="wu-metric"><span class="wu-metric__label wu-label">🎯 Opportunity Reserve</span><span class="wu-metric__value t-num wu-metric__value--positive">${money(state.opportunity.total)}</span><span class="wu-metric__note t-caption">Used ${money(state.opportunity.used)} · Remaining ${money(state.opportunity.total - state.opportunity.used)}</span></div>
-            <div class="wu-metric"><span class="wu-metric__label wu-label">📊 VOO Allocation</span><span class="wu-metric__value t-num">${money(state.opportunity.allocation.VOO)}</span></div>
-            <div class="wu-metric"><span class="wu-metric__label wu-label">📊 QQQM Allocation</span><span class="wu-metric__value t-num">${money(state.opportunity.allocation.QQQM)}</span></div>
+            <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">🎯 Opportunity Reserve</span><span class="wu-metric__value t-num wu-metric__value--positive">${money(state.opportunity.total)}</span><span class="wu-metric__note t-caption">Used ${money(state.opportunity.used)} · Remaining ${money(state.opportunity.total - state.opportunity.used)}</span></div></div>
+            <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">📊 VOO Allocation</span><span class="wu-metric__value t-num">${money(state.opportunity.allocation.VOO)}</span></div></div>
+            <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">📊 QQQM Allocation</span><span class="wu-metric__value t-num">${money(state.opportunity.allocation.QQQM)}</span></div></div>
           </div>
           <form id="drawdownForm" class="wu-row">
             <label class="wu-field-row"><span class="wu-field-row__label">Market Drawdown %</span><input class="wu-field" id="drawdownInput" type="number" min="0" max="80" step="1" value="0"></label>
