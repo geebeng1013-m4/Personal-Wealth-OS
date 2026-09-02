@@ -122,10 +122,10 @@ export function etfTopHoldingsTemplate(selected: EtfHoldingsSymbol = "VOO"): str
       <!-- Live fund facts. These the data feed really does publish, so they are
            fetched per symbol; the holdings list below it cannot be, and says so
            rather than letting a dated snapshot pass for current. -->
-      <dl id="etfLiveFacts" class="wu-list etf-live-facts">
-        <div class="wu-list__row"><dt>Expense ratio</dt><dd data-fact="expense">${UNKNOWN}</dd></div>
-        <div class="wu-list__row"><dt>Dividend yield</dt><dd data-fact="yield">${UNKNOWN}</dd></div>
-        <div class="wu-list__row"><dt>Fund size</dt><dd data-fact="aum">${UNKNOWN}</dd></div>
+      <dl id="etfLiveFacts" class="wu-list">
+        <div class="wu-list__row"><dt>Expense ratio</dt><dd class="t-num" data-fact="expense">${UNKNOWN}</dd></div>
+        <div class="wu-list__row"><dt>Dividend yield</dt><dd class="t-num" data-fact="yield">${UNKNOWN}</dd></div>
+        <div class="wu-list__row"><dt>Fund size</dt><dd class="t-num" data-fact="aum">${UNKNOWN}</dd></div>
       </dl>
       <div id="etfSectors" class="etf-sectors" hidden></div>
       <div class="wu-row wu-row--between t-caption t-faint" aria-live="polite"><span><strong id="etfHoldingsSymbol" class="t-subheading">${selected}</strong> · Top Holdings <b id="etfHoldingsTotal" class="t-num">${profile.topHoldingsTotalPercent}</b></span><small id="etfHoldingsDateWrap">Holdings as at <time id="etfHoldingsDate">${profile.updateDate}</time> · fixed snapshot, not live</small></div>
