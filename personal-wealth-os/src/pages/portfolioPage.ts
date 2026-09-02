@@ -112,12 +112,15 @@ function currencyConversionsPanel(state: WealthState): string {
         <div class="wu-row"><button class="wu-btn wu-btn--primary wu-btn--sm" id="fxImport" type="button">Read conversions</button></div>
         <small class="t-caption t-faint">Select the whole list in your broker app and paste it here — headings and dates included. Re-pasting a range you have already added updates it instead of duplicating it.</small>
         <p id="fxImportStatus" class="wu-field-row__error" role="alert"></p>
-        ${records.length > 0 ? `<div class="wu-table-wrap">
-          <table class="wu-table">
-            <thead><tr><th>Date</th><th>Direction</th><th>MYR</th><th>USD</th><th>Rate</th><th></th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>` : ""}
+        ${records.length > 0 ? `<details class="wu-details">
+          <summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-subheading">Recorded conversions</strong><span class="t-caption t-faint">${records.length}</span></span></summary>
+          <div class="wu-table-wrap">
+            <table class="wu-table">
+              <thead><tr><th>Date</th><th>Direction</th><th>MYR</th><th>USD</th><th>Rate</th><th></th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </details>` : ""}
       </div>
     </article>`;
 }
