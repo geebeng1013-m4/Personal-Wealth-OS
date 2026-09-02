@@ -355,6 +355,33 @@
     box-shadow: 0 0 0 3px var(--focus);
   }
 
+  /* ---- pick (a selectable list row, as a button) ---------------------- */
+  .wu-pick {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-left: 3px solid transparent;
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+      background var(--dur-fast) var(--ease-standard);
+  }
+  .wu-pick:hover {
+    border-color: var(--border-strong);
+  }
+  .wu-pick:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+  .wu-pick.is-selected {
+    border-left-color: var(--accent);
+    background: var(--surface-raised);
+  }
+
   /* ---- list (label / value / action rows) ---------------------------- */
   .wu-list {
     list-style: none;
