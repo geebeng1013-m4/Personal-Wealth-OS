@@ -12,6 +12,7 @@ import type { RuleCardId, RuleNote, WealthState } from "../models";
 import { money, percent, projectedAnnualEmergencyYield } from "../rules";
 import { escapeHtml } from "../html";
 import { leakInsightStrip } from "../components/leakInsightStrip";
+import { pageHeader } from "../components/pageHeader";
 import { getBudgetSnapshot } from "../budgetSummary";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
@@ -27,31 +28,70 @@ export function rulesTemplate(state: WealthState): string {
     { id: "data-safety", title: "Data Safety", body: "💾 All data is stored locally in this browser. Export JSON before switching browsers or devices." },
   ];
   const items = defaultItems.map((item) => ({ ...item, ...state.ruleCardOverrides[item.id] }));
+
+  const ruleCard = (title: string, body: string, actions: string, editForm = ""): string => `<article class="wu-card rule-card">
+    <div class="wu-card__header">
+      <span class="wu-label">${escapeHtml(title)}</span>
+      <div class="wu-row wu-row--tight">${actions}</div>
+    </div>
+    <p class="t-body t-prewrap">${escapeHtml(body)}</p>
+    ${editForm}
+  </article>`;
+
   const cards = items
     .filter((item) => !state.hiddenRuleIds.includes(item.id))
-    .map((item) => '<article class="card data-card rule-card"><div class="rule-card-head"><span class="eyebrow">' + escapeHtml(item.title) + '</span><div class="rule-card-actions"><button class="secondary-button edit-rule" data-rule-id="' + item.id + '" type="button" aria-label="Edit ' + escapeHtml(item.title) + ' rule">Edit</button><button class="icon-button danger delete-rule" data-rule-id="' + item.id + '" type="button" aria-label="Delete ' + escapeHtml(item.title) + ' rule" title="Delete rule">X</button></div></div><p style="white-space:pre-wrap;">' + escapeHtml(item.body) + '</p><form class="rule-edit-form" data-rule-id="' + item.id + '" hidden><label>Title<input name="title" maxlength="80" required value="' + escapeHtml(item.title) + '"></label><label>Content<textarea name="body" maxlength="2000" rows="5" required>' + escapeHtml(item.body) + '</textarea></label><p class="form-error" role="alert"></p><div class="rule-form-actions"><button class="primary-button" type="submit">Save</button><button class="secondary-button cancel-rule-edit" type="button">Cancel</button></div></form></article>');
+    .map((item) => ruleCard(
+      item.title,
+      item.body,
+      `<button class="wu-btn wu-btn--secondary wu-btn--sm edit-rule" data-rule-id="${item.id}" type="button" aria-label="Edit ${escapeHtml(item.title)} rule">Edit</button><button class="wu-btn wu-btn--ghost wu-btn--icon delete-rule" data-rule-id="${item.id}" type="button" aria-label="Delete ${escapeHtml(item.title)} rule" title="Delete rule">&times;</button>`,
+      `<form class="rule-edit-form wu-stack" data-rule-id="${item.id}" hidden>
+        <label class="wu-field-row"><span class="wu-field-row__label">Title</span><input class="wu-field" name="title" maxlength="80" required value="${escapeHtml(item.title)}"></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Content</span><textarea class="wu-field" name="body" maxlength="2000" rows="5" required>${escapeHtml(item.body)}</textarea></label>
+        <p class="form-error wu-field-row__error" role="alert"></p>
+        <div class="wu-row"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button><button class="wu-btn wu-btn--ghost wu-btn--sm cancel-rule-edit" type="button">Cancel</button></div>
+      </form>`,
+    ));
   if (state.ruleNotesList.length > 0) {
     state.ruleNotesList.forEach((note) => {
       const title = note.title || "Personal Rule Notes";
-      cards.push('<article class="card data-card rule-card"><div class="rule-card-head"><span class="eyebrow">' + escapeHtml(title) + '</span><div class="rule-card-actions"><button class="secondary-button edit-rule-notes" data-note-id="' + note.id + '" type="button" aria-label="Edit ' + escapeHtml(title) + '">Edit</button><button class="icon-button danger delete-rule-notes" data-note-id="' + note.id + '" type="button" aria-label="Delete ' + escapeHtml(title) + '" title="Delete note">X</button></div></div><p style="white-space:pre-wrap;">' + escapeHtml(note.body.trim()) + '</p></article>');
+      cards.push(ruleCard(
+        title,
+        note.body.trim(),
+        `<button class="wu-btn wu-btn--secondary wu-btn--sm edit-rule-notes" data-note-id="${note.id}" type="button" aria-label="Edit ${escapeHtml(title)}">Edit</button><button class="wu-btn wu-btn--ghost wu-btn--icon delete-rule-notes" data-note-id="${note.id}" type="button" aria-label="Delete ${escapeHtml(title)}" title="Delete note">&times;</button>`,
+      ));
     });
   } else if (state.ruleNotes.trim()) {
-    cards.push('<article class="card data-card rule-card"><div class="rule-card-head"><span class="eyebrow">' + escapeHtml(state.ruleNoteTitle || "Personal Rule Notes") + '</span><div class="rule-card-actions"><button class="secondary-button edit-rule-notes" type="button" aria-label="Edit personal rule notes">Edit</button><button class="icon-button danger delete-rule-notes" type="button" aria-label="Delete personal rule notes" title="Delete rule">X</button></div></div><p style="white-space:pre-wrap;">' + escapeHtml(state.ruleNotes.trim()) + '</p></article>');
+    cards.push(ruleCard(
+      state.ruleNoteTitle || "Personal Rule Notes",
+      state.ruleNotes.trim(),
+      `<button class="wu-btn wu-btn--secondary wu-btn--sm edit-rule-notes" type="button" aria-label="Edit personal rule notes">Edit</button><button class="wu-btn wu-btn--ghost wu-btn--icon delete-rule-notes" type="button" aria-label="Delete personal rule notes" title="Delete rule">&times;</button>`,
+    ));
   }
-  return leakInsightStrip(state, ["debt", "budget", "goal"], "Rule check") + '<div class="three-col-grid">' + (cards.join("") || '<p class="empty-state">No rule cards remain. Add personal notes below to create a new rule.</p>') + '</div>' +
-    '<article class="card panel" style="margin-top:16px;">' +
-      '<div class="panel-head"><div><span class="eyebrow">Custom Rules</span><h3>Rule Notes</h3></div><span style="color:var(--muted);font-size:12px;">Up to 5,000 characters</span></div>' +
-      '<form id="ruleNotesForm">' +
-        '<label for="ruleNoteTitle">Title</label>' +
-        '<input id="ruleNoteTitle" name="ruleNoteTitle" maxlength="80" value="" placeholder="e.g. Monthly Cashflow">' +
-        '<label for="ruleNotes">Add reminders, principles, or action items to your rules</label>' +
-        '<textarea id="ruleNotes" name="ruleNotes" maxlength="5000" rows="8" placeholder="Write your personal rules here..."></textarea>' +
-        '<div style="display:flex;align-items:center;gap:12px;margin-top:10px;">' +
-          '<button class="primary-button" type="submit">Save Notes</button>' +
-          '<span id="ruleNotesStatus" role="status" style="color:var(--green);font-size:12px;"></span>' +
-        '</div>' +
-      '</form>' +
-    '</article>';
+  return `<div class="wu">
+    ${pageHeader({
+      eyebrow: "Decision Framework",
+      title: "Rules",
+      sub: "Seven cards generated from your own policy figures, plus any personal notes you add.",
+    })}
+    ${leakInsightStrip(state, ["debt", "budget", "goal"], "Rule check")}
+    <div class="wu-stack wu-stack--lg">
+    <div class="wu-grid wu-grid--3">${cards.join("") || `<p class="wu-empty">No rule cards remain. Add personal notes below to create a new rule.</p>`}</div>
+    <article class="wu-card">
+      <div class="wu-card__header">
+        <div class="wu-stack wu-stack--sm"><span class="wu-label">Custom Rules</span><h3 class="wu-card__title t-heading">Rule Notes</h3></div>
+        <span class="wu-badge wu-badge--neutral">Up to 5,000 characters</span>
+      </div>
+      <form id="ruleNotesForm" class="wu-stack">
+        <label class="wu-field-row"><span class="wu-field-row__label">Title</span><input class="wu-field" id="ruleNoteTitle" name="ruleNoteTitle" maxlength="80" value="" placeholder="e.g. Monthly Cashflow"></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Add reminders, principles, or action items to your rules</span><textarea class="wu-field" id="ruleNotes" name="ruleNotes" maxlength="5000" rows="8" placeholder="Write your personal rules here..."></textarea></label>
+        <div class="wu-row">
+          <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save Notes</button>
+          <span id="ruleNotesStatus" class="wu-field-row__error is-ok" role="status"></span>
+        </div>
+      </form>
+    </article>
+    </div>
+  </div>`;
 }
 
 export function bindRules(root: HTMLElement, state: WealthState, setState: Setter, navigate: Navigate | undefined, rerender: RenderApp): void {

@@ -58,6 +58,9 @@
   .wu-self-end {
     align-self: end;
   }
+  .t-prewrap {
+    white-space: pre-wrap;
+  }
   .t-num-lg {
     font-family: var(--font-mono);
     font-weight: var(--weight-semibold);
@@ -120,6 +123,11 @@
     --wu-stack-gap: var(--space-4);
   }
   .is-hidden {
+    display: none !important;
+  }
+  /* The bare `hidden` attribute must still win inside a migrated page, where
+     wu-* layout classes (display:flex/grid) would otherwise override it. */
+  .wu [hidden] {
     display: none !important;
   }
   .wu-grid {
