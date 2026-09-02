@@ -61,6 +61,46 @@
   .t-prewrap {
     white-space: pre-wrap;
   }
+  /* an input with a small unit addon glued to its left edge */
+  .wu-affix {
+    display: flex;
+    align-items: stretch;
+  }
+  .wu-affix > :first-child {
+    display: flex;
+    align-items: center;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-right: none;
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    background: var(--surface-hover);
+    color: var(--text-faint);
+    font: var(--weight-medium) var(--text-caption) / 1 var(--font-sans);
+    white-space: nowrap;
+  }
+  .wu-affix > .wu-field {
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    min-width: 0;
+  }
+  /* TVM solver row: label · input · solve button */
+  .tvm-row {
+    display: grid;
+    grid-template-columns: 118px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .tvm-row > .tvm-row__label {
+    text-align: right;
+  }
+  @media (max-width: 640px) {
+    .tvm-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .tvm-row > .tvm-row__label {
+      grid-column: 1 / -1;
+      text-align: left;
+    }
+  }
   .t-num-lg {
     font-family: var(--font-mono);
     font-weight: var(--weight-semibold);

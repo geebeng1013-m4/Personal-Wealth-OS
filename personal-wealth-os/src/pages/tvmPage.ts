@@ -92,20 +92,18 @@ const TVM_LABELS: Record<TvmVariable, string> = {
 function tvmResultTemplate(): string {
   if (!tvmSolved) {
     return `
-      <div class="tvm-result tvm-result--empty" role="status">
-        <p class="tvm-result__label">Result</p>
-        <p class="tvm-result__hint">Fill in any four values, then press the button beside the one you want to solve.</p>
+      <div class="wu-card wu-card--inset wu-card--pad-sm tvm-result" role="status">
+        <div class="wu-metric"><span class="wu-metric__label wu-label">Result</span><span class="t-body-sm t-muted">Fill in any four values, then press the button beside the one you want to solve.</span></div>
       </div>`;
   }
 
   const { variable, result } = tvmSolved;
   if (!result.ok) {
     return `
-      <div class="tvm-result tvm-result--invalid" role="status">
-        <p class="tvm-result__label">${escapeHtml(TVM_LABELS[variable])}</p>
-        <p class="tvm-result__value">—</p>
-        <ul class="tvm-errors" role="alert">
-          ${result.errors.map((error) => `<li><span aria-hidden="true">⚠</span> ${escapeHtml(error.message)}</li>`).join("")}
+      <div class="wu-card wu-card--inset wu-card--pad-sm wu-card--negative tvm-result" role="status">
+        <div class="wu-metric"><span class="wu-metric__label wu-label">${escapeHtml(TVM_LABELS[variable])}</span><span class="wu-metric__value t-num">—</span></div>
+        <ul class="wu-list" role="alert" style="margin-top:var(--space-2)">
+          ${result.errors.map((error) => `<li class="wu-list__row"><span class="wu-field-row__error"><span aria-hidden="true">⚠</span> ${escapeHtml(error.message)}</span></li>`).join("")}
         </ul>
       </div>`;
   }
@@ -113,19 +111,18 @@ function tvmResultTemplate(): string {
   const v = result.value;
   const periodsLabel = `${Math.round(v.periods * 100) / 100} ${COMPOUNDING_LABELS[tvmFrequency].toLowerCase()} periods`;
   return `
-    <div class="tvm-result" role="status">
-      <p class="tvm-result__label">Solved for ${escapeHtml(TVM_LABELS[variable])}</p>
-      <p class="tvm-result__value">${escapeHtml(tvmFormat(variable, v.value))}</p>
-      <dl class="tvm-result__rows">
-        <div class="tvm-result__row"><dt>Present value</dt><dd>${money(v.presentValue)}</dd></div>
-        <div class="tvm-result__row"><dt>Payment</dt><dd>${money(v.payment)}</dd></div>
-        <div class="tvm-result__row"><dt>Future value</dt><dd>${money(v.futureValue)}</dd></div>
-        <div class="tvm-result__row"><dt>Annual rate</dt><dd>${Math.round(v.annualRatePercent * 1000) / 1000}% ${escapeHtml(tvmRateKind)}</dd></div>
-        <div class="tvm-result__row"><dt>Periods</dt><dd>${escapeHtml(periodsLabel)}</dd></div>
-        <div class="tvm-result__row"><dt>Total payments</dt><dd>${money(v.totalPayments)}</dd></div>
-        <div class="tvm-result__row"><dt>Total interest</dt><dd>${money(v.totalInterest)}</dd></div>
+    <div class="wu-card wu-card--inset wu-card--pad-sm wu-card--positive tvm-result" role="status">
+      <div class="wu-metric wu-metric--hero"><span class="wu-metric__label wu-label">Solved for ${escapeHtml(TVM_LABELS[variable])}</span><span class="wu-metric__value t-num">${escapeHtml(tvmFormat(variable, v.value))}</span></div>
+      <dl class="wu-list" style="margin-top:var(--space-3)">
+        <div class="wu-list__row"><dt>Present value</dt><dd>${money(v.presentValue)}</dd></div>
+        <div class="wu-list__row"><dt>Payment</dt><dd>${money(v.payment)}</dd></div>
+        <div class="wu-list__row"><dt>Future value</dt><dd>${money(v.futureValue)}</dd></div>
+        <div class="wu-list__row"><dt>Annual rate</dt><dd>${Math.round(v.annualRatePercent * 1000) / 1000}% ${escapeHtml(tvmRateKind)}</dd></div>
+        <div class="wu-list__row"><dt>Periods</dt><dd>${escapeHtml(periodsLabel)}</dd></div>
+        <div class="wu-list__row"><dt>Total payments</dt><dd>${money(v.totalPayments)}</dd></div>
+        <div class="wu-list__row"><dt>Total interest</dt><dd>${money(v.totalInterest)}</dd></div>
       </dl>
-      <p class="tvm-result__summary">Based on your own assumptions: ${escapeHtml(COMPOUNDING_LABELS[tvmFrequency].toLowerCase())} compounding, payments at the ${tvmTiming === "end" ? "end" : "beginning"} of each period, ${escapeHtml(tvmRateKind)} rate. Projections only — not guaranteed returns or investment advice.</p>
+      <p class="t-caption t-faint" style="margin-top:var(--space-3)">Based on your own assumptions: ${escapeHtml(COMPOUNDING_LABELS[tvmFrequency].toLowerCase())} compounding, payments at the ${tvmTiming === "end" ? "end" : "beginning"} of each period, ${escapeHtml(tvmRateKind)} rate. Projections only — not guaranteed returns or investment advice.</p>
     </div>`;
 }
 
@@ -151,14 +148,14 @@ function tvmInflationTemplate(): string {
           <p class="t-body-sm t-muted">What a future amount is worth in today's money.</p>
         </div>
       </div>
-      <div class="tvm-layout">
-        <div class="tvm-inputs">
+      <div class="wu-grid wu-grid--2 wu-grid--top">
+        <div class="wu-stack">
           ${fields.map((field) => `
-            <label class="tvm-field" for="tvmInf-${field.name}">
-              <span class="tvm-field__label">${escapeHtml(field.label)}</span>
-              <span class="tvm-field__control">
-                <span class="tvm-field__unit" aria-hidden="true">${escapeHtml(field.unit)}</span>
-                <input class="tvm-field__input" id="tvmInf-${field.name}" type="number" inputmode="decimal"
+            <label class="wu-field-row" for="tvmInf-${field.name}">
+              <span class="wu-field-row__label">${escapeHtml(field.label)}</span>
+              <span class="wu-affix">
+                <span aria-hidden="true">${escapeHtml(field.unit)}</span>
+                <input class="wu-field" id="tvmInf-${field.name}" type="number" inputmode="decimal"
                        step="${field.step}" value="${escapeHtml(tvmInflation[field.name])}"
                        data-tvm-inflation="${field.name}">
               </span>
@@ -166,20 +163,18 @@ function tvmInflationTemplate(): string {
         </div>
         <div class="tvm-output" aria-live="polite">
           ${result.ok ? `
-            <div class="tvm-result" role="status">
-              <p class="tvm-result__label">Today's purchasing power</p>
-              <p class="tvm-result__value">${money(result.value.todaysPurchasingPower)}</p>
-              <dl class="tvm-result__rows">
-                <div class="tvm-result__row"><dt>Purchasing-power loss</dt><dd>${money(result.value.purchasingPowerLoss)}</dd></div>
-                <div class="tvm-result__row"><dt>Loss</dt><dd>${percent(result.value.purchasingPowerLossPercent, 1)}</dd></div>
+            <div class="wu-card wu-card--inset wu-card--pad-sm wu-card--positive tvm-result" role="status">
+              <div class="wu-metric wu-metric--hero"><span class="wu-metric__label wu-label">Today's purchasing power</span><span class="wu-metric__value t-num">${money(result.value.todaysPurchasingPower)}</span></div>
+              <dl class="wu-list" style="margin-top:var(--space-3)">
+                <div class="wu-list__row"><dt>Purchasing-power loss</dt><dd>${money(result.value.purchasingPowerLoss)}</dd></div>
+                <div class="wu-list__row"><dt>Loss</dt><dd>${percent(result.value.purchasingPowerLossPercent, 1)}</dd></div>
               </dl>
-              <p class="tvm-result__summary">Assumption: constant ${escapeHtml(tvmInflation.inflationRatePercent || "0")}% inflation.</p>
+              <p class="t-caption t-faint" style="margin-top:var(--space-3)">Assumption: constant ${escapeHtml(tvmInflation.inflationRatePercent || "0")}% inflation.</p>
             </div>` : `
-            <div class="tvm-result tvm-result--invalid" role="status">
-              <p class="tvm-result__label">Today's purchasing power</p>
-              <p class="tvm-result__value">—</p>
-              <ul class="tvm-errors" role="alert">
-                ${result.errors.map((e) => `<li><span aria-hidden="true">⚠</span> ${escapeHtml(e.message)}</li>`).join("")}
+            <div class="wu-card wu-card--inset wu-card--pad-sm wu-card--negative tvm-result" role="status">
+              <div class="wu-metric"><span class="wu-metric__label wu-label">Today's purchasing power</span><span class="wu-metric__value t-num">—</span></div>
+              <ul class="wu-list" role="alert" style="margin-top:var(--space-2)">
+                ${result.errors.map((e) => `<li class="wu-list__row"><span class="wu-field-row__error"><span aria-hidden="true">⚠</span> ${escapeHtml(e.message)}</span></li>`).join("")}
               </ul>
             </div>`}
         </div>
@@ -204,32 +199,36 @@ function tvmCardsTemplate(): string {
         <button class="wu-btn wu-btn--secondary wu-btn--sm" type="button" id="tvmReset">Reset</button>
       </div>
 
-      <div class="tvm-options">
-        <fieldset class="tvm-fieldset">
-          <legend class="tvm-legend">Annual Rate</legend>
-          ${(["nominal", "effective"] as RateKind[]).map((kind) => `
-            <label class="tvm-radio">
-              <input type="radio" name="tvmRateKind" value="${kind}" data-tvm-ratekind="${kind}"${tvmRateKind === kind ? " checked" : ""}>
-              <span>${kind === "nominal" ? "Nominal" : "Effective"}</span>
-            </label>`).join("")}
+      <div class="wu-row" style="gap:var(--space-6);margin-bottom:var(--space-4)">
+        <fieldset class="wu-fieldset">
+          <legend class="wu-field-row__label">Annual Rate</legend>
+          <div class="wu-row wu-row--tight">
+            ${(["nominal", "effective"] as RateKind[]).map((kind) => `
+              <label class="wu-chip">
+                <input type="radio" name="tvmRateKind" value="${kind}" data-tvm-ratekind="${kind}"${tvmRateKind === kind ? " checked" : ""}>
+                <span>${kind === "nominal" ? "Nominal" : "Effective"}</span>
+              </label>`).join("")}
+          </div>
         </fieldset>
-        <fieldset class="tvm-fieldset">
-          <legend class="tvm-legend">Mode</legend>
-          ${(["end", "beginning"] as PaymentTiming[]).map((timing) => `
-            <label class="tvm-radio">
-              <input type="radio" name="tvmTiming" value="${timing}" data-tvm-timing="${timing}"${tvmTiming === timing ? " checked" : ""}>
-              <span>${timing === "end" ? "End" : "Beginning"}</span>
-            </label>`).join("")}
+        <fieldset class="wu-fieldset">
+          <legend class="wu-field-row__label">Mode</legend>
+          <div class="wu-row wu-row--tight">
+            ${(["end", "beginning"] as PaymentTiming[]).map((timing) => `
+              <label class="wu-chip">
+                <input type="radio" name="tvmTiming" value="${timing}" data-tvm-timing="${timing}"${tvmTiming === timing ? " checked" : ""}>
+                <span>${timing === "end" ? "End" : "Beginning"}</span>
+              </label>`).join("")}
+          </div>
         </fieldset>
       </div>
 
-      <div class="tvm-solver">
+      <div class="wu-stack wu-stack--sm">
         ${TVM_ROWS.map((row) => `
           <div class="tvm-row">
-            <label class="tvm-row__label" for="tvm-${row.name}">${escapeHtml(row.label)}</label>
-            <span class="tvm-field__control">
-              <span class="tvm-field__unit" aria-hidden="true">${escapeHtml(row.unit)}</span>
-              <input class="tvm-field__input" id="tvm-${row.name}" type="number" inputmode="decimal"
+            <label class="wu-field-row__label tvm-row__label" for="tvm-${row.name}">${escapeHtml(row.label)}</label>
+            <span class="wu-affix">
+              <span aria-hidden="true">${escapeHtml(row.unit)}</span>
+              <input class="wu-field" id="tvm-${row.name}" type="number" inputmode="decimal"
                      step="${row.step}" value="${escapeHtml(tvmValues[row.name])}"
                      data-tvm-input="${row.name}" aria-describedby="tvmSignNote">
             </span>
@@ -238,8 +237,8 @@ function tvmCardsTemplate(): string {
                     aria-label="Solve for ${escapeHtml(row.label)}">${escapeHtml(row.button)}</button>
           </div>`).join("")}
 
-        <div class="tvm-row tvm-row--select">
-          <label class="tvm-row__label" for="tvmFrequency">Compounding</label>
+        <div class="tvm-row">
+          <label class="wu-field-row__label tvm-row__label" for="tvmFrequency">Compounding</label>
           <select class="wu-field tvm-select" id="tvmFrequency" data-tvm-frequency>
             ${(Object.keys(COMPOUNDING_LABELS) as CompoundingFrequency[]).map((key) => `
               <option value="${key}"${key === tvmFrequency ? " selected" : ""}>${escapeHtml(COMPOUNDING_LABELS[key])}</option>`).join("")}
@@ -247,9 +246,9 @@ function tvmCardsTemplate(): string {
         </div>
       </div>
 
-      <p class="tvm-note" id="tvmSignNote">Cash-flow signs matter: money you pay in is negative, money you receive is positive. Leave the value you want to solve for blank, or just press its button to overwrite it.</p>
+      <p class="t-caption t-faint" id="tvmSignNote" style="margin-top:var(--space-3)">Cash-flow signs matter: money you pay in is negative, money you receive is positive. Leave the value you want to solve for blank, or just press its button to overwrite it.</p>
 
-      <div class="tvm-output" id="tvmOutput" aria-live="polite">
+      <div class="tvm-output" id="tvmOutput" aria-live="polite" style="margin-top:var(--space-4)">
         ${tvmResultTemplate()}
       </div>
     </section>
