@@ -2,12 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Scoped Tailwind build for the Investment Growth calculator (calc- prefix).
+ * All colour now comes from theme.css tokens so it reads as one system with
+ * the rest of the app: bronze = principal (money in), grey-green = interest
+ * (growth), borders instead of glows.
+ */
+
 @layer components {
   .calc-card {
     @apply calc-rounded-2xl calc-border calc-p-5 md:calc-p-6;
     border-color: var(--border);
-    background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
+    background: var(--surface);
+    box-shadow: none;
   }
 
   .calc-label {
@@ -17,57 +24,53 @@
 
   .calc-field {
     @apply calc-w-full calc-rounded-xl calc-border calc-px-3 calc-py-2.5 calc-transition;
-    border-color: var(--border-strong);
+    border-color: var(--border);
     background: var(--surface);
     color: var(--text);
   }
 
+  .calc-field:hover {
+    border-color: var(--border-strong);
+  }
+
   .calc-field:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--focus);
   }
 
   .calc-select-field option {
-    background: #141c22;
-    color: #f8fafc;
-  }
-
-  .calc-select-field option:checked {
-    background: #253440;
-    color: #ffffff;
+    background: var(--surface-raised);
+    color: var(--text);
   }
 
   .calc-chart-panel {
-    --chart-grid: rgba(148, 163, 184, 0.14);
-    --chart-cursor: rgba(226, 232, 240, 0.42);
+    --chart-grid: var(--border);
+    --chart-cursor: var(--border-strong);
     overflow: hidden;
-    border: 1px solid rgba(148, 163, 184, 0.13);
-    border-radius: 18px;
-    background:
-      radial-gradient(circle at 76% 6%, rgba(34, 197, 94, 0.09), transparent 32%),
-      radial-gradient(circle at 16% 10%, rgba(59, 130, 246, 0.12), transparent 36%),
-      #0d151c;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 18px 40px rgba(0, 0, 0, 0.18);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
   }
 
   .calc-chart-header {
     @apply calc-flex calc-flex-col calc-gap-4 calc-border-b calc-px-4 calc-py-4 sm:calc-flex-row sm:calc-items-center sm:calc-justify-between md:calc-px-5;
-    border-color: rgba(148, 163, 184, 0.1);
+    border-color: var(--border);
   }
 
   .calc-chart-eyebrow {
     @apply calc-block calc-text-[10px] calc-font-bold calc-uppercase calc-tracking-[0.18em];
-    color: #6f8493;
+    color: var(--text-faint);
   }
 
   .calc-chart-heading {
     @apply calc-mt-1 calc-block calc-text-sm calc-font-semibold;
-    color: #e7eef3;
+    color: var(--text);
   }
 
   .calc-chart-legend {
     @apply calc-flex calc-flex-wrap calc-gap-x-5 calc-gap-y-2 calc-text-[11px] calc-font-medium;
-    color: #9eacb7;
+    color: var(--text-muted);
   }
 
   .calc-chart-legend > span {
@@ -93,12 +96,12 @@
 
   .calc-chart-legend-principal,
   .calc-chart-key-principal {
-    background: #3b82f6;
+    background: var(--highlight);
   }
 
   .calc-chart-legend-interest,
   .calc-chart-key-interest {
-    background: #22c55e;
+    background: var(--accent);
   }
 
   .calc-chart-canvas {
@@ -107,18 +110,17 @@
 
   .calc-chart-tooltip {
     min-width: 248px;
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    border-radius: 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
     padding: 13px 14px;
-    background: rgba(13, 21, 28, 0.96);
-    color: #e7eef3;
-    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(14px);
+    background: var(--surface-raised);
+    color: var(--text);
+    box-shadow: var(--shadow-md);
   }
 
   .calc-chart-tooltip-title {
     @apply calc-mb-3 calc-text-xs calc-font-bold calc-uppercase calc-tracking-[0.12em];
-    color: #91a2ae;
+    color: var(--text-faint);
   }
 
   .calc-chart-tooltip-row,
@@ -135,7 +137,7 @@
   }
 
   .calc-chart-tooltip-row > span:nth-child(2) {
-    color: #9eacb7;
+    color: var(--text-muted);
   }
 
   .calc-chart-key {
@@ -151,34 +153,10 @@
     grid-template-columns: minmax(0, 1fr) auto;
     margin-top: 12px;
     padding-top: 11px;
-    border-top: 1px solid rgba(148, 163, 184, 0.14);
+    border-top: 1px solid var(--border);
   }
 
   .calc-chart-tooltip-total span {
-    color: #b7c3cc;
+    color: var(--text-muted);
   }
-}
-
-[data-theme="light"] .calc-chart-panel {
-  --chart-grid: rgba(71, 85, 105, 0.14);
-  --chart-cursor: rgba(51, 65, 85, 0.36);
-  border-color: rgba(51, 65, 85, 0.12);
-  background:
-    radial-gradient(circle at 76% 6%, rgba(34, 197, 94, 0.08), transparent 32%),
-    radial-gradient(circle at 16% 10%, rgba(59, 130, 246, 0.1), transparent 36%),
-    #f8fafc;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 18px 40px rgba(15, 23, 42, 0.08);
-}
-
-[data-theme="light"] .calc-chart-header {
-  border-color: rgba(51, 65, 85, 0.1);
-}
-
-[data-theme="light"] .calc-chart-heading {
-  color: #17212b;
-}
-
-[data-theme="light"] .calc-chart-eyebrow,
-[data-theme="light"] .calc-chart-legend {
-  color: #64748b;
 }
