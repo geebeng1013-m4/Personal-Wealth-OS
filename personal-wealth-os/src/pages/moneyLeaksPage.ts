@@ -159,20 +159,22 @@ export function moneyLeaksTemplate(state: WealthState): string {
         sub: "Deterministic checks across recurring payments, transactions, budgets, goals, and debt.",
         actions: `<button class="wu-btn wu-btn--secondary wu-btn--sm dashboard-nav" data-page="ledger" type="button">Open transactions</button><button class="wu-btn wu-btn--primary wu-btn--sm dashboard-nav" data-page="buckets" type="button">Review budget</button>`,
       })}
-      <div class="wu-grid wu-grid--wide">
-        <div class="wu-card"><div class="wu-metric"><span class="wu-metric__label wu-label">Potential monthly drag</span><span class="wu-metric__value t-num">${money(summary.monthlyImpact)}</span></div></div>
-        <div class="wu-card"><div class="wu-metric"><span class="wu-metric__label wu-label">Potential annual impact</span><span class="wu-metric__value t-num">${money(summary.annualImpact)}</span></div></div>
-        <div class="wu-card"><div class="wu-metric"><span class="wu-metric__label wu-label">Findings</span><span class="wu-metric__value t-num">${summary.leaks.length}</span></div></div>
-        <div class="wu-card"><div class="wu-metric"><span class="wu-metric__label wu-label">High priority</span><span class="wu-metric__value t-num">${summary.highCount}</span></div></div>
+      <div class="wu-stack wu-stack--lg">
+        <div class="wu-grid wu-grid--wide">
+          <div class="wu-card"><div class="wu-metric"><span class="wu-metric__label wu-label">Potential monthly drag</span><span class="wu-metric__value t-num">${money(summary.monthlyImpact)}</span></div></div>
+          <div class="wu-card"><div class="wu-metric"><span class="wu-metric__label wu-label">Potential annual impact</span><span class="wu-metric__value t-num">${money(summary.annualImpact)}</span></div></div>
+          <div class="wu-card"><div class="wu-metric"><span class="wu-metric__label wu-label">Findings</span><span class="wu-metric__value t-num">${summary.leaks.length}</span></div></div>
+          <div class="wu-card"><div class="wu-metric"><span class="wu-metric__label wu-label">High priority</span><span class="wu-metric__value t-num">${summary.highCount}</span></div></div>
+        </div>
+        <div class="money-leaks-workspace wu-grid wu-grid--2 wu-grid--top">
+          <section class="wu-card" aria-label="Detected money leaks">
+            <div class="wu-card__header"><h3 class="wu-card__title t-heading">Detected issues</h3><span class="wu-badge wu-badge--neutral">by annual impact</span></div>
+            <div class="wu-stack">${leakRows}</div>
+          </section>
+          <aside class="wu-card leak-detail-panel" aria-live="polite">${detail}</aside>
+        </div>
+        <p class="t-caption t-faint">Estimates are planning aids based on available records. Confirm merchant charges, account statements, and goal assumptions before changing or disputing payments.</p>
       </div>
-      <div class="money-leaks-workspace wu-grid wu-grid--2">
-        <section class="wu-card" aria-label="Detected money leaks">
-          <div class="wu-card__header"><h3 class="wu-card__title t-heading">Detected issues</h3><span class="wu-badge wu-badge--neutral">by annual impact</span></div>
-          <div class="wu-stack">${leakRows}</div>
-        </section>
-        <aside class="wu-card leak-detail-panel" aria-live="polite">${detail}</aside>
-      </div>
-      <p class="t-caption t-faint">Estimates are planning aids based on available records. Confirm merchant charges, account statements, and goal assumptions before changing or disputing payments.</p>
     </div>`;
 }
 
