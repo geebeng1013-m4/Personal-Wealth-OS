@@ -4,5 +4,9 @@
     "framer-motion": "^12.42.2",
     "puppeteer": "^25.7.0",
     "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1"
   }
 }

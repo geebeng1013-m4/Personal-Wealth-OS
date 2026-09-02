@@ -1,0 +1,6 @@
+# allowBuilds decides which dependencies may run their install scripts. pnpm
+# writes an unanswered placeholder here the first time it meets one; puppeteer's
+# postinstall is what fetches the browser binary it drives, so without this it
+# installs but cannot run.
+allowBuilds:
+  puppeteer: true
