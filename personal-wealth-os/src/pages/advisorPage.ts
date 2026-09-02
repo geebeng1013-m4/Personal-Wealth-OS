@@ -205,7 +205,7 @@ export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Set
         cell.textContent = "Reached — deploy now";
         cell.classList.add("wu-metric__value--negative");
       } else {
-        cell.textContent = `${(tranche.drawdown - worst).toFixed(1)}pp to go`;
+        cell.textContent = `${(tranche.drawdown - worst).toFixed(1)}% more to −${tranche.drawdown}%`;
       }
     });
   }).catch(() => {
