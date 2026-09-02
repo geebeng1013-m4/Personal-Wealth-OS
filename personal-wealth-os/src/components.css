@@ -815,6 +815,144 @@
     }
   }
 
+  /* ---- market page controls -------------------------------------------- */
+  /* bindMarket manages the .active state on these itself (it patches the DOM
+     instead of re-rendering), so the class names and the .active hook stay;
+     only the look is brought into the wu idiom. */
+  .market-tabs,
+  .market-intervals,
+  .etf-holdings-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    width: fit-content;
+    max-width: 100%;
+  }
+  .market-tab-btn,
+  .interval-btn,
+  .etf-holdings-tab {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    padding: var(--space-1) var(--space-3);
+    border-radius: calc(var(--radius-md) - 4px);
+    font: var(--weight-semibold) 0.75rem / 1 var(--font-sans);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--dur-fast) var(--ease-standard),
+      color var(--dur-fast) var(--ease-standard);
+  }
+  .market-tab-btn:hover,
+  .interval-btn:hover,
+  .etf-holdings-tab:hover {
+    color: var(--text);
+  }
+  .market-tab-btn.active,
+  .interval-btn.active,
+  .etf-holdings-tab.active {
+    background: var(--surface-raised);
+    color: var(--text);
+    box-shadow: var(--shadow-xs);
+  }
+  .market-tab-btn:focus-visible,
+  .interval-btn:focus-visible,
+  .etf-holdings-tab:focus-visible,
+  .market-symbol-btn:focus-visible,
+  .market-symbol-remove:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+  .market-tab-content {
+    display: none;
+  }
+  .market-tab-content.active {
+    display: block;
+  }
+  .market-symbols {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+  .market-custom-symbol {
+    display: inline-flex;
+    align-items: stretch;
+    flex: none;
+  }
+  .market-symbol-btn {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 2px;
+    min-width: 120px;
+    min-height: 0;
+    height: auto;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-standard),
+      background var(--dur-fast) var(--ease-standard);
+  }
+  .market-symbol-btn:hover {
+    border-color: var(--border-strong);
+  }
+  .market-symbol-btn strong {
+    font: var(--weight-semibold) var(--text-subheading) / 1 var(--font-sans);
+  }
+  .market-symbol-btn small {
+    font: var(--weight-regular) var(--text-overline) / 1.2 var(--font-sans);
+    color: var(--text-faint);
+  }
+  .market-symbol-btn.active {
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+  }
+  .market-symbol-btn.active strong {
+    color: var(--accent);
+  }
+  .market-custom-symbol .market-symbol-btn {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .market-symbol-remove {
+    border: 1px solid var(--border);
+    border-left: none;
+    border-top-right-radius: var(--radius-sm);
+    border-bottom-right-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-faint);
+    padding: 0 var(--space-2);
+    cursor: pointer;
+    transition: color var(--dur-fast) var(--ease-standard),
+      background var(--dur-fast) var(--ease-standard);
+  }
+  .market-symbol-remove:hover {
+    color: var(--negative);
+    background: var(--negative-soft);
+  }
+  .etf-holding-track {
+    height: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--border);
+    overflow: hidden;
+  }
+  .etf-holding-track > i {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    border-radius: inherit;
+  }
+
   /* ---- progress bar ------------------------------------------------------ */
   .wu-bar {
     width: 100%;

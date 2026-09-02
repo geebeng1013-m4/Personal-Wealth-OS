@@ -15,6 +15,7 @@
 
 import type { WealthState } from "../models";
 import { escapeHtml, getTheme } from "../html";
+import { pageHeader } from "../components/pageHeader";
 import { UNKNOWN } from "./valuationFormat";
 import { tradeUnits } from "../rules";
 import { tradesWithExchangeCost } from "../currencyExchange";
@@ -101,8 +102,8 @@ function etfHoldingsRowsTemplate(profile: EtfHoldingsProfile): string {
   const maxWeight = Math.max(...profile.holdings.map((holding) => holding.weight), 1);
   return profile.holdings.map((holding, index) => {
     const barWidth = Math.max((holding.weight / maxWeight) * 100, 2);
-    return `<li class="etf-holding-row">
-      <div class="etf-holding-copy"><span class="etf-holding-rank">${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(holding.symbol)}</strong><span>${escapeHtml(holding.name)}</span><b>${holding.weight.toFixed(2)}%</b></div>
+    return `<li class="etf-holding-row" style="display:grid;gap:var(--space-1);padding:var(--space-2) 0;border-top:1px solid var(--border-subtle)">
+      <div class="wu-row wu-row--tight t-body-sm"><span class="t-num t-faint">${String(index + 1).padStart(2, "0")}</span><strong class="t-subheading">${escapeHtml(holding.symbol)}</strong><span class="t-faint">${escapeHtml(holding.name)}</span><b class="t-num" style="margin-left:auto">${holding.weight.toFixed(2)}%</b></div>
       <div class="etf-holding-track" role="meter" aria-label="${escapeHtml(holding.symbol)} portfolio weight" aria-valuemin="0" aria-valuemax="${maxWeight}" aria-valuenow="${holding.weight}"><i style="width:${barWidth.toFixed(2)}%"></i></div>
     </li>`;
   }).join("");
@@ -110,24 +111,26 @@ function etfHoldingsRowsTemplate(profile: EtfHoldingsProfile): string {
 
 export function etfTopHoldingsTemplate(selected: EtfHoldingsSymbol = "VOO"): string {
   const profile = ETF_TOP_HOLDINGS[selected];
-  return `<section class="etf-holdings-panel" aria-labelledby="etfHoldingsTitle">
-    <header class="etf-holdings-head">
-      <div><span class="eyebrow">Fund Composition</span><h3 id="etfHoldingsTitle">Top Holdings</h3></div>
+  return `<section class="wu-card etf-holdings-panel" aria-labelledby="etfHoldingsTitle">
+    <div class="wu-card__header">
+      <div class="wu-stack wu-stack--sm"><span class="wu-label">Fund Composition</span><h3 class="wu-card__title t-heading" id="etfHoldingsTitle">Top Holdings</h3></div>
       <div class="etf-holdings-tabs" role="tablist" aria-label="Select ETF holdings">
         ${(Object.keys(ETF_TOP_HOLDINGS) as EtfHoldingsSymbol[]).map((symbol) => `<button class="etf-holdings-tab${symbol === selected ? " active" : ""}" data-etf-holdings="${symbol}" type="button" role="tab" aria-selected="${symbol === selected}">${symbol}</button>`).join("")}
       </div>
-    </header>
-    <!-- Live fund facts. These the data feed really does publish, so they are
-         fetched per symbol; the holdings list below it cannot be, and says so
-         rather than letting a dated snapshot pass for current. -->
-    <dl id="etfLiveFacts" class="etf-live-facts">
-      <div><dt>Expense ratio</dt><dd data-fact="expense">${UNKNOWN}</dd></div>
-      <div><dt>Dividend yield</dt><dd data-fact="yield">${UNKNOWN}</dd></div>
-      <div><dt>Fund size</dt><dd data-fact="aum">${UNKNOWN}</dd></div>
-    </dl>
-    <div id="etfSectors" class="etf-sectors" hidden></div>
-    <div class="etf-holdings-summary" aria-live="polite"><span><strong id="etfHoldingsSymbol">${selected}</strong> · Top Holdings <b id="etfHoldingsTotal">${profile.topHoldingsTotalPercent}</b></span><small id="etfHoldingsDateWrap">Holdings as at <time id="etfHoldingsDate">${profile.updateDate}</time> · fixed snapshot, not live</small></div>
-    <ol id="etfHoldingsList" class="etf-holdings-list">${etfHoldingsRowsTemplate(profile)}</ol>
+    </div>
+    <div class="wu-stack">
+      <!-- Live fund facts. These the data feed really does publish, so they are
+           fetched per symbol; the holdings list below it cannot be, and says so
+           rather than letting a dated snapshot pass for current. -->
+      <dl id="etfLiveFacts" class="wu-list etf-live-facts">
+        <div class="wu-list__row"><dt>Expense ratio</dt><dd data-fact="expense">${UNKNOWN}</dd></div>
+        <div class="wu-list__row"><dt>Dividend yield</dt><dd data-fact="yield">${UNKNOWN}</dd></div>
+        <div class="wu-list__row"><dt>Fund size</dt><dd data-fact="aum">${UNKNOWN}</dd></div>
+      </dl>
+      <div id="etfSectors" class="etf-sectors" hidden></div>
+      <div class="wu-row wu-row--between t-caption t-faint" aria-live="polite"><span><strong id="etfHoldingsSymbol" class="t-subheading">${selected}</strong> · Top Holdings <b id="etfHoldingsTotal" class="t-num">${profile.topHoldingsTotalPercent}</b></span><small id="etfHoldingsDateWrap">Holdings as at <time id="etfHoldingsDate">${profile.updateDate}</time> · fixed snapshot, not live</small></div>
+      <ol id="etfHoldingsList" class="etf-holdings-list" style="list-style:none;margin:0;padding:0">${etfHoldingsRowsTemplate(profile)}</ol>
+    </div>
   </section>`;
 }
 
@@ -146,172 +149,129 @@ export function marketTemplate(state: WealthState): string {
     '<button class="market-tab-btn' + (i === 0 ? ' active' : '') + '" data-tab="' + t.id + '" type="button">' + t.label + '</button>'
   ).join("");
 
-  return `
-    <section class="market-hero card">
-      <div><span class="eyebrow">Investment Intelligence</span><h3>Research with a long-term lens</h3><p>Use market information to understand ownership, risk and valuation—not to react to daily noise.</p></div>
-      <div class="market-principle"><span>Current principle</span><strong>Context before action</strong><small>Review the mandate before changing allocation.</small></div>
-    </section>
+  const stat = (id: string, label: string, note = ""): string =>
+    `<div class="wu-card wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">${label}</span><span class="wu-metric__value t-num" id="${id}">--</span>${note ? `<span class="wu-metric__note t-caption">${note}</span>` : ""}</div></div>`;
 
-    <div class="market-toolbar">
-      <div class="market-symbols" role="group" aria-label="Select investment">
-        <button class="market-symbol-btn active" data-symbol="VOO" type="button"><strong>VOO</strong><small>Core market</small></button>
-        <button class="market-symbol-btn" data-symbol="QQQM" type="button"><strong>QQQM</strong><small>Growth allocation</small></button>
-        ${state.customTickers.map((ticker) => '<div class="market-custom-symbol" data-symbol="' + escapeHtml(ticker) + '"><button class="market-symbol-btn" data-symbol="' + escapeHtml(ticker) + '" type="button"><strong>' + escapeHtml(ticker) + '</strong><small>Custom watchlist</small></button><button class="market-symbol-remove" data-remove-symbol="' + escapeHtml(ticker) + '" type="button" aria-label="Remove ' + escapeHtml(ticker) + '">×</button></div>').join("")}
+  return `<div class="wu">
+    ${pageHeader({
+      eyebrow: "Investment Intelligence",
+      title: "Market",
+      sub: "Research with a long-term lens — ownership, risk and valuation, not daily noise.",
+    })}
+    <div class="wu-stack wu-stack--lg">
+      <div class="wu-card wu-card--pad-sm wu-row wu-row--between">
+        <span class="wu-label">Current principle</span>
+        <span class="wu-row wu-row--tight"><strong class="t-subheading">Context before action</strong><span class="t-caption t-faint">Review the mandate before changing allocation.</span></span>
       </div>
-      <form id="customSymbolForm" class="market-custom-form"><label for="customSymbolInput">Add symbol</label><div><input id="customSymbolInput" name="symbol" type="text" maxlength="20" placeholder="e.g. AAPL" autocomplete="off" spellcheck="false"><button class="secondary-button" type="submit">Add</button></div><small id="customSymbolMessage" class="market-custom-message" aria-live="polite"></small></form>
-      <span class="market-data-note">Market data may be delayed</span>
-    </div>
 
-    <div class="market-tabs" role="tablist" aria-label="Market research views">
-      ${tabButtons}
-    </div>
-
-    <!-- Chart Tab -->
-    <div class="market-tab-content active" data-tab-content="chart">
-      <div class="market-view-head"><div><span class="eyebrow">Price Context</span><h3>Historical perspective</h3></div><div class="market-intervals" role="group" aria-label="Chart period">
-        <button class="interval-btn" data-interval="D" type="button">1D</button>
-        <button class="interval-btn" data-interval="W" type="button">1W</button>
-        <button class="interval-btn" data-interval="M" type="button">1M</button>
-        <button class="interval-btn" data-interval="5" type="button">YTD</button>
-        <button class="interval-btn active" data-interval="12M" type="button">1Y</button>
-        <button class="interval-btn" data-interval="60M" type="button">5Y</button>
-      </div></div>
-      <article class="card market-chart-card">
-        <div id="tradingview_container" style="width:100%;height:520px;"></div>
-      </article>
-    </div>
-
-    <!-- P&L Tab -->
-    <div class="market-tab-content" data-tab-content="pnl">
-      <div id="pnlPanel" style="display:none;">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;">
-          <div class="card" style="padding:12px;text-align:center;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:2px;">💰 Invested USD</div>
-            <div id="pnl-invested" style="font-size:16px;font-weight:700;">--</div>
-          </div>
-          <div class="card" style="padding:12px;text-align:center;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:2px;">📊 Units</div>
-            <div id="pnl-units" style="font-size:16px;font-weight:700;">--</div>
-          </div>
-          <div class="card" style="padding:12px;text-align:center;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:2px;">💵 Avg Cost</div>
-            <div id="pnl-cost" style="font-size:16px;font-weight:700;">--</div>
-          </div>
-          <div class="card" style="padding:12px;text-align:center;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:2px;">📈 Market Value</div>
-            <div id="pnl-value" style="font-size:16px;font-weight:700;">--</div>
-          </div>
-          <div class="card" style="padding:12px;text-align:center;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:2px;">🟢🔴 P&L</div>
-            <div id="pnl-amount" style="font-size:16px;font-weight:700;">--</div>
-            <div id="pnl-pct" style="font-size:12px;font-weight:600;">--</div>
-          </div>
-          <div class="card" style="padding:12px;text-align:center;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:2px;">💸 Fees</div>
-            <div id="pnl-fees" style="font-size:16px;font-weight:700;">--</div>
-          </div>
+      <div class="wu-stack">
+        <div class="market-symbols" role="group" aria-label="Select investment">
+          <button class="market-symbol-btn active" data-symbol="VOO" type="button"><strong>VOO</strong><small>Core market</small></button>
+          <button class="market-symbol-btn" data-symbol="QQQM" type="button"><strong>QQQM</strong><small>Growth allocation</small></button>
+          ${state.customTickers.map((ticker) => '<div class="market-custom-symbol" data-symbol="' + escapeHtml(ticker) + '"><button class="market-symbol-btn" data-symbol="' + escapeHtml(ticker) + '" type="button"><strong>' + escapeHtml(ticker) + '</strong><small>Custom watchlist</small></button><button class="market-symbol-remove" data-remove-symbol="' + escapeHtml(ticker) + '" type="button" aria-label="Remove ' + escapeHtml(ticker) + '">×</button></div>').join("")}
         </div>
-        <div id="pnl-trades-list" style="margin-top:10px;"></div>
+        <form id="customSymbolForm" class="wu-row"><label class="wu-field-row"><span class="wu-field-row__label">Add symbol</span><span class="wu-row wu-row--tight"><input class="wu-field" id="customSymbolInput" name="symbol" type="text" maxlength="20" placeholder="e.g. AAPL" autocomplete="off" spellcheck="false"><button class="wu-btn wu-btn--secondary wu-btn--sm" type="submit">Add</button></span></label><small id="customSymbolMessage" class="t-caption t-faint" aria-live="polite"></small></form>
+        <span class="t-caption t-faint">Market data may be delayed</span>
       </div>
-      <div id="pnl-empty" style="text-align:center;padding:40px;color:var(--ink-3);">No trades for this ticker</div>
-      <div id="tradeTimeline" style="margin-top:16px;"></div>
-    </div>
 
-    <!-- Risk Tab -->
-    <div class="market-tab-content" data-tab-content="risk">
-      <div id="riskContent" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
-        <div class="card" style="padding:16px;">
-          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">📉 Max Drawdown</div>
-          <div id="risk-drawdown" style="font-size:24px;font-weight:700;">--</div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:4px;">From peak to trough</div>
-        </div>
-        <div class="card" style="padding:16px;">
-          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">📊 Sharpe Ratio</div>
-          <div id="risk-sharpe" style="font-size:24px;font-weight:700;">--</div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:4px;">Risk-adjusted return</div>
-        </div>
-        <div class="card" style="padding:16px;">
-          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">🎯 Portfolio Beta</div>
-          <div id="risk-beta" style="font-size:24px;font-weight:700;">--</div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:4px;">vs S&P 500</div>
-        </div>
-        <div class="card" style="padding:16px;">
-          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">📐 Volatility</div>
-          <div id="risk-volatility" style="font-size:24px;font-weight:700;">--</div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:4px;">Annualized σ</div>
-        </div>
-        <div class="card" style="padding:16px;">
-          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">🔄 Current Drawdown</div>
-          <div id="risk-current-dd" style="font-size:24px;font-weight:700;">--</div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:4px;">From all-time high</div>
-        </div>
-        <div class="card" style="padding:16px;">
-          <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">📅 Win Rate</div>
-          <div id="risk-winrate" style="font-size:24px;font-weight:700;">--</div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:4px;">Positive months</div>
+      <div class="market-tabs" role="tablist" aria-label="Market research views">
+        ${tabButtons}
+      </div>
+
+      <!-- Chart Tab -->
+      <div class="market-tab-content active" data-tab-content="chart">
+        <div class="wu-stack">
+          <div class="wu-row wu-row--between"><span class="wu-label">Price context — historical perspective</span><div class="market-intervals" role="group" aria-label="Chart period">
+            <button class="interval-btn" data-interval="D" type="button">1D</button>
+            <button class="interval-btn" data-interval="W" type="button">1W</button>
+            <button class="interval-btn" data-interval="M" type="button">1M</button>
+            <button class="interval-btn" data-interval="5" type="button">YTD</button>
+            <button class="interval-btn active" data-interval="12M" type="button">1Y</button>
+            <button class="interval-btn" data-interval="60M" type="button">5Y</button>
+          </div></div>
+          <article class="wu-card wu-card--pad-sm market-chart-card">
+            <div id="tradingview_container" style="width:100%;height:520px;"></div>
+          </article>
         </div>
       </div>
-    </div>
 
-    <!-- Dividends Tab -->
-    <div class="market-tab-content" data-tab-content="dividends">
-      <div id="dividendsContent">
-        <p id="div-source" class="ov-detail-row__note" style="margin:0 0 10px;"></p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;">
-          <div class="card" style="padding:16px;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">💰 Dividend Yield</div>
-            <div id="div-yield" style="font-size:24px;font-weight:700;">--</div>
+      <!-- P&L Tab -->
+      <div class="market-tab-content" data-tab-content="pnl">
+        <div id="pnlPanel" style="display:none;">
+          <div class="wu-grid wu-grid--wide">
+            ${stat("pnl-invested", "💰 Invested USD")}
+            ${stat("pnl-units", "📊 Units")}
+            ${stat("pnl-cost", "💵 Avg Cost")}
+            ${stat("pnl-value", "📈 Market Value")}
+            <div class="wu-card wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">🟢🔴 P&L</span><span class="wu-metric__value t-num" id="pnl-amount">--</span><span class="wu-metric__note t-caption" id="pnl-pct">--</span></div></div>
+            ${stat("pnl-fees", "💸 Fees")}
           </div>
-          <div class="card" style="padding:16px;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">📅 Frequency</div>
-            <div id="div-frequency" style="font-size:24px;font-weight:700;">--</div>
-          </div>
-          <div class="card" style="padding:16px;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">💵 Annual Dividend</div>
-            <div id="div-annual" style="font-size:24px;font-weight:700;">--</div>
-          </div>
-          <div class="card" style="padding:16px;">
-            <div style="font-size:11px;color:var(--ink-3);margin-bottom:4px;">📊 P/E Ratio</div>
-            <div id="div-pe" style="font-size:24px;font-weight:700;">--</div>
-          </div>
+          <div id="pnl-trades-list" style="margin-top:var(--space-3)"></div>
         </div>
-        <div class="card" style="padding:16px;">
-          <div style="font-size:13px;font-weight:600;margin-bottom:12px;">Recent Dividend History</div>
-          <div id="div-history"></div>
+        <div id="pnl-empty" class="wu-empty">No trades for this ticker</div>
+        <div id="tradeTimeline" style="margin-top:var(--space-4)"></div>
+      </div>
+
+      <!-- Risk Tab -->
+      <div class="market-tab-content" data-tab-content="risk">
+        <div id="riskContent" class="wu-grid wu-grid--wide">
+          ${stat("risk-drawdown", "📉 Max Drawdown", "From peak to trough")}
+          ${stat("risk-sharpe", "📊 Sharpe Ratio", "Risk-adjusted return")}
+          ${stat("risk-beta", "🎯 Portfolio Beta", "vs S&amp;P 500")}
+          ${stat("risk-volatility", "📐 Volatility", "Annualized σ")}
+          ${stat("risk-current-dd", "🔄 Current Drawdown", "From all-time high")}
+          ${stat("risk-winrate", "📅 Win Rate", "Positive months")}
+        </div>
+      </div>
+
+      <!-- Dividends Tab -->
+      <div class="market-tab-content" data-tab-content="dividends">
+        <div id="dividendsContent" class="wu-stack">
+          <p id="div-source" class="ov-detail-row__note"></p>
+          <div class="wu-grid wu-grid--wide">
+            ${stat("div-yield", "💰 Dividend Yield")}
+            ${stat("div-frequency", "📅 Frequency")}
+            ${stat("div-annual", "💵 Annual Dividend")}
+            ${stat("div-pe", "📊 P/E Ratio")}
+          </div>
+          <article class="wu-card wu-card--pad-sm">
+            <h5 class="t-subheading" style="margin-bottom:var(--space-3)">Recent Dividend History</h5>
+            <div id="div-history"></div>
+          </article>
+        </div>
+      </div>
+
+      <!-- Sectors Tab -->
+      <div class="market-tab-content" data-tab-content="sectors">
+        <div id="sectorsContent">
+          ${etfTopHoldingsTemplate()}
+        </div>
+      </div>
+
+      <!-- Compare Tab -->
+      <div class="market-tab-content" data-tab-content="compare">
+        <div id="compareContent" class="stock-compare wu-stack">
+          <div class="wu-stack wu-stack--sm"><span class="wu-label">Asset Comparison</span><h3 class="t-heading">Your holdings, side by side</h3><p class="t-body-sm t-muted">Every asset you hold or watch, in one view. Fees, yields and fund sizes are fetched live; the descriptive rows are editorial and say what each instrument is for.</p></div>
+          <div id="compareProfiles"></div>
+          <div id="compareMatrix"></div>
+        </div>
+      </div>
+
+      <!-- Calendar Tab -->
+      <div class="market-tab-content" data-tab-content="calendar">
+        <div id="calendarContent">
+          <article class="wu-card ctx-card">
+            <div class="wu-card__header">
+              <div class="wu-stack wu-stack--sm"><span class="wu-label">Historical Context</span><h3 class="wu-card__title t-heading">How this has fallen before</h3></div>
+              <span class="wu-badge wu-badge--neutral" id="ctxRange">—</span>
+            </div>
+            <p class="t-body-sm t-muted" style="margin-bottom:var(--space-3)">Every decline of 10% or more on record, how long it took to come back, and what holding through it was worth. Computed from daily closes.</p>
+            <div id="ctxBody"><p class="wu-empty">Loading price history…</p></div>
+          </article>
         </div>
       </div>
     </div>
-
-    <!-- Sectors Tab -->
-    <div class="market-tab-content" data-tab-content="sectors">
-      <div id="sectorsContent">
-        ${etfTopHoldingsTemplate()}
-      </div>
-    </div>
-
-    <!-- Compare Tab -->
-    <div class="market-tab-content" data-tab-content="compare">
-      <div id="compareContent" class="stock-compare">
-        <div class="compare-intro"><span class="eyebrow">Asset Comparison</span><h3>Your holdings, side by side</h3><p>Every asset you hold or watch, in one view. Fees, yields and fund sizes are fetched live; the descriptive rows are editorial and say what each instrument is for.</p></div>
-        <div id="compareProfiles"></div>
-        <div id="compareMatrix"></div>
-      </div>
-    </div>
-
-    <!-- Calendar Tab -->
-    <div class="market-tab-content" data-tab-content="calendar">
-      <div id="calendarContent">
-        <div class="card ctx-card">
-          <div class="ctx-head">
-            <div><span class="eyebrow">Historical Context</span><h3>How this has fallen before</h3></div>
-            <span class="ctx-range" id="ctxRange">—</span>
-          </div>
-          <p class="ctx-lede">Every decline of 10% or more on record, how long it took to come back, and what holding through it was worth. Computed from daily closes.</p>
-          <div id="ctxBody"><p class="empty-state">Loading price history…</p></div>
-        </div>
-      </div>
-    </div>
-  `;
+  </div>`;
 }
 
 export function bindMarket(root: HTMLElement, state: WealthState, setState: Setter): void {
@@ -463,11 +423,7 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
   function selectSymbol(btn: HTMLButtonElement): void {
     currentSymbol = btn.dataset.symbol || "VOO";
     root.querySelectorAll<HTMLButtonElement>(".market-symbol-btn").forEach((button) => {
-      const active = button === btn;
-      button.classList.toggle("active", active);
-      button.style.borderColor = active ? "var(--green)" : "var(--line)";
-      button.style.background = active ? "var(--green-dim)" : "var(--surface)";
-      button.style.color = active ? "var(--green)" : "var(--ink)";
+      button.classList.toggle("active", button === btn);
     });
     createWidget(currentSymbol, currentInterval);
     updatePnL(currentSymbol);
@@ -584,7 +540,7 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     const valued = holding?.marketValueUsd != null;
     const pnlUsd = holding?.unrealizedPnlUsd ?? null;
     const isProfit = (pnlUsd ?? 0) >= 0;
-    const color = isProfit ? "var(--green)" : "var(--red)";
+    const color = isProfit ? "var(--positive)" : "var(--negative)";
     const sign = isProfit ? "+" : "−";
     const UNKNOWN = "--";
 
@@ -616,14 +572,14 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
         const units = tradeUnits(t).toFixed(4);
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface);border-radius:6px;margin-bottom:4px;font-size:12px;">' +
           '<span style="display:flex;gap:8px;align-items:center;">' +
-            '<span style="color:' + (isBuy ? 'var(--green)' : 'var(--red)') + ';font-weight:700;width:20px;">' + (isBuy ? '↑' : '↓') + '</span>' +
+            '<span style="color:' + (isBuy ? 'var(--positive)' : 'var(--negative)') + ';font-weight:700;width:20px;">' + (isBuy ? '↑' : '↓') + '</span>' +
             '<span>' + escapeHtml(t.date) + '</span>' +
-            '<span style="color:var(--ink-3);">' + t.type + '</span>' +
+            '<span style="color:var(--text-faint);">' + t.type + '</span>' +
           '</span>' +
           '<span>' + units + ' units @ $' + t.priceUsd.toFixed(2) + '</span>' +
         '</div>';
       }).join("");
-      tradeListEl.innerHTML = rows ? '<div style="font-size:12px;color:var(--ink-3);margin-bottom:6px;font-weight:600;">Trade Details — ' + symbol + '</div>' + rows : "";
+      tradeListEl.innerHTML = rows ? '<div style="font-size:12px;color:var(--text-faint);margin-bottom:6px;font-weight:600;">Trade Details — ' + symbol + '</div>' + rows : "";
     }
   }
 
@@ -689,7 +645,7 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       if (historyEl) {
         const dh = divHistory[sym] || divHistory.VOO;
         historyEl.innerHTML = dh.map((d) =>
-          '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;">' +
+          '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">' +
             '<span>' + d.date + '</span><span style="font-weight:600;">' + d.amount + '</span></div>'
         ).join("");
       }
@@ -960,24 +916,24 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
 
       setT("#risk-drawdown", pct(metrics.maxDrawdown));
       const ddEl = root.querySelector<HTMLElement>("#risk-drawdown");
-      if (ddEl) ddEl.style.color = "var(--red)";
+      if (ddEl) ddEl.style.color = "var(--negative)";
 
       setT("#risk-sharpe", metrics.sharpeRatio.toFixed(2));
       const sharpeEl = root.querySelector<HTMLElement>("#risk-sharpe");
-      if (sharpeEl) sharpeEl.style.color = metrics.sharpeRatio >= 1 ? "var(--green)" : metrics.sharpeRatio >= 0.5 ? "var(--amber)" : "var(--red)";
+      if (sharpeEl) sharpeEl.style.color = metrics.sharpeRatio >= 1 ? "var(--positive)" : metrics.sharpeRatio >= 0.5 ? "var(--warning)" : "var(--negative)";
 
       setT("#risk-beta", metrics.beta.toFixed(2));
       const betaEl = root.querySelector<HTMLElement>("#risk-beta");
-      if (betaEl) betaEl.style.color = metrics.beta <= 1 ? "var(--green)" : "var(--amber)";
+      if (betaEl) betaEl.style.color = metrics.beta <= 1 ? "var(--positive)" : "var(--warning)";
 
       setT("#risk-volatility", pct(metrics.volatility));
       setT("#risk-current-dd", pct(metrics.currentDrawdown));
       const curDDEl = root.querySelector<HTMLElement>("#risk-current-dd");
-      if (curDDEl) curDDEl.style.color = metrics.currentDrawdown < 0 ? "var(--red)" : "var(--green)";
+      if (curDDEl) curDDEl.style.color = metrics.currentDrawdown < 0 ? "var(--negative)" : "var(--positive)";
 
       setT("#risk-winrate", pct(metrics.winRate));
       const winEl = root.querySelector<HTMLElement>("#risk-winrate");
-      if (winEl) winEl.style.color = metrics.winRate >= 0.6 ? "var(--green)" : "var(--amber)";
+      if (winEl) winEl.style.color = metrics.winRate >= 0.6 ? "var(--positive)" : "var(--warning)";
 
     } catch (err) {
       console.warn("[Market] Failed to load risk metrics for " + symbol, err);
@@ -1018,7 +974,7 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       if (historyEl) {
         const row = (label: string, value: string, last = false) =>
           '<div style="display:flex;justify-content:space-between;padding:8px 0;' +
-          (last ? "" : "border-bottom:1px solid var(--line);") +
+          (last ? "" : "border-bottom:1px solid var(--border);") +
           'font-size:13px;"><span>' + escapeHtml(label) + '</span>' +
           '<span style="font-weight:600;">' + escapeHtml(value) + '</span></div>';
         const rows: string[] = [];
@@ -1055,9 +1011,9 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       const historyEl = root.querySelector<HTMLElement>("#div-history");
       if (historyEl) {
         historyEl.innerHTML =
-          '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;">' +
+          '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">' +
             '<span>Next Ex-Dividend</span><span style="font-weight:600;">' + sd.exDiv + '</span></div>' +
-          '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;">' +
+          '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">' +
             '<span>5Y Avg Yield</span><span style="font-weight:600;">' + sd.avgYield + '</span></div>' +
           '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;">' +
             '<span>Annual Dividend</span><span style="font-weight:600;">' + sd.annual + '</span></div>';
