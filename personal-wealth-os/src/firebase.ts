@@ -13,11 +13,15 @@ import {
 } from "firebase/auth";
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   getDoc,
   setDoc,
   onSnapshot,
   type Unsubscribe,
+  type Firestore,
 } from "firebase/firestore";
 import type { WealthState } from "./models";
 
@@ -36,8 +40,41 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = createFirestore(app);
 const provider = new GoogleAuthProvider();
+
+/**
+ * Firestore with an IndexedDB-backed local cache, so a write made offline is
+ * queued on disk and replayed automatically once the connection returns,
+ * instead of failing outright.
+ *
+ * Before this, saveState's only response to a failed Firestore write was to
+ * log it and fire a "sync failed" event — the edit itself had nowhere to go
+ * but the browser tab's memory. Close that tab before the connection came
+ * back and the edit was gone from the cloud for good, indistinguishable from
+ * loadStateFromCloud's own "local is newer" case except that there was no
+ * local copy left to be newer than.
+ *
+ * persistentMultipleTabManager coordinates the cache across tabs of the same
+ * origin so two open tabs don't fight over one IndexedDB connection — the
+ * default single-tab manager would make the second tab fall back to memory
+ * only, silently losing the offline queue it thinks it has.
+ *
+ * Falls back to plain in-memory Firestore if IndexedDB is unavailable —
+ * private browsing in some browsers, or a user policy that blocks site data.
+ * Sync still works there; only the offline queue is lost, which is exactly
+ * the behaviour this app already had everywhere until now.
+ */
+function createFirestore(firebaseApp: ReturnType<typeof initializeApp>): Firestore {
+  try {
+    return initializeFirestore(firebaseApp, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  } catch (error) {
+    console.warn("[Firestore] Offline persistence unavailable, falling back to memory-only:", error);
+    return getFirestore(firebaseApp);
+  }
+}
 
 // Set persistence to local (survives browser restart)
 setPersistence(auth, browserLocalPersistence);
