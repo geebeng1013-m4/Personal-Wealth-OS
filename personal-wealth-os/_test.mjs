@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import { build } from "esbuild";
+import { build, stop } from "esbuild";
 
 const projectRoot = resolve(import.meta.dirname);
 const testDirectory = resolve(projectRoot, "tests");
@@ -75,6 +75,11 @@ const result = await build({
 
 const bundledTests = result.outputFiles[0].text;
 await import(`data:text/javascript;base64,${Buffer.from(bundledTests).toString("base64")}`);
+
+// esbuild's JS API leaves a service child process running, and its two pipe
+// handles are what `process.getActiveResourcesInfo()` reports after a build.
+// A script that builds once and then wants to exit has to shut it down.
+await stop();
 
 // TEMPORARY CI PROBE — remove once the Linux-only hang is identified.
 console.log("[probe] tests done. active resources:", JSON.stringify(process.getActiveResourcesInfo()));
