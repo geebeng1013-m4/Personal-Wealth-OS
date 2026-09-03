@@ -1,0 +1,54 @@
+name: CI
+
+# The repository holds several independent projects. Only changes to the app —
+# or to this workflow — are worth a run.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "personal-wealth-os/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "personal-wealth-os/**"
+      - ".github/workflows/ci.yml"
+
+# A newer push to the same branch makes the in-flight run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: personal-wealth-os
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 24.x is what package.json's engines field requires and what Vercel runs.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: personal-wealth-os/package-lock.json
+
+      # `npm ci`, not `npm install`: it installs strictly from the lockfile and
+      # fails if the lockfile has drifted from package.json. That is the check —
+      # a half-installed dependency tree is what broke the local suite before.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
