@@ -241,12 +241,20 @@ async function handleAuth(user: User | null): Promise<void> {
     void fetchUsdToMyr(state.trades, state.currencyExchanges).catch(() => {});
 
     try {
-      const cloudState = await loadStateFromCloud();
+      const cloud = await loadStateFromCloud();
       if (requestId !== authRequestId || currentUser?.uid !== user.uid) return;
 
-      if (cloudState) {
-        state = cloudState;
+      if (cloud.outcome === "cloud-applied") {
+        state = cloud.state;
         renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
+      } else if (cloud.outcome === "local-kept-newer") {
+        // This device holds edits the cloud has never seen — it was offline, or
+        // the write was rejected. Keep them on screen and push them up, rather
+        // than letting the older cloud document overwrite work the user did.
+        console.warn("[Auth] Local data is newer than the cloud copy; keeping local and syncing it up.");
+        state = cloud.state;
+        renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
+        await syncLocalToCloud(state);
       } else if (hasLocalData) {
         // User has local data from before, sync it up
         await syncLocalToCloud(state);

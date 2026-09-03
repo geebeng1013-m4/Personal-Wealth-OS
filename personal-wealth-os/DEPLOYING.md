@@ -24,13 +24,23 @@ Vercel builds from the repository. `vercel.json` pins the parts that matter:
 
 `package.json` requires Node 24.x.
 
-Before pushing a deploy, the same three checks CI-equivalent work relies on:
+`.github/workflows/ci.yml` runs the three checks below on every push to `main`
+and on every pull request that touches `personal-wealth-os/`. It installs with
+`npm ci`, so a lockfile that has drifted from `package.json` fails the run
+rather than being papered over.
+
+Locally, the same three:
 
 ```sh
 npm run typecheck
-npm test          # 654 unit tests
+npm test          # 657 unit tests
 npm run build
 ```
+
+Install with **npm**, not pnpm. The repository root carries a `pnpm-lock.yaml`
+for the other projects in it, but this app is a standalone npm project — that is
+what `vercel.json` runs and what CI runs. Mixing the two managers in this
+directory is what left the dependency tree half-installed before.
 
 ## Firestore security rules
 

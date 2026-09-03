@@ -16,7 +16,7 @@
   - `npm run typecheck`：执行 TypeScript 类型检查。
   - `npm run build`：先进行类型检查，再生成生产构建。
   - `npm run preview`：预览生产构建。
-- 项目同时存在 `package-lock.json` 和 `pnpm-lock.yaml`。除非任务明确涉及依赖，不要更新锁文件；需要安装依赖时，先确认本次任务采用的包管理器。
+- `personal-wealth-os/` 使用 **npm**，锁文件是该目录下的 `package-lock.json`；安装依赖用 `npm ci`。仓库根目录的 `pnpm-lock.yaml` 属于其他项目，不要在本目录里使用 pnpm——两种包管理器混用会留下半装状态的依赖树。除非任务明确涉及依赖，不要更新锁文件。
 
 ## 3. 模块职责
 

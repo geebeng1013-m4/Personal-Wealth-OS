@@ -19,12 +19,32 @@ const firebaseStubPlugin = {
       if (!args.importer.endsWith("state.ts")) return undefined;
       return { path: "firebase-stub", namespace: "test-stub" };
     });
+    // The same module, addressed by name, so a test can drive what state.ts
+    // sees. Both resolutions return one path+namespace, so esbuild emits a
+    // single instance — the test and state.ts share it.
+    buildApi.onResolve({ filter: /^test:firebase-stub$/ }, () => ({
+      path: "firebase-stub",
+      namespace: "test-stub",
+    }));
     buildApi.onLoad({ filter: /.*/, namespace: "test-stub" }, () => ({
       loader: "ts",
       contents: `
-        export const currentUser = () => null;
-        export const loadFromFirestore = async () => null;
-        export const saveToFirestore = async () => undefined;
+        let user = null;
+        let cloudDocument = null;
+        export const saved = [];
+
+        export const currentUser = () => user;
+        export const loadFromFirestore = async () => cloudDocument;
+        export const saveToFirestore = async (uid, state) => { saved.push({ uid, state }); };
+
+        /** Back to "signed out, cloud empty, nothing written". */
+        export function reset() {
+          user = null;
+          cloudDocument = null;
+          saved.length = 0;
+        }
+        export function signIn(uid) { user = { uid }; }
+        export function setCloudDocument(document) { cloudDocument = document; }
       `,
     }));
   },
