@@ -51,11 +51,7 @@ jobs:
         run: npm run typecheck
 
       - name: Test
-        # TEMPORARY: hard-bounded so the log is readable while the Linux-only
-        # non-exit is being diagnosed. `timeout` returns 124 on expiry; the
-        # echo keeps the step green so later steps and the log still land.
-        run: |
-          timeout 120 npm test || echo "TEST STEP EXIT CODE $?"
+        run: npm test
 
       - name: Build
         run: npm run build

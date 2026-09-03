@@ -80,12 +80,3 @@ await import(`data:text/javascript;base64,${Buffer.from(bundledTests).toString("
 // handles are what `process.getActiveResourcesInfo()` reports after a build.
 // A script that builds once and then wants to exit has to shut it down.
 await stop();
-
-// TEMPORARY CI PROBE — remove once the Linux-only hang is identified.
-console.log("[probe] tests done. active resources:", JSON.stringify(process.getActiveResourcesInfo()));
-// unref'd, so the probe itself never keeps the process alive: if this fires,
-// something ELSE is holding the event loop open.
-setTimeout(() => {
-  console.log("[probe] STILL ALIVE 5s later. active resources:", JSON.stringify(process.getActiveResourcesInfo()));
-  process.exit(process.exitCode ?? 0);
-}, 5000).unref();
