@@ -362,10 +362,15 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
   });
 
   root.querySelector<HTMLButtonElement>("#resetData")?.addEventListener("click", () => {
-    if (!confirm("Reset local Personal Wealth OS data?")) return;
+    if (!confirm("Reset to a blank Personal Wealth OS? Your current data will be saved to Version History first, and can be restored from there.")) return;
     const next = cloneDefaultState();
-    localStorage.clear();
-    setState(next);
+    // No localStorage.clear() here — this app shares the browser origin with
+    // the theme preference, the sidebar's open/closed state and the device id
+    // that cloud-sync conflict resolution keys off. Passing a changeLabel is
+    // what makes this recoverable: saveState reads the state still on disk
+    // before overwriting it and snapshots that copy under the label, the same
+    // path every other mutation in this file already goes through.
+    setState(next, "Before reset");
     doNavigate("dashboard");
   });
 }
@@ -515,12 +520,29 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
   if (activePage === "portfolio") {
     bindPortfolio(root, state, setState, navigate, renderApp);
     // Prices land after the first paint, and go stale after
-    // PRICE_STALE_AFTER_MS if the page stays open. Re-render the page each
-    // time a (re)fetch lands so the holdings table and hero pick up the
+    // PRICE_STALE_AFTER_MS if the page stays open. Re-render the holdings
+    // table and hero each time a (re)fetch lands, so they pick up the
     // canonical snapshot's latest valuation.
+    //
+    // This used to go through navigate("portfolio") — a full renderApp,
+    // rebuilding the sidebar and tearing down and restarting the WebGL rays
+    // behind it, on every background price tick while the page sat open, as
+    // often as every PRICE_POLL_INTERVAL_MS. A price update touches none of
+    // that: same page, same user, same profile. Re-rendering only #pageMount
+    // is what the comment above always meant — the shell rebuild was
+    // collateral damage from reusing navigate() as the refresh mechanism.
+    //
+    // Safe to reuse the state captured in this closure rather than reading
+    // the caller's current state: every code path that actually changes
+    // WealthState pairs its setState call with a full renderApp (see
+    // bindPortfolio's own handlers), which tears this closure down and
+    // rebinds it with the fresh state. Nothing can mutate WealthState out
+    // from under a live price tick without also replacing this closure.
     const refetchPortfolio = (): void => {
-      if (navigate) navigate("portfolio");
-      else renderApp(root, state, setState, "portfolio");
+      const mount = root.querySelector<HTMLElement>("#pageMount");
+      if (!mount) return;
+      mount.innerHTML = portfolioTemplate(state);
+      bindPortfolio(root, state, setState, navigate, renderApp);
     };
     refreshLivePrices(state, refetchPortfolio);
     const portfolioPriceTimer = setInterval(() => refreshLivePrices(state, refetchPortfolio), PRICE_POLL_INTERVAL_MS);
