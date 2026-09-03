@@ -602,24 +602,77 @@ export function saveState(state: WealthState, uid?: string, changeLabel?: string
   }
 }
 
-export async function loadStateFromCloud(): Promise<WealthState | null> {
+/**
+ * Whether the cloud copy should replace the local one.
+ *
+ * Last write wins, compared on the `updatedAt` that saveState stamps on every
+ * write. The case this exists for is the reverse one: a LOCAL copy that is
+ * newer than the cloud means local edits never reached Firestore — the device
+ * was offline, the write was rejected, or permissions failed — and saveState
+ * only logs that failure. Replacing those edits with the older cloud document
+ * is silent data loss, and until this check existed the cloud always won.
+ *
+ * Equal timestamps are the same save, so either copy will do; the cloud is
+ * taken so both ends converge on one representation.
+ *
+ * Both timestamps come from Date.now() on whichever device wrote them, so a
+ * badly skewed device clock can still win an argument it should lose. Closing
+ * that needs a server-assigned timestamp, which is a schema change — this
+ * function does not pretend to have solved it.
+ */
+export function cloudCopyWins(localUpdatedAt: number, cloudUpdatedAt: number): boolean {
+  return cloudUpdatedAt >= localUpdatedAt;
+}
+
+/**
+ * What a cloud round-trip concluded.
+ *
+ * `state` is the copy the app should be on. It is null only when Firestore held
+ * no document at all — a distinct outcome from a failed read, which throws and
+ * is the caller's to handle.
+ */
+export type CloudSyncResult =
+  | { outcome: "no-cloud-document"; state: null }
+  | { outcome: "cloud-applied"; state: WealthState }
+  | { outcome: "local-kept-newer"; state: WealthState };
+
+export async function loadStateFromCloud(): Promise<CloudSyncResult> {
   const user = currentUser();
-  if (!user) return null;
+  if (!user) return { outcome: "no-cloud-document", state: null };
   // Don't catch errors here - let the caller distinguish "no data" from "load error"
-  const cloudState = await loadFromFirestore(user.uid);
-  if (cloudState) {
-    const key = getUserStorageKey(user.uid);
-    const previousRaw = localStorage.getItem(key);
-    if (previousRaw) {
-      try {
-        saveSnapshot(JSON.parse(previousRaw) as WealthState, "Before cloud data refresh", user.uid);
-      } catch { /* Keep loading cloud data if the old local copy is invalid. */ }
+  const cloudDocument = await loadFromFirestore(user.uid);
+  if (!cloudDocument) return { outcome: "no-cloud-document", state: null };
+
+  const key = getUserStorageKey(user.uid);
+  const cloud = migrateState(cloudDocument as Partial<WealthState>);
+
+  let local: WealthState | null = null;
+  const previousRaw = localStorage.getItem(key);
+  if (previousRaw) {
+    try {
+      local = migrateState(JSON.parse(previousRaw) as Partial<WealthState>);
+    } catch {
+      // An unreadable local copy is no reason to refuse the cloud one.
+      local = null;
     }
-    const migrated = migrateState(cloudState as Partial<WealthState>);
-    localStorage.setItem(key, JSON.stringify(migrated));
-    return migrated;
   }
-  return null;
+
+  if (local && !cloudCopyWins(local.updatedAt, cloud.updatedAt)) {
+    // Local is ahead. Leave local storage exactly as it is and hand the copy
+    // back; the caller pushes it up so the cloud catches up to the device.
+    return { outcome: "local-kept-newer", state: local };
+  }
+
+  // The cloud copy wins. Snapshot the local one first so the overwrite is
+  // recoverable — but only when it is genuinely a different save. Signing in
+  // on the device that wrote the cloud document reads back what it just wrote,
+  // and snapshotting that on every launch would push real history out of the
+  // 20-slot budget.
+  if (local && local.updatedAt !== cloud.updatedAt) {
+    saveSnapshot(local, "Before cloud data refresh", user.uid);
+  }
+  localStorage.setItem(key, JSON.stringify(cloud));
+  return { outcome: "cloud-applied", state: cloud };
 }
 
 export async function syncLocalToCloud(state: WealthState): Promise<void> {
