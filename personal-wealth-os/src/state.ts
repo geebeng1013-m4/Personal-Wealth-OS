@@ -735,14 +735,18 @@ function byteLength(value: string): number {
 
 /**
  * Drops the oldest snapshots (the end of the array, since saveSnapshot keeps
- * the list newest-first) until the serialised list fits MAX_SNAPSHOTS_BYTES,
- * or only one is left. A single snapshot is never dropped purely for being
- * over budget on its own — an oversized WealthState is still worth one
- * restore point, just not twenty.
+ * the list newest-first) until the serialised list fits the budget, or only
+ * one is left. A single snapshot is never dropped purely for being over
+ * budget on its own — an oversized WealthState is still worth one restore
+ * point, just not twenty.
+ *
+ * budgetBytes is a parameter only so tests can exercise the policy with a few
+ * kilobytes instead of allocating multiple megabytes to cross the real
+ * threshold. Production callers pass nothing and get MAX_SNAPSHOTS_BYTES.
  */
-function trimToByteBudget(snapshots: Snapshot[]): Snapshot[] {
+export function trimToByteBudget(snapshots: Snapshot[], budgetBytes = MAX_SNAPSHOTS_BYTES): Snapshot[] {
   let trimmed = snapshots;
-  while (trimmed.length > 1 && byteLength(JSON.stringify(trimmed)) > MAX_SNAPSHOTS_BYTES) {
+  while (trimmed.length > 1 && byteLength(JSON.stringify(trimmed)) > budgetBytes) {
     trimmed = trimmed.slice(0, -1);
   }
   return trimmed;

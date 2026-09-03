@@ -6,6 +6,7 @@ import {
   clearSnapshots,
   loadStateFromCloud,
   migrateState,
+  trimToByteBudget,
   CURRENT_VERSION,
 } from "../src/state";
 import type { Snapshot } from "../src/state";
@@ -13,15 +14,17 @@ import type { WealthState } from "../src/models";
 import { reset, signIn, setCloudDocument, saved } from "test:firebase-stub";
 
 const UID = "snapshot-budget-test-user";
-const MAX_SNAPSHOTS_BYTES = 2 * 1024 * 1024;
 
 /**
- * A state carrying one identifiable trade, padded with `junkBytes` of ASCII
- * text in ruleNotes so its serialised size is predictable and cheap to
- * construct — no need to model thousands of realistic ledger transactions to
- * exercise the byte-budget trim.
+ * A state carrying one identifiable trade, optionally padded in ruleNotes so
+ * its serialised size is predictable.
+ *
+ * The padding stays small on purpose. The byte-budget policy is exercised by
+ * handing trimToByteBudget a small budget rather than by allocating enough
+ * data to cross the real 2MB one — a test that needs megabytes to prove a
+ * size rule is slow, memory-hungry and environment-sensitive for no gain.
  */
-function bigState(tradeId: string, junkBytes: number): WealthState {
+function stateWith(tradeId: string, junkBytes = 0): WealthState {
   const base = migrateState({
     version: CURRENT_VERSION,
     deviceId: "test-device",
@@ -38,11 +41,19 @@ function bigState(tradeId: string, junkBytes: number): WealthState {
       feeMyr: 1.2,
     }],
   } as Partial<WealthState>);
-  return { ...base, ruleNotes: "x".repeat(junkBytes) };
+  return junkBytes > 0 ? { ...base, ruleNotes: "x".repeat(junkBytes) } : base;
 }
 
 function tradeIdsOf(snapshot: Snapshot): string[] {
   return snapshot.state.trades.map((trade) => trade.id);
+}
+
+function makeSnapshot(tradeId: string, timestamp: number, junkBytes = 0): Snapshot {
+  return { id: `snap-${tradeId}`, timestamp, label: `label-${tradeId}`, state: stateWith(tradeId, junkBytes) };
+}
+
+function byteSize(snapshots: Snapshot[]): number {
+  return new TextEncoder().encode(JSON.stringify(snapshots)).length;
 }
 
 function startClean(): void {
@@ -51,68 +62,68 @@ function startClean(): void {
   clearSnapshots(UID);
 }
 
-const SNAPSHOTS_KEY_FOR_UID = `personal-wealth-os-snapshots-${UID}`;
+// --- the eviction policy, exercised against a small injected budget --------
 
-/**
- * A snapshot with an explicit timestamp, for seeding localStorage directly.
- *
- * saveSnapshot collapses a new save into the existing newest one when they
- * land within 1 second of each other — real saves are always further apart
- * than that, but calling saveSnapshot several times in a tight test loop
- * lands well inside that window and silently collapses down to one entry,
- * which would make these tests pass without ever exercising the byte-budget
- * trim they exist to check. Seeding pre-spaced snapshots directly, then
- * making exactly one real saveSnapshot call, sidesteps that unrelated
- * mechanism entirely.
- */
-function makeSnapshot(tradeId: string, timestamp: number, junkBytes: number): Snapshot {
-  return { id: `snap-${tradeId}`, timestamp, label: `label-${tradeId}`, state: bigState(tradeId, junkBytes) };
-}
+test("trimToByteBudget: drops the oldest snapshots until the list fits the budget", () => {
+  // Newest-first, as saveSnapshot keeps them.
+  const snapshots = [
+    makeSnapshot("newest", 4_000),
+    makeSnapshot("middle", 3_000),
+    makeSnapshot("older", 2_000),
+    makeSnapshot("oldest", 1_000),
+  ];
+  // Self-calibrating: a budget that exactly fits the first two, whatever a
+  // WealthState happens to serialise to. Hard-coding a byte figure here would
+  // only encode today's default-state size and break the day it changes.
+  const budget = byteSize(snapshots.slice(0, 2));
 
-function seedSnapshots(snapshots: Snapshot[]): void {
-  localStorage.setItem(SNAPSHOTS_KEY_FOR_UID, JSON.stringify(snapshots));
-}
+  const trimmed = trimToByteBudget(snapshots, budget);
 
-test("saveSnapshot: the oldest snapshots are evicted once the combined size exceeds the byte budget", () => {
-  startClean();
-  // Three pre-existing ~600KB snapshots already total ~1.8MB. Saving a
-  // fourth of similar size pushes the combined total over the 2MB budget,
-  // and the oldest ("first-out") should be the one dropped to make room.
-  seedSnapshots([
-    makeSnapshot("third", 3_000, 600_000),
-    makeSnapshot("second", 2_000, 600_000),
-    makeSnapshot("first-out", 1_000, 600_000),
-  ]);
-  saveSnapshot(bigState("fourth", 600_000), "four", UID);
-
-  const snapshots = loadSnapshots(UID);
-  assert.ok(!snapshots.some((s) => tradeIdsOf(s).includes("first-out")), "the oldest, over-budget snapshot should have been evicted");
-  assert.ok(snapshots.some((s) => tradeIdsOf(s).includes("fourth")), "the newest snapshot must survive");
-
-  const storedSize = new TextEncoder().encode(JSON.stringify(snapshots)).length;
-  assert.ok(storedSize <= MAX_SNAPSHOTS_BYTES, `stored payload (${storedSize} bytes) should respect the byte budget`);
+  assert.equal(trimmed.length, 2, "the two that fit are kept, the two that do not are dropped");
+  assert.deepEqual(trimmed.map(tradeIdsOf).flat(), ["newest", "middle"], "eviction takes from the oldest end");
+  assert.ok(byteSize(trimmed) <= budget, "result must fit the budget");
 });
 
-test("saveSnapshot: a single snapshot larger than the byte budget on its own is still kept", () => {
-  startClean();
-  // 3MB alone, already over the 2MB budget — trimming must stop at one.
-  saveSnapshot(bigState("only-one", 3_000_000), "huge", UID);
-
-  const snapshots = loadSnapshots(UID);
-  assert.equal(snapshots.length, 1, "an oversized state is still worth one restore point");
-  assert.deepEqual(tradeIdsOf(snapshots[0]), ["only-one"]);
+test("trimToByteBudget: a single snapshot over budget on its own is still kept", () => {
+  const snapshots = [makeSnapshot("only-one", 1_000, 8_000)];
+  const trimmed = trimToByteBudget(snapshots, 5_000);
+  assert.equal(trimmed.length, 1, "an oversized state is still worth one restore point");
+  assert.deepEqual(tradeIdsOf(trimmed[0]), ["only-one"]);
 });
 
-test("saveSnapshot: small snapshots well under budget are not evicted early", () => {
+test("trimToByteBudget: a list already under budget is returned untouched", () => {
+  const snapshots = [
+    makeSnapshot("c", 3_000),
+    makeSnapshot("b", 2_000),
+    makeSnapshot("a", 1_000),
+  ];
+  const trimmed = trimToByteBudget(snapshots, 2 * 1024 * 1024);
+  assert.equal(trimmed.length, 3);
+  assert.deepEqual(trimmed.map(tradeIdsOf).flat(), ["c", "b", "a"]);
+});
+
+test("trimToByteBudget: never returns an empty list, even with an impossible budget", () => {
+  const snapshots = [makeSnapshot("b", 2_000), makeSnapshot("a", 1_000)];
+  assert.equal(trimToByteBudget(snapshots, 1).length, 1);
+});
+
+// --- saveSnapshot wiring and failure handling ------------------------------
+
+test("saveSnapshot: ordinary saves are kept, not evicted by the real budget", () => {
   startClean();
-  seedSnapshots([
-    makeSnapshot("d", 4_000, 100),
-    makeSnapshot("c", 3_000, 100),
-    makeSnapshot("b", 2_000, 100),
-    makeSnapshot("a", 1_000, 100),
-  ]);
-  saveSnapshot(bigState("e", 100), "save e", UID);
-  assert.equal(loadSnapshots(UID).length, 5, "five small snapshots are nowhere near the byte budget");
+  // Seeded with explicit timestamps: saveSnapshot collapses saves landing
+  // within 1 second of each other, so a tight loop of real calls would
+  // silently collapse to one entry and prove nothing.
+  localStorage.setItem(`personal-wealth-os-snapshots-${UID}`, JSON.stringify([
+    makeSnapshot("d", 4_000),
+    makeSnapshot("c", 3_000),
+    makeSnapshot("b", 2_000),
+    makeSnapshot("a", 1_000),
+  ]));
+
+  saveSnapshot(stateWith("e"), "save e", UID);
+
+  assert.equal(loadSnapshots(UID).length, 5, "five ordinary snapshots are nowhere near the 2MB budget");
 });
 
 test("saveSnapshot: a localStorage write failure is swallowed, not thrown", () => {
@@ -122,41 +133,26 @@ test("saveSnapshot: a localStorage write failure is swallowed, not thrown", () =
     throw new Error("QuotaExceededError (simulated)");
   };
   try {
-    assert.doesNotThrow(() => saveSnapshot(bigState("whatever", 100), "label", UID));
+    assert.doesNotThrow(() => saveSnapshot(stateWith("whatever"), "label", UID));
   } finally {
     localStorage.setItem = original;
   }
-  // The failed write must not leave a corrupt or partial entry behind.
-  assert.deepEqual(loadSnapshots(UID), []);
+  assert.deepEqual(loadSnapshots(UID), [], "a failed write must not leave a partial entry behind");
 });
 
 test("cloud sync integration: a snapshot write failure never blocks the cloud state from being cached locally", async () => {
-  // This is the regression loadStateFromCloud was exposed to before this
-  // fix: saveSnapshot's own localStorage.setItem had no try/catch, so a
-  // quota failure while snapshotting the outgoing local copy would throw
-  // straight through loadStateFromCloud and skip the line that actually
-  // persists the cloud document — losing data that had already been
-  // fetched successfully, over a failure that had nothing to do with it.
-  reset();
-  localStorage.clear();
-  clearSnapshots(UID);
+  // The regression loadStateFromCloud was exposed to: saveSnapshot's own
+  // localStorage.setItem had no try/catch, so a quota failure while
+  // snapshotting the outgoing local copy would throw straight through and
+  // skip the very next line — the one that persists a cloud document that
+  // had already been fetched successfully.
+  startClean();
   signIn(UID);
 
-  const localState = migrateState({
-    version: CURRENT_VERSION,
-    deviceId: "test-device",
-    updatedAt: 1_000,
-    trades: [{ id: "stale-local", date: "2026-08-01", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 100, amountUsd: 23.5, priceUsd: 620, units: 0.0379, feeMyr: 1.2 }],
-  } as Partial<WealthState>);
-  localStorage.setItem(`personal-wealth-os-state-${UID}`, JSON.stringify(localState));
+  const stale = migrateState({ version: CURRENT_VERSION, deviceId: "test-device", updatedAt: 1_000, trades: [{ id: "stale-local", date: "2026-08-01", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 100, amountUsd: 23.5, priceUsd: 620, units: 0.0379, feeMyr: 1.2 }] } as Partial<WealthState>);
+  localStorage.setItem(`personal-wealth-os-state-${UID}`, JSON.stringify(stale));
 
-  const cloudState = migrateState({
-    version: CURRENT_VERSION,
-    deviceId: "test-device",
-    updatedAt: 5_000,
-    trades: [{ id: "fresh-cloud", date: "2026-08-01", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 100, amountUsd: 23.5, priceUsd: 620, units: 0.0379, feeMyr: 1.2 }],
-  } as Partial<WealthState>);
-  setCloudDocument(cloudState);
+  setCloudDocument(migrateState({ version: CURRENT_VERSION, deviceId: "test-device", updatedAt: 5_000, trades: [{ id: "fresh-cloud", date: "2026-08-01", platform: "moomoo", ticker: "VOO", type: "DCA", amountMyr: 100, amountUsd: 23.5, priceUsd: 620, units: 0.0379, feeMyr: 1.2 }] } as Partial<WealthState>));
 
   const original = localStorage.setItem;
   localStorage.setItem = (key: string, value: string) => {
