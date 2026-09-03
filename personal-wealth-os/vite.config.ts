@@ -35,7 +35,9 @@ function devApiRoutes(): Plugin {
               send(body: string) { response.end(body); return shim; },
               setHeader(key: string, value: string) { response.setHeader(key, value); },
             };
-            await handler({ method: request.method, query }, shim);
+            // Headers are forwarded so the origin guard behaves the same here
+            // as it does deployed — the whole point of this shim.
+            await handler({ method: request.method, query, headers: request.headers }, shim);
           } catch (error) {
             response.statusCode = 500;
             response.setHeader("content-type", "application/json");

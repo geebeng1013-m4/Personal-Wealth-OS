@@ -24,6 +24,9 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # A hung step otherwise burns the full six-hour default before anyone sees
+    # a log. The whole job runs in well under a minute when healthy.
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: personal-wealth-os

@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { isAllowedOrigin } from "./_originGuard.js";
 
 /**
  * Server-side quote proxy.
@@ -101,6 +102,10 @@ export default async function handler(request: VercelRequest, response: VercelRe
   if (request.method !== "GET") {
     response.setHeader("Allow", "GET");
     response.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+  if (!isAllowedOrigin(request)) {
+    response.status(403).json({ error: "Forbidden" });
     return;
   }
 
