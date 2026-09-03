@@ -5,3 +5,7 @@ node_modules
 # Python bytecode caches — build artefacts, regenerated on every run.
 __pycache__/
 *.pyc
+
+# Dev-server output and scratch files captured by accident.
+*.log
+*.tmp
