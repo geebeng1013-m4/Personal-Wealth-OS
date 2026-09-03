@@ -671,7 +671,21 @@ export async function loadStateFromCloud(): Promise<CloudSyncResult> {
   if (local && local.updatedAt !== cloud.updatedAt) {
     saveSnapshot(local, "Before cloud data refresh", user.uid);
   }
-  localStorage.setItem(key, JSON.stringify(cloud));
+  // The cloud document was already fetched successfully by this point — a
+  // failure to cache it locally (quota exceeded, private-browsing storage
+  // limits) must not read as "the cloud load failed", and must not stop the
+  // caller from using the state it already has in hand. persistentLocalCache
+  // (see firebase.ts) means the document itself is durably cached in
+  // IndexedDB by Firestore regardless of whether this line succeeds; what is
+  // lost on failure is only this app's own faster local-storage path to it.
+  try {
+    localStorage.setItem(key, JSON.stringify(cloud));
+  } catch (err) {
+    console.error("[loadStateFromCloud] localStorage write failed:", err);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("pwo-save-error", { detail: { message: "Cloud data loaded, but could not be cached locally." } }));
+    }
+  }
   return { outcome: "cloud-applied", state: cloud };
 }
 
@@ -696,9 +710,42 @@ export interface Snapshot {
 
 const SNAPSHOTS_KEY = "personal-wealth-os-snapshots";
 const MAX_SNAPSHOTS = 20;
+/**
+ * Combined budget for one user's snapshot history, in UTF-8 bytes of its
+ * serialised form.
+ *
+ * MAX_SNAPSHOTS alone bounds COUNT, not SIZE. A WealthState grows with
+ * ongoing ledger use — a synthetic year of moderate daily use (about three
+ * transactions a day) measured at roughly 220KB for a single snapshot, and
+ * twenty of those alone approaches a browser's localStorage quota before
+ * counting the live state, the market cache, or anything else sharing the
+ * origin. This bounds the worst case regardless of how large a single state
+ * has grown, by dropping the oldest snapshots first once the combined size
+ * would exceed it.
+ */
+const MAX_SNAPSHOTS_BYTES = 2 * 1024 * 1024;
 
 function getSnapshotsKey(uid?: string): string {
   return uid ? `${SNAPSHOTS_KEY}-${uid}` : SNAPSHOTS_KEY;
+}
+
+function byteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+/**
+ * Drops the oldest snapshots (the end of the array, since saveSnapshot keeps
+ * the list newest-first) until the serialised list fits MAX_SNAPSHOTS_BYTES,
+ * or only one is left. A single snapshot is never dropped purely for being
+ * over budget on its own — an oversized WealthState is still worth one
+ * restore point, just not twenty.
+ */
+function trimToByteBudget(snapshots: Snapshot[]): Snapshot[] {
+  let trimmed = snapshots;
+  while (trimmed.length > 1 && byteLength(JSON.stringify(trimmed)) > MAX_SNAPSHOTS_BYTES) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  return trimmed;
 }
 
 export function saveSnapshot(prevState: WealthState, label: string, uid?: string): void {
@@ -723,12 +770,28 @@ export function saveSnapshot(prevState: WealthState, label: string, uid?: string
 
   snapshots.unshift(snapshot);
 
-  // Trim to max
   if (snapshots.length > MAX_SNAPSHOTS) {
     snapshots = snapshots.slice(0, MAX_SNAPSHOTS);
   }
+  snapshots = trimToByteBudget(snapshots);
 
-  localStorage.setItem(key, JSON.stringify(snapshots));
+  // A snapshot is a safety net, not the thing this call was actually meant to
+  // protect — the caller's own write, or (from loadStateFromCloud) a cloud
+  // document that has already landed and is about to be persisted locally.
+  // localStorage.setItem can still throw QuotaExceededError here even after
+  // trimming, if the rest of the origin is what's using the quota, and that
+  // must degrade to "no new snapshot" rather than propagate: an uncaught
+  // throw here would have stopped loadStateFromCloud from ever reaching its
+  // own write, losing a cloud document it had already successfully fetched
+  // over a snapshot failure that had nothing to do with it.
+  try {
+    localStorage.setItem(key, JSON.stringify(snapshots));
+  } catch (err) {
+    console.error("[saveSnapshot] localStorage write failed:", err);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("pwo-save-error", { detail: { message: "Could not save a version-history snapshot. Your current data is unaffected." } }));
+    }
+  }
 }
 
 export function loadSnapshots(uid?: string): Snapshot[] {
