@@ -362,10 +362,15 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
   });
 
   root.querySelector<HTMLButtonElement>("#resetData")?.addEventListener("click", () => {
-    if (!confirm("Reset local Personal Wealth OS data?")) return;
+    if (!confirm("Reset to a blank Personal Wealth OS? Your current data will be saved to Version History first, and can be restored from there.")) return;
     const next = cloneDefaultState();
-    localStorage.clear();
-    setState(next);
+    // No localStorage.clear() here — this app shares the browser origin with
+    // the theme preference, the sidebar's open/closed state and the device id
+    // that cloud-sync conflict resolution keys off. Passing a changeLabel is
+    // what makes this recoverable: saveState reads the state still on disk
+    // before overwriting it and snapshots that copy under the label, the same
+    // path every other mutation in this file already goes through.
+    setState(next, "Before reset");
     doNavigate("dashboard");
   });
 }
