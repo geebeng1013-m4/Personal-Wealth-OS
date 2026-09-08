@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { isAllowedOrigin } from "./_originGuard.js";
+import { checkRateLimit } from "./_rateLimit.js";
 
 /**
  * Server-side market-data passthrough for the Market page's secondary panels
@@ -19,6 +20,14 @@ const MAX_SYMBOL_LENGTH = 20;
 const UPSTREAM_TIMEOUT_MS = 8000;
 /** Fundamentals and daily history move slowly; cache them harder than quotes. */
 const CACHE_SECONDS = 900;
+
+/**
+ * Per-IP request budget. This route backs the Market page's secondary panels —
+ * a user clicking through tickers makes a few calls a minute. 30 is room for
+ * brisk browsing and a wall for a scraper. Best-effort — see _rateLimit.ts.
+ */
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX = 30;
 
 const RANGES = new Set(["1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "max"]);
 
@@ -200,6 +209,16 @@ export default async function handler(request: VercelRequest, response: VercelRe
   }
   if (!isAllowedOrigin(request)) {
     response.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const rate = checkRateLimit(request, { bucket: "market", windowMs: RATE_WINDOW_MS, max: RATE_MAX });
+  response.setHeader("RateLimit-Limit", String(rate.limit));
+  response.setHeader("RateLimit-Remaining", String(rate.remaining));
+  response.setHeader("RateLimit-Reset", String(rate.resetSec));
+  if (!rate.ok) {
+    response.setHeader("Retry-After", String(rate.retryAfterSec));
+    response.status(429).json({ error: "Too many requests" });
     return;
   }
 
