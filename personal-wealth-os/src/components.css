@@ -242,6 +242,20 @@
     margin-top: var(--space-1);
   }
 
+  /* ---- disclaimer strip -------------------------------------------------- */
+  /* Sits under the header on advice-bearing pages. Muted on purpose — present
+     and readable, not shouting. */
+  .wu-disclaimer {
+    margin: calc(var(--space-4) * -1 + var(--space-1)) 0 var(--space-5);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--surface-bg);
+    color: var(--text-faint);
+    font: var(--weight-regular) var(--text-caption) / 1.5 var(--font-sans);
+    max-width: 72ch;
+  }
+
   /* ---- button ----------------------------------------------------------- */
   .wu-btn {
     --_bg: transparent;

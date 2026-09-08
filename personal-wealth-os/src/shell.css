@@ -218,6 +218,13 @@
   gap: 6px;
   align-items: center;
 }
+/* Always visible: the app gives estimates from the user's own data, not advice. */
+.sidebar-disclaimer {
+  margin: 4px 0 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-faint);
+}
 .sidebar-actions-row button,
 .sidebar-actions-row .file-button {
   flex: 1;

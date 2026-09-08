@@ -25,6 +25,7 @@ import { isRecommendationCompleted, markRecommendationDone } from "../actionReco
 import { assetDrawdownBelow } from "../drawdowns";
 import { leakInsightStrip } from "../components/leakInsightStrip";
 import { pageHeader } from "../components/pageHeader";
+import { disclaimerStrip } from "../components/disclaimer";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
 function advisorPriorityActionControl(state: WealthState): string {
@@ -91,6 +92,7 @@ export function advisorPageTemplate(state: WealthState): string {
       title: "Advisor",
       sub: "Rules-based guidance in canonical order, plus the dip-buy scenario check.",
     })}
+    ${disclaimerStrip()}
     ${leakInsightStrip(state, ["debt", "goal", "budget", "fee", "subscription", "duplicate"], "Priority guidance")}
     <div class="wu-grid wu-grid--2">
       <article class="wu-card advisor-panel">
