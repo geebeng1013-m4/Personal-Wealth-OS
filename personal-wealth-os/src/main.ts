@@ -10,9 +10,14 @@ import { fetchUsdToMyr, pruneMarketCache } from "./market";
 import type { User } from "firebase/auth";
 import { isDemoMode } from "./demo";
 import { demoStateFor, DEMO_USER_DISPLAY_NAME, DEMO_USER_EMAIL, DEMO_USER_PHOTO } from "./demoData";
+import { initSaveErrorToasts } from "./components/toast";
 
 // Drop stale cached ticker data from previous sessions so localStorage doesn't grow unbounded.
 pruneMarketCache();
+
+// Surface the pwo-save-error events state.ts already dispatches — without this
+// a failed write (quota, blocked storage, rejected sync) is completely silent.
+initSaveErrorToasts();
 
 // PWA install prompt
 let deferredPrompt: BeforeInstallPromptEvent | null = null;

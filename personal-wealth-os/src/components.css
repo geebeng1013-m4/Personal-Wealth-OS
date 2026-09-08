@@ -1120,4 +1120,67 @@
   .wu-bar__fill--faint {
     background: var(--text-faint);
   }
+
+  /* ---- save-error toast ------------------------------------------------- */
+  /* A stacked, self-dismissing strip. Never blocks, never takes focus — a
+     failed save is worth reporting, not worth interrupting over. */
+  .wu-toast-stack {
+    position: fixed;
+    right: var(--space-4);
+    bottom: var(--space-4);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-width: min(360px, calc(100vw - var(--space-4) * 2));
+    pointer-events: none;
+  }
+  .wu-toast {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--negative);
+    border-left-width: 3px;
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-md);
+    color: var(--text);
+    font: var(--weight-regular) var(--text-body-sm) / 1.45 var(--font-sans);
+    pointer-events: auto;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity var(--dur-mid) var(--ease-out), transform var(--dur-mid) var(--ease-out);
+  }
+  .wu-toast.is-in {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .wu-toast.is-out {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  .wu-toast__text {
+    flex: 1;
+    min-width: 0;
+  }
+  .wu-toast__close {
+    flex: none;
+    margin: -2px -4px -2px 0;
+    padding: 0 4px;
+    border: 0;
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 1rem;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+  .wu-toast__close:hover {
+    color: var(--text);
+  }
+  .wu-toast__close:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+    border-radius: var(--radius-sm);
+  }
 }
