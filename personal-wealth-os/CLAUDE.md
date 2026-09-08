@@ -242,6 +242,9 @@ Task 4
 
 > 「我们现在在哪里。」
 
+（工作流约定，2026-09-08：只改 PLAN.md / PROGRESS.md 的 bookkeeping 更新，直接
+commit 到 `main`，不开 PR；有代码改动才走 PR。）
+
 ---
 
 # 10. 不要无限优化
