@@ -11,6 +11,7 @@ import { getGoalsSnapshot } from "./goalSummary";
 import { getBudgetSnapshot } from "./budgetSummary";
 import { bindTvmCalculator, tvmCalculatorTemplate } from "./pages/tvmPage";
 import { escapeHtml, getTheme } from "./html";
+import { DISCLAIMER_SHORT } from "./components/disclaimer";
 import { mountSideRays } from "./sideRays";
 
 import type { Navigate, Setter } from "./pages/pageTypes";
@@ -122,6 +123,7 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
             </div>
           </div>
         </details>
+        <p class="sidebar-disclaimer">${DISCLAIMER_SHORT}</p>
       </div>
     </aside>
     <main id="main-content" class="main">
