@@ -139,9 +139,23 @@ function allocationAmount(portfolio: PortfolioSnapshot, holding: PortfolioHoldin
   return money(holding.investedMyr);
 }
 
-export function portfolioTemplate(state: WealthState): string {
-  const portfolio = getPortfolioSnapshot(state, new Date(), livePriceInputs());
-  const positionRows = portfolio.holdings.map((position) => {
+function allocationHealthLabel(portfolio: PortfolioSnapshot): string {
+  return portfolio.maxAbsoluteDrift <= 0.05 ? "Aligned" : portfolio.maxAbsoluteDrift <= 0.1 ? "Monitor" : "Rebalance";
+}
+
+/*
+ * The four regions below carry every figure that moves with the live price:
+ * the hero valuation, the rebalance split, the allocation weights, and the
+ * Position Detail rows. They are pulled out as their own bodies so the
+ * live-price poll can repaint just these (see patchPortfolioValuation) instead
+ * of re-rendering the whole page — which was wiping whatever the user had
+ * half-typed into the contribution form on every tick. None of them contains
+ * an input or a bound control, so replacing their innerHTML needs no rebinding.
+ */
+
+/** Position Detail table rows — one per holding, price-driven throughout. */
+function positionRowsHtml(portfolio: PortfolioSnapshot): string {
+  return portfolio.holdings.map((position) => {
     const driftClass = Math.abs(position.drift) > 0.08 ? "negative" : "positive";
     const driftSign = position.drift >= 0 ? "+" : "";
     // Market price, value and P&L come straight off the holding. A holding with
@@ -163,6 +177,42 @@ export function portfolioTemplate(state: WealthState): string {
       '<td class="' + driftToneClass + '">' + driftSign + percent(position.drift, 1) + '</td>' +
       '</tr>';
   }).join("");
+}
+
+/** Hero card body — cost basis is fixed; market value, P&L and drift move with the price. */
+function portfolioHeroBody(portfolio: PortfolioSnapshot): string {
+  const heldCount = portfolio.holdings.filter((position) => position.units > 0).length;
+  const allocationHealth = allocationHealthLabel(portfolio);
+  return `<div class="wu-row" style="align-items:stretch;gap:var(--space-5)">
+          <!-- Count only positions actually held. -->
+          <div class="wu-metric" style="flex:1;min-width:0"><span class="wu-metric__label wu-label">Long-term Investment Portfolio</span><span class="wu-metric__value t-num">${money(portfolio.totalInvestedMyr)}</span><span class="wu-metric__note t-caption">${heldCount > 0
+            ? `Capital contributed across ${heldCount} ${heldCount === 1 ? "holding" : "holdings"} · USD ${portfolio.totalInvestedUsd.toFixed(2)} cost basis`
+            : "No contributions recorded yet · targets are configured but nothing is held"}</span></div>
+          <span aria-hidden="true" style="width:1px;background:var(--border);flex:none"></span>
+          <div class="wu-metric wu-valuation" data-valuation-status="${portfolio.valuationStatus}" style="flex:1;min-width:0"><span class="wu-metric__label wu-label">Market value</span><span class="wu-metric__value t-num" id="pfMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)}</span><span class="wu-metric__note t-caption ${pnlTone(portfolio.unrealizedPnlMyr)}" id="pfUnrealised">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)}${portfolio.valuationStatus !== "complete" ? ` · ${escapeHtml(valuationNote(portfolio))}` : ""}</span>${portfolio.feesInCostBasisMyr > 0.005
+            ? `<span class="wu-metric__note t-caption">${escapeHtml([`${money(portfolio.feesInCostBasisMyr)} fees`, feeFreeReturnNote(portfolio)].filter(Boolean).join(" · "))}</span>`
+            : ""}</div>
+          <span aria-hidden="true" style="width:1px;background:var(--border);flex:none"></span>
+          <div class="wu-metric" style="flex:1;min-width:0"><span class="wu-metric__label wu-label">Allocation health</span><span class="wu-metric__value t-num">${allocationHealth}</span><span class="wu-metric__note t-caption">Largest drift ${percent(portfolio.maxAbsoluteDrift, 1)}</span></div>
+        </div>`;
+}
+
+/** "Next Contribution" split — drift-driven, so it moves with the price. */
+function nextContributionBody(state: WealthState, portfolio: PortfolioSnapshot): string {
+  const contributionPlan = rebalanceContributions(state, portfolio);
+  return `<div class="wu-card__header"><div class="wu-stack wu-stack--sm"><span class="wu-label">Next Contribution</span><h3 class="wu-card__title t-heading">Rebalance with new money</h3></div><span class="wu-badge wu-badge--neutral">No selling required</span></div>
+        <div class="wu-grid wu-grid--wide">${contributionPlan.map((item) => `<div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">${escapeHtml(item.ticker)}</span><span class="wu-metric__value t-num">${money(item.amount)}</span></div></div>`).join("")}</div>`;
+}
+
+/** Strategic Allocation panel body — weights and drift, price-driven. */
+function allocationPanelBody(portfolio: PortfolioSnapshot): string {
+  const allocationHealth = allocationHealthLabel(portfolio);
+  return `<div class="wu-card__header"><div class="wu-stack wu-stack--sm"><span class="wu-label">Strategic Allocation</span><h3 class="wu-card__title t-heading">Portfolio structure</h3><small class="t-caption t-faint">${portfolio.allocationBasis === "market" ? "Weighted by market value" : "Weighted by cost — no live price yet"}</small></div><span class="wu-badge wu-badge--${portfolio.maxAbsoluteDrift <= 0.08 ? "positive" : "warning"}">${allocationHealth}</span></div>
+          ${portfolio.holdings.length ? `<div class="wu-stack">${portfolio.holdings.map((position, index) => `<div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-stack wu-stack--sm"><div class="wu-row wu-row--between"><span class="wu-stack wu-stack--sm"><span class="wu-row wu-row--tight"><span class="t-num t-faint">${String(index + 1).padStart(2, "0")}</span><strong class="t-subheading">${escapeHtml(position.ticker)}</strong></span><small class="t-caption t-faint">${position.ticker === "VOO" ? "Core market exposure" : position.ticker === "QQQM" ? "Growth allocation" : "Portfolio holding"}</small></span><span class="wu-metric wu-metric--end"><span class="t-subheading t-num">${allocationAmount(portfolio, position)}</span><span class="t-caption t-faint">${percent(position.actualAllocation)} of portfolio</span></span></div><div class="allocation-track"><span style="width:${Math.min(position.actualAllocation * 100, 100)}%"></span><i style="left:${Math.min(position.targetAllocation * 100, 100)}%" title="Target ${percent(position.targetAllocation)}"></i></div><div class="wu-row wu-row--between t-caption"><span class="t-faint">Target ${percent(position.targetAllocation)}</span><span class="${Math.abs(position.drift) > 0.08 ? "wu-metric__value--negative" : "wu-metric__value--positive"}">${position.drift >= 0 ? "+" : ""}${percent(position.drift, 1)} drift</span></div></div></div>`).join("")}</div>` : `<p class="wu-empty">No portfolio positions yet. Record a contribution to establish your long-term allocation.</p>`}`;
+}
+
+export function portfolioTemplate(state: WealthState): string {
+  const portfolio = getPortfolioSnapshot(state, new Date(), livePriceInputs());
 
   const tradeRows = [...state.trades]
     .sort((a, b) => b.date.localeCompare(a.date))
@@ -181,11 +231,6 @@ export function portfolioTemplate(state: WealthState): string {
         '</tr>';
     }).join("");
 
-  const allocationHealth = portfolio.maxAbsoluteDrift <= 0.05 ? "Aligned" : portfolio.maxAbsoluteDrift <= 0.1 ? "Monitor" : "Rebalance";
-  // Fed the same snapshot the panels above render, so the plan and the weights
-  // it is closing can never disagree on screen.
-  const contributionPlan = rebalanceContributions(state, portfolio);
-  const heldCount = portfolio.holdings.filter((position) => position.units > 0).length;
   return `<div class="wu">
     ${pageHeader({
       eyebrow: "Long-term Investment Portfolio",
@@ -193,31 +238,12 @@ export function portfolioTemplate(state: WealthState): string {
       sub: "Market value, cost basis and drift — every figure from the canonical snapshot.",
     })}
     <div class="wu-stack wu-stack--lg">
-      <section class="wu-card">
-        <div class="wu-row" style="align-items:stretch;gap:var(--space-5)">
-          <!-- Count only positions actually held. -->
-          <div class="wu-metric" style="flex:1;min-width:0"><span class="wu-metric__label wu-label">Long-term Investment Portfolio</span><span class="wu-metric__value t-num">${money(portfolio.totalInvestedMyr)}</span><span class="wu-metric__note t-caption">${heldCount > 0
-            ? `Capital contributed across ${heldCount} ${heldCount === 1 ? "holding" : "holdings"} · USD ${portfolio.totalInvestedUsd.toFixed(2)} cost basis`
-            : "No contributions recorded yet · targets are configured but nothing is held"}</span></div>
-          <span aria-hidden="true" style="width:1px;background:var(--border);flex:none"></span>
-          <div class="wu-metric wu-valuation" data-valuation-status="${portfolio.valuationStatus}" style="flex:1;min-width:0"><span class="wu-metric__label wu-label">Market value</span><span class="wu-metric__value t-num" id="pfMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)}</span><span class="wu-metric__note t-caption ${pnlTone(portfolio.unrealizedPnlMyr)}" id="pfUnrealised">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)}${portfolio.valuationStatus !== "complete" ? ` · ${escapeHtml(valuationNote(portfolio))}` : ""}</span>${portfolio.feesInCostBasisMyr > 0.005
-            ? `<span class="wu-metric__note t-caption">${escapeHtml([`${money(portfolio.feesInCostBasisMyr)} fees`, feeFreeReturnNote(portfolio)].filter(Boolean).join(" · "))}</span>`
-            : ""}</div>
-          <span aria-hidden="true" style="width:1px;background:var(--border);flex:none"></span>
-          <div class="wu-metric" style="flex:1;min-width:0"><span class="wu-metric__label wu-label">Allocation health</span><span class="wu-metric__value t-num">${allocationHealth}</span><span class="wu-metric__note t-caption">Largest drift ${percent(portfolio.maxAbsoluteDrift, 1)}</span></div>
-        </div>
-      </section>
+      <section class="wu-card" id="pfHero">${portfolioHeroBody(portfolio)}</section>
 
-      <article class="wu-card">
-        <div class="wu-card__header"><div class="wu-stack wu-stack--sm"><span class="wu-label">Next Contribution</span><h3 class="wu-card__title t-heading">Rebalance with new money</h3></div><span class="wu-badge wu-badge--neutral">No selling required</span></div>
-        <div class="wu-grid wu-grid--wide">${contributionPlan.map((item) => `<div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">${escapeHtml(item.ticker)}</span><span class="wu-metric__value t-num">${money(item.amount)}</span></div></div>`).join("")}</div>
-      </article>
+      <article class="wu-card" id="pfNextContribution">${nextContributionBody(state, portfolio)}</article>
 
       <div class="wu-grid wu-grid--2 wu-grid--top">
-        <article class="wu-card">
-          <div class="wu-card__header"><div class="wu-stack wu-stack--sm"><span class="wu-label">Strategic Allocation</span><h3 class="wu-card__title t-heading">Portfolio structure</h3><small class="t-caption t-faint">${portfolio.allocationBasis === "market" ? "Weighted by market value" : "Weighted by cost — no live price yet"}</small></div><span class="wu-badge wu-badge--${portfolio.maxAbsoluteDrift <= 0.08 ? "positive" : "warning"}">${allocationHealth}</span></div>
-          ${portfolio.holdings.length ? `<div class="wu-stack">${portfolio.holdings.map((position, index) => `<div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-stack wu-stack--sm"><div class="wu-row wu-row--between"><span class="wu-stack wu-stack--sm"><span class="wu-row wu-row--tight"><span class="t-num t-faint">${String(index + 1).padStart(2, "0")}</span><strong class="t-subheading">${escapeHtml(position.ticker)}</strong></span><small class="t-caption t-faint">${position.ticker === "VOO" ? "Core market exposure" : position.ticker === "QQQM" ? "Growth allocation" : "Portfolio holding"}</small></span><span class="wu-metric wu-metric--end"><span class="t-subheading t-num">${allocationAmount(portfolio, position)}</span><span class="t-caption t-faint">${percent(position.actualAllocation)} of portfolio</span></span></div><div class="allocation-track"><span style="width:${Math.min(position.actualAllocation * 100, 100)}%"></span><i style="left:${Math.min(position.targetAllocation * 100, 100)}%" title="Target ${percent(position.targetAllocation)}"></i></div><div class="wu-row wu-row--between t-caption"><span class="t-faint">Target ${percent(position.targetAllocation)}</span><span class="${Math.abs(position.drift) > 0.08 ? "wu-metric__value--negative" : "wu-metric__value--positive"}">${position.drift >= 0 ? "+" : ""}${percent(position.drift, 1)} drift</span></div></div></div>`).join("")}</div>` : `<p class="wu-empty">No portfolio positions yet. Record a contribution to establish your long-term allocation.</p>`}
-        </article>
+        <article class="wu-card" id="pfAllocation">${allocationPanelBody(portfolio)}</article>
         <article class="wu-card">
           <div class="wu-card__header"><div class="wu-stack wu-stack--sm"><span class="wu-label">Contribution Record</span><h3 class="wu-card__title t-heading">Add investment activity</h3></div><span class="wu-badge wu-badge--neutral">Cost basis</span></div>
           <form id="tradeForm" class="wu-grid wu-grid--2">
@@ -245,7 +271,7 @@ export function portfolioTemplate(state: WealthState): string {
         <div class="wu-table-wrap">
           <table class="wu-table">
             <thead><tr><th>Ticker</th><th>Invested MYR</th><th>Invested USD</th><th>Units</th><th>Avg Cost</th><th>Market Price</th><th>Market Value</th><th>Unrealised P&amp;L</th><th>Actual / Target</th><th>Drift</th></tr></thead>
-            <tbody>${positionRows}</tbody>
+            <tbody id="pfPositionRows">${positionRowsHtml(portfolio)}</tbody>
           </table>
         </div>
       </details>
@@ -265,6 +291,29 @@ export function portfolioTemplate(state: WealthState): string {
       </article>
     </div>
   </div>`;
+}
+
+/**
+ * Repaint only the price-driven regions of an already-rendered Portfolio page.
+ *
+ * The live-price poll used to re-render the whole #pageMount on every tick
+ * (as often as every PRICE_POLL_INTERVAL_MS), which threw away whatever the
+ * user had half-typed into the contribution form. These four regions carry
+ * every figure that moves with the price and contain no input or bound
+ * control, so swapping their innerHTML is safe and needs no re-binding. The
+ * form, the CSV import, the FX panel and the cost-basis history table are
+ * left exactly as they are.
+ */
+export function patchPortfolioValuation(root: HTMLElement, state: WealthState): void {
+  const portfolio = getPortfolioSnapshot(state, new Date(), livePriceInputs());
+  const set = (id: string, html: string): void => {
+    const el = root.querySelector<HTMLElement>("#" + id);
+    if (el) el.innerHTML = html;
+  };
+  set("pfHero", portfolioHeroBody(portfolio));
+  set("pfNextContribution", nextContributionBody(state, portfolio));
+  set("pfAllocation", allocationPanelBody(portfolio));
+  set("pfPositionRows", positionRowsHtml(portfolio));
 }
 
 function tradeTypeBadge(type: string): string {
