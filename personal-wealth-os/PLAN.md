@@ -10,14 +10,17 @@
 
 ## V1 待办（按优先级）
 
-### V1-1 — `pwo-save-error` 事件补一个监听器  `[ ]`
+### V1-1 — `pwo-save-error` 事件补一个监听器  `[x]`  （PR #12，merged）
 - **问题**：`src/state.ts` 有 4 处 `dispatchEvent(new CustomEvent("pwo-save-error", ...))`
   （本地存储失败、云同步失败、云数据无法本地缓存、快照写入失败），但 `src/` 里
   **0 个监听器** —— 用户永远看不到这些提示。
 - **影响**：静默失败。存储配额满 / 隐私模式下写入失败时，用户以为数据存了。
-- **Done when**：`main.ts`（或 shell）挂一个全局监听，把 `detail.message` 用非阻塞
-  方式显示给用户（toast / 顶部条），自动消失；4 个触发点手动各验一次；明暗主题都验。
-- 规模：小。不动数据模型。
+- **做法**：`src/components/toast.ts` —— `initSaveErrorToasts()`，`main.ts` 启动时调一次。
+  右下角堆叠提示条，`role="alert"` + 容器 `aria-live="polite"`（不抢焦点），6.5s 自动消失、
+  可点 × 关、上限 3 条、CSS 淡入淡出、reduced-motion 安全、消息缺失有兜底文案。
+  样式全用现有主题变量，明暗都验。不动 `state.ts`。
+- 验证：真实 app 跑过 —— 单条渲染 / 连发 6 留 3 / 空 detail 兜底 / × 关 / 自动消失 /
+  patch `localStorage.setItem` 抛错走真实链路 / 浅色主题。typecheck + test 699 + build 全绿。
 
 ### V1-2 — 服务端权威时间戳  `[ ]`
 - **问题**：`cloudCopyWins(localUpdatedAt, cloudUpdatedAt)` 比较的是各设备自己的
@@ -61,7 +64,9 @@
 | #3 | 快照存储按字节预算（2MB）而非仅数量 + 写入永不抛异常 | merged |
 | #9 | 价格轮询不再重画整页 → 不再清空半填的 Portfolio 表单 | merged |
 | #10 | `CLAUDE.md`（工作系统，每次会话自动加载） | merged |
-| #8 | 恢复快照字节预算的 8 个测试 + `_test.mjs` 强制退出（修 CI 卡死） | open，CI 绿，待合并 |
+| #8 | 恢复快照字节预算的 8 个测试 + `_test.mjs` 强制退出（修 CI 卡死） | merged |
+| #11 | 建立 `PLAN.md` + `PROGRESS.md` | merged |
+| #12 | **V1-1**：`pwo-save-error` 补全局 toast 监听 | merged |
 
 ---
 
