@@ -21,7 +21,7 @@ import { bindSettings, settingsTemplate } from "./pages/settingsPage";
 import { bindGoals, goalsTemplate } from "./pages/goalsPage";
 import { bindBuckets, bucketsTemplate } from "./pages/budgetPage";
 import { bindLedger, ledgerTemplate } from "./pages/ledgerPage";
-import { bindPortfolio, portfolioTemplate } from "./pages/portfolioPage";
+import { bindPortfolio, portfolioTemplate, patchPortfolioValuation } from "./pages/portfolioPage";
 import { bindMarket, marketTemplate } from "./pages/marketPage";
 import { bindDashboard, dashboardTemplate } from "./pages/dashboardPage";
 import { bindMoneyLeaks, moneyLeaksTemplate, setSelectedMoneyLeakId } from "./pages/moneyLeaksPage";
@@ -522,17 +522,17 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
   if (activePage === "portfolio") {
     bindPortfolio(root, state, setState, navigate, renderApp);
     // Prices land after the first paint, and go stale after
-    // PRICE_STALE_AFTER_MS if the page stays open. Re-render the holdings
-    // table and hero each time a (re)fetch lands, so they pick up the
-    // canonical snapshot's latest valuation.
+    // PRICE_STALE_AFTER_MS if the page stays open. On each (re)fetch, repaint
+    // only the price-driven regions — the hero valuation, the rebalance split,
+    // the allocation panel and the Position Detail rows.
     //
-    // This used to go through navigate("portfolio") — a full renderApp,
-    // rebuilding the sidebar and tearing down and restarting the WebGL rays
-    // behind it, on every background price tick while the page sat open, as
-    // often as every PRICE_POLL_INTERVAL_MS. A price update touches none of
-    // that: same page, same user, same profile. Re-rendering only #pageMount
-    // is what the comment above always meant — the shell rebuild was
-    // collateral damage from reusing navigate() as the refresh mechanism.
+    // This used to re-render the entire #pageMount (and earlier still, a full
+    // navigate("portfolio") that also rebuilt the sidebar and WebGL). Both
+    // discarded whatever the user had half-typed into the contribution form on
+    // every background tick, as often as every PRICE_POLL_INTERVAL_MS.
+    // patchPortfolioValuation touches only those four display regions — none of
+    // which holds an input or a bound control — so nothing the user is
+    // interacting with is disturbed and no rebind is needed.
     //
     // Safe to reuse the state captured in this closure rather than reading
     // the caller's current state: every code path that actually changes
@@ -540,16 +540,11 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
     // bindPortfolio's own handlers), which tears this closure down and
     // rebinds it with the fresh state. Nothing can mutate WealthState out
     // from under a live price tick without also replacing this closure.
-    const refetchPortfolio = (): void => {
-      const mount = root.querySelector<HTMLElement>("#pageMount");
-      if (!mount) return;
-      mount.innerHTML = portfolioTemplate(state);
-      bindPortfolio(root, state, setState, navigate, renderApp);
-    };
-    refreshLivePrices(state, refetchPortfolio);
-    const portfolioPriceTimer = setInterval(() => refreshLivePrices(state, refetchPortfolio), PRICE_POLL_INTERVAL_MS);
+    const repaintPortfolioValuation = (): void => patchPortfolioValuation(root, state);
+    refreshLivePrices(state, repaintPortfolioValuation);
+    const portfolioPriceTimer = setInterval(() => refreshLivePrices(state, repaintPortfolioValuation), PRICE_POLL_INTERVAL_MS);
     const onPortfolioVisible = (): void => {
-      if (document.visibilityState === "visible") refreshLivePrices(state, refetchPortfolio);
+      if (document.visibilityState === "visible") refreshLivePrices(state, repaintPortfolioValuation);
     };
     document.addEventListener("visibilitychange", onPortfolioVisible);
     priceRefreshCleanup.set(root, () => {
