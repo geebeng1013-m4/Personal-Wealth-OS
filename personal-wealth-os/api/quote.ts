@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { isAllowedOrigin } from "./_originGuard.js";
+import { checkRateLimit } from "./_rateLimit.js";
 
 /**
  * Server-side quote proxy.
@@ -19,8 +20,21 @@ import { isAllowedOrigin } from "./_originGuard.js";
 const UPSTREAM = "https://query1.finance.yahoo.com/v8/finance/chart";
 const MAX_SYMBOLS = 12;
 const UPSTREAM_TIMEOUT_MS = 8000;
-/** Quotes are delayed anyway; a short shared cache keeps us well inside rate limits. */
-const CACHE_SECONDS = 30;
+/**
+ * Quotes are 15-minute-delayed anyway, so a 60s shared cache collapses a burst
+ * of page-loads into one upstream call without anyone seeing a staler number
+ * than the upstream itself serves.
+ */
+const CACHE_SECONDS = 60;
+
+/**
+ * Per-IP request budget. The app refreshing every open page's prices makes a
+ * handful of calls a minute; 40 leaves a user with several tabs generous room
+ * while still cutting off a script in a loop. Best-effort, not a hard
+ * cluster-wide cap — see _rateLimit.ts.
+ */
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX = 40;
 
 export interface QuotePayload {
   symbol: string;
@@ -109,6 +123,16 @@ export default async function handler(request: VercelRequest, response: VercelRe
     return;
   }
 
+  const rate = checkRateLimit(request, { bucket: "quote", windowMs: RATE_WINDOW_MS, max: RATE_MAX });
+  response.setHeader("RateLimit-Limit", String(rate.limit));
+  response.setHeader("RateLimit-Remaining", String(rate.remaining));
+  response.setHeader("RateLimit-Reset", String(rate.resetSec));
+  if (!rate.ok) {
+    response.setHeader("Retry-After", String(rate.retryAfterSec));
+    response.status(429).json({ error: "Too many requests" });
+    return;
+  }
+
   const raw = request.query.symbols ?? request.query.symbol;
   const requested = (Array.isArray(raw) ? raw.join(",") : raw ?? "")
     .split(",")
@@ -134,6 +158,6 @@ export default async function handler(request: VercelRequest, response: VercelRe
   const quotes = await Promise.all(unique.map(fetchOne));
 
   // Cached at the edge so several pages opening at once cost one upstream call.
-  response.setHeader("Cache-Control", `public, max-age=0, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=60`);
+  response.setHeader("Cache-Control", `public, max-age=0, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=300`);
   response.status(200).json({ quotes });
 }

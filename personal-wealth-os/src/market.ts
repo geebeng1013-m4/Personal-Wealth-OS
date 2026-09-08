@@ -255,14 +255,21 @@ export async function fetchQuote(symbol: string): Promise<MarketQuote> {
  * entry for that ticker, which every consumer reads as "unknown".
  */
 export async function fetchLivePrices(symbols: string[]): Promise<PriceMap> {
-  const wanted = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
+  // Sorted so the request URL is the same whatever order the caller passed the
+  // symbols in — the server-side route is edge-cached on the raw query string,
+  // and "VOO,QQQM" vs "QQQM,VOO" would otherwise be two separate cache entries
+  // and two separate upstream calls.
+  const wanted = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))].sort();
   if (wanted.length === 0) return new Map();
 
-  const cacheKey = "prices_" + wanted.slice().sort().join(",");
+  const cacheKey = "prices_" + wanted.join(",");
   const cached = getCached(cacheKey);
   if (cached) return normalizeQuotes(cached);
 
   try {
+    // A 429 here (per-IP rate limit on the route) lands in the !response.ok
+    // branch below like any other failure: no entry for the ticker, read as
+    // "unknown", retried on the next refresh.
     const response = await fetch(`/api/quote?symbols=${encodeURIComponent(wanted.join(","))}`, {
       signal: AbortSignal.timeout(12_000),
       headers: { accept: "application/json" },
