@@ -80,3 +80,14 @@ await import(`data:text/javascript;base64,${Buffer.from(bundledTests).toString("
 // handles are what `process.getActiveResourcesInfo()` reports after a build.
 // A script that builds once and then wants to exit has to shut it down.
 await stop();
+
+// The suite has run, the summary is printed, process.exitCode is set, and
+// esbuild's service is stopped — there is no legitimate work left. Even so,
+// something on Linux CI still holds the event loop open past all of that:
+// several rounds of bisection pinned it to test files that reassign
+// localStorage.setItem but never named the handle, and the cost was 10-minute
+// timeouts on runs where every test had already passed in ~30s. Exit rather
+// than wait for a handle that is doing nothing. process.exit() with no
+// argument uses process.exitCode (1 when flush() saw a failure, else 0); the
+// awaited stop() above yields a loop turn first, so the summary flushes.
+process.exit();
