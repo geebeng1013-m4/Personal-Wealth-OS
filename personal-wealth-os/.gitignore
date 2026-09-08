@@ -4,3 +4,6 @@
 node_modules/
 dist/
 *.log
+
+# Local-only: a PDF export of WEALTHUP_CONTEXT.md. The .md is the source of truth.
+docs/wealthup-plan.pdf
