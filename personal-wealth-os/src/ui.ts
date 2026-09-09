@@ -87,6 +87,24 @@ const primaryTabs: ReadonlyArray<readonly [id: string, label: string, icon: stri
   ["buckets", "Budget", TAB_ICONS.budget],
 ];
 
+/*
+ * Pages the phone "More" list opens — everything without its own bottom tab.
+ * The same rule moreTemplate() applies to build the list, named here so the
+ * "back to More" arrow and the list can never disagree about which pages sit
+ * under More.
+ */
+const morePageIds = new Set(
+  pages.map(([id]) => id).filter((id) => !primaryTabs.some(([tabId]) => tabId === id)),
+);
+
+/* Left-pointing chevron for the phone "back to More" control. */
+const BACK_TO_MORE_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>';
+
+function backToMoreButton(): string {
+  return `<button class="wu-page-back" data-page="more" type="button" aria-label="Back to More"><span aria-hidden="true">${BACK_TO_MORE_ICON}</span></button>`;
+}
+
 function tabbarTemplate(activePage: string): string {
   const items = primaryTabs
     .map(([id, label, icon]) => {
@@ -377,7 +395,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
     buckets: bucketsTemplate(state),
     goals: goalsTemplate(state),
     tvm: tvmCalculatorTemplate(),
-    calculator: '<div id="investmentGrowthCalculator"></div>',
+    calculator: `<div class="wu">${pageHeader({ title: "Investment Growth", sub: "Contribution projections" })}</div><div id="investmentGrowthCalculator"></div>`,
     advisor: advisorPageTemplate(state),
     rules: rulesTemplate(state),
     review: reviewTemplate(state),
@@ -386,6 +404,18 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
     more: moreTemplate(user),
   };
   mount.innerHTML = templates[activePage] ?? templates.dashboard;
+
+  // On a phone, a page opened from the "More" list gets a back arrow to the
+  // left of its title that returns to that list. Desktop opens the same pages
+  // from the sidebar, so .wu-page-back stays display:none above the phone
+  // breakpoint.
+  if (morePageIds.has(activePage)) {
+    const headerBar = mount.querySelector(".wu-page-header__bar");
+    if (headerBar) {
+      headerBar.classList.add("wu-page-header__bar--back");
+      headerBar.insertAdjacentHTML("afterbegin", backToMoreButton());
+    }
+  }
 
   bindCommon(root, state, setState, navigate, user, onLogout);
   bindPage(root, state, setState, activePage, navigate);
@@ -417,9 +447,10 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     });
   });
 
-  // The phone tab bar and the "More" page rows all navigate by data-page. They
-  // live outside the drawer, so there is no sidebar scroll or drawer to touch.
-  root.querySelectorAll<HTMLButtonElement>(".tabbar__btn[data-page], .more-row[data-page]").forEach((button) => {
+  // The phone tab bar, the "More" page rows and the back-to-More arrow all
+  // navigate by data-page. They live outside the drawer, so there is no sidebar
+  // scroll or drawer to touch.
+  root.querySelectorAll<HTMLButtonElement>(".tabbar__btn[data-page], .more-row[data-page], .wu-page-back[data-page]").forEach((button) => {
     button.addEventListener("click", () => doNavigate(button.dataset.page ?? "dashboard"));
   });
 

@@ -16,6 +16,7 @@
 
 import { money, percent } from "../rules";
 import { escapeHtml } from "../html";
+import { pageHeader } from "../components/pageHeader";
 import {
   calculateInflationAdjustedValue,
   solveTvm,
@@ -183,8 +184,13 @@ function tvmInflationTemplate(): string {
 }
 
 export function tvmCalculatorTemplate(): string {
-  // Wrapper so Reset can re-render just the calculator, not the page shell.
-  return `<div id="tvmRoot" class="wu wu-stack wu-stack--lg">${tvmCardsTemplate()}</div>`;
+  // The header sits outside #tvmRoot so Reset (rerenderAll in
+  // bindTvmCalculator) can re-render just the cards without dropping it — and
+  // so the phone "back to More" arrow has a page title to sit beside.
+  return `<div class="wu wu-stack wu-stack--lg">
+    ${pageHeader({ title: "TVM Calculator", sub: "Time value of money" })}
+    <div id="tvmRoot" class="wu-stack wu-stack--lg">${tvmCardsTemplate()}</div>
+  </div>`;
 }
 
 function tvmCardsTemplate(): string {
