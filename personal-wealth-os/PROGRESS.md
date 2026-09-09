@@ -26,14 +26,14 @@ Portfolio 表单不被价格轮询清空(#9)、CLAUDE.md(#10)、CI 卡死修复(
 
 ## 当前正在做
 
-- 无。V1 收尾。
+- **阶段 1 起步（做成 App）**：Capacitor 脚手架已合并（#19）—— 依赖 + `capacitor.config.ts` + `cap:sync` 脚本 + `docs/app-packaging.md` 全套操作手册。
+- 下一步在你手上：在有 Android Studio 的机器跑 `npx cap add android`，按手册走。
 
 ## 下一步
 
-方向由你定：
-- `COMMERCIALIZATION_PLAN.md` 阶段 1 —— **Capacitor 打包成 App**（完整做需 Mac / Android Studio，本机只能搭脚手架）
-- 或阶段 0 剩余合规项（Apple / 邮箱登录、账号删除）
-- 或别的
+1. 你在有 Android Studio 的机器上按 `docs/app-packaging.md` §2 跑起来（`npx cap add android` → `cap:sync` → Android Studio 运行）。遇到报错发我。
+2. Firebase 登录在 WebView 里要改成原生流程（手册 §2a，代码片段已给）。
+3. 之后：iOS（要 Mac）、图标/深链、上架。
 
 ## FUTURE IDEAS / 待清
 
