@@ -254,8 +254,8 @@ export function portfolioTemplate(state: WealthState): string {
             <label class="wu-field-row"><span class="wu-field-row__label">Amount MYR</span><input class="wu-field" name="amountMyr" type="number" min="0" step="0.01"></label>
             <label class="wu-field-row"><span class="wu-field-row__label">Amount USD</span><input class="wu-field" name="amountUsd" type="number" min="0" step="0.01"></label>
             <label class="wu-field-row"><span class="wu-field-row__label">Price / Unit USD</span><input class="wu-field" name="priceUsd" type="number" min="0" step="0.01"></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Filled Quantity</span><input class="wu-field" name="units" type="number" min="0" step="0.01"></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Fee MYR</span><input class="wu-field" name="feeMyr" type="number" min="0" step="0"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Filled Quantity</span><input class="wu-field" name="units" type="number" min="0" step="0.0001"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Fee MYR</span><input class="wu-field" name="feeMyr" type="number" min="0" step="0.01"></label>
             <label class="wu-field-row"><span class="wu-field-row__label">Notes</span><input class="wu-field" name="notes" type="text" placeholder="Optional"></label>
             <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Record contribution</button></div>
           </form>
