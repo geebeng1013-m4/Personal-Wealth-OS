@@ -7,8 +7,9 @@
 
 ## 我们现在在哪
 
-- **阶段**：**V1 完成**（2026-09-09）。核心正确性的洞都补上了。
-- **`main`**：`70a6823` —— typecheck / 769 测试 / build 全绿。
+- **阶段**：V1 完成（2026-09-09）。核心正确性的洞都补上了。之后：**产品打磨（手机比例）** ——
+  App / 订阅方向因预算暂停（见下），先把产品本身做好。
+- **`main`**：`3924cd6` —— typecheck / 769 测试 / build 全绿。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 
 ## V1 收尾（全部合并）
@@ -24,16 +25,31 @@
 Portfolio 表单不被价格轮询清空(#9)、CLAUDE.md(#10)、CI 卡死修复(#8)、PLAN/PROGRESS(#11)。
 顺带（不在 V1 清单）：交易表单 USD 化(#16)、Sponsored 资金来源回归(#17)。
 
-## 当前正在做
+## 手机比例打磨（进行中）
 
-- **阶段 1 起步（做成 App）**：Capacitor 脚手架已合并（#19）—— 依赖 + `capacitor.config.ts` + `cap:sync` 脚本 + `docs/app-packaging.md` 全套操作手册。
-- 下一步在你手上：在有 Android Studio 的机器跑 `npx cap add android`，按手册走。
+目标：手机页面「看起来不乱、用起来直接知道 use for 什么」。全部集中在 `@media (max-width: 720px)`，
+不动任何页面逻辑。
+
+| PR | 内容 | 状态 |
+| --- | --- | --- |
+| #20 | 原生 Android 工程（`npx cap add android`） | merged（App 方向已暂停，工程留着） |
+| #21 | 整体缩小 ~20%（缩 token）+ 每页只留一个标题（隐藏 shell topbar / eyebrow）+ 四边统一安全区留白 | merged |
+| #22 | 页面标题改口语化：4 个标题对齐侧栏名（Overview / Goals / Budget / Settings）+ 9 条副标题重写成一行大白话 | 待合并 |
+
+12 个页面全部用 CDP 390px 真机模拟验过：无横向溢出，首屏 = 标题 + 一行说明 + 真内容。
+
+## App / 订阅方向（暂停）
+
+- 因预算不足，`COMMERCIALIZATION_PLAN.md` 阶段 1（Capacitor 打包上架）+ 付费订阅**暂停**，
+  由你决定何时重启。Capacitor 脚手架（#19）+ 原生 Android 工程（#20）+ `docs/app-packaging.md`
+  操作手册都留在库里，随时可继续。
+- 重启时的下一步：有 Android Studio 的机器按手册 §2 跑 `cap:sync` → Android Studio 运行；
+  Firebase 登录在 WebView 里要改原生流程（手册 §2a）。
 
 ## 下一步
 
-1. 你在有 Android Studio 的机器上按 `docs/app-packaging.md` §2 跑起来（`npx cap add android` → `cap:sync` → Android Studio 运行）。遇到报错发我。
-2. Firebase 登录在 WebView 里要改成原生流程（手册 §2a，代码片段已给）。
-3. 之后：iOS（要 Mac）、图标/深链、上架。
+1. 你 review + merge PR #22。手机比例这一轮就收尾了。
+2. 之后的产品打磨项由你定。
 
 ## FUTURE IDEAS / 待清
 

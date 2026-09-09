@@ -8,7 +8,35 @@
 
 > **2026-09-09：V1 全部完成。** V1-1 / V1-2+V1-3 / V1-4 / V1-5 均已合并，
 > `main` typecheck / 769 测试 / build 全绿，云同步多设备手验通过。
-> 下一步方向由你定 —— `COMMERCIALIZATION_PLAN.md` 阶段 1（Capacitor）或其他。
+
+> **2026-09-09（当天晚些）：方向调整。** App 打包 + 付费订阅因预算不足**暂停**
+> （Capacitor 脚手架 #19 + 原生 Android 工程 #20 留在库里）。改为先打磨产品本身，
+> 第一轮是**手机比例**。产品定位收窄：面向东南亚年轻人、ETF/DCA、先做马来西亚一个市场，
+> 不做「翻译即全球」。
+
+---
+
+## 手机比例打磨（M 系列）
+
+目标：手机页面「看起来不乱、用起来直接知道 use for 什么」。约束：全部改动在
+`@media (max-width: 720px)`，不碰页面逻辑；每步 STOP 汇报。
+
+### M-1 — 整体缩小 + 单标题 + 安全区  `[x]`  （PR #21，merged）
+- **问题**：整个设计系统是按桌面仪表盘定的尺寸——标题、金额、卡片留白、段间距在手机上都大一号；
+  每页还渲染两个标题（shell topbar + 页面自己的 `wu-page-header`），首屏 ~120px 全是重复。
+- **做法**：设计 token 化，所以在手机断点上把字号 / 间距 token 在 `:root` 上调小，一处缩全局
+  （标题 24→19px，金额 24→18px，卡片留白 20→14px）；`.topbar` 手机隐藏、`wu-page-header__eyebrow`
+  隐藏；四边统一 ~20px 留白 + OS 安全区（刘海 / home 条 / 圆角）。溢出兜底：grid/flex/stack 子项
+  `min-width:0`、表单控件 `max-width:100%`、`.wu-card{overflow-x:clip}`、`.wu-grid--4`→2×2、
+  并排 `.wu-metric` 改竖排、Market tab 条改单行横滚。
+- 验证：CDP 390px 真机模拟，12 页无横向溢出。typecheck / 769 测试 / build 全绿。
+
+### M-2 — 页面标题口语化  `[~]`  （PR #22，待合并）
+- **问题**：副标题是给桌面仪表盘写的——长、抽象（"canonical snapshot"、"deterministic checks"），
+  手机上折到三行。侧栏名和页面标题也对不上（"Wealth Overview" vs "Overview"）。
+- **做法**：4 个标题对齐侧栏名（Overview / Goals / Budget / Settings）；9 条副标题重写成一行
+  大白话（"What you're saving for, and how close you are." 等）。Dashboard 动态副标题、Review 不动。
+- 验证：typecheck / 769 测试 / build 全绿，无测试断言旧文案。
 
 ---
 
