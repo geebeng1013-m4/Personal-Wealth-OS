@@ -8,18 +8,19 @@ Same codebase, same UI. This document is the step-by-step for taking it from
 
 ## 0. What is already done (in the repo)
 
-- `@capacitor/core`, `@capacitor/cli`, `@capacitor/app` are installed.
+- `@capacitor/core`, `@capacitor/cli`, `@capacitor/app`, **`@capacitor/android`**
+  are installed.
 - `capacitor.config.ts` — `appId: cc.wealthup.app`, `appName: WealthUp`,
   `webDir: dist`, assets bundled (no remote `server.url`).
-- `npm run cap:sync` — builds the web app, then copies it into the native
-  projects and updates plugins. **It only works after you have added a platform
-  (step 2 / step 5).**
-- `.gitignore` already excludes native build output.
+- **`android/`** — the native Android project, generated with
+  `npx cap add android`. Committed. Its build output stays out via
+  `android/.gitignore` + the root `.gitignore`.
+- `npm run cap:sync` — builds the web app, then copies it into `android/` (and
+  `ios/` once added) and updates plugins.
 
-**Not** in the repo, and **not** doable on a Windows machine without the native
-toolchains: the `android/` and `ios/` project folders, any APK/AAB/IPA build,
-emulators, and anything App Store. That is what the rest of this document walks
-through.
+**Not** in the repo yet, and needs a **Mac**: the `ios/` project and anything
+App Store. Also not done anywhere yet: an APK/AAB build, running on a device,
+the Firebase-sign-in fix (§2a), icons/splash, deep links.
 
 ---
 
@@ -37,26 +38,28 @@ You can do Android entirely on Windows. iOS needs the Mac.
 
 ---
 
-## 2. Android — add the platform
+## 2. Android — run it
 
-On a machine with Android Studio installed:
+The `android/` project is already in the repo (added with
+`npm i @capacitor/android` then `npx cap add android`). On a machine with
+Android Studio + the SDK installed:
 
 ```sh
 cd personal-wealth-os
 npm ci
-npm run build            # produces dist/
-npx cap add android      # creates the android/ folder (commit it)
-npm run cap:sync         # build + copy dist/ into android/ + sync plugins
-npx cap open android     # opens the project in Android Studio
+npm run cap:sync         # build the web app + copy it into android/
+npx cap open android     # opens android/ in Android Studio
 ```
 
-`npx cap add android` scaffolds a full Gradle project under `android/`.
-**Commit that folder** — from then on it is part of the repo and only its
-build output (already gitignored) stays out.
+In Android Studio: let it finish the Gradle sync (first time pulls the Android
+Gradle Plugin + dependencies — a few minutes), then **Run ▶** with an emulator
+(Device Manager → Create Device) or a USB-connected phone (Developer Options →
+USB debugging). The app should launch and show the dashboard.
 
-In Android Studio: let it finish the Gradle sync, then **Run ▶** with an
-emulator or a USB-connected phone (Developer Options → USB debugging). The app
-should launch and show the dashboard.
+If Android Studio installed to a non-default path (e.g. `Android Studio1`
+because a leftover folder held the name), `npx cap open android` may not find
+it — just open `personal-wealth-os/android` from Android Studio's
+**File → Open** instead.
 
 ### 2a. The Firebase sign-in fix — do this before you rely on login
 
