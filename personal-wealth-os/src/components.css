@@ -201,9 +201,80 @@
   }
   @media (max-width: 720px) {
     .wu-grid--2,
-    .wu-grid--3,
-    .wu-grid--4 {
+    .wu-grid--3 {
       grid-template-columns: 1fr;
+    }
+    /* Four small metric tiles read better as 2x2 than as four tall stacked cards. */
+    .wu-grid--4 {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    /* A grid or flex child keeps its min-content width unless told otherwise, and
+       a long money string or heading then blows the track past the viewport —
+       which .main clips, so it just looks cut off. Let them shrink. */
+    .wu-grid > *,
+    .wu-row > * {
+      min-width: 0;
+    }
+    /* Segmented tab strips (Market's "Long-term view / Risk / Income / …") are
+       inline-flex with no wrap. Scroll them inside their own box instead of
+       pushing the page wide. */
+    .wu-segmented {
+      max-width: 100%;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .wu-segmented::-webkit-scrollbar {
+      display: none;
+    }
+    .wu-segmented__option {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+    /* Long unbroken figures wrap rather than force a scroll. */
+    .wu-metric__value,
+    .wu-metric__note {
+      overflow-wrap: anywhere;
+    }
+    /* A row of side-by-side metrics (portfolio hero, plan status) has no room
+       for two or three columns on a phone — stack it. The 1px divider spans
+       between them collapse to nothing, which is fine. */
+    .wu-row:has(> .wu-metric) {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-3);
+    }
+    /* The section eyebrow ("INVESTMENT INTELLIGENCE", "GOAL SYSTEM", the
+       "Good evening, …" greeting on the dashboard) is scene-setting the phone
+       has no room for. The wu-page-header title + sub carry the meaning. */
+    .wu-page-header__eyebrow {
+      display: none;
+    }
+    .wu-page-header {
+      margin-bottom: var(--space-4);
+    }
+
+    /* Any run of chips wraps instead of overflowing. */
+    .wu-chip {
+      flex: 0 1 auto;
+    }
+    /* Form controls: a number input with a long value or a select with a long
+       option keeps a min-content width that pushes its stack/grid item past the
+       card. Force them to fit, and let any card clip a stray-wide child rather
+       than hand the page a horizontal scrollbar. */
+    .wu-stack,
+    .wu-stack > *,
+    .wu-field-row,
+    form {
+      min-width: 0;
+    }
+    .wu-field,
+    input,
+    select,
+    textarea {
+      max-width: 100%;
+    }
+    .wu-card {
+      overflow-x: clip;
     }
   }
 
@@ -972,6 +1043,23 @@
   }
   .market-tab-content.active {
     display: block;
+  }
+  /* Placed after the base rules above so it wins the source-order tie: on a
+     phone one horizontally-scrolling line reads cleaner than a ragged
+     two-line wrap. */
+  @media (max-width: 720px) {
+    .market-tabs,
+    .market-intervals,
+    .etf-holdings-tabs {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .market-tabs::-webkit-scrollbar,
+    .market-intervals::-webkit-scrollbar,
+    .etf-holdings-tabs::-webkit-scrollbar {
+      display: none;
+    }
   }
   .market-symbols {
     display: flex;
