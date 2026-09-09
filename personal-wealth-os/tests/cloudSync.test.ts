@@ -57,22 +57,35 @@ function startClean(): void {
 
 // --- the decision itself ----------------------------------------------------
 
-test("cloudCopyWins: a newer cloud copy replaces the local one", () => {
-  assert.equal(cloudCopyWins(1_000, 2_000), true);
+// Pre-sync-point fallback: a local copy with lastSyncedAt 0 (pre-v20 data on
+// its first load after the upgrade) still uses the old updatedAt comparison.
+
+test("cloudCopyWins: with no sync point, a newer cloud copy replaces local", () => {
+  assert.equal(cloudCopyWins({ updatedAt: 1_000, lastSyncedAt: 0 }, { updatedAt: 2_000, lastSyncedAt: 0 }), true);
 });
 
-test("cloudCopyWins: a newer local copy is kept", () => {
-  assert.equal(cloudCopyWins(2_000, 1_000), false);
+test("cloudCopyWins: with no sync point, a newer local copy is kept", () => {
+  assert.equal(cloudCopyWins({ updatedAt: 2_000, lastSyncedAt: 0 }, { updatedAt: 1_000, lastSyncedAt: 0 }), false);
 });
 
-test("cloudCopyWins: equal timestamps are the same save, so the cloud is taken", () => {
-  assert.equal(cloudCopyWins(1_000, 1_000), true);
+test("cloudCopyWins: with no local copy at all, the cloud is taken", () => {
+  assert.equal(cloudCopyWins(null, { updatedAt: 1_000, lastSyncedAt: 0 }), true);
 });
 
-test("cloudCopyWins: two untimestamped copies fall back to the cloud", () => {
-  // Legacy states carry updatedAt 0. Preferring the cloud keeps the old
-  // behaviour for data that predates the timestamp.
-  assert.equal(cloudCopyWins(0, 0), true);
+// Once a sync point exists, the decision is skew-proof: it only asks whether
+// local has edits the server has not confirmed, never which clock is bigger.
+
+test("cloudCopyWins: a clean local copy yields to the cloud even if its clock is behind", () => {
+  // Local was confirmed on the server at updatedAt 9000; the cloud doc a
+  // remote device wrote claims updatedAt 1000. Old logic kept local; the new
+  // logic takes the cloud, because local has nothing unsynced to lose.
+  assert.equal(cloudCopyWins({ updatedAt: 9_000, lastSyncedAt: 9_000 }, { updatedAt: 1_000, lastSyncedAt: 1_000 }), true);
+});
+
+test("cloudCopyWins: a dirty local copy is kept even if the cloud clock is ahead", () => {
+  // Local edited to updatedAt 2000 since its last confirmed sync at 1000; the
+  // cloud claims updatedAt 9000 (a fast-clocked device). Local is kept.
+  assert.equal(cloudCopyWins({ updatedAt: 2_000, lastSyncedAt: 1_000 }, { updatedAt: 9_000, lastSyncedAt: 9_000 }), false);
 });
 
 // --- the round trip ---------------------------------------------------------

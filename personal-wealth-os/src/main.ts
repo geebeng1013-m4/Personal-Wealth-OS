@@ -3,9 +3,9 @@ import "./components.css";
 import "./shell.css";
 import "./legacy-tail.css";
 import type { WealthState } from "./models";
-import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState } from "./state";
+import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint } from "./state";
 import { renderApp } from "./ui";
-import { onAuth, signInWithGoogle, handleRedirectResult, logOut } from "./firebase";
+import { onAuth, signInWithGoogle, handleRedirectResult, logOut, subscribeToFirestore, type CloudSnapshot } from "./firebase";
 import { fetchUsdToMyr, pruneMarketCache } from "./market";
 import type { User } from "firebase/auth";
 import { isDemoMode } from "./demo";
@@ -177,6 +177,57 @@ async function handleLogout(): Promise<void> {
   await logOut();
 }
 
+/**
+ * Live subscription to the user's cloud document.
+ *
+ * The initial reconcile in handleAuth is a one-shot getDoc. This keeps the app
+ * converged after that: it records a sync point when the server confirms this
+ * device's own write (so lastSyncedAt advances and the copy is marked clean),
+ * re-pushes local when another device's change collides with unsynced local
+ * edits, and — see handleRemoteUpdate — surfaces a genuine remote change the
+ * user has not seen.
+ */
+function startCloudSubscription(uid: string): void {
+  if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
+  cloudSyncUnsub = subscribeToFirestore(uid, (snap) => handleCloudSnapshot(uid, snap));
+}
+
+function handleCloudSnapshot(uid: string, snap: CloudSnapshot): void {
+  if (currentUser?.uid !== uid) return;
+  const remote = migrateState(snap.state);
+  const action = reconcileCloudSnapshot(state, {
+    updatedAt: remote.updatedAt,
+    hasPendingWrites: snap.hasPendingWrites,
+    fromCache: snap.fromCache,
+  });
+
+  if (action === "ignore") return;
+
+  if (action === "record-sync-point") {
+    const marked = recordCloudSyncPoint(uid, state.updatedAt);
+    if (marked) state = marked;
+    return;
+  }
+
+  if (action === "push-local") {
+    // Another device wrote, but this device has edits the server never got.
+    // Keep what is on screen and push it up; last-writer-wins at Firestore.
+    console.warn("[Sync] Remote change collided with unsynced local edits — keeping local and re-pushing.");
+    void syncLocalToCloud(state);
+    return;
+  }
+
+  // action === "apply-remote": another device changed the data and this device
+  // is clean. C-4 turns this into a user-visible prompt.
+  handleRemoteUpdate(uid, remote);
+}
+
+function handleRemoteUpdate(_uid: string, _remote: WealthState): void {
+  // Placeholder — C-4 fills this in (notify the user; do not silently swap the
+  // screen while they may be mid-edit).
+  console.info("[Sync] A newer version exists from another device.");
+}
+
 function renderLogin(): void {
   document.body.classList.toggle("mask-financial-amounts", state.privacy.maskAmounts);
   root!.className = "login-shell";
@@ -275,6 +326,10 @@ async function handleAuth(user: User | null): Promise<void> {
       // A failed read is not the same as an empty cloud document. Keep the local
       // state and never overwrite cloud data when connectivity or permissions fail.
       console.error("[Auth] Cloud load failed, continuing with local state:", err);
+    }
+
+    if (requestId === authRequestId && currentUser?.uid === user.uid) {
+      startCloudSubscription(user.uid);
     }
 
   } else {
