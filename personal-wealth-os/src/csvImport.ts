@@ -65,7 +65,11 @@ function stripBom(text: string): string {
   return text.replace(/^﻿/, "").replace(/^ï»¿/, "");
 }
 
-export function recordsFromCsv(text: string): Trade[] {
+/**
+ * @param fallbackPlatform stamped on rows of a non-Moomoo ("custom") CSV that
+ *   carry no Platform column. A genuine Moomoo export is always "moomoo".
+ */
+export function recordsFromCsv(text: string, fallbackPlatform = "moomoo"): Trade[] {
   const [headers = [], ...rows] = parseCsv(stripBom(text));
   const normalized = headers.map((h) => h.toLowerCase().replace(/\s+/g, " ").trim());
   const get = (row: string[], names: string[]) => {
@@ -140,7 +144,7 @@ export function recordsFromCsv(text: string): Trade[] {
       return {
         id: createId("csv"),
         date: get(row, ["date"]),
-        platform: get(row, ["platform"]) || "moomoo",
+        platform: get(row, ["platform"]) || fallbackPlatform,
         ticker: ticker as Ticker,
         amountMyr: Number(get(row, ["amount(rm)", "amount myr", "total(rm)"])) || 0,
         amountUsd: Number(get(row, ["amount (usd)", "amount usd"])) || 0,

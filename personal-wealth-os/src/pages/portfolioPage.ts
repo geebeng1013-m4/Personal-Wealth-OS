@@ -44,6 +44,26 @@ function rateText(rate: number): string {
 }
 
 /**
+ * The brokers this account has actually used, newest first, for the trade
+ * form's datalist. Derived from the trades themselves — no separate list to
+ * keep in sync — with "Moomoo" always offered as the common starting point.
+ */
+function knownPlatforms(state: WealthState): string[] {
+  const seen = new Set<string>();
+  for (let i = state.trades.length - 1; i >= 0; i--) {
+    const name = state.trades[i]?.platform?.trim();
+    if (name) seen.add(name);
+  }
+  if (![...seen].some((p) => p.toLowerCase() === "moomoo")) seen.add("Moomoo");
+  return [...seen];
+}
+
+/** What to pre-fill the Platform field with: whatever the last trade used. */
+function lastUsedPlatform(state: WealthState): string {
+  return state.trades[state.trades.length - 1]?.platform?.trim() || "Moomoo";
+}
+
+/**
  * One honest sentence about how much of the ringgit cost basis rests on a rate
  * the user really paid.
  *
@@ -248,6 +268,8 @@ export function portfolioTemplate(state: WealthState): string {
           <div class="wu-card__header"><div class="wu-stack wu-stack--sm"><span class="wu-label">Contribution Record</span><h3 class="wu-card__title t-heading">Add investment activity</h3></div><span class="wu-badge wu-badge--neutral">Cost basis</span></div>
           <form id="tradeForm" class="wu-grid wu-grid--2">
             <label class="wu-field-row"><span class="wu-field-row__label">Date</span><input class="wu-field" name="date" type="date" required></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Platform</span><select class="wu-field" name="platform" id="platformSelect">${knownPlatforms(state).map((pf) => "<option" + (pf === lastUsedPlatform(state) ? " selected" : "") + ">" + escapeHtml(pf) + "</option>").join("")}<option value="__custom__">+ Custom</option></select></label>
+            <div id="customPlatformWrap" class="wu-field-row--wide" style="display:none;"><label class="wu-field-row"><span class="wu-field-row__label">Custom Platform</span><input class="wu-field" name="customPlatform" id="customPlatformInput" type="text" placeholder="e.g. IBKR, Webull, Rakuten Trade"></label></div>
             <label class="wu-field-row"><span class="wu-field-row__label">Ticker</span><select class="wu-field" name="ticker" id="tickerSelect"><option>VOO</option><option>QQQM</option>${state.customTickers.map((t) => "<option>" + escapeHtml(t) + "</option>").join("")}<option value="__custom__">+ Custom</option></select></label>
             <div id="customTickerWrap" class="wu-field-row--wide" style="display:none;"><label class="wu-field-row"><span class="wu-field-row__label">Custom Ticker</span><input class="wu-field" name="customTicker" id="customTickerInput" type="text" placeholder="e.g. AAPL" style="text-transform:uppercase"></label></div>
             <label class="wu-field-row"><span class="wu-field-row__label">Type</span><select class="wu-field" name="type"><option>DCA</option><option>Dip Buy</option><option>Manual Buy</option><option>Sell</option></select></label>
@@ -334,6 +356,13 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
     if (customWrap) customWrap.style.display = tickerSelect.value === "__custom__" ? "block" : "none";
   });
 
+  // Same "+ Custom" reveal for the broker.
+  const platformSelect = root.querySelector<HTMLSelectElement>("#platformSelect");
+  const customPlatformWrap = root.querySelector<HTMLElement>("#customPlatformWrap");
+  platformSelect?.addEventListener("change", () => {
+    if (customPlatformWrap) customPlatformWrap.style.display = platformSelect.value === "__custom__" ? "block" : "none";
+  });
+
   root.querySelector<HTMLFormElement>("#tradeForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;
@@ -343,10 +372,13 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
       ticker = String(data.get("customTicker") ?? "").toUpperCase().trim();
       if (!ticker) return;
     }
+    let platform = String(data.get("platform") ?? "");
+    if (platform === "__custom__") platform = String(data.get("customPlatform") ?? "").trim();
+    if (!platform) platform = lastUsedPlatform(state);
     const trade: Trade = {
       id: createId("trade"),
       date: String(data.get("date") ?? ""),
-      platform: "moomoo",
+      platform,
       ticker,
       type: String(data.get("type")) as TradeType,
       amountMyr: Number(data.get("amountMyr")) || 0,
@@ -372,7 +404,7 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    const records = recordsFromCsv(await file.text());
+    const records = recordsFromCsv(await file.text(), lastUsedPlatform(state));
     const next = { ...state, trades: [...state.trades, ...records] };
     setState(next);
     rerender(root, next, setState, "portfolio", navigate);
