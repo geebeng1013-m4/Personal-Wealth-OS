@@ -316,6 +316,16 @@ export interface WealthState {
   netWorthSnapshots: NetWorthSnapshot[];
   privacy: PrivacyPreferences;
   updatedAt: number;
+  /**
+   * The `updatedAt` value that was last confirmed written to Firestore's
+   * server (not the local offline cache). 0 = never confirmed.
+   *
+   * `updatedAt !== lastSyncedAt` means this device holds edits the server has
+   * not acknowledged, so a cloud copy — however recent its own device clock
+   * claims to be — must not replace them. This is what removes device-clock
+   * skew from the sync decision.
+   */
+  lastSyncedAt: number;
   deviceId: string;
   ruleCardOverrides: Partial<Record<RuleCardId, RuleCardContent>>;
   ruleNoteTitle: string;

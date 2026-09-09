@@ -254,6 +254,7 @@ export const demoState: WealthState = {
   ],
   privacy: { maskAmounts: false, requireExportConfirmation: true },
   updatedAt: Date.now(),
+  lastSyncedAt: 0,
   deviceId: "demo-device",
   ruleCardOverrides: {},
   ruleNoteTitle: "Investment Rules for 2026",

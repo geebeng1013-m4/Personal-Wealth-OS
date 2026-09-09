@@ -9,7 +9,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 19;
+export const CURRENT_VERSION = 20;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -147,6 +147,7 @@ export const defaultState: WealthState = {
   netWorthSnapshots: [],
   privacy: { maskAmounts: false, requireExportConfirmation: true },
   updatedAt: 0,
+  lastSyncedAt: 0,
   deviceId: "default",
   ruleCardOverrides: {},
   ruleNoteTitle: "",
@@ -243,6 +244,7 @@ export function emptyState(): WealthState {
     netWorthSnapshots: [],
     privacy: { maskAmounts: false, requireExportConfirmation: true },
     updatedAt: 0,
+    lastSyncedAt: 0,
     deviceId: deviceId(),
     ruleCardOverrides: {},
     ruleNoteTitle: "",
@@ -483,6 +485,9 @@ export function migrateState(input: Partial<WealthState>): WealthState {
     requireExportConfirmation: input.privacy?.requireExportConfirmation !== false,
   };
   merged.updatedAt = Number.isFinite(input.updatedAt) ? Number(input.updatedAt) : 0;
+  // New in v20. Old data has no confirmed sync point, so it starts dirty and the
+  // first cloud reconcile establishes one.
+  merged.lastSyncedAt = Number.isFinite(input.lastSyncedAt) ? Number(input.lastSyncedAt) : 0;
   merged.deviceId = typeof input.deviceId === "string" && input.deviceId ? input.deviceId : deviceId();
   merged.ruleCardOverrides = validRuleCardOverrides(input.ruleCardOverrides);
   merged.ruleNoteTitle = typeof input.ruleNoteTitle === "string" ? input.ruleNoteTitle.trim().slice(0, 80) : "";
