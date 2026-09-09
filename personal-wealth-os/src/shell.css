@@ -435,8 +435,8 @@
   }
   .hamburger {
     display: flex;
-    top: calc(16px + env(safe-area-inset-top));
-    left: calc(20px + env(safe-area-inset-left));
+    top: calc(14px + env(safe-area-inset-top));
+    left: calc(16px + env(safe-area-inset-left));
     width: 40px;
     height: 40px;
     align-items: center;
@@ -472,15 +472,32 @@
   }
   /* A uniform "safe zone" inset on all four edges — content never touches the
      screen edge — plus the OS-reserved insets (notch, home indicator, curved
-     corners) on top of that. The top is larger to clear the floating
-     hamburger. */
+     corners) on top of that. */
   .main {
     min-height: 100dvh;
     padding:
-      calc(68px + env(safe-area-inset-top))
+      calc(14px + env(safe-area-inset-top))
       calc(20px + env(safe-area-inset-right))
       calc(20px + env(safe-area-inset-bottom))
       calc(20px + env(safe-area-inset-left));
+  }
+  /* 1A — the page title shares the top row with the floating hamburger instead
+     of sitting in a block of dead space below it. Only the title row is indented
+     past the button and sized to its height; the sub keeps the full width below.
+     The two pages with no wu-page-header (TVM, calculator) take top clearance. */
+  .wu-page-header {
+    gap: var(--space-1);
+    margin-bottom: var(--space-4);
+  }
+  .wu-page-header__bar {
+    min-height: 40px;
+    padding-left: calc(40px + var(--space-3));
+    align-items: center;
+  }
+  #tvmRoot,
+  #investmentGrowthCalculator {
+    display: block;
+    padding-top: calc(40px + var(--space-2));
   }
   .side-rays {
     height: 360px;
