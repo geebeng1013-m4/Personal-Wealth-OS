@@ -9,7 +9,7 @@
 
 - **阶段**：V1 完成（2026-09-09）。核心正确性的洞都补上了。之后：**产品打磨** —— 手机比例这轮
   已收尾（M-1..M-6，见下）。App / 订阅方向因预算暂停（见下），先把产品本身做好。
-- **`main`**：`cc2fae5` —— typecheck / 769 测试 / build 全绿。
+- **`main`**：`75ef8a6` —— typecheck / 769 测试 / build 全绿。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 
 ## V1 收尾（全部合并）
@@ -40,6 +40,15 @@ Portfolio 表单不被价格轮询清空(#9)、CLAUDE.md(#10)、CI 卡死修复(
 
 手机导航现在是：底部 4 Tab（Home / Ledger / Portfolio / Budget）+ More 整页；抽屉只剩桌面侧栏用。
 12 页 + More 全部 CDP 390px 验过：无横向溢出。**这轮收尾。**
+
+## 零散打磨（M 系列之后）
+
+| PR | 内容 | 状态 |
+| --- | --- | --- |
+| #25 | 手机头部留白（`.main` 顶部 22→40px，桌面不动） | merged |
+| #26 | 交易表单选券商：Platform 下拉 +「+ Custom」，预选上次用的；不再写死 "moomoo" | merged |
+
+**观察（待你定）**：桌面版仍有两个「Overview」标题（外壳 topbar + 页面 header）—— M-1 只在手机隐藏了 topbar。
 
 ## App / 订阅方向（暂停）
 
