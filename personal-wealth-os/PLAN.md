@@ -48,9 +48,10 @@
   「上游返回异常结构」的测试；失败降级到陈旧数据时 UI 带时间戳。
 - 规模：中。仅 `api/` + 展示边界。
 
-### V1-5 — 文档漂移小修  `[ ]`
-- `WEALTHUP_CONTEXT.md` 多处写 `version = 20`，实际 `CURRENT_VERSION = 19`。校对一遍。
-- 规模：极小。
+### V1-5 — 文档漂移小修  `[x]`  （PR #14）
+- `WEALTHUP_CONTEXT.md` 4 处写 `version = 20`（实际 `CURRENT_VERSION = 19`）+ 下一次 bump 写成 21 → 全改对。
+- 顺带把 P1「迁移测试覆盖」待办标完成（`architecture.test.ts` 已有表格驱动测试）。
+- **仍待清**：`WEALTHUP_CONTEXT.md` P1/P2 里还有已做的待办没标（如第 198 行 `/api/*` 限流 = PR #5 已做）。见 FUTURE IDEAS。
 
 ---
 
@@ -74,3 +75,5 @@
 
 - `COMMERCIALIZATION_PLAN.md` 全部内容（Capacitor 打包、付费订阅、AI 视频增长）。
 - 阶段 0 里偏商业化的项：Apple / 邮箱登录、账号删除流程、数据导出复核。
+- `WEALTHUP_CONTEXT.md` 第 9 节（P0-P4 待办清单）整体过一遍 —— 里面多条其实本轮已做
+  （限流、字节预算、免责声明、CI 卡死、Portfolio 表单），标记或删除。
