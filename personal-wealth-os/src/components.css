@@ -1183,4 +1183,28 @@
     box-shadow: 0 0 0 3px var(--focus);
     border-radius: var(--radius-sm);
   }
+  /* Neutral variant: "another device changed your data" is news, not an error. */
+  .wu-toast--notice {
+    border-color: var(--border-strong);
+    border-left-color: var(--accent);
+  }
+  .wu-toast__action {
+    flex: none;
+    align-self: center;
+    padding: 2px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font: var(--weight-medium) var(--text-caption) / 1.2 var(--font-sans);
+    cursor: pointer;
+  }
+  .wu-toast__action:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .wu-toast__action:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+  }
 }

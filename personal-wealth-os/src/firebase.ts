@@ -139,13 +139,47 @@ export function saveToFirestore(uid: string, state: WealthState): Promise<void> 
   return setDoc(userDocRef(uid), { ...state, _syncedAt: Date.now() }, { merge: true });
 }
 
+/**
+ * One delivery of the user's cloud document, with the two metadata bits that
+ * make an offline-safe sync decision possible.
+ */
+export interface CloudSnapshot {
+  state: WealthState;
+  /**
+   * The snapshot came from the local cache, not a confirmed server read.
+   * Every write produces one of these immediately (optimistic), followed by a
+   * `fromCache: false` delivery once the server has it.
+   */
+  fromCache: boolean;
+  /**
+   * This client has local writes the server has not acknowledged yet. While
+   * true, the local copy is ahead of the server regardless of any clock.
+   */
+  hasPendingWrites: boolean;
+}
+
+/**
+ * Subscribe to the user's cloud document.
+ *
+ * `includeMetadataChanges` is what makes this useful for conflict handling: it
+ * delivers the metadata-only transition when a write goes from pending to
+ * server-confirmed, which is the moment a device can safely record a sync
+ * point. Without it, `hasPendingWrites` clearing would be invisible.
+ */
 export function subscribeToFirestore(
   uid: string,
-  callback: (state: WealthState) => void
+  callback: (snapshot: CloudSnapshot) => void
 ): Unsubscribe {
-  return onSnapshot(userDocRef(uid), (snap) => {
-    if (snap.exists()) {
-      callback(snap.data() as WealthState);
-    }
-  });
+  return onSnapshot(
+    userDocRef(uid),
+    { includeMetadataChanges: true },
+    (snap) => {
+      if (!snap.exists()) return;
+      callback({
+        state: snap.data() as WealthState,
+        fromCache: snap.metadata.fromCache,
+        hasPendingWrites: snap.metadata.hasPendingWrites,
+      });
+    },
+  );
 }

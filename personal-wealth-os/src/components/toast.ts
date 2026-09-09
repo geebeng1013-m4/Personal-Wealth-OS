@@ -1,19 +1,20 @@
 /**
- * The one place the app tells the user a save went wrong.
+ * The one place the app talks to the user out-of-band.
  *
- * state.ts dispatches a `pwo-save-error` CustomEvent whenever a write it cannot
- * retry has failed — localStorage over quota or blocked, a Firestore sync
- * rejected, a snapshot not stored. Each carries a plain-language `detail.message`
- * that is safe to show as-is. Until now nothing listened, so those failures were
- * completely silent: the user believed their data was saved when it was not.
+ * Two things use it:
+ *   - `pwo-save-error` CustomEvents from state.ts — a write it cannot retry has
+ *     failed (localStorage over quota or blocked, a Firestore sync rejected, a
+ *     snapshot not stored). Silent until this listener existed.
+ *   - showSyncNotice() from main.ts — another device changed the data and this
+ *     device is clean, so there is a newer version to pick up.
  *
  * Deliberately small: a stacked, self-dismissing strip at the bottom-right, no
- * dependency, no state. It never blocks and never steals focus — a failed save
- * is worth telling the user about, not worth interrupting them over.
+ * dependency, no framework. It never blocks and never steals focus.
  */
 
-const EVENT = "pwo-save-error";
-const DISMISS_AFTER_MS = 6500;
+const ERROR_EVENT = "pwo-save-error";
+const ERROR_DISMISS_MS = 6500;
+const NOTICE_DISMISS_MS = 20000;
 const MAX_VISIBLE = 3;
 
 let stack: HTMLElement | null = null;
@@ -23,8 +24,6 @@ function ensureStack(): HTMLElement {
   if (stack && stack.isConnected) return stack;
   stack = document.createElement("div");
   stack.className = "wu-toast-stack";
-  // aria-live on the container so each appended child is announced once,
-  // politely — these are not errors the user must act on this instant.
   stack.setAttribute("aria-live", "polite");
   document.body.appendChild(stack);
   return stack;
@@ -34,14 +33,18 @@ function dismiss(toast: HTMLElement): void {
   if (!toast.isConnected) return;
   toast.classList.remove("is-in");
   toast.classList.add("is-out");
-  // Matches the CSS transition; falls back to a straight remove if the
-  // transition never fires (reduced motion zeroes the duration).
   const done = (): void => toast.remove();
   toast.addEventListener("transitionend", done, { once: true });
   setTimeout(done, 400);
 }
 
-function show(message: string): void {
+interface ToastOptions {
+  tone?: "error" | "notice";
+  dismissAfterMs?: number;
+  action?: { label: string; onClick: () => void };
+}
+
+function show(message: string, opts: ToastOptions = {}): void {
   const host = ensureStack();
 
   while (host.childElementCount >= MAX_VISIBLE && host.firstElementChild) {
@@ -49,12 +52,22 @@ function show(message: string): void {
   }
 
   const toast = document.createElement("div");
-  toast.className = "wu-toast";
-  toast.setAttribute("role", "alert");
+  toast.className = opts.tone === "notice" ? "wu-toast wu-toast--notice" : "wu-toast";
+  toast.setAttribute("role", opts.tone === "notice" ? "status" : "alert");
 
   const text = document.createElement("span");
   text.className = "wu-toast__text";
   text.textContent = message;
+  toast.append(text);
+
+  if (opts.action) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "wu-toast__action";
+    btn.textContent = opts.action.label;
+    btn.addEventListener("click", () => { opts.action!.onClick(); dismiss(toast); });
+    toast.append(btn);
+  }
 
   const close = document.createElement("button");
   close.type = "button";
@@ -62,13 +75,11 @@ function show(message: string): void {
   close.setAttribute("aria-label", "Dismiss");
   close.textContent = "×";
   close.addEventListener("click", () => dismiss(toast));
+  toast.append(close);
 
-  toast.append(text, close);
   host.appendChild(toast);
-
-  // Next frame, so the entrance transition has a starting state to move from.
   requestAnimationFrame(() => toast.classList.add("is-in"));
-  setTimeout(() => dismiss(toast), DISMISS_AFTER_MS);
+  setTimeout(() => dismiss(toast), opts.dismissAfterMs ?? ERROR_DISMISS_MS);
 }
 
 /**
@@ -78,11 +89,23 @@ function show(message: string): void {
 export function initSaveErrorToasts(): void {
   if (started) return;
   started = true;
-  window.addEventListener(EVENT, (event: Event) => {
+  window.addEventListener(ERROR_EVENT, (event: Event) => {
     const detail = (event as CustomEvent<{ message?: unknown }>).detail;
     const message = typeof detail?.message === "string" && detail.message.trim().length > 0
       ? detail.message.trim()
       : "Something could not be saved.";
-    show(message);
+    show(message, { tone: "error" });
+  });
+}
+
+/**
+ * Tell the user another device changed their data and offer to reload. Neutral
+ * tone, longer on screen, does not auto-swap what is under the user's hands.
+ */
+export function showSyncNotice(onReload: () => void): void {
+  show("Your data was updated on another device.", {
+    tone: "notice",
+    dismissAfterMs: NOTICE_DISMISS_MS,
+    action: { label: "Reload", onClick: onReload },
   });
 }

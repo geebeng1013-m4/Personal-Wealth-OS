@@ -9,7 +9,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 19;
+export const CURRENT_VERSION = 20;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -147,6 +147,7 @@ export const defaultState: WealthState = {
   netWorthSnapshots: [],
   privacy: { maskAmounts: false, requireExportConfirmation: true },
   updatedAt: 0,
+  lastSyncedAt: 0,
   deviceId: "default",
   ruleCardOverrides: {},
   ruleNoteTitle: "",
@@ -243,6 +244,7 @@ export function emptyState(): WealthState {
     netWorthSnapshots: [],
     privacy: { maskAmounts: false, requireExportConfirmation: true },
     updatedAt: 0,
+    lastSyncedAt: 0,
     deviceId: deviceId(),
     ruleCardOverrides: {},
     ruleNoteTitle: "",
@@ -483,6 +485,9 @@ export function migrateState(input: Partial<WealthState>): WealthState {
     requireExportConfirmation: input.privacy?.requireExportConfirmation !== false,
   };
   merged.updatedAt = Number.isFinite(input.updatedAt) ? Number(input.updatedAt) : 0;
+  // New in v20. Old data has no confirmed sync point, so it starts dirty and the
+  // first cloud reconcile establishes one.
+  merged.lastSyncedAt = Number.isFinite(input.lastSyncedAt) ? Number(input.lastSyncedAt) : 0;
   merged.deviceId = typeof input.deviceId === "string" && input.deviceId ? input.deviceId : deviceId();
   merged.ruleCardOverrides = validRuleCardOverrides(input.ruleCardOverrides);
   merged.ruleNoteTitle = typeof input.ruleNoteTitle === "string" ? input.ruleNoteTitle.trim().slice(0, 80) : "";
@@ -602,26 +607,88 @@ export function saveState(state: WealthState, uid?: string, changeLabel?: string
   }
 }
 
+type SyncTimes = Pick<WealthState, "updatedAt" | "lastSyncedAt">;
+
 /**
- * Whether the cloud copy should replace the local one.
+ * Whether this device is definitely holding edits the server has not confirmed.
  *
- * Last write wins, compared on the `updatedAt` that saveState stamps on every
- * write. The case this exists for is the reverse one: a LOCAL copy that is
- * newer than the cloud means local edits never reached Firestore — the device
- * was offline, the write was rejected, or permissions failed — and saveState
- * only logs that failure. Replacing those edits with the older cloud document
- * is silent data loss, and until this check existed the cloud always won.
+ * `updatedAt` is bumped on every local save; `lastSyncedAt` only advances when
+ * a write is confirmed on Firestore's server (via the onSnapshot subscription,
+ * see main.ts). So once a sync point exists, `updatedAt !== lastSyncedAt` means
+ * "I have local work the server has never seen" — offline, in flight, or
+ * rejected.
  *
- * Equal timestamps are the same save, so either copy will do; the cloud is
- * taken so both ends converge on one representation.
- *
- * Both timestamps come from Date.now() on whichever device wrote them, so a
- * badly skewed device clock can still win an argument it should lose. Closing
- * that needs a server-assigned timestamp, which is a schema change — this
- * function does not pretend to have solved it.
+ * Returns false when `lastSyncedAt` is 0 (no sync point yet — migrated from a
+ * pre-v20 state, or a brand-new signed-out draft): "dirty" is simply unknown,
+ * and the caller decides what to do with that.
  */
-export function cloudCopyWins(localUpdatedAt: number, cloudUpdatedAt: number): boolean {
-  return cloudUpdatedAt >= localUpdatedAt;
+export function hasUnsyncedLocalEdits(local: SyncTimes): boolean {
+  return local.lastSyncedAt > 0 && local.updatedAt !== local.lastSyncedAt;
+}
+
+/**
+ * Whether the cloud copy should replace the local one on load.
+ *
+ *   - No local copy → take the cloud.
+ *   - Local has a sync point (`lastSyncedAt > 0`) → the skew-proof rule: keep
+ *     local only if it has unsynced edits; otherwise everything it holds is
+ *     already on the server and taking the server's copy back is lossless. No
+ *     device clocks are compared.
+ *   - Local has no sync point yet (pre-v20 data on its first load after the
+ *     upgrade) → fall back to the old rule, `cloud.updatedAt >= local.updatedAt`.
+ *     This is the one window where a skewed clock can still matter; it closes
+ *     as soon as the first confirmed sync writes a real `lastSyncedAt`.
+ */
+export function cloudCopyWins(local: SyncTimes | null, cloud: SyncTimes): boolean {
+  if (!local) return true;
+  if (local.lastSyncedAt > 0) return !hasUnsyncedLocalEdits(local);
+  return cloud.updatedAt >= local.updatedAt;
+}
+
+/**
+ * What to do when the onSnapshot subscription delivers a cloud document.
+ *
+ *   ignore            — not a server-confirmed change, or our own write still
+ *                       in flight. Do nothing.
+ *   record-sync-point — the server just confirmed our own last write. Mark the
+ *                       local copy clean (recordCloudSyncPoint); no re-render.
+ *   push-local        — another device changed the doc, but this device also
+ *                       has unsynced edits. Keep local on screen, push it up.
+ *   apply-remote      — another device changed the doc and this device is
+ *                       clean. The remote state should replace the local one.
+ */
+export type CloudSnapshotAction = "ignore" | "record-sync-point" | "push-local" | "apply-remote";
+
+export function reconcileCloudSnapshot(
+  local: SyncTimes,
+  snap: { updatedAt: number; hasPendingWrites: boolean; fromCache: boolean },
+): CloudSnapshotAction {
+  if (snap.hasPendingWrites || snap.fromCache) return "ignore";
+  if (snap.updatedAt === local.updatedAt) return "record-sync-point";
+  if (hasUnsyncedLocalEdits(local)) return "push-local";
+  return "apply-remote";
+}
+
+/**
+ * Persist a confirmed sync point: the local copy's `updatedAt` is now known to
+ * be on the server, so mark it clean. Only writes localStorage — never
+ * Firestore — so it cannot loop with saveState. No-op unless the stored copy's
+ * `updatedAt` still matches `syncedUpdatedAt` (a newer local edit since the
+ * write means we are dirty again and must stay so).
+ */
+export function recordCloudSyncPoint(uid: string, syncedUpdatedAt: number): WealthState | null {
+  const key = getUserStorageKey(uid);
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const stored = migrateState(JSON.parse(raw) as Partial<WealthState>);
+    if (stored.updatedAt !== syncedUpdatedAt || stored.lastSyncedAt === syncedUpdatedAt) return null;
+    const next = { ...stored, lastSyncedAt: syncedUpdatedAt };
+    localStorage.setItem(key, JSON.stringify(next));
+    return next;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -657,9 +724,9 @@ export async function loadStateFromCloud(): Promise<CloudSyncResult> {
     }
   }
 
-  if (local && !cloudCopyWins(local.updatedAt, cloud.updatedAt)) {
-    // Local is ahead. Leave local storage exactly as it is and hand the copy
-    // back; the caller pushes it up so the cloud catches up to the device.
+  if (local && !cloudCopyWins(local, cloud)) {
+    // Local is ahead of the server. Leave local storage exactly as it is and
+    // hand the copy back; the caller pushes it up so the cloud catches up.
     return { outcome: "local-kept-newer", state: local };
   }
 
@@ -671,6 +738,9 @@ export async function loadStateFromCloud(): Promise<CloudSyncResult> {
   if (local && local.updatedAt !== cloud.updatedAt) {
     saveSnapshot(local, "Before cloud data refresh", user.uid);
   }
+  // Taking the server's copy: its updatedAt is, by definition, now a confirmed
+  // sync point for this device.
+  cloud.lastSyncedAt = cloud.updatedAt;
   // The cloud document was already fetched successfully by this point — a
   // failure to cache it locally (quota exceeded, private-browsing storage
   // limits) must not read as "the cloud load failed", and must not stop the
