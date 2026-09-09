@@ -62,6 +62,40 @@ const pageGroups = [
 
 const pages: Page[] = pageGroups.flatMap<Page>(([, groupPages]) => [...groupPages]);
 
+/*
+ * Bottom tab bar (phone only, see .tabbar in shell.css).
+ *
+ * On a phone every page change means opening the drawer. These five are the
+ * ones reached often enough to deserve a permanent thumb-level tab; the drawer
+ * (hamburger) still holds the full list. Icons are inline 24-grid line SVGs —
+ * stroke: currentColor, no fill — so they inherit the active/idle colour and
+ * add no icon dependency.
+ */
+const TAB_ICONS: Record<string, string> = {
+  home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 4l9 6.5"/><path d="M5 9.5V20h14V9.5"/></svg>',
+  portfolio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11"/><path d="M12 20V4"/><path d="M19 20v-6"/></svg>',
+  ledger: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z"/><path d="M9 8h6M9 12h6"/></svg>',
+  budget: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg>',
+  market: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l5-5 4 4 7-8"/><path d="M17 7h4v4"/></svg>',
+};
+const primaryTabs: ReadonlyArray<readonly [id: string, label: string, icon: string]> = [
+  ["dashboard", "Home", TAB_ICONS.home],
+  ["portfolio", "Portfolio", TAB_ICONS.portfolio],
+  ["ledger", "Ledger", TAB_ICONS.ledger],
+  ["buckets", "Budget", TAB_ICONS.budget],
+  ["market", "Market", TAB_ICONS.market],
+];
+
+function tabbarTemplate(activePage: string): string {
+  const items = primaryTabs
+    .map(([id, label, icon]) => {
+      const on = id === activePage;
+      return `<button class="tabbar__btn${on ? " is-active" : ""}" data-page="${id}" type="button"${on ? ' aria-current="page"' : ""}><span class="tabbar__icon" aria-hidden="true">${icon}</span><span class="tabbar__label">${label}</span></button>`;
+    })
+    .join("");
+  return `<nav class="tabbar" aria-label="Primary">${items}</nav>`;
+}
+
 function navTemplate(activePage: string): string {
   let pageIndex = 0;
   return pageGroups
@@ -138,6 +172,7 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
       </header>
       <section id="pageMount"></section>
     </main>
+    ${tabbarTemplate(activePage)}
   `;
 }
 
@@ -317,6 +352,12 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
       closeSidebar(root);
       doNavigate(button.dataset.page ?? "dashboard");
     });
+  });
+
+  // The phone tab bar reuses data-page; it lives outside the drawer, so there
+  // is no sidebar scroll to remember or drawer to close.
+  root.querySelectorAll<HTMLButtonElement>(".tabbar__btn").forEach((button) => {
+    button.addEventListener("click", () => doNavigate(button.dataset.page ?? "dashboard"));
   });
 
   // Remember whether the tools drawer is open across reloads.
