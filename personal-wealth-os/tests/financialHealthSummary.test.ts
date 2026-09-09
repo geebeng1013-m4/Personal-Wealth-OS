@@ -158,6 +158,26 @@ test("health/D: cash flow reads the canonical recorded surplus", () => {
   assert.equal(factor.detail, "Spending within income");
 });
 
+// --- D2. budget (spending limit) ---------------------------------------------
+
+test("health/D2: a sponsored expense does not count toward the Budget factor's spending limit", () => {
+  const now = new Date(2026, 7, 5, 12, 0, 0);
+  const state = stateWith({
+    cashflow: { allowance: 2000, transport: 100, food: 100, otherFixed: 0, irregularIncome: 0 },
+    ledgerAccounts: accounts,
+    ledgerTransactions: [
+      // Limit is 200 (transport 100 + food 100). Uncounted, this sponsored
+      // 900 would blow past it — it must not, since it was a parent's money
+      // for a specific errand, not the user's own spending.
+      { id: "sponsored-spend", amount: 900, type: "expense", categoryId: "expense-food", accountId: "acc-bank", date: iso(2026, 7, 5), fundingSource: "sponsored" },
+    ] as LedgerTransaction[],
+  });
+  const factor = getHealthFactor(getFinancialHealthSnapshot(state, now), "budget")!;
+  assert.equal(factor.status, "healthy", "a sponsored expense must not trip the Budget factor");
+  assert.equal(factor.value, 0, "recorded spending should reflect zero personal spending");
+  assert.equal(factor.detail, "0% of limit");
+});
+
 // --- E. plan execution ------------------------------------------------------
 
 function tradeThisMonth(id: string, amountMyr: number): Trade {

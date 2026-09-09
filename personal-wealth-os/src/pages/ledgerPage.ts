@@ -13,7 +13,7 @@
  * module-level here, with the same lifetime: it lives until the tab closes.
  */
 
-import type { LedgerAccountType, LedgerTransaction, LedgerTransactionType, WealthState } from "../models";
+import type { LedgerAccountType, LedgerFundingSource, LedgerTransaction, LedgerTransactionType, WealthState } from "../models";
 import { createId } from "../state";
 import { money, percent } from "../rules";
 import { escapeHtml } from "../html";
@@ -43,6 +43,7 @@ let ledgerEntryDraft = {
   toAccountId: "",
   date: "",
   note: "",
+  fundingSource: "personal" as LedgerFundingSource,
 };
 let ledgerHistoryOpen = false;
 let ledgerCategoriesOpen = false;
@@ -64,6 +65,7 @@ function resetLedgerEntry(): void {
     toAccountId: "",
     date: "",
     note: "",
+    fundingSource: "personal",
   };
 }
 
@@ -115,7 +117,14 @@ export function ledgerTemplate(state: WealthState): string {
   const entryAmount = editing ? String(editing.amount) : ledgerEntryDraft.amount;
   const entryDate = editing?.date ? localDateValue(editing.date) : ledgerEntryDraft.date || localDateValue();
   const entryNote = editing?.note ?? ledgerEntryDraft.note;
-  const expenses = categoryTotals(filtered, state.ledgerCategories, "expense");
+  const entryFundingSource: LedgerFundingSource = (editing?.fundingSource ?? ledgerEntryDraft.fundingSource) === "sponsored" ? "sponsored" : "personal";
+  // Category Share breaks down where the user's OWN money went, so sponsored/
+  // earmarked transactions (money that passed through but was never theirs to
+  // budget) are excluded here — unlike the raw Income/Expenses cards above,
+  // which deliberately show full cash flow.
+  const personalExpenseTransactions = filtered.filter((transaction) => transaction.fundingSource !== "sponsored");
+  const expenses = categoryTotals(personalExpenseTransactions, state.ledgerCategories, "expense");
+  const personalExpenseTotal = ledgerTotals(personalExpenseTransactions).expense;
   const palette = ["#ef6461", "#f59e0b", "#8b5cf6", "#3b82f6", "#14b8a6", "#ec4899", "#84cc16"];
   let angle = 0;
   const donut = expenses.length ? expenses.map((item, index) => {
@@ -134,7 +143,8 @@ export function ledgerTemplate(state: WealthState): string {
     const icon = transaction.type === "transfer" ? "↔" : category?.icon ?? "•";
     const amountPrefix = transaction.type === "income" ? "+" : transaction.type === "expense" ? "−" : "↔ ";
     const amountTone = transaction.type === "income" ? " wu-metric__value--positive" : transaction.type === "expense" ? " wu-metric__value--negative" : "";
-    return `<div class="wu-list__row"><span class="wu-row wu-row--tight"><span aria-hidden="true">${escapeHtml(icon)}</span><span class="wu-stack wu-stack--sm"><strong class="t-subheading">${escapeHtml(title)}</strong><span class="t-caption t-faint">${new Date(transaction.date).toLocaleDateString()} &middot; ${escapeHtml(accountMeta)}${transaction.note ? " &middot; " + escapeHtml(transaction.note) : ""}</span></span></span><strong class="t-num${amountTone}">${amountPrefix}${money(transaction.amount)}</strong><button class="wu-btn wu-btn--ghost wu-btn--icon edit-ledger" data-id="${escapeHtml(transaction.id)}" type="button" aria-label="Edit transaction">✎</button><button class="wu-btn wu-btn--ghost wu-btn--icon delete-ledger" data-id="${escapeHtml(transaction.id)}" type="button" aria-label="Delete transaction">✕</button></div>`;
+    const sponsoredBadge = transaction.fundingSource === "sponsored" ? ' <span class="wu-badge wu-badge--neutral">Sponsored</span>' : "";
+    return `<div class="wu-list__row"><span class="wu-row wu-row--tight"><span aria-hidden="true">${escapeHtml(icon)}</span><span class="wu-stack wu-stack--sm"><strong class="t-subheading">${escapeHtml(title)}${sponsoredBadge}</strong><span class="t-caption t-faint">${new Date(transaction.date).toLocaleDateString()} &middot; ${escapeHtml(accountMeta)}${transaction.note ? " &middot; " + escapeHtml(transaction.note) : ""}</span></span></span><strong class="t-num${amountTone}">${amountPrefix}${money(transaction.amount)}</strong><button class="wu-btn wu-btn--ghost wu-btn--icon edit-ledger" data-id="${escapeHtml(transaction.id)}" type="button" aria-label="Edit transaction">✎</button><button class="wu-btn wu-btn--ghost wu-btn--icon delete-ledger" data-id="${escapeHtml(transaction.id)}" type="button" aria-label="Delete transaction">✕</button></div>`;
   }).join("");
 
   const presetLabel: Record<string, string> = { today: "Today", week: "This week", month: "This month", year: "This year", custom: "Custom" };
@@ -164,7 +174,8 @@ export function ledgerTemplate(state: WealthState): string {
           ${entryType === "transfer"
             ? `<div class="wu-grid wu-grid--2"><label class="wu-field-row"><span class="wu-field-row__label">From account</span><select class="wu-field" name="fromAccountId" required>${accountOptions(selectedFromAccountId)}</select></label><label class="wu-field-row"><span class="wu-field-row__label">To account</span><select class="wu-field" name="toAccountId" required>${accountOptions(selectedToAccountId)}</select></label></div>`
             : `<label class="wu-field-row"><span class="wu-field-row__label">Account</span><select class="wu-field" name="accountId" required>${accountOptions(selectedAccountId)}</select></label>
-          <fieldset class="wu-fieldset"><legend class="wu-field-row__label">Category</legend><div class="wu-row wu-row--tight">${entryCategories.map((category, index) => `<label class="wu-chip"><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === editing?.categoryId || (!editing && index === 0) ? " checked" : ""}><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)}</span></label>`).join("")}</div></fieldset>`}
+          <fieldset class="wu-fieldset"><legend class="wu-field-row__label">Category</legend><div class="wu-row wu-row--tight">${entryCategories.map((category, index) => `<label class="wu-chip"><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === editing?.categoryId || (!editing && index === 0) ? " checked" : ""}><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)}</span></label>`).join("")}</div></fieldset>
+          <label class="wu-switch"><input type="checkbox" name="fundingSource" value="sponsored"${entryFundingSource === "sponsored" ? " checked" : ""}><span class="wu-switch__track"></span><span class="wu-switch__label">Sponsored / earmarked money — not part of my budget</span></label>`}
           <details class="wu-details"${editing ? " open" : ""}><summary class="wu-details__summary"><span class="t-subheading">Date &amp; note</span></summary><div class="wu-grid wu-grid--2"><label class="wu-field-row"><span class="wu-field-row__label">Date</span><input class="wu-field" name="date" type="date" required value="${entryDate}"></label><label class="wu-field-row"><span class="wu-field-row__label">Note</span><input class="wu-field" name="note" maxlength="500" value="${escapeHtml(entryNote)}" placeholder="Optional"></label></div></details>
           <p id="ledgerFormError" class="wu-field-row__error" role="alert">${transferUnavailable ? "Add at least two accounts before recording a transfer." : ""}</p>
           <button class="wu-btn wu-btn--primary wu-btn--block" type="submit"${transferUnavailable ? " disabled" : ""}>${editing ? "Save Changes" : "Save Transaction"}</button>
@@ -199,7 +210,7 @@ export function ledgerTemplate(state: WealthState): string {
           </form>
         </article>
         <div class="wu-grid wu-grid--2">
-          <article class="wu-card"><div class="wu-card__header"><h3 class="wu-card__title t-heading">Category Share</h3></div>${expenses.length ? `<div class="ledger-donut-wrap"><div class="ledger-donut" style="background:conic-gradient(${donut})"><span>${money(totals.expense)}</span></div><div class="ledger-legend">${expenses.map((item, index) => `<div><i style="background:${palette[index % palette.length]}"></i><span>${escapeHtml(item.category.icon + " " + item.category.label)}</span><strong>${percent(item.share, 1)}</strong></div>`).join("")}</div></div><div class="ledger-bars">${expenses.map((item, index) => `<div><span>${escapeHtml(item.category.label)}</span><div><i style="width:${(item.amount / maxCategory) * 100}%;background:${palette[index % palette.length]}"></i></div><strong>${money(item.amount)}</strong></div>`).join("")}</div>` : `<p class="wu-empty">No expense data in this period.</p>`}</article>
+          <article class="wu-card"><div class="wu-card__header"><h3 class="wu-card__title t-heading">Category Share</h3></div>${expenses.length ? `<div class="ledger-donut-wrap"><div class="ledger-donut" style="background:conic-gradient(${donut})"><span>${money(personalExpenseTotal)}</span></div><div class="ledger-legend">${expenses.map((item, index) => `<div><i style="background:${palette[index % palette.length]}"></i><span>${escapeHtml(item.category.icon + " " + item.category.label)}</span><strong>${percent(item.share, 1)}</strong></div>`).join("")}</div></div><div class="ledger-bars">${expenses.map((item, index) => `<div><span>${escapeHtml(item.category.label)}</span><div><i style="width:${(item.amount / maxCategory) * 100}%;background:${palette[index % palette.length]}"></i></div><strong>${money(item.amount)}</strong></div>`).join("")}</div>` : `<p class="wu-empty">No expense data in this period.</p>`}</article>
           <article class="wu-card"><div class="wu-card__header"><h3 class="wu-card__title t-heading">Monthly Income vs Expense</h3></div><div class="monthly-chart">${monthly.map((item) => `<div class="month-column"><div class="month-bars"><i class="income" style="height:${Math.max(item.income / monthlyMax * 100, item.income ? 3 : 0)}%" title="Income ${money(item.income)}"></i><i class="expense" style="height:${Math.max(item.expense / monthlyMax * 100, item.expense ? 3 : 0)}%" title="Expense ${money(item.expense)}"></i></div><small>${new Date(2000, item.month).toLocaleString("en", { month: "short" }).slice(0, 1)}</small></div>`).join("")}</div><div class="chart-key"><span><i class="income"></i>Income</span><span><i class="expense"></i>Expense</span></div></article>
         </div>
         <details id="ledgerHistoryPanel" class="wu-details"${ledgerHistoryOpen ? " open" : ""}><summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-heading">History</strong><span class="t-caption t-faint">${filtered.length} records</span></span></summary><div class="wu-stack wu-stack--sm">${transactionRows || `<p class="wu-empty">No transactions match this view. Add your first record above.</p>`}</div></details>
@@ -287,6 +298,7 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
       toAccountId: (form?.elements.namedItem("toAccountId") as HTMLSelectElement | null)?.value ?? ledgerEntryDraft.toAccountId,
       date: (form?.elements.namedItem("date") as HTMLInputElement | null)?.value ?? "",
       note: (form?.elements.namedItem("note") as HTMLInputElement | null)?.value ?? "",
+      fundingSource: (form?.elements.namedItem("fundingSource") as HTMLInputElement | null)?.checked ? "sponsored" : "personal",
     };
     ledgerEditingId = "";
     ledgerEntryType = type;
@@ -320,9 +332,10 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
     }
     const id = String(data.get("id") || createId("ledger"));
     const note = String(data.get("note") ?? "").trim().slice(0, 500);
+    const fundingSource: LedgerFundingSource | undefined = type !== "transfer" && data.get("fundingSource") === "sponsored" ? "sponsored" : undefined;
     const transaction: LedgerTransaction = type === "transfer"
       ? { id, amount, type, fromAccountId, toAccountId, date: date.toISOString(), ...(note ? { note } : {}) }
-      : { id, amount, type, categoryId, accountId, date: date.toISOString(), ...(note ? { note } : {}) };
+      : { id, amount, type, categoryId, accountId, date: date.toISOString(), ...(note ? { note } : {}), ...(fundingSource ? { fundingSource } : {}) };
     const exists = state.ledgerTransactions.some((item) => item.id === id);
     const ledgerTransactions = exists ? state.ledgerTransactions.map((item) => item.id === id ? transaction : item) : [...state.ledgerTransactions, transaction];
     resetLedgerEntry();

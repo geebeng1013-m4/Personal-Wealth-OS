@@ -8,8 +8,11 @@
  *   ACTION  one concrete next step
  *
  * Source-of-truth discipline:
- *   - Recorded financial facts (net worth, cash, recorded monthly spending)
- *     come from getFinancialSnapshot().
+ *   - Recorded financial facts (net worth, cash) come from getFinancialSnapshot().
+ *     Recorded monthly spending against the personal spending limit comes from
+ *     the budget snapshot's actualSpending instead, which excludes sponsored/
+ *     earmarked transactions — money that passed through the ledger but was
+ *     never the user's own to budget.
  *   - Personal policies (emergency minimum, spending limit, DCA amount,
  *     allocation targets, drift tolerance, reserve ladder) come from
  *     state.financialRules.
@@ -38,7 +41,6 @@ import {
 } from "./rules";
 import { getPortfolioSnapshot, type PortfolioSnapshot } from "./portfolioSummary";
 import { getBudgetSnapshot, type BudgetSnapshot } from "./budgetSummary";
-import { getFinancialSnapshot, type FinancialSnapshot } from "./financialHealth";
 import { DEFAULT_DRIFT_TOLERANCE, getFinancialRule, goalContributionRuleId } from "./financialRules";
 import {
   detectMoneyLeakFindings,
@@ -77,12 +79,11 @@ function evidence(label: string, value: string): AdvisorEvidence {
 export interface AdvisorInputs {
   /**
    * The instant to build against. Only used for a snapshot this call has to
-   * build itself — a passed `snapshot` / `portfolio` / `budget` already carries
-   * its own instant. Defaults to now, so production callers omit it; a test
-   * pins it so "this month" does not drift with the clock.
+   * build itself — a passed `portfolio` / `budget` already carries its own
+   * instant. Defaults to now, so production callers omit it; a test pins it
+   * so "this month" does not drift with the clock.
    */
   now?: Date;
-  snapshot?: FinancialSnapshot;
   portfolio?: PortfolioSnapshot;
   budget?: BudgetSnapshot;
 }
@@ -92,8 +93,8 @@ export interface AdvisorInputs {
  * Pure: the same state always produces the same recommendations in the same order.
  */
 export function advisorRecommendations(state: WealthState, inputs: AdvisorInputs = {}): AdvisorRecommendation[] {
-  const snapshot = inputs.snapshot ?? getFinancialSnapshot(state, inputs.now);
   const portfolio = inputs.portfolio ?? getPortfolioSnapshot(state, inputs.now);
+  const budget = inputs.budget ?? getBudgetSnapshot(state, inputs.now);
   const recommendations: AdvisorRecommendation[] = [];
 
   // --- Emergency fund: structured emergency rule vs configured progress ---
@@ -212,7 +213,7 @@ export function advisorRecommendations(state: WealthState, inputs: AdvisorInputs
   // amount. This rule asks "does my plan add up?", not "what did I actually
   // spend?", so recorded surplus must not be substituted here.
   // Planned surplus comes from the canonical budget read model.
-  const surplus = (inputs.budget ?? getBudgetSnapshot(state, inputs.now)).plannedSurplus;
+  const surplus = budget.plannedSurplus;
   const surplusCoversDca = surplus >= dcaMonthly;
   recommendations.push({
     id: ADVISOR_RECOMMENDATION_IDS.cashflowDiscipline,
@@ -236,9 +237,13 @@ export function advisorRecommendations(state: WealthState, inputs: AdvisorInputs
 
   // --- Spending limit: structured policy vs RECORDED spending ---
   // The only recommendation that compares a policy against recorded reality.
+  // Uses the budget snapshot's personal-only actualSpending, not the
+  // financial snapshot's full cash-flow total, so sponsored/earmarked money
+  // (e.g. a parent's money for a specific errand) never counts against the
+  // user's own spending limit.
   const spendingRule = getFinancialRule(state, "monthly-spending-limit");
   if (spendingRule && spendingRule.enabled && spendingRule.limitAmount > 0) {
-    const recorded = snapshot.currentMonthExpenses;
+    const recorded = budget.actualSpending;
     const overLimit = recorded > spendingRule.limitAmount;
     recommendations.push({
       id: ADVISOR_RECOMMENDATION_IDS.spendingLimit,

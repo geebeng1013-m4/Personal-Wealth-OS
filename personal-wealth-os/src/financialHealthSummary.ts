@@ -18,6 +18,7 @@
  */
 import type { WealthState } from "./models";
 import { getFinancialSnapshot, type FinancialSnapshot } from "./financialHealth";
+import { getBudgetSnapshot, type BudgetSnapshot } from "./budgetSummary";
 import { getFinancialRule } from "./financialRules";
 import { emergencyRatio } from "./rules";
 
@@ -88,6 +89,7 @@ export interface HealthSignals {
 export interface HealthInputs {
   snapshot?: FinancialSnapshot;
   plan?: PlanExecution;
+  budget?: BudgetSnapshot;
 }
 
 const STATUS_LABELS: Record<HealthStatus, string> = {
@@ -158,6 +160,7 @@ export function getFinancialHealthSnapshot(
 ): FinancialHealthSnapshot {
   const snapshot: FinancialSnapshot = inputs.snapshot ?? getFinancialSnapshot(state, now);
   const plan = inputs.plan ?? getPlanExecution(state, now);
+  const budgetSnapshot = inputs.budget ?? getBudgetSnapshot(state, now);
 
   // 1. Emergency buffer
   const emergency = emergencyRatio(state);
@@ -185,9 +188,12 @@ export function getFinancialHealthSnapshot(
   // A fact — "12% over limit" — never the advice to fix it. Mirrors the
   // Advisor's monthly-spending-limit check so the two cards never disagree:
   // recorded spending above the limit is an action, anything else is fine.
+  // Uses the budget snapshot's personal-only actualSpending (same source the
+  // Advisor reads), not the financial snapshot's full cash-flow total, so
+  // sponsored/earmarked money never counts against the user's own limit.
   const spendingRule = getFinancialRule(state, "monthly-spending-limit");
   const spendingLimit = spendingRule?.enabled ? spendingRule.limitAmount : 0;
-  const recordedSpend = snapshot.currentMonthExpenses;
+  const recordedSpend = budgetSnapshot.actualSpending;
   const overBudget = spendingLimit > 0 && recordedSpend > spendingLimit;
   const budget: HealthFactor = {
     id: "budget",

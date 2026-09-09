@@ -131,7 +131,7 @@ export function getBudgetSnapshot(
     };
   });
 
-  const actualSpending = ledger.currentMonth.expenses;
+  const actualSpending = ledger.currentMonth.personalExpenses;
 
   return {
     monthKey: ledger.currentMonth.key,
@@ -141,9 +141,9 @@ export function getBudgetSnapshot(
     plannedSurplus,
     plannedDcaAmount,
     planCoversDca: plannedSurplus >= plannedDcaAmount,
-    actualIncome: ledger.currentMonth.income,
+    actualIncome: ledger.currentMonth.personalIncome,
     actualSpending,
-    actualSurplus: ledger.currentMonth.surplus,
+    actualSurplus: ledger.currentMonth.personalSurplus,
     spendingVariance: actualSpending - plannedSpending,
     isOverPlannedSpending: actualSpending > plannedSpending,
     buckets,

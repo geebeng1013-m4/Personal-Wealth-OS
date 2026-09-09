@@ -184,6 +184,25 @@ test("advisor: the spending recommendation reacts to ledger changes, not to plan
   assert.equal(byId(advisorRecommendations(highSpend), ADVISOR_RECOMMENDATION_IDS.spendingLimit).severity, "action");
 });
 
+test("advisor: a sponsored expense does not count toward the personal spending limit", () => {
+  const now = new Date();
+  const thisMonth = new Date(now.getFullYear(), now.getMonth(), 5, 12, 0, 0).toISOString();
+  const state = stateWith({
+    cashflow: { allowance: 2000, transport: 100, food: 100, otherFixed: 0, irregularIncome: 0 },
+    ledgerAccounts: [{ id: "acc-bank", name: "Bank", type: "bank", openingBalance: 5000 }],
+    ledgerTransactions: [
+      // Limit is 200 (transport 100 + food 100); this sponsored 900 would blow
+      // way past it if counted, but it was a parent's money for a specific
+      // errand, not the user's own spending.
+      { id: "sponsored-spend", amount: 900, type: "expense", categoryId: "expense-food", accountId: "acc-bank", date: thisMonth, fundingSource: "sponsored" },
+    ] as LedgerTransaction[],
+  });
+
+  const recommendation = byId(advisorRecommendations(state), ADVISOR_RECOMMENDATION_IDS.spendingLimit);
+  assert.equal(recommendation.severity, "positive", "a sponsored expense must not trip the personal spending limit");
+  assert.ok(recommendation.fact.includes(money(0)), "recorded spending should reflect zero personal spending");
+});
+
 test("advisor: the cashflow recommendation still evaluates PLANNING surplus, not recorded surplus", () => {
   const now = new Date();
   const thisMonth = new Date(now.getFullYear(), now.getMonth(), 5, 12, 0, 0).toISOString();

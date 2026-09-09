@@ -386,7 +386,8 @@ function validLedgerTransactions(value: unknown, categories: LedgerCategory[], a
       : undefined;
     if (type === "transfer" && fromAccountId === toAccountId) return [];
     const note = typeof item.note === "string" ? item.note.trim().slice(0, 500) : undefined;
-    return [{ id: item.id, amount: Math.round((amount + Number.EPSILON) * 100) / 100, type, ...(type !== "transfer" && typeof item.categoryId === "string" ? { categoryId: item.categoryId } : {}), ...(type !== "transfer" ? { accountId } : {}), ...(type === "transfer" ? { fromAccountId, toAccountId } : {}), date: new Date(timestamp).toISOString(), ...(note ? { note } : {}) }];
+    const fundingSource = type !== "transfer" && item.fundingSource === "sponsored" ? "sponsored" as const : undefined;
+    return [{ id: item.id, amount: Math.round((amount + Number.EPSILON) * 100) / 100, type, ...(type !== "transfer" && typeof item.categoryId === "string" ? { categoryId: item.categoryId } : {}), ...(type !== "transfer" ? { accountId } : {}), ...(type === "transfer" ? { fromAccountId, toAccountId } : {}), date: new Date(timestamp).toISOString(), ...(note ? { note } : {}), ...(fundingSource ? { fundingSource } : {}) }];
   });
 }
 

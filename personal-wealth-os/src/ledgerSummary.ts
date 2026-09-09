@@ -71,6 +71,12 @@ export interface LedgerMonthTotals {
   /** Transfer volume, tracked separately so it never inflates income or expenses. */
   transfers: number;
   transactionCount: number;
+  /** income excluding transactions flagged fundingSource: "sponsored". */
+  personalIncome: number;
+  /** expenses excluding transactions flagged fundingSource: "sponsored". */
+  personalExpenses: number;
+  /** personalIncome - personalExpenses. */
+  personalSurplus: number;
 }
 
 export interface LedgerSnapshot {
@@ -98,6 +104,7 @@ export interface LedgerSnapshot {
 export function ledgerMonthTotals(transactions: LedgerTransaction[], key: string): LedgerMonthTotals {
   const inMonth = transactionsInRange(transactions, monthRange(key));
   const totals = ledgerTotals(inMonth);
+  const personal = ledgerTotals(inMonth.filter((transaction) => transaction.fundingSource !== "sponsored"));
   return {
     key,
     income: totals.income,
@@ -105,6 +112,9 @@ export function ledgerMonthTotals(transactions: LedgerTransaction[], key: string
     surplus: totals.balance,
     transfers: totals.transfer,
     transactionCount: inMonth.length,
+    personalIncome: personal.income,
+    personalExpenses: personal.expense,
+    personalSurplus: personal.balance,
   };
 }
 

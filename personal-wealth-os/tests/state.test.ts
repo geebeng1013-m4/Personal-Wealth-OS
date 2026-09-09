@@ -42,6 +42,25 @@ test("migrateState: two transactions referencing the same account by name (diffe
   assert.equal(recovered.length, 1, "the recovered account should only be created once, not duplicated per transaction");
 });
 
+test("migrateState: fundingSource round-trips for income/expense, defaults to absent for legacy data, and is stripped from transfers", () => {
+  const rawTransactions = [
+    { id: "legacy", amount: 12, type: "expense", categoryId: "expense-food", date: "2026-08-01" }, // no fundingSource key at all
+    { id: "sponsored", amount: 18, type: "expense", categoryId: "expense-food", date: "2026-08-02", fundingSource: "sponsored" },
+    { id: "garbage", amount: 5, type: "expense", categoryId: "expense-food", date: "2026-08-03", fundingSource: "yeet" },
+    { id: "transfer-tagged", amount: 50, type: "transfer", date: "2026-08-04", fromAccountId: "account-bank", toAccountId: "account-wallet", fundingSource: "sponsored" },
+  ];
+  const result = migrateState({
+    deviceId: "device-1",
+    ledgerTransactions: rawTransactions as unknown as LedgerTransaction[],
+  });
+  assert.equal(result.ledgerTransactions.length, 4);
+  const byId = (id: string) => result.ledgerTransactions.find((transaction) => transaction.id === id);
+  assert.equal(byId("legacy")?.fundingSource, undefined, "legacy transactions default to personal (absent)");
+  assert.equal(byId("sponsored")?.fundingSource, "sponsored");
+  assert.equal(byId("garbage")?.fundingSource, undefined, "an invalid value normalizes to absent rather than rejecting the record");
+  assert.equal(byId("transfer-tagged")?.fundingSource, undefined, "fundingSource is meaningless on a transfer and is stripped");
+});
+
 test("migrateState: a transfer with the same source and destination account is dropped", () => {
   const rawTransactions = [
     { id: "t3", amount: 50, type: "transfer", date: "2026-08-03", fromAccountId: "account-bank", toAccountId: "account-bank" },
