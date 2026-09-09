@@ -156,7 +156,7 @@ export function moneyLeaksTemplate(state: WealthState): string {
       ${pageHeader({
         eyebrow: "Cash Flow",
         title: "Money Leaks",
-        sub: "Deterministic checks across recurring payments, transactions, budgets, goals, and debt.",
+        sub: "Where small recurring costs are quietly draining your cash flow.",
         actions: `<button class="wu-btn wu-btn--secondary wu-btn--sm dashboard-nav" data-page="ledger" type="button">Open transactions</button><button class="wu-btn wu-btn--primary wu-btn--sm dashboard-nav" data-page="buckets" type="button">Review budget</button>`,
       })}
       <div class="wu-stack wu-stack--lg">

@@ -153,7 +153,7 @@ export function ledgerTemplate(state: WealthState): string {
     ${pageHeader({
       eyebrow: "Everyday Money",
       title: "Ledger",
-      sub: "Capture income, expenses, and account transfers, then understand where your money goes.",
+      sub: "Record income and spending, see where the money goes.",
     })}
     ${leakInsightStrip(state, ["duplicate", "fee", "subscription"], "Transaction check")}
     <div class="wu-ledger-layout">

@@ -165,7 +165,7 @@ export function marketTemplate(state: WealthState): string {
     ${pageHeader({
       eyebrow: "Investment Intelligence",
       title: "Market",
-      sub: "Research with a long-term lens — ownership, risk and valuation, not daily noise.",
+      sub: "Check your ETFs' price, holdings and risk before changing anything.",
     })}
     <div class="wu-stack wu-stack--xl">
       <div class="wu-card wu-card--pad-sm wu-row wu-row--between">

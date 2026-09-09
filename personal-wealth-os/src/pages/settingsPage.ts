@@ -115,8 +115,8 @@ export function settingsTemplate(state: WealthState): string {
     <div class="wu">
       ${pageHeader({
         eyebrow: "Configuration",
-        title: "Profile and Parameters",
-        sub: "Adjust your investor profile, cash flow, and investment parameters.",
+        title: "Settings",
+        sub: "Your profile, cash flow and investment settings.",
       })}
       <div class="wu-grid wu-grid--wide">
         ${profile}

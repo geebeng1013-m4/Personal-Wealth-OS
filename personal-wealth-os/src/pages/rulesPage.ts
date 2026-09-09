@@ -89,7 +89,7 @@ export function rulesTemplate(state: WealthState): string {
     ${pageHeader({
       eyebrow: "Decision Framework",
       title: "Rules",
-      sub: "The rules you have set for yourself, and how the rest of WealthUp works.",
+      sub: "The plan you've set for yourself.",
     })}
     ${leakInsightStrip(state, ["debt", "budget", "goal"], "Rule check")}
     <div class="wu-stack wu-stack--lg">

@@ -90,7 +90,7 @@ export function advisorPageTemplate(state: WealthState): string {
     ${pageHeader({
       eyebrow: "Guidance & Scenarios",
       title: "Advisor",
-      sub: "Rules-based guidance in canonical order, plus the dip-buy scenario check.",
+      sub: "What to do next — from the rules you set, not predictions.",
     })}
     ${disclaimerStrip()}
     ${leakInsightStrip(state, ["debt", "goal", "budget", "fee", "subscription", "duplicate"], "Priority guidance")}

@@ -82,8 +82,8 @@ export function goalsTemplate(state: WealthState): string {
     <div class="wu">
       ${pageHeader({
         eyebrow: "Goal System",
-        title: "Goals and Wishlist",
-        sub: "Goals do not restrict your life; they give every ringgit a clear direction.",
+        title: "Goals",
+        sub: "What you're saving for, and how close you are.",
       })}
       ${leakInsightStrip(state, ["goal"], "Goal pace")}
       ${goalsEmptyState}
