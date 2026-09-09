@@ -13,7 +13,7 @@
 ```
 浏览器 (Vite 构建的 TS/DOM SPA, PWA)
   │
-  ├── 本地状态：localStorage（按 uid 隔离）+ 版本迁移 migrateState (v20)
+  ├── 本地状态：localStorage（按 uid 隔离）+ 版本迁移 migrateState (v19)
   │
   ├── 认证 & 云同步：Firebase Auth (Google 登录) + Firestore
   │        文档路径 users/{uid}/wealth/state   ——  一个用户 = 一份 JSON 文档
@@ -103,7 +103,7 @@ CI (`.github/workflows/ci.yml`)：push 到 `main` 或任何改动 `personal-weal
 | --- | --- |
 | `main.ts` | 应用启动、认证流程、主题、路由（hash）、顶层 `setState` 协调、PWA 安装提示、demo 模式分支 |
 | `models.ts` | **领域模型与所有共享类型**。`WealthState` 是持久化契约。新增持久字段必须同步：默认值 + 迁移 + 导入导出 + 云端兼容 |
-| `state.ts` | `defaultState` / `emptyState` / **`migrateState`（v20）** / localStorage 持久化（按 uid）/ 快照（20 个 + 2MB 字节预算）/ 云同步决策（`cloudCopyWins` 最后写入胜）/ 导入导出 |
+| `state.ts` | `defaultState` / `emptyState` / **`migrateState`（v19）** / localStorage 持久化（按 uid）/ 快照（20 个 + 2MB 字节预算）/ 云同步决策（`cloudCopyWins` 最后写入胜）/ 导入导出 |
 | `firebase.ts` | Firebase 初始化、Google 登录（popup 失败回退 redirect）、Firestore 读写（`users/{uid}/wealth/state`）、`persistentLocalCache` 离线队列 |
 | `rules.ts` | 财务计算与建议规则，**纯函数**，不碰 DOM/localStorage/Firebase。`money` / `percent` / `formatPrice` 等格式化只在展示边界用 |
 | `financialRules.ts` | 结构化「个人政策规则」（应急金下限、月支出上限、DCA 金额、目标配置、漂移容忍、机会金梯队、目标供款）——规划意图，**不是**记录余额 |
@@ -151,7 +151,7 @@ VITE_DEMO_MODE=          # 只在 build:demo 时 true，生产绝不能设
 
 ## 7. 数据模型与持久化契约（改动前必看）
 
-- `WealthState.version` **当前 = 20**（`state.ts` 的 `CURRENT_VERSION`）。
+- `WealthState.version` **当前 = 19**（`state.ts` 的 `CURRENT_VERSION`）。
 - **新增 / 删除 / 重命名字段或改语义 → 必须提升 version 并在 `migrateState` 写向后兼容迁移。**
 - 迁移必须保留旧数据：缺字段用明确默认值；**单个无效字段不得导致整份状态重置**。
 - 状态更新走不可变语义：构造新对象/数组交给顶层 `setState`，不在渲染中原地改。
@@ -190,10 +190,11 @@ VITE_DEMO_MODE=          # 只在 build:demo 时 true，生产绝不能设
 
 ### P1 —— 稳健性 / 数据安全
 - [ ] **服务端时间戳**：`cloudCopyWins` 现在信任设备 `Date.now()`，时钟歪的设备会赢不该赢的冲突。
-      引入 Firestore `serverTimestamp()` 作为权威 `updatedAt`（这是 schema 变更 → version 21 + 迁移）。
+      引入 Firestore `serverTimestamp()` 作为权威 `updatedAt`（这是 schema 变更 → version 20 + 迁移）。
 - [ ] **多标签页 / 实时订阅**：`subscribeToFirestore` 已实现但 `main.ts` 里 `cloudSyncUnsub` 目前没接
       `onSnapshot`。决定是否要「另一台设备改了，当前页自动刷新」，如要则接上并处理与本地未保存编辑的合并。
-- [ ] **迁移测试覆盖**：`migrateState` 已经很长（v3 → v20），补一个「每个历史版本的样本状态都能迁到 v20 且不丢数据」的表格驱动测试。
+- [x] **迁移测试覆盖**：已有 —— `tests/architecture.test.ts` 的 "arch: every earlier persisted state
+      migrates to the current version"（表格驱动，覆盖 v3 → v19）。
 - [ ] **配额 / 滥用**：Firestore 免费额度、行情代理被刷。给 `/api/*` 加简单速率限制或缓存命中率监控。
 
 ### P2 —— 行情数据韧性
