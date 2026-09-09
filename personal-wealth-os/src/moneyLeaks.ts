@@ -230,6 +230,7 @@ function detectBudgetDrift(state: WealthState): MoneyLeakObservation[] {
   if (months.length === 0) return [];
   const categoryTotals = new Map<string, number>();
   months.forEach(([, transactions]) => transactions.forEach((transaction) => {
+    if (transaction.fundingSource === "sponsored") return;
     const label = categoryLabel(state, transaction);
     categoryTotals.set(label, (categoryTotals.get(label) ?? 0) + transaction.amount);
   }));

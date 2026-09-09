@@ -96,6 +96,28 @@ test("ledgerSnapshot: transfers are tracked separately and never enter income or
   assert.equal(snapshot.currentMonth.expenses, 340, "transfer must not inflate expenses");
 });
 
+test("ledgerSnapshot: a sponsored transaction is recorded in full totals but excluded from personal totals", () => {
+  const state = stateWith({
+    ledgerAccounts: accounts,
+    ledgerTransactions: [
+      { id: "sponsored-in", amount: 20, type: "income", categoryId: "income-salary", accountId: "acc-bank", date: iso(2026, 7, 3), fundingSource: "sponsored" },
+      { id: "sponsored-out", amount: 18, type: "expense", categoryId: "expense-food", accountId: "acc-bank", date: iso(2026, 7, 4), fundingSource: "sponsored" },
+      { id: "own-expense", amount: 50, type: "expense", categoryId: "expense-food", accountId: "acc-bank", date: iso(2026, 7, 5) },
+    ] as LedgerTransaction[],
+  });
+  const snapshot = getLedgerSnapshot(state, NOW);
+  assert.equal(snapshot.currentMonth.income, 20, "full cash-flow income includes the sponsored gift");
+  assert.equal(snapshot.currentMonth.expenses, 68, "full cash-flow expenses include the sponsored spend");
+  assert.equal(snapshot.currentMonth.personalIncome, 0, "sponsored income is excluded from personal totals");
+  assert.equal(snapshot.currentMonth.personalExpenses, 50, "sponsored expense is excluded, only the own expense remains");
+  assert.equal(snapshot.currentMonth.personalSurplus, -50);
+  assert.deepEqual(
+    snapshot.accountBalances,
+    accountBalances(state.ledgerTransactions, state.ledgerAccounts),
+    "fundingSource must not affect account balances",
+  );
+});
+
 test("ledgerSnapshot: previous month is the calendar month before `now`", () => {
   const snapshot = getLedgerSnapshot(busyState(), NOW);
   assert.equal(snapshot.previousMonth.key, "2026-07");

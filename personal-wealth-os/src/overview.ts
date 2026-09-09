@@ -195,14 +195,14 @@ export function buildOverviewModel(
 
   // One Advisor pipeline feeds both the priority action and the health signal.
   // It consumes the canonical facts above rather than rebuilding its own.
-  const advisor = getAdvisorSnapshot(state, { snapshot, portfolio, budget });
+  const advisor = getAdvisorSnapshot(state, { portfolio, budget });
   const recommendations = advisor.recommendations;
   const planStatus = buildPlanStatus(plan);
   // Health is canonical. The Advisor signal is injected so the health model
   // never has to import the Advisor.
   const wealthHealth = getFinancialHealthSnapshot(state, now, {
     hasUrgentAdvice: recommendations.some((recommendation) => recommendation.severity === "action"),
-  }, { snapshot, plan });
+  }, { snapshot, plan, budget });
   const priorityAction = advisor.priority ? toPriorityAction(advisor.priority) : null;
 
   // Expense trend vs the previous calendar month. Both months come from the

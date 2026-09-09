@@ -286,6 +286,19 @@ test("split: budget-drift advice still names the drifting category", () => {
   assert.equal(budget!.actionLabel, "Adjust money plan");
 });
 
+test("split: a sponsored expense does not trigger budget-drift, even though it would if counted", () => {
+  const state = stateWith({
+    cashflow: { allowance: 2000, transport: 50, food: 100, otherFixed: 0, irregularIncome: 0 },
+    ledgerAccounts: [{ id: "acc-bank", name: "Bank", type: "bank", openingBalance: 9000 }],
+    ledgerTransactions: [
+      { id: "f1", amount: 600, type: "expense", categoryId: "expense-food", accountId: "acc-bank", date: "2026-07-05T00:00:00.000Z", fundingSource: "sponsored" },
+    ] as LedgerTransaction[],
+  });
+  const annotated = detectMoneyLeaks(state);
+  const budget = annotated.leaks.find((leak) => leak.category === "budget");
+  assert.equal(budget, undefined, "a sponsored expense must not count toward the personal budget-drift check");
+});
+
 test("split: detection and recommendations are deterministic", () => {
   const state = multiLeakState();
   assert.deepEqual(detectMoneyLeakFindings(state), detectMoneyLeakFindings(state));

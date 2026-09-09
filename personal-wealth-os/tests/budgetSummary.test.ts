@@ -50,7 +50,7 @@ test("budget/A: planned income and allowance read the existing cashflow state", 
 
 // --- B & C. actual figures come from the ledger snapshot --------------------
 
-test("budget/B: actualSpending equals getLedgerSnapshot().currentMonth.expenses", () => {
+test("budget/B: actualSpending equals getLedgerSnapshot().currentMonth.personalExpenses", () => {
   const state = plannedState({
     ledgerAccounts: accounts,
     ledgerTransactions: [
@@ -61,8 +61,24 @@ test("budget/B: actualSpending equals getLedgerSnapshot().currentMonth.expenses"
   });
   const budget = getBudgetSnapshot(state, NOW);
   const ledger = getLedgerSnapshot(state, NOW);
-  assert.equal(budget.actualSpending, ledger.currentMonth.expenses);
+  assert.equal(budget.actualSpending, ledger.currentMonth.personalExpenses);
   assert.equal(budget.actualSpending, 340, "last month's expense is excluded");
+});
+
+test("budget/B2: a sponsored expense is recorded in the ledger but excluded from actualSpending", () => {
+  const state = plannedState({
+    ledgerAccounts: accounts,
+    ledgerTransactions: [
+      { id: "sponsored-in", amount: 20, type: "income", categoryId: "income-salary", accountId: "acc-bank", date: iso(2026, 7, 3), fundingSource: "sponsored" },
+      { id: "sponsored-out", amount: 18, type: "expense", categoryId: "expense-food", accountId: "acc-bank", date: iso(2026, 7, 4), fundingSource: "sponsored" },
+      { id: "own-expense", amount: 250, type: "expense", categoryId: "expense-food", accountId: "acc-bank", date: iso(2026, 7, 6) },
+    ] as LedgerTransaction[],
+  });
+  const budget = getBudgetSnapshot(state, NOW);
+  const ledger = getLedgerSnapshot(state, NOW);
+  assert.equal(ledger.currentMonth.expenses, 268, "the sponsored spend is still recorded in cash-flow totals");
+  assert.equal(budget.actualSpending, 250, "the sponsored spend does not count toward the personal budget");
+  assert.equal(budget.isOverPlannedSpending, false, "250 stays under the planned 800");
 });
 
 test("budget/C: actual income and surplus match the canonical ledger snapshot", () => {
@@ -76,8 +92,8 @@ test("budget/C: actual income and surplus match the canonical ledger snapshot", 
   });
   const budget = getBudgetSnapshot(state, NOW);
   const ledger = getLedgerSnapshot(state, NOW);
-  assert.equal(budget.actualIncome, ledger.currentMonth.income);
-  assert.equal(budget.actualSurplus, ledger.currentMonth.surplus);
+  assert.equal(budget.actualIncome, ledger.currentMonth.personalIncome);
+  assert.equal(budget.actualSurplus, ledger.currentMonth.personalSurplus);
   assert.equal(budget.actualSurplus, 2750, "transfers excluded from both sides");
   assert.equal(budget.monthKey, ledger.currentMonth.key);
 });
@@ -314,9 +330,9 @@ test("budget/J: ledger facts are delegated, not re-derived", () => {
   });
   const budget = getBudgetSnapshot(state, NOW);
   const ledger = getLedgerSnapshot(state, NOW);
-  assert.equal(budget.actualIncome, ledger.currentMonth.income);
-  assert.equal(budget.actualSpending, ledger.currentMonth.expenses);
-  assert.equal(budget.actualSurplus, ledger.currentMonth.surplus);
+  assert.equal(budget.actualIncome, ledger.currentMonth.personalIncome);
+  assert.equal(budget.actualSpending, ledger.currentMonth.personalExpenses);
+  assert.equal(budget.actualSurplus, ledger.currentMonth.personalSurplus);
   assert.equal(budget.actualSpending, 120, "malformed dates are dropped by the shared filter");
 });
 

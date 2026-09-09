@@ -180,6 +180,8 @@ export interface LedgerCategory {
   type: LedgerTransactionType;
 }
 
+export type LedgerFundingSource = "personal" | "sponsored";
+
 export interface LedgerTransaction {
   id: string;
   amount: number;
@@ -190,6 +192,13 @@ export interface LedgerTransaction {
   toAccountId?: string;
   date: string;
   note?: string;
+  /**
+   * Only meaningful on "income"/"expense". Absent (or "personal") means the
+   * money counts toward the user's own budget. "sponsored" means the money is
+   * earmarked/pass-through (e.g. a parent's RM20 for dinner) — still recorded
+   * so account balances stay accurate, but excluded from budget actuals.
+   */
+  fundingSource?: LedgerFundingSource;
 }
 
 export type RuleCardId =
