@@ -124,6 +124,7 @@ const appPages = new Set([
   "review",
   "settings",
   "money-leaks",
+  "more",
 ]);
 
 function pageFromLocation(): string {

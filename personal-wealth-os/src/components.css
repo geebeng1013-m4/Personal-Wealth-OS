@@ -250,7 +250,21 @@
       display: none;
     }
     .wu-page-header {
-      margin-bottom: var(--space-4);
+      margin-bottom: var(--space-3);
+    }
+
+    /* Cards on a phone already read as separate blocks — a border, a rounded
+       corner, their own inset. Desktop-sized gutters between them just push the
+       second card off the first screen. Tighten the gaps that stack cards; card
+       padding (--space-5) was already scaled down for the phone. */
+    .wu-grid {
+      gap: var(--space-3);
+    }
+    .wu-stack--lg {
+      --wu-stack-gap: var(--space-3);
+    }
+    .wu-stack--xl {
+      --wu-stack-gap: var(--space-4);
     }
 
     /* Any run of chips wraps instead of overflowing. */
@@ -311,6 +325,108 @@
     gap: var(--space-2);
     flex-wrap: wrap;
     margin-top: var(--space-1);
+  }
+
+  /* ---- "More" page (phone nav landing) --------------------------------- */
+  .more-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+  .more-group__title {
+    color: var(--text-faint);
+    margin-bottom: var(--space-2);
+    padding-left: var(--space-1);
+  }
+  .more-group__rows {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .more-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    padding: var(--space-4);
+    text-align: left;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border-subtle);
+    cursor: pointer;
+  }
+  .more-row:last-child {
+    border-bottom: none;
+  }
+  .more-row:hover,
+  .more-row:focus-visible {
+    background: var(--surface-hover);
+    outline: none;
+  }
+  .more-row__icon {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    color: var(--text-muted);
+  }
+  .more-row__icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .more-row__text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .more-row__label {
+    color: var(--text);
+    font-weight: var(--weight-medium);
+  }
+  .more-row__sub {
+    color: var(--text-faint);
+    font-size: var(--text-caption);
+  }
+  .more-row__chev {
+    flex: none;
+    color: var(--text-faint);
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+  .more-account {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  .more-account__avatar {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    background: var(--surface-hover);
+  }
+  .more-account__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+  }
+  .more-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
   }
 
   /* ---- disclaimer strip -------------------------------------------------- */
@@ -1044,6 +1160,11 @@
   .market-tab-content.active {
     display: block;
   }
+  /* Height lives here, not on the element, so the phone can shrink it — the
+     TradingView widget is autosize and fills whatever this box gives it. */
+  #tradingview_container {
+    height: 520px;
+  }
   /* Placed after the base rules above so it wins the source-order tie: on a
      phone one horizontally-scrolling line reads cleaner than a ragged
      two-line wrap. */
@@ -1059,6 +1180,11 @@
     .market-intervals::-webkit-scrollbar,
     .etf-holdings-tabs::-webkit-scrollbar {
       display: none;
+    }
+    /* 520px is two-thirds of a phone screen for a chart you glance at. The
+       page's own interval buttons sit right above it. */
+    #tradingview_container {
+      height: 340px;
     }
   }
   .market-symbols {

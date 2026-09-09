@@ -199,7 +199,7 @@ export function marketTemplate(state: WealthState): string {
             <button class="interval-btn" data-interval="60M" type="button">5Y</button>
           </div></div>
           <article class="wu-card wu-card--pad-sm market-chart-card">
-            <div id="tradingview_container" style="width:100%;height:520px;"></div>
+            <div id="tradingview_container" style="width:100%;"></div>
           </article>
         </div>
       </div>
@@ -485,6 +485,10 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     container.innerHTML = "";
 
     const isDark = getTheme() === "dark";
+    // On a phone the page's own interval buttons and quote header already cover
+    // what the widget's top toolbar and date-range strip do — drop them so the
+    // short chart is chart, not chrome.
+    const isPhone = window.matchMedia("(max-width: 720px)").matches;
     const rangeMap: Record<string, string> = { "D": "1D", "W": "1W", "M": "1M", "5": "YTD", "12M": "12M", "60M": "60M" };
     const intervalMap: Record<string, string> = { "D": "D", "W": "W", "M": "M", "5": "D", "12M": "W", "60M": "M" };
 
@@ -498,9 +502,10 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       style: "1",
       locale: "en",
       hide_volume: true,
-      allow_symbol_change: true,
+      allow_symbol_change: !isPhone,
+      hide_top_toolbar: isPhone,
       hide_side_toolbar: true,
-      withdateranges: true,
+      withdateranges: !isPhone,
       details: false,
       studies: [],
       container_id: "tradingview_container",

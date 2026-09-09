@@ -394,8 +394,13 @@
 }
 
 /* ---- mobile hamburger + drawer ---- */
-.hamburger {
+/* Both the hamburger and the bottom tab bar are off until the phone media
+   query below turns them on. */
+.hamburger,
+.tabbar {
   display: none;
+}
+.hamburger {
   position: fixed;
   top: 12px;
   left: 12px;
@@ -433,15 +438,8 @@
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
   }
-  .hamburger {
-    display: flex;
-    top: calc(16px + env(safe-area-inset-top));
-    left: calc(20px + env(safe-area-inset-left));
-    width: 40px;
-    height: 40px;
-    align-items: center;
-    justify-content: center;
-  }
+  /* The phone has the bottom tab bar (with its "More" button) as its only
+     navigation chrome — the top-left hamburger stays hidden. */
   .sidebar-overlay {
     display: block;
   }
@@ -472,15 +470,19 @@
   }
   /* A uniform "safe zone" inset on all four edges — content never touches the
      screen edge — plus the OS-reserved insets (notch, home indicator, curved
-     corners) on top of that. The top is larger to clear the floating
-     hamburger. */
+     corners) on top of that. Nothing floats over the top now, so the top inset
+     is the same as the sides. */
   .main {
     min-height: 100dvh;
     padding:
-      calc(68px + env(safe-area-inset-top))
+      calc(22px + env(safe-area-inset-top))
       calc(20px + env(safe-area-inset-right))
       calc(20px + env(safe-area-inset-bottom))
       calc(20px + env(safe-area-inset-left));
+  }
+  /* Room for the fixed bottom tab bar so the last card is never under it. */
+  .main {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
   }
   .side-rays {
     height: 360px;
@@ -495,6 +497,50 @@
   .topbar h2 span {
     display: block;
     font-size: 13px;
+  }
+  /* ---- bottom tab bar (phone only) ---- */
+  .tabbar {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 120;
+    background: color-mix(in srgb, var(--surface-bg) 94%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tabbar__btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 9px 4px 7px;
+    min-height: 52px;
+    color: var(--text-faint);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+  .tabbar__btn.is-active {
+    color: var(--accent);
+  }
+  .tabbar__btn:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--focus);
+  }
+  .tabbar__icon {
+    display: block;
+    width: 22px;
+    height: 22px;
+  }
+  .tabbar__icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
   }
 }
 
