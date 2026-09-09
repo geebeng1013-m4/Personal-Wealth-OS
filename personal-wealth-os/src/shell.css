@@ -435,8 +435,8 @@
   }
   .hamburger {
     display: flex;
-    top: calc(12px + env(safe-area-inset-top));
-    left: calc(14px + env(safe-area-inset-left));
+    top: calc(16px + env(safe-area-inset-top));
+    left: calc(20px + env(safe-area-inset-left));
     width: 40px;
     height: 40px;
     align-items: center;
@@ -470,9 +470,17 @@
   .profile-card {
     display: none;
   }
+  /* A uniform "safe zone" inset on all four edges — content never touches the
+     screen edge — plus the OS-reserved insets (notch, home indicator, curved
+     corners) on top of that. The top is larger to clear the floating
+     hamburger. */
   .main {
     min-height: 100dvh;
-    padding: calc(62px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
+    padding:
+      calc(68px + env(safe-area-inset-top))
+      calc(20px + env(safe-area-inset-right))
+      calc(20px + env(safe-area-inset-bottom))
+      calc(20px + env(safe-area-inset-left));
   }
   .side-rays {
     height: 360px;
