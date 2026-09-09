@@ -59,8 +59,8 @@ export function bucketsTemplate(state: WealthState): string {
     <div class="wu">
       ${pageHeader({
         eyebrow: "Capital Routing",
-        title: "Monthly Fund Allocation Matrix",
-        sub: "Give every ringgit a clear purpose to reduce emotional spending and impulsive investing.",
+        title: "Budget",
+        sub: "Give every ringgit a job before the month starts.",
       })}
       ${leakInsightStrip(state, ["budget"], "Budget signal")}
       <div class="wu-grid wu-grid--3">

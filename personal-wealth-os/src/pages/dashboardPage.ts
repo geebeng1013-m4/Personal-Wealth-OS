@@ -79,7 +79,7 @@ export function dashboardTemplate(state: WealthState): string {
 
     ${pageHeader({
       eyebrow: `Good ${getGreeting()}, ${overview.greetingName}`,
-      title: "Wealth Overview",
+      title: "Overview",
       sub: overview.headline,
     })}
 

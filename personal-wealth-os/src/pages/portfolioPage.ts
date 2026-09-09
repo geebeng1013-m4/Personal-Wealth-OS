@@ -235,7 +235,7 @@ export function portfolioTemplate(state: WealthState): string {
     ${pageHeader({
       eyebrow: "Long-term Investment Portfolio",
       title: "Portfolio",
-      sub: "Market value, cost basis and drift — every figure from the canonical snapshot.",
+      sub: "Your holdings, what they're worth, and how far off target.",
     })}
     <div class="wu-stack wu-stack--lg">
       <section class="wu-card" id="pfHero">${portfolioHeroBody(portfolio)}</section>
