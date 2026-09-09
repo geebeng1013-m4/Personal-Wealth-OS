@@ -316,7 +316,9 @@
   position: relative;
   isolation: isolate;
   min-width: 0;
-  padding: 44px clamp(28px, 4vw, 68px) 80px;
+  /* A touch of air above the page header so the title is not glued to the top
+     edge of the content column. The phone overrides this whole padding. */
+  padding: 64px clamp(28px, 4vw, 68px) 80px;
   background: var(--surface-bg);
   overflow: hidden;
 }
