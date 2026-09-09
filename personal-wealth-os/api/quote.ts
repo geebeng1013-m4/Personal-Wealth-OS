@@ -68,6 +68,41 @@ function toText(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+/**
+ * Turn a parsed Yahoo chart response into a QuotePayload.
+ *
+ * Pure and total: any shape Yahoo did not promise — a renamed key, a missing
+ * nesting level, a string where an object was expected, an HTML error page
+ * parsed to a bare string — resolves to `{ symbol, error }`, never to a
+ * fabricated price. This is the seam the upstream-resilience tests exercise;
+ * fetchOne only does the network and hands the result here.
+ */
+export function parseYahooQuote(json: unknown, symbol: string): QuotePayload {
+  const meta = (json as { chart?: { result?: Array<{ meta?: unknown }> } } | null | undefined)
+    ?.chart?.result?.[0]?.meta;
+  if (!meta || typeof meta !== "object") return { symbol, error: "no data" };
+  const m = meta as Record<string, unknown>;
+
+  const price = toPrice(m.regularMarketPrice);
+  if (price === undefined) return { symbol, error: "no price" };
+
+  const quotedAt = typeof m.regularMarketTime === "number" && Number.isFinite(m.regularMarketTime)
+    ? m.regularMarketTime * 1000
+    : Date.now();
+
+  const previousClose = toPrice(m.chartPreviousClose ?? m.previousClose);
+  return {
+    // Strip any exchange prefix ("AMEX:QQQM" -> "QQQM") so it matches the ticker on file.
+    symbol: (toText(m.symbol) ?? symbol).replace(/^[A-Za-z]+:/, "").toUpperCase(),
+    price,
+    currency: toText(m.currency) ?? "USD",
+    marketState: toText(m.marketState) ?? "UNKNOWN",
+    shortName: toText(m.shortName) ?? symbol,
+    ...(previousClose !== undefined ? { previousClose } : {}),
+    quotedAt,
+  };
+}
+
 async function fetchOne(symbol: string): Promise<QuotePayload> {
   const url = `${UPSTREAM}/${encodeURIComponent(symbol)}?range=1d&interval=5m`;
   try {
@@ -81,31 +116,14 @@ async function fetchOne(symbol: string): Promise<QuotePayload> {
     });
     if (!response.ok) return { symbol, error: `upstream ${response.status}` };
 
-    const json = (await response.json()) as {
-      chart?: { result?: Array<{ meta?: Record<string, unknown> }> };
-    };
-    const meta = json?.chart?.result?.[0]?.meta;
-    if (!meta) return { symbol, error: "no data" };
-
-    const price = toPrice(meta.regularMarketPrice);
-    if (price === undefined) return { symbol, error: "no price" };
-
-    const quotedAt = typeof meta.regularMarketTime === "number" && Number.isFinite(meta.regularMarketTime)
-      ? meta.regularMarketTime * 1000
-      : Date.now();
-
-    return {
-      // Strip any exchange prefix ("AMEX:QQQM" -> "QQQM") so it matches the ticker on file.
-      symbol: (toText(meta.symbol) ?? symbol).replace(/^[A-Za-z]+:/, "").toUpperCase(),
-      price,
-      currency: toText(meta.currency) ?? "USD",
-      marketState: toText(meta.marketState) ?? "UNKNOWN",
-      shortName: toText(meta.shortName) ?? symbol,
-      ...(toPrice(meta.chartPreviousClose ?? meta.previousClose) !== undefined
-        ? { previousClose: toPrice(meta.chartPreviousClose ?? meta.previousClose) }
-        : {}),
-      quotedAt,
-    };
+    let json: unknown;
+    try {
+      json = await response.json();
+    } catch {
+      // A 200 that is not JSON — an HTML block page, an empty body.
+      return { symbol, error: "bad json" };
+    }
+    return parseYahooQuote(json, symbol);
   } catch (error) {
     const reason = error instanceof Error && error.name === "TimeoutError" ? "timeout" : "network error";
     return { symbol, error: reason };

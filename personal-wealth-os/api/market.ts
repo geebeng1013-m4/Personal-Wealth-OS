@@ -90,7 +90,14 @@ interface HoldingsPayload {
   sectors: Array<{ sector: string; weight: number }>;
 }
 
-function readTopHoldings(raw: unknown): HoldingsPayload | null {
+/**
+ * Parse Yahoo quoteSummary topHoldings into a HoldingsPayload, or null.
+ *
+ * Pure and total: a missing module, a renamed key, entries without a numeric
+ * `.raw`, or a completely empty result all return null — never a payload of
+ * zero-weight holdings. Exercised directly by the upstream-resilience tests.
+ */
+export function readTopHoldings(raw: unknown): HoldingsPayload | null {
   const result = (raw as { quoteSummary?: { result?: unknown[] } })?.quoteSummary?.result;
   const top = Array.isArray(result)
     ? (result[0] as { topHoldings?: Record<string, unknown> } | undefined)?.topHoldings
@@ -178,18 +185,56 @@ async function fetchTradingViewFundamentals(symbol: string): Promise<Record<stri
   });
   if (!response.ok) return null;
 
-  const payload = (await response.json()) as { data?: Array<{ s?: string; d?: unknown[] }> };
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return null;
+  }
+  return parseTradingViewFundamentals(payload, symbol);
+}
+
+/**
+ * Pull the requested columns for `symbol` out of a TradingView scanner payload,
+ * or null.
+ *
+ * Pure and total: a missing `data` array, no row for the symbol, a row without
+ * a `d` array, or every value being null all return null — never `{}` and
+ * never a column mapped to null. Exercised directly by the upstream-resilience
+ * tests.
+ */
+export function parseTradingViewFundamentals(payload: unknown, symbol: string): Record<string, unknown> | null {
+  const data = (payload as { data?: unknown } | null | undefined)?.data;
+  if (!Array.isArray(data)) return null;
   // The scanner matches on the plain ticker but answers with an exchange-
   // qualified symbol ("AMEX:VOO"), so match on the suffix rather than equality.
-  const row = payload?.data?.find((entry) => (entry?.s ?? "").split(":").pop()?.toUpperCase() === symbol);
-  if (!row?.d) return null;
+  const row = data.find((entry) => {
+    const s = (entry as { s?: unknown } | null | undefined)?.s;
+    return typeof s === "string" && s.split(":").pop()?.toUpperCase() === symbol;
+  }) as { d?: unknown } | undefined;
+  const cells = row?.d;
+  if (!Array.isArray(cells)) return null;
 
   const out: Record<string, unknown> = {};
   TRADINGVIEW_FUNDAMENTAL_COLUMNS.forEach((column, index) => {
-    const value = row.d![index];
+    const value = cells[index];
     if (value !== null && value !== undefined) out[column] = value;
   });
   return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * Whether a raw response body is a Yahoo chart JSON document, not an HTML
+ * error/block page. Pure; used to gate the "history" passthrough.
+ */
+export function isYahooChartBody(body: string): boolean {
+  try {
+    const json = JSON.parse(body) as { chart?: { result?: unknown; error?: unknown } };
+    return typeof json === "object" && json !== null && typeof json.chart === "object" && json.chart !== null
+      && (Array.isArray(json.chart.result) || json.chart.error != null);
+  } catch {
+    return false;
+  }
 }
 
 /** Only "history" is a plain GET passthrough; "fundamentals" has its own path. */
@@ -297,6 +342,13 @@ export default async function handler(request: VercelRequest, response: VercelRe
       return;
     }
     const body = await upstreamResponse.text();
+    // "history" is a raw passthrough, so a 200 carrying an HTML block page
+    // would otherwise be forwarded as application/json for the chart code to
+    // choke on. Confirm it is the shape we asked for before relaying it.
+    if (!isYahooChartBody(body)) {
+      response.status(502).json({ error: "bad upstream shape" });
+      return;
+    }
     response.setHeader("Cache-Control", `public, max-age=0, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=3600`);
     response.setHeader("content-type", "application/json");
     response.status(200).send(body);
