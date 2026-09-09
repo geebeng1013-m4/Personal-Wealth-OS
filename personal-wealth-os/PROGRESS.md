@@ -23,16 +23,15 @@
 - 建立 `PLAN.md` + `PROGRESS.md`（PR #11）
 - **V1-1 完成**：`pwo-save-error` 补全局 toast 监听 —— 写入失败不再静默（PR #12）
 - **V1-5 完成**：`WEALTHUP_CONTEXT.md` 版本号漂移订正（PR #14）
-- **V1-2 + V1-3 完成**：云同步不再靠设备时钟 —— 改用 `onSnapshot` 的 `hasPendingWrites`；另一台设备改了 → 通知 + Reload（PR #15 已合并，**多设备手验仍待你做**）
+- **V1-2 + V1-3 完成**：云同步不再靠设备时钟 —— 改用 `onSnapshot` 的 `hasPendingWrites`；另一台设备改了 → 通知 + Reload（PR #15，**多设备手验通过**：两浏览器 profile 同账号，B 加一笔 → A 收通知 → Reload → 一致）
 
 ## 当前正在做
 
-- 无进行中的 Task。#15/#16/#17 都合并了，整合后 typecheck / 725 测试 / build 全绿。
+- 无进行中的 Task。云同步多设备手验已过。V1 只剩 V1-4。
 
 ## 下一步
 
-1. 云同步多设备手验（两个浏览器 profile @ 5173，其中一个改快系统时钟）。
-2. V1 剩：**V1-4**（行情 `/api/*` 上游韧性）。
+1. V1 只剩 **V1-4**（行情 `/api/*` 上游结构变化韧性）。
 
 
 ## 待决定
