@@ -1160,6 +1160,11 @@
   .market-tab-content.active {
     display: block;
   }
+  /* Height lives here, not on the element, so the phone can shrink it — the
+     TradingView widget is autosize and fills whatever this box gives it. */
+  #tradingview_container {
+    height: 520px;
+  }
   /* Placed after the base rules above so it wins the source-order tie: on a
      phone one horizontally-scrolling line reads cleaner than a ragged
      two-line wrap. */
@@ -1175,6 +1180,11 @@
     .market-intervals::-webkit-scrollbar,
     .etf-holdings-tabs::-webkit-scrollbar {
       display: none;
+    }
+    /* 520px is two-thirds of a phone screen for a chart you glance at. The
+       page's own interval buttons sit right above it. */
+    #tradingview_container {
+      height: 340px;
     }
   }
   .market-symbols {
