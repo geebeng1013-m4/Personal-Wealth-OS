@@ -38,6 +38,31 @@
   大白话（"What you're saving for, and how close you are." 等）。Dashboard 动态副标题、Review 不动。
 - 验证：typecheck / 769 测试 / build 全绿，无测试断言旧文案。
 
+### M-3 — 标题上到汉堡那一行（1A）  `[-]`  （试做后撤销）
+- 试过把页面标题和汉堡按钮放同一行，省掉顶部 ~90px 空白。你看了觉得不要，
+  `git checkout` 回退，PR #23 关掉。顶部空白保持原样（1C）。
+
+### M-4 — 底部 Tab 栏 +「More」整页  `[x]`  （PR #24，merged）
+- **问题**：手机上每次换页都要开抽屉，没有拇指级导航。
+- **过程**：先试 5 个内容 Tab（其余页面显得二等）→ 再试 4 Tab + More 开抽屉（还是有滑出面板）
+  → 最终 **4 Tab（Home / Ledger / Portfolio / Budget）+ More 整页**。More 是一个真页面
+  （Moomoo Discover 那种）：无 Tab 的页面按侧栏分组列成可点的行，底下是账号行 + Data & tools。
+  手机上**抽屉彻底不用**；桌面常驻侧栏不动。
+- **要点**：账号 / 工具按钮加 `data-tool` 钩子，侧栏（`#id`）和 More 页（`data-tool`）都能绑；
+  `activePageFromNav` 改读 `location.hash`（More 页没有 `.nav-item.active`）。
+- 验证：CDP 390px —— Tab 栏、More active 态、行跳转、工具按钮、无重复 id、无横向溢出。
+
+### M-5 — 卡片间距收紧（4A）  `[x]`  （PR #24，随 M-4 一起）
+- 手机上 `.wu-grid` gap、`.wu-stack--lg` / `--xl` 16→12px；`.wu-page-header` 下边距 16→12px。
+  卡片内边距 M-1 已经缩过。
+
+### M-6 — Market 图表右尺寸（原 5A）  `[x]`  （PR #24，随 M-4 一起）
+- 原本担心的横向溢出**不存在**（TradingView widget 本来就 autosize）。真问题是图表 520px
+  占了三分之二屏，还顶着 TV 自带的拥挤工具条。手机上：图表 520→340px（高度移到 class，
+  media query 才够得着）+ 隐藏 widget 顶部工具条 / 日期条 / 符号搜索（app 自己的周期按钮已覆盖）。
+
+**M 系列收尾。** 下一步产品打磨项由你定。
+
 ---
 
 ## V1 待办（全部完成）
