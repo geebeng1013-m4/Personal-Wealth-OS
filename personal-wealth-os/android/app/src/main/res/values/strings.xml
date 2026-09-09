@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">WealthUp</string>
+    <string name="title_activity_main">WealthUp</string>
+    <string name="package_name">cc.wealthup.app</string>
+    <string name="custom_url_scheme">cc.wealthup.app</string>
+</resources>
