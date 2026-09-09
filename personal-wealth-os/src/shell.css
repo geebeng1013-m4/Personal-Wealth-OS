@@ -438,15 +438,8 @@
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
   }
-  .hamburger {
-    display: flex;
-    top: calc(16px + env(safe-area-inset-top));
-    left: calc(20px + env(safe-area-inset-left));
-    width: 40px;
-    height: 40px;
-    align-items: center;
-    justify-content: center;
-  }
+  /* The phone has the bottom tab bar (with its "More" button) as its only
+     navigation chrome — the top-left hamburger stays hidden. */
   .sidebar-overlay {
     display: block;
   }
@@ -477,12 +470,12 @@
   }
   /* A uniform "safe zone" inset on all four edges — content never touches the
      screen edge — plus the OS-reserved insets (notch, home indicator, curved
-     corners) on top of that. The top is larger to clear the floating
-     hamburger. */
+     corners) on top of that. Nothing floats over the top now, so the top inset
+     is the same as the sides. */
   .main {
     min-height: 100dvh;
     padding:
-      calc(68px + env(safe-area-inset-top))
+      calc(22px + env(safe-area-inset-top))
       calc(20px + env(safe-area-inset-right))
       calc(20px + env(safe-area-inset-bottom))
       calc(20px + env(safe-area-inset-left));
