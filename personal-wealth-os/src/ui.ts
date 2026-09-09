@@ -11,6 +11,7 @@ import { getGoalsSnapshot } from "./goalSummary";
 import { getBudgetSnapshot } from "./budgetSummary";
 import { bindTvmCalculator, tvmCalculatorTemplate } from "./pages/tvmPage";
 import { escapeHtml, getTheme } from "./html";
+import { pageHeader } from "./components/pageHeader";
 import { DISCLAIMER_SHORT } from "./components/disclaimer";
 import { mountSideRays } from "./sideRays";
 
@@ -93,11 +94,68 @@ function tabbarTemplate(activePage: string): string {
       return `<button class="tabbar__btn${on ? " is-active" : ""}" data-page="${id}" type="button"${on ? ' aria-current="page"' : ""}><span class="tabbar__icon" aria-hidden="true">${icon}</span><span class="tabbar__label">${label}</span></button>`;
     })
     .join("");
-  // "More" is active whenever the current page is not one of the four tabs, so
-  // the bar never shows nothing selected.
+  // "More" is a real page (moreTemplate) listing everything that is not one of
+  // the four tabs. It reads as active on its own page and on any page reached
+  // from it, so the bar never shows nothing selected.
   const moreActive = !primaryTabs.some(([id]) => id === activePage);
-  const more = `<button class="tabbar__btn tabbar__btn--more${moreActive ? " is-active" : ""}" type="button" aria-haspopup="menu"><span class="tabbar__icon" aria-hidden="true">${TAB_ICONS.more}</span><span class="tabbar__label">More</span></button>`;
+  const more = `<button class="tabbar__btn tabbar__btn--more${moreActive ? " is-active" : ""}" data-page="more" type="button"><span class="tabbar__icon" aria-hidden="true">${TAB_ICONS.more}</span><span class="tabbar__label">More</span></button>`;
   return `<nav class="tabbar" aria-label="Primary">${items}${more}</nav>`;
+}
+
+/*
+ * The "More" page — a Discover-style landing list of every page that does not
+ * have its own tab, in the same groups as the desktop sidebar, plus the account
+ * row and the data tools. On a phone this replaces the slide-in drawer
+ * entirely; the drawer markup stays only for the desktop sidebar.
+ */
+const MORE_ICONS: Record<string, string> = {
+  goals: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/></svg>',
+  market: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l5-5 4 4 7-8"/><path d="M17 7h4v4"/></svg>',
+  "money-leaks": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 6.8 6 11a6 6 0 0 1-12 0c0-4.2 6-11 6-11Z"/></svg>',
+  advisor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M15 9l-2 5-4 1 2-5 4-1Z"/></svg>',
+  review: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>',
+  rules: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h10M4 18h10"/><path d="M17.5 5l1.5 1.5L22 3.5"/></svg>',
+  tvm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg>',
+  calculator: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M4 20h16"/><path d="M8 15l4-5 3 2 5-7"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>',
+};
+
+function moreRow(id: string, label: string, sub: string): string {
+  return `<button class="more-row" data-page="${id}" type="button">`
+    + `<span class="more-row__icon" aria-hidden="true">${MORE_ICONS[id] ?? ""}</span>`
+    + `<span class="more-row__text"><span class="more-row__label">${escapeHtml(label)}</span>`
+    + (sub ? `<span class="more-row__sub">${escapeHtml(sub)}</span>` : "")
+    + `</span><span class="more-row__chev" aria-hidden="true">›</span></button>`;
+}
+
+function moreTemplate(user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }): string {
+  const tabIds = new Set(primaryTabs.map(([id]) => id));
+  const groups = pageGroups
+    .map(([title, groupPages]) => {
+      const rows = groupPages
+        .filter(([id]) => !tabIds.has(id))
+        .map(([id, english, sub]) => moreRow(id, english, sub))
+        .join("");
+      return rows
+        ? `<section class="more-group"><p class="more-group__title t-overline">${escapeHtml(title)}</p><div class="more-group__rows">${rows}</div></section>`
+        : "";
+    })
+    .join("");
+  const account = user
+    ? `<section class="more-account"><img src="${escapeHtml(user.photoURL || "")}" alt="" class="more-account__avatar" referrerpolicy="no-referrer"><span class="more-account__name">${escapeHtml(user.displayName || user.email || "User")}</span><button class="wu-btn wu-btn--ghost wu-btn--sm logout-btn" type="button">Sign Out</button></section>`
+    : "";
+  const tools = `<section class="more-group"><p class="more-group__title t-overline">Data &amp; tools</p><div class="more-tools">`
+    + `<button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="theme" type="button">Toggle theme</button>`
+    + `<button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="install" type="button">Add to Home Screen</button>`
+    + `<button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="export" type="button">Export</button>`
+    + `<label class="wu-btn wu-btn--secondary wu-btn--sm file-button">Import<input data-tool="import" type="file" accept="application/json"></label>`
+    + `<button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="version" type="button">Version History</button>`
+    + `<button class="wu-btn wu-btn--danger wu-btn--sm" data-tool="reset" type="button">Reset</button>`
+    + `</div></section>`;
+  return `<div class="wu">
+    ${pageHeader({ title: "More", sub: "Everything else WealthUp does." })}
+    <div class="more-list">${groups}${account}${tools}</div>
+  </div>`;
 }
 
 function navTemplate(activePage: string): string {
@@ -325,6 +383,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
     review: reviewTemplate(state),
     settings: settingsTemplate(state),
     "money-leaks": moneyLeaksTemplate(state),
+    more: moreTemplate(user),
   };
   mount.innerHTML = templates[activePage] ?? templates.dashboard;
 
@@ -358,10 +417,9 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     });
   });
 
-  // The phone tab bar reuses data-page; it lives outside the drawer, so there
-  // is no sidebar scroll to remember or drawer to close. The "More" button has
-  // no data-page — it opens the drawer, wired in bindSidebar.
-  root.querySelectorAll<HTMLButtonElement>(".tabbar__btn[data-page]").forEach((button) => {
+  // The phone tab bar and the "More" page rows all navigate by data-page. They
+  // live outside the drawer, so there is no sidebar scroll or drawer to touch.
+  root.querySelectorAll<HTMLButtonElement>(".tabbar__btn[data-page], .more-row[data-page]").forEach((button) => {
     button.addEventListener("click", () => doNavigate(button.dataset.page ?? "dashboard"));
   });
 
@@ -370,32 +428,40 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     setSidebarToolsOpen((event.currentTarget as HTMLDetailsElement).open);
   });
 
-  root.querySelector<HTMLButtonElement>("#themeToggle")?.addEventListener("click", () => {
+  // The account row and the data tools appear twice — the desktop sidebar (by
+  // id) and the phone "More" page (by data-tool) — so bind every match, not the
+  // first.
+  const bindAll = (selector: string, type: string, handler: (event: Event) => void): void => {
+    root.querySelectorAll<HTMLElement>(selector).forEach((el) => el.addEventListener(type, handler));
+  };
+
+  bindAll("#themeToggle, [data-tool='theme']", "click", () => {
     const w = window as unknown as Record<string, Record<string, () => void>>;
     w.__pwo?.toggleTheme();
     renderApp(root, state, setState, activePageFromNav(root) ?? "dashboard", navigate, user);
   });
 
-  root.querySelector<HTMLButtonElement>(".logout-btn")?.addEventListener("click", () => {
+  bindAll(".logout-btn", "click", () => {
     onLogout?.();
   });
 
-  // Install PWA button — hide if already standalone
-  const installBtn = root.querySelector<HTMLButtonElement>("#installPwa");
-  if (installBtn && (window.matchMedia("(display-mode: standalone)").matches || (window.navigator as unknown as { standalone?: boolean }).standalone === true)) {
-    installBtn.style.display = "none";
-  }
-  installBtn?.addEventListener("click", () => {
-    (window as unknown as Record<string, () => Promise<void>>).__pwoInstall?.();
+  // Install PWA button — hide if already standalone.
+  const standalone = window.matchMedia("(display-mode: standalone)").matches
+    || (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+  root.querySelectorAll<HTMLButtonElement>("#installPwa, [data-tool='install']").forEach((btn) => {
+    if (standalone) btn.style.display = "none";
+    btn.addEventListener("click", () => {
+      (window as unknown as Record<string, () => Promise<void>>).__pwoInstall?.();
+    });
   });
 
   bindSidebar(root);
 
-  root.querySelector<HTMLButtonElement>("#exportJson")?.addEventListener("click", () => {
+  bindAll("#exportJson, [data-tool='export']", "click", () => {
     if (state.privacy.requireExportConfirmation && !confirm("Export a file containing your financial data? Store it securely.")) return;
     exportState(state);
   });
-  root.querySelector<HTMLInputElement>("#importJson")?.addEventListener("change", async (event) => {
+  bindAll("#importJson, [data-tool='import']", "change", async (event) => {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
@@ -404,12 +470,12 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     doNavigate("dashboard");
   });
 
-  root.querySelector<HTMLButtonElement>("#versionHistory")?.addEventListener("click", () => {
+  bindAll("#versionHistory, [data-tool='version']", "click", () => {
     const snapshots = loadSnapshots(user?.email ?? undefined);
     renderVersionHistoryModal(root, setState, snapshots, navigate, user, onLogout);
   });
 
-  root.querySelector<HTMLButtonElement>("#resetData")?.addEventListener("click", () => {
+  bindAll("#resetData, [data-tool='reset']", "click", () => {
     if (!confirm("Reset to a blank Personal Wealth OS? Your current data will be saved to Version History first, and can be restored from there.")) return;
     const next = cloneDefaultState();
     // No localStorage.clear() here — this app shares the browser origin with
@@ -449,8 +515,6 @@ function bindSidebar(root: HTMLElement): void {
     if (sidebar.classList.contains("open")) closeSidebar(root);
     else openSidebar();
   });
-  // On a phone the bottom bar's "More" is the only way to open the drawer.
-  root.querySelector<HTMLButtonElement>(".tabbar__btn--more")?.addEventListener("click", openSidebar);
   overlay.addEventListener("click", () => closeSidebar(root));
   root.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || !sidebar.classList.contains("open")) return;
@@ -528,8 +592,13 @@ function renderVersionHistoryModal(root: HTMLElement, setState: Setter, snapshot
 }
 
 function activePageFromNav(root: HTMLElement): string | undefined {
-  const active = root.querySelector<HTMLButtonElement>(".nav-item.active");
-  return active?.dataset?.page;
+  // The hash is set on every navigation and is the one source of truth for the
+  // current page — the sidebar's .nav-item.active only covers pages that have a
+  // sidebar entry (the "More" page, for one, does not). Fall back to it only on
+  // a first load with no hash yet.
+  const hash = window.location.hash.slice(1);
+  if (hash) return hash;
+  return root.querySelector<HTMLButtonElement>(".nav-item.active")?.dataset?.page;
 }
 
 function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activePage: string, navigate?: Navigate): void {
