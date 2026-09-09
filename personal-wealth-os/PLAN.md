@@ -6,9 +6,13 @@
 
 状态标记：`[ ]` 未开始 · `[~]` 进行中 · `[x]` 完成
 
+> **2026-09-09：V1 全部完成。** V1-1 / V1-2+V1-3 / V1-4 / V1-5 均已合并，
+> `main` typecheck / 769 测试 / build 全绿，云同步多设备手验通过。
+> 下一步方向由你定 —— `COMMERCIALIZATION_PLAN.md` 阶段 1（Capacitor）或其他。
+
 ---
 
-## V1 待办（按优先级）
+## V1 待办（全部完成）
 
 ### V1-1 — `pwo-save-error` 事件补一个监听器  `[x]`  （PR #12，merged）
 - **问题**：`src/state.ts` 有 4 处 `dispatchEvent(new CustomEvent("pwo-save-error", ...))`
@@ -41,13 +45,12 @@
   - C-8 PR。
 - 规模：中偏大。碰持久化契约。
 
-### V1-4 — 行情数据韧性（`/api/*` 上游结构变化）  `[ ]`
-- **现状**：客户端 `marketValuation.test.ts` 已覆盖「畸形数据降级为无价，绝不为 0」。
-  未覆盖：serverless 侧 Yahoo / TradingView 改字段或封 UA 时的行为；陈旧数据展示时
-  是否带「最后成交时间」标识而非冒充实时。
-- **Done when**：`api/market.ts` 每个 `kind`（history / holdings / fundamentals）补
-  「上游返回异常结构」的测试；失败降级到陈旧数据时 UI 带时间戳。
-- 规模：中。仅 `api/` + 展示边界。
+### V1-4 — 行情数据韧性（`/api/*` 上游结构变化）  `[x]`  （PR #18）
+- 把 Yahoo / TradingView 响应解析抽成纯函数（`parseYahooQuote` / `readTopHoldings` /
+  `parseTradingViewFundamentals`）+ 44 个测试：各种坏结构一律「无数据」，绝不编造数字。
+- `history` 原样转发前加 `isYahooChartBody` 校验；`response.json()` 加保护。
+- 陈旧数据诚实性 —— 查过，之前已做好（`livePrices.ts` 不覆盖好价/不伪造；
+  `valuationFormat.ts` 显示成交时间 + 「may be delayed」），本次未动。
 
 ### V1-5 — 文档漂移小修  `[x]`  （PR #14）
 - `WEALTHUP_CONTEXT.md` 4 处写 `version = 20`（实际 `CURRENT_VERSION = 19`）+ 下一次 bump 写成 21 → 全改对。

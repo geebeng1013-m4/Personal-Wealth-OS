@@ -7,33 +7,35 @@
 
 ## 我们现在在哪
 
-- **阶段**：V1 收尾。功能基本完整、已上线 `wealthup.cc`，在补正确性和稳健性的洞。
-- **`main`**：`fc6be65` —— 含 V1-1 / V1-5 / V1-2+V1-3(#15) / 交易表单 USD 化(#16) / sponsored 资金来源(#17)。
+- **阶段**：**V1 完成**（2026-09-09）。核心正确性的洞都补上了。
+- **`main`**：`70a6823` —— typecheck / 769 测试 / build 全绿。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 
-## 最近完成（2026-09-08，本轮）
+## V1 收尾（全部合并）
 
-- 行情代理按 IP 限流 + 缓存加固（PR #5）
-- 加了 `COMMERCIALIZATION_PLAN.md`、把 `WEALTHUP_CONTEXT.md` 纳入 git、加了 `README.md`（PR #6）
-- Advisor / 侧边栏常驻「非投资建议」声明（PR #7）
-- 快照存储按字节预算 + 写入永不抛异常（PR #3）
-- **Portfolio 表单不再被价格轮询清空**（PR #9）—— 用户报的 bug，已修并验证
-- 加了 `CLAUDE.md`（工作系统，每次会话自动加载）（PR #10）
-- 恢复快照测试 + `_test.mjs` 强制退出修 CI 卡死（PR #8）
-- 建立 `PLAN.md` + `PROGRESS.md`（PR #11）
-- **V1-1 完成**：`pwo-save-error` 补全局 toast 监听 —— 写入失败不再静默（PR #12）
-- **V1-5 完成**：`WEALTHUP_CONTEXT.md` 版本号漂移订正（PR #14）
-- **V1-2 + V1-3 完成**：云同步不再靠设备时钟 —— 改用 `onSnapshot` 的 `hasPendingWrites`；另一台设备改了 → 通知 + Reload（PR #15，**多设备手验通过**：两浏览器 profile 同账号，B 加一笔 → A 收通知 → Reload → 一致）
+| 项 | PR | 内容 |
+| --- | --- | --- |
+| V1-1 | #12 | `pwo-save-error` 补全局 toast —— 写入失败不再静默 |
+| V1-2+V1-3 | #15 | 云同步不靠设备时钟（`onSnapshot` + `hasPendingWrites`）+ 跨设备通知/Reload。多设备手验通过 |
+| V1-4 | #18 | 行情 `/api/*` 上游结构变化韧性 —— 解析抽纯函数 + 44 测试，坏结构一律「无数据」 |
+| V1-5 | #14 | `WEALTHUP_CONTEXT.md` 版本号漂移订正 |
+
+本轮更早的基建：限流(#5)、商业化计划+CONTEXT入库+README(#6)、免责声明(#7)、快照字节预算(#3)、
+Portfolio 表单不被价格轮询清空(#9)、CLAUDE.md(#10)、CI 卡死修复(#8)、PLAN/PROGRESS(#11)。
+顺带（不在 V1 清单）：交易表单 USD 化(#16)、Sponsored 资金来源回归(#17)。
 
 ## 当前正在做
 
-- 无进行中的 Task。云同步多设备手验已过。V1 只剩 V1-4。
+- 无。V1 收尾。
 
 ## 下一步
 
-1. V1 只剩 **V1-4**（行情 `/api/*` 上游结构变化韧性）。
+方向由你定：
+- `COMMERCIALIZATION_PLAN.md` 阶段 1 —— **Capacitor 打包成 App**（完整做需 Mac / Android Studio，本机只能搭脚手架）
+- 或阶段 0 剩余合规项（Apple / 邮箱登录、账号删除）
+- 或别的
 
+## FUTURE IDEAS / 待清
 
-## 待决定
-
-- （无）
+- `WEALTHUP_CONTEXT.md` 第 9 节 P0-P4 待办清单整体过一遍 —— 本轮做掉的多项（限流、字节预算、
+  免责、CI 卡死、Portfolio 表单、云同步、行情韧性）还挂在那当 TODO，该标记或删除。
