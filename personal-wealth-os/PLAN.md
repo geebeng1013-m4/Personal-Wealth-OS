@@ -31,7 +31,7 @@
   并排 `.wu-metric` 改竖排、Market tab 条改单行横滚。
 - 验证：CDP 390px 真机模拟，12 页无横向溢出。typecheck / 769 测试 / build 全绿。
 
-### M-2 — 页面标题口语化  `[~]`  （PR #22，待合并）
+### M-2 — 页面标题口语化  `[x]`  （PR #22，merged）
 - **问题**：副标题是给桌面仪表盘写的——长、抽象（"canonical snapshot"、"deterministic checks"），
   手机上折到三行。侧栏名和页面标题也对不上（"Wealth Overview" vs "Overview"）。
 - **做法**：4 个标题对齐侧栏名（Overview / Goals / Budget / Settings）；9 条副标题重写成一行
