@@ -268,7 +268,8 @@ export function portfolioTemplate(state: WealthState): string {
           <div class="wu-card__header"><div class="wu-stack wu-stack--sm"><span class="wu-label">Contribution Record</span><h3 class="wu-card__title t-heading">Add investment activity</h3></div><span class="wu-badge wu-badge--neutral">Cost basis</span></div>
           <form id="tradeForm" class="wu-grid wu-grid--2">
             <label class="wu-field-row"><span class="wu-field-row__label">Date</span><input class="wu-field" name="date" type="date" required></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Platform</span><input class="wu-field" name="platform" type="text" list="platformOptions" value="${escapeHtml(lastUsedPlatform(state))}" placeholder="e.g. Moomoo, IBKR"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Platform</span><select class="wu-field" name="platform" id="platformSelect">${knownPlatforms(state).map((pf) => "<option" + (pf === lastUsedPlatform(state) ? " selected" : "") + ">" + escapeHtml(pf) + "</option>").join("")}<option value="__custom__">+ Custom</option></select></label>
+            <div id="customPlatformWrap" class="wu-field-row--wide" style="display:none;"><label class="wu-field-row"><span class="wu-field-row__label">Custom Platform</span><input class="wu-field" name="customPlatform" id="customPlatformInput" type="text" placeholder="e.g. IBKR, Webull, Rakuten Trade"></label></div>
             <label class="wu-field-row"><span class="wu-field-row__label">Ticker</span><select class="wu-field" name="ticker" id="tickerSelect"><option>VOO</option><option>QQQM</option>${state.customTickers.map((t) => "<option>" + escapeHtml(t) + "</option>").join("")}<option value="__custom__">+ Custom</option></select></label>
             <div id="customTickerWrap" class="wu-field-row--wide" style="display:none;"><label class="wu-field-row"><span class="wu-field-row__label">Custom Ticker</span><input class="wu-field" name="customTicker" id="customTickerInput" type="text" placeholder="e.g. AAPL" style="text-transform:uppercase"></label></div>
             <label class="wu-field-row"><span class="wu-field-row__label">Type</span><select class="wu-field" name="type"><option>DCA</option><option>Dip Buy</option><option>Manual Buy</option><option>Sell</option></select></label>
@@ -280,7 +281,6 @@ export function portfolioTemplate(state: WealthState): string {
             <label class="wu-field-row"><span class="wu-field-row__label">Notes</span><input class="wu-field" name="notes" type="text" placeholder="Optional"></label>
             <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Record contribution</button></div>
           </form>
-          <datalist id="platformOptions">${knownPlatforms(state).map((p) => '<option value="' + escapeHtml(p) + '"></option>').join("")}</datalist>
           <div class="wu-card__footer wu-stack wu-stack--sm">
             <label class="wu-btn wu-btn--secondary wu-btn--sm file-button">Import broker CSV<input id="csvInput" type="file" accept=".csv" style="display:none"></label>
             <small class="t-caption t-faint">Moomoo and custom transaction exports are supported.</small>
@@ -356,6 +356,13 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
     if (customWrap) customWrap.style.display = tickerSelect.value === "__custom__" ? "block" : "none";
   });
 
+  // Same "+ Custom" reveal for the broker.
+  const platformSelect = root.querySelector<HTMLSelectElement>("#platformSelect");
+  const customPlatformWrap = root.querySelector<HTMLElement>("#customPlatformWrap");
+  platformSelect?.addEventListener("change", () => {
+    if (customPlatformWrap) customPlatformWrap.style.display = platformSelect.value === "__custom__" ? "block" : "none";
+  });
+
   root.querySelector<HTMLFormElement>("#tradeForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;
@@ -365,10 +372,13 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
       ticker = String(data.get("customTicker") ?? "").toUpperCase().trim();
       if (!ticker) return;
     }
+    let platform = String(data.get("platform") ?? "");
+    if (platform === "__custom__") platform = String(data.get("customPlatform") ?? "").trim();
+    if (!platform) platform = lastUsedPlatform(state);
     const trade: Trade = {
       id: createId("trade"),
       date: String(data.get("date") ?? ""),
-      platform: String(data.get("platform") ?? "").trim() || lastUsedPlatform(state),
+      platform,
       ticker,
       type: String(data.get("type")) as TradeType,
       amountMyr: Number(data.get("amountMyr")) || 0,
