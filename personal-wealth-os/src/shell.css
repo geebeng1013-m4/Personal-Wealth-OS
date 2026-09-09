@@ -435,10 +435,10 @@
   }
   .hamburger {
     display: flex;
-    top: calc(20px + env(safe-area-inset-top));
+    top: calc(16px + env(safe-area-inset-top));
     left: calc(20px + env(safe-area-inset-left));
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     align-items: center;
     justify-content: center;
   }
@@ -470,25 +470,31 @@
   .profile-card {
     display: none;
   }
+  /* A uniform "safe zone" inset on all four edges — content never touches the
+     screen edge — plus the OS-reserved insets (notch, home indicator, curved
+     corners) on top of that. The top is larger to clear the floating
+     hamburger. */
   .main {
     min-height: 100dvh;
-    padding: calc(84px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
+    padding:
+      calc(68px + env(safe-area-inset-top))
+      calc(20px + env(safe-area-inset-right))
+      calc(20px + env(safe-area-inset-bottom))
+      calc(20px + env(safe-area-inset-left));
   }
   .side-rays {
     height: 360px;
   }
+  /* The shell topbar repeats the page name and a generic subtitle that every
+     page's own wu-page-header already carries. On a phone that second header is
+     ~120px of duplication before any content — drop it and let wu-page-header
+     be the one header. */
   .topbar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-  .topbar h2 {
-    font-size: 26px;
+    display: none;
   }
   .topbar h2 span {
     display: block;
-    font-size: 15px;
+    font-size: 13px;
   }
 }
 
