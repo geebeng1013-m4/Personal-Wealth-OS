@@ -22,23 +22,24 @@
 - 验证：真实 app 跑过 —— 单条渲染 / 连发 6 留 3 / 空 detail 兜底 / × 关 / 自动消失 /
   patch `localStorage.setItem` 抛错走真实链路 / 浅色主题。typecheck + test 699 + build 全绿。
 
-### V1-2 — 服务端权威时间戳  `[ ]`
-- **问题**：`cloudCopyWins(localUpdatedAt, cloudUpdatedAt)` 比较的是各设备自己的
-  `Date.now()`（`state.ts:623`，注释里也承认「时钟歪的设备会赢不该赢的冲突」）。
-- **影响**：多设备场景下，时钟偏差 → 静默数据丢失（旧的云副本盖掉新的本地编辑，或反之）。
-- **Done when**：引入 Firestore `serverTimestamp()` 作为权威 `updatedAt`；schema 变更
-  → `CURRENT_VERSION` 从 19 升 20 + `migrateState` 写向后兼容迁移；补测试：旧数据迁移
-  不丢字段、并发编辑服务端时间新的胜、离线补传后时间戳正确。
-- 规模：中。碰持久化契约。
-
-### V1-3 — 实时云订阅：要不要做，决定后再动  `[ ]`
-- **现状**：`subscribeToFirestore`（`firebase.ts:142`，用 `onSnapshot`）已实现，
-  `main.ts` 有 `cloudSyncUnsub` 的清理管道，但「另一台设备改了 → 当前页自动刷新」
-  这个行为是否真的接上、是否要进 V1，未定。
-- **Done when（先决策）**：你决定 V1 是否需要跨设备实时刷新。
-  - 要 → 接上 `onSnapshot`，处理与「本地未保存编辑」的合并冲突，补测试。
-  - 不要 → 在 PLAN 里记为「V1 不做」，关掉这条。
-- 规模：不做=0；做=中偏大（合并冲突是难点）。
+### V1-2 + V1-3（合并）— 云同步不再被设备时钟决定，改用 onSnapshot  `[~]`
+- **决定（2026-09-08）**：走方案 C —— 把 V1-2（时钟偏差）和 V1-3（实时订阅）合并做。
+  设计 spike 结论：A（dirty-flag）和 B（serverTimestamp）都得靠 `hasPendingWrites` 补
+  离线洞，等于半个 C；分两次做要碰两遍持久化层、迁移两遍 schema。
+- **问题**：`cloudCopyWins` 比较两个设备各自的 `Date.now()`；时钟歪的设备会盖掉别人的新编辑。
+- **做法**：`onSnapshot(ref, {includeMetadataChanges:true})`。`metadata.hasPendingWrites`
+  是「本地有没有没被服务器确认的写」的权威信号 —— 决策完全不碰挂钟，离线也对。
+  服务器确认（pending 清空且非 fromCache）时记同步点。
+- **子步骤**（逐步做，每步 STOP 汇报）：
+  - C-1 schema + 迁移：`WealthState` 加 `lastSyncedAt`，`CURRENT_VERSION` 19→20，`migrateState` 兜底。
+  - C-2 `firebase.ts`：`subscribeToFirestore` 传 `includeMetadataChanges`，回调带 `{state, fromCache, hasPendingWrites}`。
+  - C-3 `main.ts`：登录时订阅、登出/切换时退订（`cloudSyncUnsub` 管道已在）。
+  - C-4 冲突/合并规则：远端快照到达时如何应用；用户正在编辑时不静默覆盖。
+  - C-5 `loadStateFromCloud` 初次加载路径改用 `lastSyncedAt` 做无偏决策。
+  - C-6 测试：迁移 v19→v20；时钟偏差；离线改动→上线；两设备并发；快照 metadata。
+  - C-7 手验：5173 真实模式，两个浏览器 profile 当两台设备。
+  - C-8 PR。
+- 规模：中偏大。碰持久化契约。
 
 ### V1-4 — 行情数据韧性（`/api/*` 上游结构变化）  `[ ]`
 - **现状**：客户端 `marketValuation.test.ts` 已覆盖「畸形数据降级为无价，绝不为 0」。
