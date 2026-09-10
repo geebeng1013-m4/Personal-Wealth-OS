@@ -1,12 +1,10 @@
 /**
  * The one place the app talks to the user out-of-band.
  *
- * Two things use it:
+ * One thing uses it:
  *   - `pwo-save-error` CustomEvents from state.ts — a write it cannot retry has
  *     failed (localStorage over quota or blocked, a Firestore sync rejected, a
  *     snapshot not stored). Silent until this listener existed.
- *   - showSyncNotice() from main.ts — another device changed the data and this
- *     device is clean, so there is a newer version to pick up.
  *
  * Deliberately small: a stacked, self-dismissing strip at the bottom-right, no
  * dependency, no framework. It never blocks and never steals focus.
@@ -14,7 +12,6 @@
 
 const ERROR_EVENT = "pwo-save-error";
 const ERROR_DISMISS_MS = 6500;
-const NOTICE_DISMISS_MS = 20000;
 const MAX_VISIBLE = 3;
 
 let stack: HTMLElement | null = null;
@@ -98,14 +95,3 @@ export function initSaveErrorToasts(): void {
   });
 }
 
-/**
- * Tell the user another device changed their data and offer to reload. Neutral
- * tone, longer on screen, does not auto-swap what is under the user's hands.
- */
-export function showSyncNotice(onReload: () => void): void {
-  show("Your data was updated on another device.", {
-    tone: "notice",
-    dismissAfterMs: NOTICE_DISMISS_MS,
-    action: { label: "Reload", onClick: onReload },
-  });
-}

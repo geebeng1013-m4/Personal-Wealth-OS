@@ -10,7 +10,7 @@ import { fetchUsdToMyr, pruneMarketCache } from "./market";
 import type { User } from "firebase/auth";
 import { isDemoMode } from "./demo";
 import { demoStateFor, DEMO_USER_DISPLAY_NAME, DEMO_USER_EMAIL, DEMO_USER_PHOTO } from "./demoData";
-import { initSaveErrorToasts, showSyncNotice } from "./components/toast";
+import { initSaveErrorToasts } from "./components/toast";
 
 // Drop stale cached ticker data from previous sessions so localStorage doesn't grow unbounded.
 pruneMarketCache();
@@ -219,15 +219,10 @@ function handleCloudSnapshot(uid: string, snap: CloudSnapshot): void {
   }
 
   // action === "apply-remote": another device changed the data and this device
-  // is clean. Tell the user; do not silently swap the screen while they may be
-  // mid-edit. On reload, loadStateFromCloud takes the cloud copy cleanly.
-  if (remote.updatedAt === lastRemoteNoticeUpdatedAt) return;
-  lastRemoteNoticeUpdatedAt = remote.updatedAt;
-  showSyncNotice(() => window.location.reload());
+  // is clean. Deliberately do nothing on screen — no interruption. The next
+  // reload or sign-in runs loadStateFromCloud, which takes the cloud copy
+  // cleanly, so nothing is lost, only deferred.
 }
-
-/** So the same remote change is not announced on every metadata delivery. */
-let lastRemoteNoticeUpdatedAt = 0;
 
 function renderLogin(): void {
   document.body.classList.toggle("mask-financial-amounts", state.privacy.maskAmounts);
