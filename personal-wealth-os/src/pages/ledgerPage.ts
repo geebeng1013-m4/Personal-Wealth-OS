@@ -32,7 +32,7 @@ import {
 import { getLedgerSnapshot } from "../ledgerSummary";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
-let ledgerFilters: LedgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "" };
+let ledgerFilters: LedgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "", fundingSource: "all" };
 let ledgerEditingId = "";
 let ledgerEntryType: LedgerTransactionType = "expense";
 let suppressLedgerAmountFocus = false;
@@ -203,6 +203,7 @@ export function ledgerTemplate(state: WealthState): string {
               <label class="wu-field-row custom-date"><span class="wu-field-row__label">From</span><input class="wu-field" name="startDate" type="date" value="${ledgerFilters.startDate}"></label>
               <label class="wu-field-row custom-date"><span class="wu-field-row__label">To</span><input class="wu-field" name="endDate" type="date" value="${ledgerFilters.endDate}"></label>
               <label class="wu-field-row"><span class="wu-field-row__label">Type</span><select class="wu-field" name="type"><option value="all">All types</option><option value="expense"${ledgerFilters.type === "expense" ? " selected" : ""}>Expense</option><option value="income"${ledgerFilters.type === "income" ? " selected" : ""}>Income</option><option value="transfer"${ledgerFilters.type === "transfer" ? " selected" : ""}>Transfer</option></select></label>
+              <label class="wu-field-row"><span class="wu-field-row__label">Funding</span><select class="wu-field" name="fundingSource"><option value="all">All funding</option><option value="personal"${ledgerFilters.fundingSource === "personal" ? " selected" : ""}>Personal only</option><option value="sponsored"${ledgerFilters.fundingSource === "sponsored" ? " selected" : ""}>Sponsored only</option></select></label>
               <label class="wu-field-row"><span class="wu-field-row__label">Category</span><select class="wu-field" name="categoryId"><option value="">All categories</option>${categoryOptions}</select></label>
               <label class="wu-field-row"><span class="wu-field-row__label">Search</span><input class="wu-field" name="query" type="search" value="${escapeHtml(ledgerFilters.query)}" placeholder="Note, category, account"></label>
               <div class="wu-row wu-self-end"><button class="wu-btn wu-btn--ghost wu-btn--sm" id="resetLedgerFilters" type="button">Reset</button></div>
@@ -360,13 +361,13 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
     const form = root.querySelector<HTMLFormElement>("#ledgerFilterForm");
     if (!form) return;
     const data = new FormData(form);
-    ledgerFilters = { ...ledgerFilters, startDate: String(data.get("startDate") ?? ""), endDate: String(data.get("endDate") ?? ""), type: String(data.get("type")) as LedgerFilters["type"], categoryId: String(data.get("categoryId") ?? ""), query: String(data.get("query") ?? "") };
+    ledgerFilters = { ...ledgerFilters, startDate: String(data.get("startDate") ?? ""), endDate: String(data.get("endDate") ?? ""), type: String(data.get("type")) as LedgerFilters["type"], categoryId: String(data.get("categoryId") ?? ""), query: String(data.get("query") ?? ""), fundingSource: String(data.get("fundingSource") ?? "all") as LedgerFilters["fundingSource"] };
     refresh(state, undefined, true);
   };
   root.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((button) => button.addEventListener("click", () => { ledgerFilters.preset = button.dataset.preset as LedgerFilters["preset"]; applyFilters(); }));
   root.querySelectorAll<HTMLInputElement | HTMLSelectElement>("#ledgerFilterForm input, #ledgerFilterForm select").forEach((field) => field.addEventListener("change", applyFilters));
   root.querySelector<HTMLInputElement>('#ledgerFilterForm input[name="query"]')?.addEventListener("search", applyFilters);
-  root.querySelector<HTMLButtonElement>("#resetLedgerFilters")?.addEventListener("click", () => { ledgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "" }; refresh(state, undefined, true); });
+  root.querySelector<HTMLButtonElement>("#resetLedgerFilters")?.addEventListener("click", () => { ledgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "", fundingSource: "all" }; refresh(state, undefined, true); });
 
   root.querySelector<HTMLFormElement>("#ledgerCategoryForm")?.addEventListener("submit", (event) => {
     event.preventDefault();

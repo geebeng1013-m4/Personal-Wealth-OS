@@ -16,7 +16,7 @@ function tx(overrides: Partial<LedgerTransaction> & Pick<LedgerTransaction, "id"
 }
 
 function baseFilters(overrides: Partial<LedgerFilters> = {}): LedgerFilters {
-  return { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "", ...overrides };
+  return { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "", fundingSource: "all", ...overrides };
 }
 
 test("ledgerRange: 'week' starts on Monday regardless of today's weekday", () => {
@@ -60,6 +60,23 @@ test("filterLedgerTransactions: text query matches on note, category, and accoun
   assert.deepEqual(byNote.map((t) => t.id), ["1"]);
   const byCategory = filterLedgerTransactions(transactions, baseFilters({ query: "transport" }), now, categories);
   assert.deepEqual(byCategory.map((t) => t.id), ["2"]);
+});
+
+test("filterLedgerTransactions: fundingSource filter splits personal from sponsored", () => {
+  const now = new Date(2026, 7, 27);
+  const transactions = [
+    tx({ id: "personal-absent", amount: 10, type: "expense", date: "2026-08-05T00:00:00.000Z" }),
+    tx({ id: "personal-explicit", amount: 12, type: "expense", date: "2026-08-06T00:00:00.000Z", fundingSource: "personal" }),
+    tx({ id: "sponsored", amount: 20, type: "expense", date: "2026-08-07T00:00:00.000Z", fundingSource: "sponsored" }),
+  ];
+  const all = filterLedgerTransactions(transactions, baseFilters({ fundingSource: "all" }), now);
+  assert.deepEqual(all.map((t) => t.id).sort(), ["personal-absent", "personal-explicit", "sponsored"]);
+
+  const personal = filterLedgerTransactions(transactions, baseFilters({ fundingSource: "personal" }), now);
+  assert.deepEqual(personal.map((t) => t.id).sort(), ["personal-absent", "personal-explicit"]);
+
+  const sponsored = filterLedgerTransactions(transactions, baseFilters({ fundingSource: "sponsored" }), now);
+  assert.deepEqual(sponsored.map((t) => t.id), ["sponsored"]);
 });
 
 test("ledgerTotals: sums income/expense/transfer independently and derives balance", () => {

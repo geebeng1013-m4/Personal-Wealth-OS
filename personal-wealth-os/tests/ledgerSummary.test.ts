@@ -257,7 +257,7 @@ test("ledgerSnapshot: arbitrary filtered ranges still work through the old path"
   const state = busyState();
   const filtered = filterLedgerTransactions(
     state.ledgerTransactions,
-    { preset: "custom", startDate: "2026-07-01", endDate: "2026-07-31", type: "all", categoryId: "", query: "" },
+    { preset: "custom", startDate: "2026-07-01", endDate: "2026-07-31", type: "all", categoryId: "", query: "", fundingSource: "all" },
     NOW,
     state.ledgerCategories,
     state.ledgerAccounts,

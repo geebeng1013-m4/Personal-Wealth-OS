@@ -9,6 +9,12 @@ export interface LedgerFilters {
   type: LedgerTransactionType | "all";
   categoryId: string;
   query: string;
+  /**
+   * "all" shows every row. "personal" hides fundingSource: "sponsored" rows
+   * (money that does not count toward the user's budget). "sponsored" shows
+   * only those.
+   */
+  fundingSource: "all" | "personal" | "sponsored";
 }
 
 export interface LedgerTotals {
@@ -69,6 +75,8 @@ export function filterLedgerTransactions(transactions: LedgerTransaction[], filt
       const timestamp = new Date(transaction.date).getTime();
       if (!Number.isFinite(timestamp) || (start && timestamp < start.getTime()) || (end && timestamp > end.getTime())) return false;
       if (filters.type !== "all" && transaction.type !== filters.type) return false;
+      if (filters.fundingSource === "personal" && transaction.fundingSource === "sponsored") return false;
+      if (filters.fundingSource === "sponsored" && transaction.fundingSource !== "sponsored") return false;
       if (filters.categoryId && transaction.categoryId !== filters.categoryId) return false;
       const searchable = [transaction.note ?? "", categoryNames.get(transaction.categoryId ?? "") ?? "", accountNames.get(transaction.accountId ?? "") ?? "", accountNames.get(transaction.fromAccountId ?? "") ?? "", accountNames.get(transaction.toAccountId ?? "") ?? ""].join(" ").toLocaleLowerCase();
       return !query || searchable.includes(query);
