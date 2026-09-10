@@ -244,6 +244,10 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
       <div class="side-rays" aria-hidden="true">
         <div class="side-rays-container" id="sideRays"></div>
       </div>
+      <header class="mobile-brandbar">
+        <span class="mobile-brandbar__mark"><img src="/brand/wealth-mark.png" alt=""></span>
+        <span class="mobile-brandbar__name">WealthUp</span>
+      </header>
       <header class="topbar">
         <div>
           <span class="eyebrow t-overline">Personal CFO Operating System</span>

@@ -394,10 +394,11 @@
 }
 
 /* ---- mobile hamburger + drawer ---- */
-/* Both the hamburger and the bottom tab bar are off until the phone media
-   query below turns them on. */
+/* The hamburger, the bottom tab bar and the phone brand bar are all off until
+   the phone media query below turns them on. */
 .hamburger,
-.tabbar {
+.tabbar,
+.mobile-brandbar {
   display: none;
 }
 .hamburger {
@@ -470,15 +471,53 @@
   }
   /* A uniform "safe zone" inset on all four edges — content never touches the
      screen edge — plus the OS-reserved insets (notch, home indicator, curved
-     corners) on top of that. The top gets more than the sides so the page
-     title has some air above it and does not sit against the status bar. */
+     corners) on top of that. The top clears the fixed brand bar (52px + its
+     own status-bar inset) and then leaves 20px of air before the page title. */
   .main {
     min-height: 100dvh;
     padding:
-      calc(40px + env(safe-area-inset-top))
+      calc(72px + env(safe-area-inset-top))
       calc(20px + env(safe-area-inset-right))
       calc(20px + env(safe-area-inset-bottom))
       calc(20px + env(safe-area-inset-left));
+  }
+  /* ---- phone brand bar (fixed, mirrors the bottom tab bar) ---- */
+  .mobile-brandbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 120;
+    height: calc(52px + env(safe-area-inset-top));
+    padding:
+      env(safe-area-inset-top)
+      calc(20px + env(safe-area-inset-right))
+      0
+      calc(20px + env(safe-area-inset-left));
+    background: color-mix(in srgb, var(--surface-bg) 94%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+  }
+  .mobile-brandbar__mark {
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    border-radius: 24%;
+    overflow: hidden;
+    background: #030403;
+  }
+  .mobile-brandbar__mark img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .mobile-brandbar__name {
+    font-size: 17px;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    color: var(--text);
   }
   /* Room for the fixed bottom tab bar so the last card is never under it. */
   .main {
@@ -581,7 +620,7 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 .login-logo-frame {
-  width: 104px;
+  width: 84px;
   aspect-ratio: 1;
   margin: 0 auto 14px;
   overflow: hidden;
