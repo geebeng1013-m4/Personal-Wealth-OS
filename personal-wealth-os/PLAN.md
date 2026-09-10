@@ -153,3 +153,6 @@
 - 阶段 0 里偏商业化的项：Apple / 邮箱登录、账号删除流程、数据导出复核。
 - `WEALTHUP_CONTEXT.md` 第 9 节（P0-P4 待办清单）整体过一遍 —— 里面多条其实本轮已做
   （限流、字节预算、免责声明、CI 卡死、Portfolio 表单），标记或删除。
+- 清掉手机上已废弃的导航 chrome：`.hamburger` 按钮 + `#sidebarToggle` + 滑出
+  `.sidebar` 抽屉的 markup/CSS。手机导航现已全部走底部 tab bar + "More" 整页
+  （见 `ui.ts` 注释 124-127），抽屉只剩桌面侧边栏在用；手机相关的抽屉代码是死代码。
