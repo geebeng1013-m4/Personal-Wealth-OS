@@ -80,6 +80,25 @@
 - 桌面版仍有两个「Overview」标题（外壳 topbar + 页面 `wu-page-header`）。M-1 只在手机隐藏了
   topbar，桌面没动，还留着 ~120px 重复。要不要桌面也隐藏 —— 待你定。
 
+### P-3 — 定位文案更新  `[x]`  （文档改动，直接进 main）
+- **背景**：对比竞品（Wealth Up Vietnam / Wealthup India / Brisa / MyPenny 等）发现，WealthUp
+  的 Dashboard/Advisor/Rules/Review 已经是「理解→决定→行动→复盘」的完整链路，但 README.md /
+  WEALTHUP_CONTEXT.md 的定位文字只停在「记账工具」描述，没把这条链路讲出来。
+- **查证**：Wealthup India / Brisa / Wealth Up Vietnam（wealthup.io）三个真实存在；「Wealth OS
+  Australia」「Monitrax」查无实据，「Wealth Up iOS FIRE tracker」App Store 找不到同名 App ——
+  原分析部分竞品细节可能是编的或记错的，不作为产品决策依据。唯一站得住脚、且和现有 Advisor
+  架构（FACT→RULE→IMPACT→ACTION）方向一致的是 Brisa 的 "gives you context, not just numbers"。
+- **做法**：README.md 开头定位段落 + WEALTHUP_CONTEXT.md 第 39 行附近，加一句话把现有页面按
+  「现状（Dashboard/Ledger/Portfolio）→决定（Advisor/Rules）→复盘（Review）」说清楚，同时
+  明确「不做通用 AI 投顾/股票聊天」。不改任何代码逻辑。
+- **FUTURE IDEAS（本轮不做，已记录等你决定）**：
+  - 周报/自动叙事摘要 —— 把现有 Financial Health 的 5 个 factor 包装成自动推送的周度/月度摘要
+    （🟢/🟡 + 一句话），不需要新数据源。
+  - What-if 绑定真实数据 —— 扩展 TVM，让场景模拟读取真实 Emergency Fund / Goals 状态
+    （"如果我花 RM3000，Goal 会延后多久"），复用现有引擎。
+  - Wealth Vault —— 全新功能，上传财务文件自动提取数字；是否为此引入 AI/OCR 待你决定
+    （现在 Advisor 是零 AI、纯确定性规则架构，这会是一个架构例外）。
+
 下一步产品打磨项由你定。
 
 ---

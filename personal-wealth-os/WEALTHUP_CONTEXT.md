@@ -37,6 +37,9 @@ Firestore 安全规则通过 Firebase CLI 单独部署，Vercel 部署不携带�
 - **当前阶段**：功能基本完整，已上线 `wealthup.cc`。正在做稳健性打磨
   （离线写入、云/本地冲突、快照存储预算、行情代理防滥用）。
 - **产品定位**：单用户、隐私优先、可离线。数据主权在用户手里（导入/导出 JSON、版本快照）。
+  WealthUp 不只是记录钱在哪——现状由 Dashboard/Ledger/Portfolio 呈现；该怎么办由 Advisor/Rules
+  给出建议，并附带 FACT→RULE→IMPACT→ACTION 的理由链；有没有做到由 Review 核对。不做通用 AI 投顾
+  或股票聊天——所有建议都是基于用户自己配置的规则的确定性判断，不是市场预测。
 - **真实使用者**：项目作者本人在用，数据是真实 Moomoo 组合（VOO + QQQM，约 22 笔交易）。
   → **验证财务计算必须用真实账户形态，不能只用 demo fixture**（demo 的零值掩盖过双重计数 bug）。
 

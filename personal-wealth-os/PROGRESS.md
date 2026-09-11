@@ -47,6 +47,7 @@ Portfolio 表单不被价格轮询清空(#9)、CLAUDE.md(#10)、CI 卡死修复(
 | --- | --- | --- |
 | #25 | 手机头部留白（`.main` 顶部 22→40px，桌面不动） | merged |
 | #26 | 交易表单选券商：Platform 下拉 +「+ Custom」，预选上次用的；不再写死 "moomoo" | merged |
+| — | P-3：定位文案更新（README.md / WEALTHUP_CONTEXT.md，讲清楚「现状→决定→复盘」链路） | merged（文档，直接进 main） |
 
 **观察（待你定）**：桌面版仍有两个「Overview」标题（外壳 topbar + 页面 header）—— M-1 只在手机隐藏了 topbar。
 
@@ -66,3 +67,6 @@ Portfolio 表单不被价格轮询清空(#9)、CLAUDE.md(#10)、CI 卡死修复(
 
 - `WEALTHUP_CONTEXT.md` 第 9 节 P0-P4 待办清单整体过一遍 —— 本轮做掉的多项（限流、字节预算、
   免责、CI 卡死、Portfolio 表单、云同步、行情韧性）还挂在那当 TODO，该标记或删除。
+- 竞品对比后留下的三个候选（详见 `PLAN.md` P-3）：周报/自动叙事摘要、What-if 绑定真实
+  Emergency Fund/Goals 数据、Wealth Vault（文件上传自动提取，需先决定 AI/OCR 架构例外）。
+  都还没决定做不做。
