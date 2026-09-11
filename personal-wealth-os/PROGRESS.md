@@ -9,7 +9,7 @@
 
 - **阶段**：V1 完成（2026-09-09）。核心正确性的洞都补上了。之后：**产品打磨** —— 手机比例这轮
   已收尾（M-1..M-6，见下）。App / 订阅方向因预算暂停（见下），先把产品本身做好。
-- **`main`**：`75ef8a6` —— typecheck / 769 测试 / build 全绿。
+- **`main`**：`c5cb80f`。PR #34（Dashboard 具体化 headline + TVM What-if）待 merge，见下。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 
 ## V1 收尾（全部合并）
@@ -48,6 +48,7 @@ Portfolio 表单不被价格轮询清空(#9)、CLAUDE.md(#10)、CI 卡死修复(
 | #25 | 手机头部留白（`.main` 顶部 22→40px，桌面不动） | merged |
 | #26 | 交易表单选券商：Platform 下拉 +「+ Custom」，预选上次用的；不再写死 "moomoo" | merged |
 | — | P-3：定位文案更新（README.md / WEALTHUP_CONTEXT.md，讲清楚「现状→决定→复盘」链路） | merged（文档，直接进 main） |
+| #34 | P-4：Dashboard headline 具体化（`drivingFactor()`）+ TVM「What If I Spend This?」（一次性/每月、机会成本、一句话总结） | 待 merge |
 
 **观察（待你定）**：桌面版仍有两个「Overview」标题（外壳 topbar + 页面 header）—— M-1 只在手机隐藏了 topbar。
 
@@ -61,12 +62,11 @@ Portfolio 表单不被价格轮询清空(#9)、CLAUDE.md(#10)、CI 卡死修复(
 
 ## 下一步
 
-- 手机比例这轮已收尾。之后的产品打磨项由你定。
+- PR #34 待你 review/merge。合并后：Wealth Vault 的 AI/OCR 取舍还没讨论出结论，其余产品打磨项由你定。
 
 ## FUTURE IDEAS / 待清
 
 - `WEALTHUP_CONTEXT.md` 第 9 节 P0-P4 待办清单整体过一遍 —— 本轮做掉的多项（限流、字节预算、
   免责、CI 卡死、Portfolio 表单、云同步、行情韧性）还挂在那当 TODO，该标记或删除。
-- 竞品对比后留下的三个候选（详见 `PLAN.md` P-3）：周报/自动叙事摘要、What-if 绑定真实
-  Emergency Fund/Goals 数据、Wealth Vault（文件上传自动提取，需先决定 AI/OCR 架构例外）。
-  都还没决定做不做。
+- Wealth Vault（文件上传自动提取）—— 需先决定是否为此引入 AI/OCR（Advisor 判断逻辑仍保持
+  确定性规则不变；"零 AI" 本身已不再被当作差异化，只是还没决定 Vault 这条线值不值得做）。

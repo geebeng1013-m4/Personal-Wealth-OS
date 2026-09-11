@@ -99,6 +99,30 @@
   - Wealth Vault —— 全新功能，上传财务文件自动提取数字；是否为此引入 AI/OCR 待你决定
     （现在 Advisor 是零 AI、纯确定性规则架构，这会是一个架构例外）。
 
+### P-4 — Dashboard 状态摘要 + TVM What-if  `[x]`  （PR #34，待 merge）
+- **背景**：P-3 之后挑了两个"零新成本、复用现有引擎"的候选往下做，Wealth Vault 留着不动。
+- **讨论中的两个修正**：
+  1. "零 AI 是差异化"这个说法不准确——重查 Brisa 原话，它本身就是用 AI 做的；真正被印证的是
+     "给理由不只给数字"，跟用不用 AI 是两件事。这条不再当作护城河。
+  2. Dashboard 定位收紧：只放"一眼看懂财务状况"，不是什么功能都往里塞——明显的新功能（哪怕小）
+     该开自己的地方，不该为了省一个导航项硬塞进 Dashboard。
+- **A. Dashboard 状态摘要** —— 原计划是新增一句话摘要卡片，写完后对着真实代码检查发现 Dashboard
+  已经有 Wealth Health 卡片（列出全部 5 个 factor）和 Expenses 卡片（月度对比），新加卡片会跟
+  已有内容重复。改成**修正已有的那句笼统文案**：`financialHealthSummary.ts` 加 `drivingFactor()`，
+  在 `overview.ts` 里把页头 headline 和 Wealth Health 卡片里的"One or more areas need action now."
+  换成具体的（"Safety buffer: 62% funded." 这种）；status 由 Advisor 紧急建议升级、而非某个
+  factor 本身超标时，老实保留笼统文案（真正原因已经在 Priority Action 卡片讲清楚）。
+- **B. TVM What-if** —— 新增 `src/whatIf.ts`，TVM 页面加第三张卡「What If I Spend This?」，
+  跟主求解器和通胀工具并排、互不影响：
+  - 一次性支出：延后未来供款能力（金额 ÷ 现有月供速度）。
+  - 每月重复支出：永久降低月供速度——复用 `monthsToEmergencyTarget` / `buildGoalSnapshot`，
+    只换掉速度参数重算，不重新发明公式。
+  - 机会成本：接回主求解器自己设的 Rate/Periods/Compounding/Timing，算"这笔钱拿去投资会变多少"。
+  - 一句话总结，合成上面几项。
+- 验证：typecheck / 808 测试全绿；CDP 真实浏览器验证（Dashboard 具体文案、TVM 三张卡独立、
+  切换 one-time/monthly 数字正确更新、零运行时报错）。
+- **FUTURE IDEAS（未决定）**：Wealth Vault（AI/OCR 架构取舍还没讨论出结论）。
+
 下一步产品打磨项由你定。
 
 ---
