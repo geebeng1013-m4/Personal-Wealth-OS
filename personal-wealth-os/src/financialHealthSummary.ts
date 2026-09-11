@@ -271,3 +271,15 @@ export function getHealthFactor(
 ): HealthFactor | undefined {
   return snapshot.factors.find((factor) => factor.id === id);
 }
+
+/**
+ * The factor responsible for the overall status, or null when everything is
+ * healthy. `snapshot.status` is already the worst of the factor statuses, so
+ * the first factor matching it is the one driving the headline — used where a
+ * specific reason ("Safety buffer: 62% funded") reads better than the generic
+ * `summary` ("One or more areas need action now.").
+ */
+export function drivingFactor(snapshot: FinancialHealthSnapshot): HealthFactor | null {
+  if (snapshot.status === "healthy") return null;
+  return snapshot.factors.find((factor) => factor.status === snapshot.status) ?? null;
+}

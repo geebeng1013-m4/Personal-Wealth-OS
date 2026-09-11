@@ -17,6 +17,7 @@ import { getFinancialSnapshot, type FinancialSnapshot } from "./financialHealth"
 import { getLedgerSnapshot } from "./ledgerSummary";
 import { getAdvisorSnapshot, prioritizeRecommendations, type AdvisorSnapshot } from "./advisor";
 import {
+  drivingFactor,
   getFinancialHealthSnapshot,
   getPlanExecution,
   type HealthStatus,
@@ -205,6 +206,14 @@ export function buildOverviewModel(
   }, { snapshot, plan, budget });
   const priorityAction = advisor.priority ? toPriorityAction(advisor.priority) : null;
 
+  // The generic status sentence ("One or more areas need action now.") names
+  // no specific factor, so wherever it surfaces on the Dashboard it is
+  // replaced with the factor actually driving the status when there is one.
+  const urgentFactor = drivingFactor(wealthHealth);
+  const wealthHealthSummary = urgentFactor
+    ? `${urgentFactor.label}: ${urgentFactor.detail}.`
+    : wealthHealth.summary;
+
   // Expense trend vs the previous calendar month. Both months come from the
   // canonical ledger snapshot, so they share one definition of month bounds.
   const previousExpenses = ledger.previousMonth.expenses;
@@ -225,10 +234,10 @@ export function buildOverviewModel(
       surplus: snapshot.currentMonthSurplus,
       expenseChange,
     },
-    wealthHealth,
+    wealthHealth: { ...wealthHealth, summary: wealthHealthSummary },
     planStatus,
     priorityAction,
-    headline: `${wealthHealth.summary} ${planStatus.label === "On plan" ? "Your plan is on track." : ""}`.trim(),
+    headline: `${wealthHealthSummary} ${planStatus.label === "On plan" ? "Your plan is on track." : ""}`.trim(),
     briefing: advisor.priority
       ? `${advisor.priority.fact} ${advisor.priority.action}`.trim()
       : "Your plan has no urgent exceptions. Stay consistent with the next scheduled contribution.",

@@ -398,7 +398,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
     ledger: ledgerTemplate(state),
     buckets: bucketsTemplate(state),
     goals: goalsTemplate(state),
-    tvm: tvmCalculatorTemplate(),
+    tvm: tvmCalculatorTemplate(state),
     calculator: `<div class="wu">${pageHeader({ title: "Investment Growth", sub: "Contribution projections" })}</div><div id="investmentGrowthCalculator"></div>`,
     advisor: advisorPageTemplate(state),
     rules: rulesTemplate(state),
@@ -646,7 +646,7 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
 
   if (activePage === "dashboard") bindDashboard(root, state, setState, navigate, renderApp);
   if (activePage === "money-leaks") bindMoneyLeaks(root, state, setState, navigate, renderApp);
-  if (activePage === "tvm") bindTvmCalculator(root);
+  if (activePage === "tvm") bindTvmCalculator(root, state);
   if (activePage === "calculator") {
     const mount = root.querySelector<HTMLElement>("#investmentGrowthCalculator");
     if (mount) {

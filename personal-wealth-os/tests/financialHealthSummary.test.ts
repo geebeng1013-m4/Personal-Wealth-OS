@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "./testHarness";
 import {
+  drivingFactor,
   getFinancialHealthSnapshot,
   getHealthFactor,
   getPlanExecution,
@@ -93,6 +94,27 @@ test("health/B: the summary matches the status", () => {
     const snapshot = getFinancialHealthSnapshot(state, NOW);
     assert.equal(snapshot.summary, map[snapshot.status]);
   }
+});
+
+test("health/B: drivingFactor is null when healthy, else the factor matching the overall status", () => {
+  const healthy = stateWith({
+    emergency: { current: 5000, target: 5000, annualYield: 0, monthlyTopUp: 0 },
+    dca: { monthly: 0, targets: { VOO: 1 } },
+    ledgerAccounts: accounts,
+    ledgerTransactions: [
+      { id: "i1", amount: 1000, type: "income", categoryId: "income-salary", accountId: "acc-bank", date: iso(2026, 7, 3) },
+    ] as LedgerTransaction[],
+  });
+  assert.equal(drivingFactor(getFinancialHealthSnapshot(healthy, NOW)), null);
+
+  const unfunded = stateWith({
+    emergency: { current: 0, target: 5000, annualYield: 0, monthlyTopUp: 0 }, // action
+  });
+  const snapshot = getFinancialHealthSnapshot(unfunded, NOW);
+  const factor = drivingFactor(snapshot);
+  assert.ok(factor);
+  assert.equal(factor!.id, "safetyBuffer");
+  assert.equal(factor!.status, snapshot.status);
 });
 
 // --- C. safety buffer -------------------------------------------------------
@@ -265,7 +287,7 @@ test("health/F: debt load reports liabilities against assets", () => {
 
 // --- G. the Dashboard consumes the canonical health -------------------------
 
-test("health/G: the Overview model's wealthHealth IS the canonical snapshot", () => {
+test("health/G: the Overview model's wealthHealth IS the canonical snapshot, with a driving-factor-specific summary", () => {
   for (const state of [cloneDefaultState(), stateWith(), emptyState()]) {
     const model = buildOverviewModel(state, NOW);
     const canonical = getFinancialHealthSnapshot(state, NOW, {
@@ -273,7 +295,13 @@ test("health/G: the Overview model's wealthHealth IS the canonical snapshot", ()
     });
     assert.equal(model.wealthHealth.status, canonical.status);
     assert.equal(model.wealthHealth.label, canonical.label);
-    assert.equal(model.wealthHealth.summary, canonical.summary);
+    // The Overview replaces the generic canonical summary with the specific
+    // factor driving the status, when there is one.
+    const factor = drivingFactor(canonical);
+    assert.equal(
+      model.wealthHealth.summary,
+      factor ? `${factor.label}: ${factor.detail}.` : canonical.summary,
+    );
     assert.deepEqual(
       model.wealthHealth.factors.map((f) => `${f.label}:${f.status}:${f.detail}`),
       canonical.factors.map((f) => `${f.label}:${f.status}:${f.detail}`),

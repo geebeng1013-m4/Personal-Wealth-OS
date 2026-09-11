@@ -14,6 +14,7 @@
  * the events.
  */
 
+import type { WealthState } from "../models";
 import { money, percent } from "../rules";
 import { escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
@@ -27,6 +28,7 @@ import {
   type TvmSolveInput,
   type TvmVariable,
 } from "../tvm";
+import { getSpendingImpact, type SpendingImpact, type SpendMode } from "../whatIf";
 
 type TvmFieldName = "presentValue" | "payment" | "futureValue" | "annualRatePercent" | "periods";
 
@@ -47,6 +49,10 @@ let tvmSolved: { variable: TvmVariable; result: ReturnType<typeof solveTvm> } | 
 
 /** Inflation is a separate small tool, not one of the five variables. */
 const tvmInflation = { futureAmount: "100000", inflationRatePercent: "3", years: "10" };
+
+/** What-if is a third separate tool: a hypothetical spend against real state. */
+let tvmWhatIfAmount = "";
+let tvmWhatIfMode: SpendMode = "once";
 
 const TVM_ROWS: Array<{ name: TvmFieldName; label: string; button: string; unit: string; step: string }> = [
   { name: "presentValue", label: "Present Value", button: "PV", unit: "MYR", step: "100" },
@@ -183,17 +189,133 @@ function tvmInflationTemplate(): string {
     </section>`;
 }
 
-export function tvmCalculatorTemplate(): string {
+/** Infinity means no monthly pace to estimate against — never printed as a raw number. */
+function tvmMonthsLabel(months: number): string {
+  if (!Number.isFinite(months)) return "no monthly rate set";
+  if (months <= 0) return "already there";
+  return `${months} mo`;
+}
+
+/**
+ * What if this money were invested instead, using the exact rate/periods/
+ * frequency/timing already set in the main solver above — so this always
+ * reflects "your own assumptions", not a second invented rate. "once" invests
+ * it as a lump sum today; "monthly" invests it as a recurring contribution,
+ * matching how the spend itself behaves.
+ */
+function tvmWhatIfOpportunityCost(amount: number, mode: SpendMode): ReturnType<typeof solveTvm> | null {
+  if (amount <= 0) return null;
+  const input = tvmSolveInput();
+  if (!Number.isFinite(input.annualRatePercent) || !Number.isFinite(input.periods)) return null;
+  const hypothetical: TvmSolveInput = mode === "once"
+    ? { ...input, presentValue: -amount, payment: 0, futureValue: Number.NaN }
+    : { ...input, presentValue: 0, payment: -amount, futureValue: Number.NaN };
+  return solveTvm("futureValue", hypothetical);
+}
+
+/** null when there is nothing to say (no delay in either direction). */
+function tvmWhatIfDelayPhrase(now: number, after: number, label: string): string | null {
+  if (after <= now) return null;
+  if (!Number.isFinite(after)) return `stall ${label} entirely`;
+  const delay = after - now;
+  return `push ${label} back ${delay} month${delay === 1 ? "" : "s"}`;
+}
+
+/** One synthesized sentence combining the Emergency Fund, the goal, and the opportunity cost. */
+function tvmWhatIfSummary(impact: SpendingImpact, opportunity: ReturnType<typeof solveTvm> | null): string {
+  if (impact.amount <= 0) return "";
+  const costLabel = impact.mode === "monthly" ? `${money(impact.amount)}/month` : money(impact.amount);
+  const phrases = [
+    tvmWhatIfDelayPhrase(impact.emergency.monthsToTargetNow, impact.emergency.monthsToTargetAfter, "your Emergency Fund"),
+    impact.goal ? tvmWhatIfDelayPhrase(impact.goal.monthsToTargetNow, impact.goal.monthsToTargetAfter, impact.goal.name) : null,
+  ].filter((phrase): phrase is string => phrase !== null);
+
+  let sentence = phrases.length > 0
+    ? `Spending ${costLabel} would ${phrases.join(" and ")}.`
+    : `Spending ${costLabel} would not meaningfully delay your Emergency Fund or current goal.`;
+
+  if (opportunity?.ok) {
+    sentence += ` Invested instead at the rate you set above, it would grow to ${money(opportunity.value.value)}.`;
+  }
+  return sentence;
+}
+
+function tvmWhatIfResultTemplate(impact: SpendingImpact, opportunity: ReturnType<typeof solveTvm> | null): string {
+  if (impact.amount <= 0) {
+    return `
+      <div class="wu-card wu-card--inset wu-card--pad-sm tvm-result" role="status">
+        <div class="wu-metric"><span class="wu-metric__label wu-label">Result</span><span class="t-body-sm t-muted">Enter an amount to see the impact.</span></div>
+      </div>`;
+  }
+
+  return `
+    <div class="wu-card wu-card--inset wu-card--pad-sm wu-card--positive tvm-result" role="status">
+      <dl class="wu-list">
+        <div class="wu-list__row"><dt>Emergency Fund</dt><dd>${tvmMonthsLabel(impact.emergency.monthsToTargetNow)} → ${tvmMonthsLabel(impact.emergency.monthsToTargetAfter)}</dd></div>
+        ${impact.goal ? `<div class="wu-list__row"><dt>${escapeHtml(impact.goal.name)}</dt><dd>${tvmMonthsLabel(impact.goal.monthsToTargetNow)} → ${tvmMonthsLabel(impact.goal.monthsToTargetAfter)}</dd></div>` : ""}
+        ${opportunity?.ok ? `<div class="wu-list__row"><dt>Invested instead</dt><dd>${money(opportunity.value.value)}</dd></div>` : ""}
+      </dl>
+      ${impact.goal ? "" : `<p class="t-caption t-faint" style="margin-top:var(--space-3)">No goal is currently being actively funded, so only the Emergency Fund is shown.</p>`}
+      ${!opportunity ? `<p class="t-caption t-faint" style="margin-top:var(--space-3)">Set Annual Rate and Periods in the calculator above to see the opportunity cost.</p>` : ""}
+      <p class="t-body-sm" style="margin-top:var(--space-3)">${escapeHtml(tvmWhatIfSummary(impact, opportunity))}</p>
+      <p class="t-caption t-faint" style="margin-top:var(--space-3)">Assumes this money would otherwise have gone toward these at their current monthly pace. Projections only — not financial advice.</p>
+    </div>`;
+}
+
+function tvmWhatIfTemplate(state: WealthState): string {
+  const amount = Number(tvmWhatIfAmount.trim() === "" ? Number.NaN : tvmWhatIfAmount);
+  const impact = getSpendingImpact(state, amount, tvmWhatIfMode);
+  const opportunity = tvmWhatIfOpportunityCost(impact.amount, tvmWhatIfMode);
+
+  return `
+    <section class="wu-card tvm-card" aria-labelledby="tvmWhatIfTitle">
+      <div class="wu-card__header">
+        <div class="wu-stack wu-stack--sm">
+          <span class="wu-label">Planning Tool</span>
+          <h3 class="wu-card__title t-heading" id="tvmWhatIfTitle">What If I Spend This?</h3>
+          <p class="t-body-sm t-muted">See how a hypothetical expense pushes back your real Emergency Fund and current goal — and what it would be worth invested instead.</p>
+        </div>
+      </div>
+      <div class="wu-grid wu-grid--2 wu-grid--top">
+        <div class="wu-stack">
+          <fieldset class="wu-fieldset">
+            <legend class="wu-field-row__label">Shape</legend>
+            <div class="wu-row wu-row--tight">
+              ${(["once", "monthly"] as SpendMode[]).map((mode) => `
+                <label class="wu-chip">
+                  <input type="radio" name="tvmWhatIfMode" value="${mode}" data-tvm-whatif-mode="${mode}"${tvmWhatIfMode === mode ? " checked" : ""}>
+                  <span>${mode === "once" ? "One-time" : "Monthly"}</span>
+                </label>`).join("")}
+            </div>
+          </fieldset>
+          <label class="wu-field-row" for="tvmWhatIf-amount">
+            <span class="wu-field-row__label">${tvmWhatIfMode === "once" ? "One-time spend" : "New monthly cost"}</span>
+            <span class="wu-affix">
+              <span aria-hidden="true">MYR</span>
+              <input class="wu-field" id="tvmWhatIf-amount" type="number" inputmode="decimal"
+                     min="0" step="50" value="${escapeHtml(tvmWhatIfAmount)}"
+                     data-tvm-whatif-amount>
+            </span>
+          </label>
+        </div>
+        <div class="tvm-output" aria-live="polite">
+          ${tvmWhatIfResultTemplate(impact, opportunity)}
+        </div>
+      </div>
+    </section>`;
+}
+
+export function tvmCalculatorTemplate(state: WealthState): string {
   // The header sits outside #tvmRoot so Reset (rerenderAll in
   // bindTvmCalculator) can re-render just the cards without dropping it — and
   // so the phone "back to More" arrow has a page title to sit beside.
   return `<div class="wu wu-stack wu-stack--lg">
     ${pageHeader({ title: "TVM Calculator", sub: "Time value of money" })}
-    <div id="tvmRoot" class="wu-stack wu-stack--lg">${tvmCardsTemplate()}</div>
+    <div id="tvmRoot" class="wu-stack wu-stack--lg">${tvmCardsTemplate(state)}</div>
   </div>`;
 }
 
-function tvmCardsTemplate(): string {
+function tvmCardsTemplate(state: WealthState): string {
   return `
     <section class="wu-card tvm-card" aria-labelledby="tvmTitle">
       <div class="wu-card__header">
@@ -258,15 +380,16 @@ function tvmCardsTemplate(): string {
         ${tvmResultTemplate()}
       </div>
     </section>
-    ${tvmInflationTemplate()}`;
+    ${tvmInflationTemplate()}
+    ${tvmWhatIfTemplate(state)}`;
 }
 
-export function bindTvmCalculator(root: HTMLElement): void {
+export function bindTvmCalculator(root: HTMLElement, state: WealthState): void {
   const rerenderAll = () => {
     const host = root.querySelector<HTMLElement>("#tvmRoot");
     if (!host) return;
-    host.innerHTML = tvmCardsTemplate();
-    bindTvmCalculator(root);
+    host.innerHTML = tvmCardsTemplate(state);
+    bindTvmCalculator(root, state);
   };
   const rerenderResult = () => {
     const output = root.querySelector<HTMLElement>("#tvmOutput");
@@ -343,6 +466,29 @@ export function bindTvmCalculator(root: HTMLElement): void {
       wrapper.innerHTML = tvmInflationTemplate();
       const fresh = wrapper.querySelector(".tvm-output");
       if (fresh) output.innerHTML = fresh.innerHTML;
+    });
+  });
+
+  root.querySelectorAll<HTMLInputElement>("[data-tvm-whatif-amount]").forEach((input) => {
+    input.addEventListener("input", () => {
+      tvmWhatIfAmount = input.value;
+      const card = input.closest(".tvm-card");
+      const output = card?.querySelector<HTMLElement>(".tvm-output");
+      if (!output) return;
+      // Re-render only this card's output, preserving focus, same as inflation.
+      const amount = Number(tvmWhatIfAmount.trim() === "" ? Number.NaN : tvmWhatIfAmount);
+      const impact = getSpendingImpact(state, amount, tvmWhatIfMode);
+      output.innerHTML = tvmWhatIfResultTemplate(impact, tvmWhatIfOpportunityCost(impact.amount, tvmWhatIfMode));
+    });
+  });
+
+  root.querySelectorAll<HTMLInputElement>("[data-tvm-whatif-mode]").forEach((input) => {
+    input.addEventListener("change", () => {
+      // Changes the field label too ("One-time spend" vs "New monthly cost"),
+      // so this re-renders the whole card set rather than just the output —
+      // a radio click has no typing focus to preserve, unlike the amount field.
+      tvmWhatIfMode = input.dataset.tvmWhatifMode as SpendMode;
+      rerenderAll();
     });
   });
 }

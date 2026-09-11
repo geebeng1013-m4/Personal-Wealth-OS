@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "./testHarness";
 import { buildOverviewModel, trackedCapital } from "../src/overview";
 import { getFinancialSnapshot } from "../src/financialHealth";
-import { getFinancialHealthSnapshot } from "../src/financialHealthSummary";
+import { drivingFactor, getFinancialHealthSnapshot } from "../src/financialHealthSummary";
 import { getPortfolioSnapshot } from "../src/portfolioSummary";
 import { getGoalsSnapshot } from "../src/goalSummary";
 import { getBudgetSnapshot } from "../src/budgetSummary";
@@ -79,7 +79,7 @@ test("flow/B: the model never restates a metric that disagrees with its snapshot
 
 // --- C. wealth health -------------------------------------------------------
 
-test("flow/C: Wealth Health equals the canonical FinancialHealthSnapshot", () => {
+test("flow/C: Wealth Health equals the canonical FinancialHealthSnapshot, with a driving-factor-specific summary", () => {
   for (const state of [cloneDefaultState(), richState()]) {
     const model = buildOverviewModel(state, NOW);
     const canonical = getFinancialHealthSnapshot(state, NOW, {
@@ -87,7 +87,13 @@ test("flow/C: Wealth Health equals the canonical FinancialHealthSnapshot", () =>
     });
     assert.equal(model.wealthHealth.status, canonical.status);
     assert.equal(model.wealthHealth.label, canonical.label);
-    assert.equal(model.wealthHealth.summary, canonical.summary);
+    // The generic canonical summary is replaced by the specific factor driving
+    // the status, when there is one — that is the whole point of the override.
+    const factor = drivingFactor(canonical);
+    assert.equal(
+      model.wealthHealth.summary,
+      factor ? `${factor.label}: ${factor.detail}.` : canonical.summary,
+    );
     assert.deepEqual(
       model.wealthHealth.factors.map((f) => `${f.label}:${f.status}`),
       canonical.factors.map((f) => `${f.label}:${f.status}`),
