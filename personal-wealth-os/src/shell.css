@@ -321,6 +321,11 @@
   overflow: hidden;
 }
 .main.quick-view-main {
+  /* .app-shell is a 2-column grid (sidebar + main). Quick View renders only
+     this one child, so without an explicit span it falls into the sidebar's
+     270px track instead of the full width — everything past ~270px then
+     gets clipped. */
+  grid-column: 1 / -1;
   padding: calc(64px + env(safe-area-inset-top)) 20px calc(32px + env(safe-area-inset-bottom));
 }
 .side-rays {
