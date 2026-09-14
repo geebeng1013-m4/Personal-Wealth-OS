@@ -12,6 +12,7 @@ import { getBudgetSnapshot } from "./budgetSummary";
 import { bindTvmCalculator, tvmCalculatorTemplate } from "./pages/tvmPage";
 import { escapeHtml, getTheme } from "./html";
 import { pageHeader } from "./components/pageHeader";
+import { assistantTemplate, mountAssistant } from "./components/assistant/assistantWidget";
 import { DISCLAIMER_SHORT } from "./components/disclaimer";
 import { mountSideRays } from "./sideRays";
 
@@ -257,6 +258,7 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
       <section id="pageMount"></section>
     </main>
     ${tabbarTemplate(activePage)}
+    ${assistantTemplate()}
   `;
 }
 
@@ -423,6 +425,11 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
 
   bindCommon(root, state, setState, navigate, user, onLogout);
   bindPage(root, state, setState, activePage, navigate);
+
+  // Last: the assistant can navigate and pre-fill, so it binds against a page
+  // that is already wired up. It lives outside #pageMount and is re-mounted on
+  // every render, with its conversation held in module state.
+  mountAssistant(root, state, navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user, onLogout)));
 }
 
 function keepActiveNavigationVisible(root: HTMLElement): void {

@@ -14,6 +14,7 @@
  */
 
 import type { LedgerAccountType, LedgerFundingSource, LedgerTransaction, LedgerTransactionType, WealthState } from "../models";
+import type { LedgerDraft } from "../components/assistant/assistantTypes";
 import { createId } from "../state";
 import { money, percent } from "../rules";
 import { escapeHtml } from "../html";
@@ -43,6 +44,8 @@ let ledgerEntryDraft = {
   toAccountId: "",
   date: "",
   note: "",
+  /** Only ever set by the assistant; a hand-driven type switch leaves it "". */
+  categoryId: "",
   fundingSource: "personal" as LedgerFundingSource,
 };
 let ledgerHistoryOpen = false;
@@ -65,8 +68,37 @@ function resetLedgerEntry(): void {
     toAccountId: "",
     date: "",
     note: "",
+    categoryId: "",
     fundingSource: "personal",
   };
+}
+
+/**
+ * Pre-fill the entry form from an assistant draft.
+ *
+ * Writes the same module draft a type switch already uses, so the next render
+ * of ledgerTemplate picks it up — no DOM poking, and the form behaves exactly
+ * as if the user had typed it. Nothing is recorded: the user still presses
+ * Save, and every validation on that path still runs.
+ *
+ * The caller navigates to "ledger" after this.
+ */
+export function applyLedgerDraft(draft: LedgerDraft): void {
+  ledgerEditingId = "";
+  ledgerEntryType = draft.type;
+  ledgerEntryDraft = {
+    amount: String(draft.amount),
+    accountId: draft.accountId ?? "",
+    fromAccountId: "",
+    toAccountId: "",
+    date: draft.date,
+    note: draft.note,
+    categoryId: draft.categoryId ?? "",
+    fundingSource: "personal",
+  };
+  // The amount is already filled, so stealing focus to it would only put the
+  // caret in a field the user is meant to be checking, not retyping.
+  suppressLedgerAmountFocus = true;
 }
 
 function localDateValue(iso?: string): string {
@@ -113,6 +145,11 @@ export function ledgerTemplate(state: WealthState): string {
   const selectedToAccountId = accountIds.has(requestedToAccountId) && requestedToAccountId !== selectedFromAccountId
     ? requestedToAccountId
     : state.ledgerAccounts.find((account) => account.id !== selectedFromAccountId)?.id ?? "";
+  // Only an assistant draft sets this. When it names a category that exists for
+  // this entry type, that chip is pre-selected instead of the first one.
+  const draftCategoryId = entryCategories.some((category) => category.id === ledgerEntryDraft.categoryId)
+    ? ledgerEntryDraft.categoryId
+    : "";
   const transferUnavailable = entryType === "transfer" && state.ledgerAccounts.length < 2;
   const entryAmount = editing ? String(editing.amount) : ledgerEntryDraft.amount;
   const entryDate = editing?.date ? localDateValue(editing.date) : ledgerEntryDraft.date || localDateValue();
@@ -174,7 +211,7 @@ export function ledgerTemplate(state: WealthState): string {
           ${entryType === "transfer"
             ? `<div class="wu-grid wu-grid--2"><label class="wu-field-row"><span class="wu-field-row__label">From account</span><select class="wu-field" name="fromAccountId" required>${accountOptions(selectedFromAccountId)}</select></label><label class="wu-field-row"><span class="wu-field-row__label">To account</span><select class="wu-field" name="toAccountId" required>${accountOptions(selectedToAccountId)}</select></label></div>`
             : `<label class="wu-field-row"><span class="wu-field-row__label">Account</span><select class="wu-field" name="accountId" required>${accountOptions(selectedAccountId)}</select></label>
-          <fieldset class="wu-fieldset"><legend class="wu-field-row__label">Category</legend><div class="wu-row wu-row--tight">${entryCategories.map((category, index) => `<label class="wu-chip"><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === editing?.categoryId || (!editing && index === 0) ? " checked" : ""}><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)}</span></label>`).join("")}</div></fieldset>
+          <fieldset class="wu-fieldset"><legend class="wu-field-row__label">Category</legend><div class="wu-row wu-row--tight">${entryCategories.map((category, index) => `<label class="wu-chip"><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === editing?.categoryId || (!editing && (draftCategoryId ? category.id === draftCategoryId : index === 0)) ? " checked" : ""}><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)}</span></label>`).join("")}</div></fieldset>
           <label class="wu-switch"><input type="checkbox" name="fundingSource" value="sponsored"${entryFundingSource === "sponsored" ? " checked" : ""}><span class="wu-switch__track"></span><span class="wu-switch__label">Sponsored / earmarked money — not part of my budget</span></label>`}
           <details class="wu-details"${editing ? " open" : ""}><summary class="wu-details__summary"><span class="t-subheading">Date &amp; note</span></summary><div class="wu-grid wu-grid--2"><label class="wu-field-row"><span class="wu-field-row__label">Date</span><input class="wu-field" name="date" type="date" required value="${entryDate}"></label><label class="wu-field-row"><span class="wu-field-row__label">Note</span><input class="wu-field" name="note" maxlength="500" value="${escapeHtml(entryNote)}" placeholder="Optional"></label></div></details>
           <p id="ledgerFormError" class="wu-field-row__error" role="alert">${transferUnavailable ? "Add at least two accounts before recording a transfer." : ""}</p>
@@ -299,6 +336,8 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
       toAccountId: (form?.elements.namedItem("toAccountId") as HTMLSelectElement | null)?.value ?? ledgerEntryDraft.toAccountId,
       date: (form?.elements.namedItem("date") as HTMLInputElement | null)?.value ?? "",
       note: (form?.elements.namedItem("note") as HTMLInputElement | null)?.value ?? "",
+      // Categories are per type, so the old selection cannot carry over.
+      categoryId: "",
       fundingSource: (form?.elements.namedItem("fundingSource") as HTMLInputElement | null)?.checked ? "sponsored" : "personal",
     };
     ledgerEditingId = "";
