@@ -181,9 +181,8 @@
   四种失败路径 / 刷新后开关关闭、旧对话不重发）；你手动跑完 25 项测试清单。
 
 ### 待办 / FUTURE IDEAS（记录，不自动做）
-- **上线顺序**：先重新部署 Cloud Function（线上还是只支持 Ask 的 A-1 版本），再合并 PR。
-  合并会触发 Vercel 自动发布前端，顺序反过来 Record 在线上会直接失败。
-- **换 OpenRouter key**：key 在对话里贴过两次，建议上线前换一把。
+- **已上线（2026-09-14）**：先部署新版 Cloud Function，再合并 PR #35（顺序不能反，否则线上 Record 会失败）。
+- **换 OpenRouter key**：key 在对话里贴过两次，上线后尽快换。不用改代码。
 - 聊天记录改存 Firestore（跟账号走、换设备可见、不串号）。现在是浏览器 localStorage。SQLite 讨论过，不适合。
 - `firebase-functions` 版本偏旧，CLI 部署时提示升级（有破坏性变更，单独做）。
 - 更多 Record 动作（目标、预算桶、换汇、每月定投）；流式输出。

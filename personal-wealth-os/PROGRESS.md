@@ -52,7 +52,7 @@ Portfolio 表单不被价格轮询清空(#9)、CLAUDE.md(#10)、CI 卡死修复(
 
 **观察（待你定）**：桌面版仍有两个「Overview」标题（外壳 topbar + 页面 header）—— M-1 只在手机隐藏了 topbar。
 
-## AI 助手（A 系列，测试完成，待上线）
+## AI 助手（A 系列，已上线 2026-09-14）
 
 右下角悬浮助手：**Ask** 问答 + **Record** 一句话预填记账 / 交易表单（保存永远你自己按）。
 模型 `ling-3.0-flash-fin:free`（OpenRouter 免费档）。服务器在 Firebase Cloud Function，key 只在服务器端。
@@ -60,7 +60,7 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 
 | PR | 内容 | 状态 |
 | --- | --- | --- |
-| #35 | A-1 服务器代理 · A-2 悬浮组件 · A-3 Ask · A-4/A-5 Record（记账 + 交易）· A-6 隐私 | 你已跑完测试清单，待上线 |
+| #35 | A-1 服务器代理 · A-2 悬浮组件 · A-3 Ask · A-4/A-5 Record（记账 + 交易）· A-6 隐私 | merged，已上线 |
 
 实测抓到并修掉：模型会**编造汇率**填进令吉金额（现在你没说过的数字一律不填）；reasoning 模型思考吃光
 输出预算导致空回复。
@@ -75,8 +75,10 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 
 ## 下一步
 
-- **AI 助手上线**（需要你确认，两步都会发到公网）：① 重新部署 Cloud Function ② 合并 PR #35（触发 Vercel 发布前端）。
-  **顺序不能反**，否则线上 Record 会失败。上线前建议先换 OpenRouter key（对话里贴过两次）。
+- **AI 助手已上线**（2026-09-14）：先部署了新版 Cloud Function，再合并 PR #35。线上函数 Ask / Record 实测正常，
+  wealthup.cc 的前端包里有助手、指向生产函数、不含 key。
+- **待做：换 OpenRouter key**（对话里贴过两次）。你生成新 key 放进 `functions/.secret.local`，我写进 Secret Manager
+  并让函数用上，不用改代码、不用重新合并。
 
 - PR #34 待你 review/merge。合并后：Wealth Vault 的 AI/OCR 取舍还没讨论出结论，其余产品打磨项由你定。
 
