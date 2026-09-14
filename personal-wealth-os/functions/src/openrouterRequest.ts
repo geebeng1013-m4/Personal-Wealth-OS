@@ -7,6 +7,21 @@
  * Cloud Functions wiring; it hands the request body here to be validated and
  * turned into an OpenRouter payload, and hands the upstream JSON back here to be
  * read. That seam is what the unit tests exercise.
+ *
+ * Two modes share this path:
+ *
+ *   "help" — ordinary Q&A. The model answers in prose.
+ *   "fill" — the user described something to record. The model answers with one
+ *            JSON action object, which the BROWSER parses and validates against
+ *            the live WealthState (see src/components/assistant/). The server
+ *            deliberately does not parse it: only the client knows the real
+ *            category / account / ticker ids, and keeping the action schema on
+ *            one side avoids two copies drifting apart.
+ *
+ * The system prompt for each mode lives here, server-side, so a client cannot
+ * replace it. The `context` string comes from the client (it is the only side
+ * that can see the user's own vocabulary and figures) and is length-capped and
+ * carried as a separate system message.
  */
 
 /** OpenRouter's OpenAI-compatible chat-completions endpoint. */
@@ -22,14 +37,32 @@ export const ASSISTANT_MODEL = "ling-3.0-flash-fin:free";
 export const MAX_MESSAGES = 20;
 export const MAX_MESSAGE_CHARS = 4000;
 export const MAX_TOTAL_CHARS = 16000;
-
-/** Upstream generation limits. */
-export const MAX_OUTPUT_TOKENS = 800;
-export const TEMPERATURE = 0.3;
+/**
+ * The client-supplied context (today's date, the user's category/account/ticker
+ * names, and — only when they opt in — a small figures summary). Capped
+ * separately from the conversation so a large context cannot crowd it out.
+ */
+export const MAX_CONTEXT_CHARS = 4000;
 
 /**
- * System prompt for V1 (help / Q&A only). Deliberately small and factual —
- * mode B ("fill in this form") lands in a later task and will extend this.
+ * Upstream generation limits.
+ *
+ * This model reasons before answering and bills that reasoning against the same
+ * budget, so the ceiling has to cover thinking AND the answer. At 800 a trade
+ * request ("bought 500 usd of VOO at 520.50, fee 3") spent the whole budget
+ * reasoning about exchange rates and returned an EMPTY completion. Fill mode
+ * gets the larger budget because its reasoning is the longer of the two.
+ */
+export const MAX_OUTPUT_TOKENS = 1200;
+export const MAX_OUTPUT_TOKENS_FILL = 2400;
+/** Prose wants a little warmth; a JSON action wants determinism. */
+export const TEMPERATURE_HELP = 0.3;
+export const TEMPERATURE_FILL = 0.1;
+
+export type AssistantMode = "help" | "fill";
+
+/**
+ * System prompt for ordinary Q&A.
  */
 export const SYSTEM_PROMPT = [
   "You are the assistant inside WealthUp, a personal wealth web app.",
@@ -40,11 +73,53 @@ export const SYSTEM_PROMPT = [
   "Review (monthly close), Rules, and two calculators (TVM and Investment Growth).",
   "",
   "Answer the user's question directly and briefly. Explain how to use a page or",
-  "how a number is derived when asked. You cannot see the user's figures unless",
-  "they are quoted in the conversation, so do not invent specific amounts. You",
-  "cannot change any data yourself in this mode; if the user wants something",
-  "recorded, tell them which page and which fields to use.",
+  "how a number is derived when asked. Do not invent specific amounts: use only",
+  "figures given to you in the conversation or the context. When no figures are",
+  "provided, answer in general terms and say that the user can turn on figure",
+  "sharing if they want a specific answer.",
+  "You cannot change any data yourself in this mode; if the user wants something",
+  "recorded, tell them to switch to the Record tab, or which page and fields to use.",
   "This is not financial advice.",
+].join("\n");
+
+/**
+ * System prompt for turning a plain-language request into one action object.
+ *
+ * The schema is stated in full because this model is not asked for a structured
+ * response format — free models vary in whether they support one, and a
+ * rejected request is worse than a prompt-guided one. The browser parses the
+ * reply leniently (fences stripped, first object taken) and validates every
+ * field, so a malformed answer degrades to "I could not read that", never to a
+ * wrong record.
+ */
+export const FILL_SYSTEM_PROMPT = [
+  "You turn a plain-language request into ONE action object for WealthUp, a",
+  "personal wealth app.",
+  "",
+  "Reply with a single JSON object and nothing else. No prose, no explanation,",
+  "no markdown code fences.",
+  "",
+  "Supported actions:",
+  "",
+  "1. A ledger entry — money spent or received:",
+  '{"action":"ledger.entry","type":"expense"|"income","amount":NUMBER,"category":"CATEGORY LABEL","account":"ACCOUNT NAME","date":"YYYY-MM-DD","note":"SHORT TEXT"}',
+  "",
+  "2. A portfolio trade — buying or selling a holding:",
+  '{"action":"portfolio.trade","ticker":"SYMBOL","tradeType":"DCA"|"Dip Buy"|"Manual Buy"|"Sell","platform":"BROKER","date":"YYYY-MM-DD","amountMyr":NUMBER,"amountUsd":NUMBER,"priceUsd":NUMBER,"units":NUMBER,"feeMyr":NUMBER,"notes":"SHORT TEXT"}',
+  "",
+  "3. Nothing recordable:",
+  '{"action":"none","reason":"ONE SHORT SENTENCE saying what is missing or unclear"}',
+  "",
+  "Rules:",
+  "- Include only the fields you are confident about. Omit a field rather than guess it.",
+  "- Every number must be a plain positive number: no currency symbols, no thousands separators, no quotes.",
+  "- The context lists the user's real categories, accounts, tickers and platforms. Copy a name from those lists exactly. If nothing fits, omit the field.",
+  "- The context gives today's date. Resolve 'yesterday', 'last Friday', 'this morning' against it and always output an absolute YYYY-MM-DD date.",
+  "- Ledger amounts are in MYR unless the user clearly says otherwise.",
+  "- 'type' is 'expense' for money going out and 'income' for money coming in.",
+  "- NEVER convert between currencies and never estimate an exchange rate. If the user gave a USD amount and no MYR amount, fill amountUsd and omit amountMyr.",
+  "- NEVER calculate a figure the user did not state. Do not divide an amount by a price to produce units. Omit it instead.",
+  "- If the user asked a question rather than describing something to record, use action 'none'.",
 ].join("\n");
 
 export interface ChatMessage {
@@ -61,7 +136,7 @@ export interface OpenRouterPayload {
 }
 
 export type BuildResult =
-  | { ok: true; payload: OpenRouterPayload }
+  | { ok: true; payload: OpenRouterPayload; mode: AssistantMode }
   | { ok: false; status: number; error: string };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -71,18 +146,33 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 /**
  * Validate the request body and build the OpenRouter payload.
  *
- * Accepts `{ messages: ChatMessage[], mode?: "help" }`. The `system` role is
- * rejected from the client — this proxy owns the system prompt and prepends it.
+ * Accepts `{ messages: ChatMessage[], mode?: "help" | "fill", context?: string }`.
+ * The `system` role is rejected from the client — this proxy owns the system
+ * prompt and prepends it.
  */
 export function buildOpenRouterPayload(body: unknown): BuildResult {
   if (!isPlainObject(body)) {
     return { ok: false, status: 400, error: "Body must be a JSON object" };
   }
 
-  const { messages, mode } = body as { messages?: unknown; mode?: unknown };
+  const { messages, mode: rawMode, context } = body as {
+    messages?: unknown;
+    mode?: unknown;
+    context?: unknown;
+  };
 
-  if (mode !== undefined && mode !== "help") {
+  if (rawMode !== undefined && rawMode !== "help" && rawMode !== "fill") {
     return { ok: false, status: 400, error: "Unsupported mode" };
+  }
+  const mode: AssistantMode = rawMode === "fill" ? "fill" : "help";
+
+  if (context !== undefined) {
+    if (typeof context !== "string") {
+      return { ok: false, status: 400, error: "context must be a string" };
+    }
+    if (context.length > MAX_CONTEXT_CHARS) {
+      return { ok: false, status: 400, error: `context may not exceed ${MAX_CONTEXT_CHARS} characters` };
+    }
   }
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -124,13 +214,21 @@ export function buildOpenRouterPayload(body: unknown): BuildResult {
     return { ok: false, status: 400, error: "The last message must be from the user" };
   }
 
+  const system = mode === "fill" ? FILL_SYSTEM_PROMPT : SYSTEM_PROMPT;
+  const contextText = typeof context === "string" ? context.trim() : "";
+  const preamble: OpenRouterPayload["messages"] = [{ role: "system", content: system }];
+  if (contextText.length > 0) {
+    preamble.push({ role: "system", content: `Context:\n${contextText}` });
+  }
+
   return {
     ok: true,
+    mode,
     payload: {
       model: ASSISTANT_MODEL,
-      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...clean],
-      max_tokens: MAX_OUTPUT_TOKENS,
-      temperature: TEMPERATURE,
+      messages: [...preamble, ...clean],
+      max_tokens: mode === "fill" ? MAX_OUTPUT_TOKENS_FILL : MAX_OUTPUT_TOKENS,
+      temperature: mode === "fill" ? TEMPERATURE_FILL : TEMPERATURE_HELP,
       stream: false,
     },
   };

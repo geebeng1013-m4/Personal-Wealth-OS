@@ -2,3 +2,6 @@ node_modules/
 lib/
 *.log
 .env
+# Secrets the emulator reads locally. Never committed — the real values live in
+# Firebase Secret Manager.
+.secret.local

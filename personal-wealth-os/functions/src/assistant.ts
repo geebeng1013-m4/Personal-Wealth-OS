@@ -7,8 +7,10 @@
  * the reply text. No user data is stored; nothing about the key ever reaches
  * the client, including in an error.
  *
- * V1 is help / Q&A only. "Fill in this form for me" is a later task and will
- * extend the payload builder and this handler, not replace them.
+ * Two modes are carried, both shaped by openrouterRequest.ts: "help" answers in
+ * prose, "fill" answers with one JSON action object that the browser parses and
+ * validates against the live state. Either way this handler only moves text —
+ * it never writes anything, and nothing it returns can change data on its own.
  */
 
 import { onRequest } from "firebase-functions/v2/https";
@@ -137,6 +139,6 @@ export const assistant = onRequest(
       return;
     }
 
-    response.status(200).json({ reply: parsed.reply });
+    response.status(200).json({ reply: parsed.reply, mode: built.mode });
   },
 );
