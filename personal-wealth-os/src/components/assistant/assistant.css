@@ -1,0 +1,610 @@
+/*
+ * The floating assistant: the corner button and the panel it opens.
+ *
+ * Everything here is scoped under .assistant, and every colour comes from the
+ * theme tokens, so it follows the app's light/dark switch without a second
+ * palette. The one layout rule worth stating outright: on a phone the app
+ * already owns the bottom edge with the tab bar, so both the button and the
+ * panel are lifted clear of it rather than floating over it.
+ */
+
+.assistant {
+  position: fixed;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-3);
+  pointer-events: none;
+}
+.assistant > * {
+  pointer-events: auto;
+}
+
+/* ---- the button -------------------------------------------------------- */
+
+.assistant-fab {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.assistant-fab:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+.assistant-fab:active {
+  transform: translateY(0);
+}
+.assistant-fab:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-md), 0 0 0 3px var(--focus);
+}
+.assistant-fab__icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+.assistant-fab__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- the panel --------------------------------------------------------- */
+
+.assistant-panel {
+  width: min(390px, calc(100vw - 40px));
+  max-height: min(600px, calc(100vh - 140px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  animation: assistant-rise var(--dur-mid) var(--ease-out);
+}
+@keyframes assistant-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-panel { animation: none; }
+  .assistant-fab { transition: none; }
+}
+
+.assistant-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+  flex: none;
+}
+.assistant-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-hover);
+  border-radius: var(--radius-pill);
+}
+.assistant-tab {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: var(--weight-medium) var(--text-caption) / 1 var(--font-sans);
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+.assistant-tab.is-active {
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: var(--shadow-xs);
+}
+.assistant-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+.assistant-head__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.assistant-icon-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font: var(--weight-medium) var(--text-caption) / 1 var(--font-sans);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.assistant-icon-btn:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+.assistant-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus);
+}
+.assistant-icon-btn--glyph {
+  display: flex;
+  padding: 6px;
+}
+.assistant-icon-btn--glyph svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ---- privacy notice ---------------------------------------------------- */
+
+.assistant-notice {
+  flex: none;
+  padding: var(--space-3) var(--space-4);
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.assistant-notice__body {
+  margin: 0;
+  color: var(--text-muted);
+  font: var(--weight-regular) var(--text-caption) / var(--leading-normal) var(--font-sans);
+}
+.assistant-notice__body strong {
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+}
+.assistant-notice__ok {
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  font: var(--weight-medium) var(--text-caption) / 1 var(--font-sans);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.assistant-notice__ok:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+/* ---- transcript -------------------------------------------------------- */
+
+.assistant-log {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 140px;
+}
+
+.assistant-msg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 100%;
+}
+.assistant-msg--user {
+  align-items: flex-end;
+}
+.assistant-msg--assistant {
+  align-items: flex-start;
+}
+.assistant-msg__bubble {
+  max-width: 86%;
+  padding: 9px 13px;
+  border-radius: var(--radius-md);
+  font: var(--weight-regular) var(--text-body-sm) / var(--leading-normal) var(--font-sans);
+  overflow-wrap: anywhere;
+}
+.assistant-msg--user .assistant-msg__bubble {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-bottom-right-radius: var(--radius-xs);
+}
+.assistant-msg--assistant .assistant-msg__bubble {
+  background: var(--surface-hover);
+  color: var(--text);
+  border-bottom-left-radius: var(--radius-xs);
+}
+.assistant-msg--error .assistant-msg__bubble {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+/* Where this visit's conversation starts; the model does not see above it. */
+.assistant-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-faint);
+  font: var(--weight-semibold) var(--text-overline) / 1 var(--font-sans);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  margin: var(--space-1) 0;
+}
+.assistant-divider::before,
+.assistant-divider::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border);
+}
+
+.assistant-typing {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.assistant-typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  animation: assistant-blink 1.2s infinite ease-in-out;
+}
+.assistant-typing span:nth-child(2) { animation-delay: 0.15s; }
+.assistant-typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes assistant-blink {
+  0%, 60%, 100% { opacity: 0.25; }
+  30% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-typing span { animation: none; opacity: 0.6; }
+}
+
+/* ---- empty state ------------------------------------------------------- */
+
+.assistant-empty {
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.assistant-empty__title {
+  margin: 0;
+  color: var(--text);
+  font: var(--weight-semibold) var(--text-subheading) / var(--leading-snug) var(--font-sans);
+}
+.assistant-empty__body {
+  margin: 0;
+  color: var(--text-muted);
+  font: var(--weight-regular) var(--text-caption) / var(--leading-normal) var(--font-sans);
+}
+.assistant-empty__chips {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.assistant-chip {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: var(--weight-regular) var(--text-caption) / 1.3 var(--font-sans);
+  text-align: left;
+  padding: 7px 11px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+.assistant-chip:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+.assistant-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+/* ---- Record log -------------------------------------------------------- */
+/* Not a conversation: a list of things the user asked to record, newest first,
+   each carrying its own outcome so past entries can be scanned and found. */
+
+.assistant-log--records {
+  /* Newest is at the top here, so the list starts at the top edge. */
+  padding-top: var(--space-3);
+}
+.assistant-rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.assistant-rec-day {
+  margin: var(--space-2) 0 2px;
+  color: var(--text-faint);
+  font: var(--weight-semibold) var(--text-overline) / 1 var(--font-sans);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  position: sticky;
+  top: calc(var(--space-3) * -1);
+  background: var(--surface-raised);
+  padding: 4px 0;
+  z-index: 1;
+}
+.assistant-rec-day:first-child {
+  margin-top: 0;
+}
+
+.assistant-rec {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.assistant-rec--ready { border-left-color: var(--accent); }
+.assistant-rec--done { border-left-color: var(--positive); }
+.assistant-rec--warn { border-left-color: var(--warning); }
+.assistant-rec--bad { border-left-color: var(--negative); }
+.assistant-rec--muted,
+.assistant-rec--pending { border-left-color: var(--border-strong); }
+.assistant-rec--muted { opacity: 0.72; }
+
+.assistant-rec__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.assistant-rec__status {
+  font: var(--weight-semibold) var(--text-overline) / 1 var(--font-sans);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.assistant-rec--ready .assistant-rec__status { color: var(--accent); }
+.assistant-rec--done .assistant-rec__status { color: var(--positive); }
+.assistant-rec--warn .assistant-rec__status { color: var(--warning); }
+.assistant-rec--bad .assistant-rec__status { color: var(--negative); }
+.assistant-rec__time {
+  flex: none;
+  color: var(--text-faint);
+  font: var(--weight-regular) var(--text-overline) / 1 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.assistant-rec__said {
+  margin: 0;
+  color: var(--text-muted);
+  font: var(--weight-regular) var(--text-caption) / var(--leading-normal) var(--font-sans);
+  overflow-wrap: anywhere;
+}
+.assistant-rec__said::before { content: "“"; }
+.assistant-rec__said::after { content: "”"; }
+
+.assistant-rec__summary {
+  margin: 0;
+  color: var(--text);
+  font: var(--weight-medium) var(--text-body-sm) / var(--leading-snug) var(--font-sans);
+  overflow-wrap: anywhere;
+}
+.assistant-rec__target,
+.assistant-rec__note {
+  margin: 0;
+  color: var(--text-faint);
+  font: var(--weight-regular) var(--text-caption) / var(--leading-normal) var(--font-sans);
+}
+.assistant-rec__reason {
+  margin: 0;
+  color: var(--text-muted);
+  font: var(--weight-regular) var(--text-body-sm) / var(--leading-snug) var(--font-sans);
+}
+.assistant-rec__warn {
+  margin: 0;
+  color: var(--warning);
+  font: var(--weight-regular) var(--text-caption) / var(--leading-normal) var(--font-sans);
+}
+.assistant-rec__typing {
+  padding: 4px 0;
+}
+.assistant-rec__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.assistant-btn {
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  font: var(--weight-medium) var(--text-caption) / 1 var(--font-sans);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.assistant-btn:hover {
+  border-color: var(--border-strong);
+}
+.assistant-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+.assistant-btn--primary:hover {
+  background: var(--accent-hover);
+}
+.assistant-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+/* ---- composer ---------------------------------------------------------- */
+
+.assistant-foot {
+  flex: none;
+  border-top: 1px solid var(--border-subtle, var(--border));
+  padding: var(--space-3) var(--space-4) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.assistant-share {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font: var(--weight-regular) var(--text-caption) / var(--leading-normal) var(--font-sans);
+  cursor: pointer;
+  margin: 0;
+}
+.assistant-share--static {
+  cursor: default;
+  color: var(--text-faint);
+}
+.assistant-share input {
+  accent-color: var(--accent);
+  flex: none;
+}
+
+/* Record's examples: always shown above the composer, since every entry is a
+   fresh request and a reminder of the phrasing helps each time. Ask keeps its
+   examples in the empty log only. */
+.assistant-prompts {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  /* One row that scrolls sideways, so the examples cost a single line of
+     height on a narrow phone panel instead of three. */
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  /* Bleed to the panel edges so a chip visibly runs off the side — the cue
+     that there is more to swipe to. */
+  margin: 0 calc(var(--space-4) * -1);
+  padding: 0 var(--space-4) 2px;
+  scroll-padding-inline: var(--space-4);
+}
+.assistant-prompts::-webkit-scrollbar {
+  display: none;
+}
+.assistant-prompts .assistant-chip {
+  flex: none;
+  white-space: nowrap;
+  padding: 5px 10px;
+  scroll-snap-align: start;
+}
+
+.assistant-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+.assistant-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  resize: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-bg);
+  color: var(--text);
+  font: var(--weight-regular) var(--text-body-sm) / var(--leading-normal) var(--font-sans);
+  padding: 9px 11px;
+  max-height: 132px;
+  /* The field is grown to fit its content by autoGrow, so it should never show
+     a scrollbar — Edge draws stepper arrows on one, which read as a number
+     input. autoGrow switches this to "auto" only once the height is capped. */
+  overflow-y: hidden;
+}
+.assistant-input:focus {
+  outline: none;
+  border-color: var(--accent-line, var(--accent));
+  box-shadow: 0 0 0 2px var(--focus);
+}
+.assistant-input:disabled {
+  opacity: 0.6;
+}
+.assistant-send {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  cursor: pointer;
+}
+.assistant-send:disabled {
+  background: var(--surface-hover);
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+.assistant-send svg {
+  width: 18px;
+  height: 18px;
+}
+.assistant-send:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus);
+}
+.assistant-disclaimer {
+  margin: 0;
+  color: var(--text-faint);
+  font: var(--weight-regular) var(--text-overline) / var(--leading-normal) var(--font-sans);
+}
+
+/* ---- the form the assistant just filled in ----------------------------- */
+
+#tradeForm.is-assistant-filled {
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: assistant-filled-fade 2.6s var(--ease-out) forwards;
+}
+@keyframes assistant-filled-fade {
+  0%, 60% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
+  100% { box-shadow: 0 0 0 2px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #tradeForm.is-assistant-filled { animation: none; }
+}
+
+/* ---- phone ------------------------------------------------------------- */
+
+@media (max-width: 720px) {
+  /* The tab bar owns the bottom edge (52px + its own safe-area padding). */
+  .assistant {
+    right: 16px;
+    left: 16px;
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    align-items: flex-end;
+  }
+  .assistant-fab {
+    width: 48px;
+    height: 48px;
+  }
+  .assistant-panel {
+    width: 100%;
+    max-height: min(72vh, calc(100vh - 180px));
+  }
+  .assistant-log {
+    padding: var(--space-3);
+  }
+}

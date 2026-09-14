@@ -1,6 +1,7 @@
 import "./theme.css";
 import "./components.css";
 import "./shell.css";
+import "./components/assistant/assistant.css";
 import "./legacy-tail.css";
 import type { WealthState } from "./models";
 import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint } from "./state";

@@ -36,7 +36,80 @@ import { exchangesFromText, mergeExchanges } from "../exchangeImport";
 import { rebalanceContributions, tradeExchangeRate } from "../financialHealth";
 import { recordsFromCsv } from "../csvImport";
 import { getUsdToMyr } from "../market";
+import type { TradeDraft } from "../components/assistant/assistantTypes";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
+
+/**
+ * A trade the assistant has read from plain language, waiting to be written
+ * into the form.
+ *
+ * Unlike the Ledger, the trade form keeps no module draft of its own — it
+ * renders empty every time — so the pre-fill is applied to the DOM once, in
+ * bindPortfolio, and then cleared. Cleared on use, not on navigation: applying
+ * it is the last step of a navigate() the assistant just triggered, and leaving
+ * it set would refill the form the next time the page is opened.
+ */
+let pendingTradePrefill: TradeDraft | null = null;
+
+/** Queue an assistant draft; the caller then navigates to "portfolio". */
+export function queueTradePrefill(draft: TradeDraft): void {
+  pendingTradePrefill = draft;
+}
+
+/**
+ * Write a queued draft into the trade form.
+ *
+ * Only fields the draft actually carries are touched, so an omitted figure
+ * stays empty for the user to fill rather than being invented as 0. A ticker or
+ * broker that is not already on file goes down the form's own "+ Custom" path,
+ * including revealing the custom input — exactly what a change event on those
+ * selects would have done.
+ */
+function applyTradePrefill(root: HTMLElement, draft: TradeDraft): void {
+  const form = root.querySelector<HTMLFormElement>("#tradeForm");
+  if (!form) return;
+
+  const setField = (name: string, value: string): void => {
+    const field = form.elements.namedItem(name);
+    if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement) field.value = value;
+  };
+  const setNumber = (name: string, value: number | undefined): void => {
+    if (value !== undefined) setField(name, String(value));
+  };
+
+  setField("date", draft.date);
+  setField("type", draft.tradeType);
+
+  if (draft.isCustomTicker) {
+    setField("ticker", "__custom__");
+    setField("customTicker", draft.ticker);
+    const wrap = root.querySelector<HTMLElement>("#customTickerWrap");
+    if (wrap) wrap.style.display = "block";
+  } else {
+    setField("ticker", draft.ticker);
+  }
+
+  if (draft.isCustomPlatform) {
+    setField("platform", "__custom__");
+    setField("customPlatform", draft.platform);
+    const wrap = root.querySelector<HTMLElement>("#customPlatformWrap");
+    if (wrap) wrap.style.display = "block";
+  } else {
+    setField("platform", draft.platform);
+  }
+
+  setNumber("amountMyr", draft.amountMyr);
+  setNumber("amountUsd", draft.amountUsd);
+  setNumber("priceUsd", draft.priceUsd);
+  setNumber("units", draft.units);
+  setNumber("feeMyr", draft.feeMyr);
+  if (draft.notes) setField("notes", draft.notes);
+
+  // Bring it into view and mark it, so a form filled in from the other side of
+  // a page change is not something the user has to go hunting for.
+  form.classList.add("is-assistant-filled");
+  form.scrollIntoView({ behavior: "smooth", block: "center" });
+}
 
 /** A conversion rate, at the precision the difference actually shows up in. */
 function rateText(rate: number): string {
@@ -48,7 +121,11 @@ function rateText(rate: number): string {
  * form's datalist. Derived from the trades themselves — no separate list to
  * keep in sync — with "Moomoo" always offered as the common starting point.
  */
-function knownPlatforms(state: WealthState): string[] {
+/**
+ * Brokers the trade form offers. Exported so the assistant proposes a platform
+ * from exactly the same list the form will accept, rather than its own copy.
+ */
+export function knownPlatforms(state: WealthState): string[] {
   const seen = new Set<string>();
   for (let i = state.trades.length - 1; i >= 0; i--) {
     const name = state.trades[i]?.platform?.trim();
@@ -362,6 +439,13 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
   platformSelect?.addEventListener("change", () => {
     if (customPlatformWrap) customPlatformWrap.style.display = platformSelect.value === "__custom__" ? "block" : "none";
   });
+
+  // Applied after the selects are bound so the custom-input reveal it performs
+  // is not undone by a later change event.
+  if (pendingTradePrefill) {
+    applyTradePrefill(root, pendingTradePrefill);
+    pendingTradePrefill = null;
+  }
 
   root.querySelector<HTMLFormElement>("#tradeForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
