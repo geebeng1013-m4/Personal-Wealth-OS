@@ -130,6 +130,66 @@
 
 ---
 
+## AI 助手（A 系列）
+
+目标：右下角悬浮助手。**Ask** 问 WealthUp 怎么用、数字怎么来的；**Record** 用一句话描述一笔账或交易，
+助手把对应表单预填好，**保存永远由你自己按**。模型 `ling-3.0-flash-fin:free`（OpenRouter，免费档，
+不产生 API 费用）。
+
+**边界**：这个助手和 Advisor 是两件事。Advisor 仍然是纯规则、零 AI，本系列没有碰它。助手不写任何数据，
+只预填表单；Ask 回答里带「非投资建议」。
+
+### A-1 — 服务器代理（Cloud Function）  `[x]`  （PR #35）
+- **问题**：浏览器不能直接调 OpenRouter，key 会暴露。
+- **做法**：`functions/`（Firebase Cloud Functions 2nd gen，us-central1）。模型写死在服务器端，客户端改不了；
+  客户端送来的 `system` 消息直接拒绝；跨域白名单（站点在 Vercel、函数在 Firebase，每次都是跨域）；
+  按 IP 限流（移植自 `api/_rateLimit.ts`）。key 存在 Firebase Secret Manager，不进仓库。
+- 验证：已部署到生产并用真实请求验过（预检 204、非白名单 403、改模型被忽略、坏输入干净 400）。
+
+### A-2 — 悬浮组件外壳  `[x]`
+- `src/components/assistant/`。挂在 `#pageMount` 外面，切页面不消失；状态是模块级变量（跟 Ledger 筛选、
+  TVM 输入同一个做法），不进 `WealthState`。手机上抬高避开底部 Tab 栏。
+
+### A-3 — Ask 问答  `[x]`
+- 聊天气泡、连续对话、失败提示（限流 / 服务器错 / 断网 / 空回复各有一句人话）。
+- 新对话时有建议问题，开始聊之后不再显示。
+
+### A-4 + A-5 — Record：记账 + 持仓交易  `[x]`
+- 模型按提示词输出一个 JSON 动作，浏览器端宽松解析（去掉代码块、取第一个完整对象）再逐字段校验。
+- 预填走页面自己的路径：Ledger 复用已有的 `ledgerEntryDraft`；Portfolio 表单没有草稿状态，
+  排队到 `bindPortfolio` 里一次性写进 DOM。
+- **Record 是日志不是对话**（你看过觉得跟 Ask 太像，改的）：每条一张卡片——原话、解析结果、状态
+  （Ready / Filled in / Discarded / Not recognised / Failed / Not used），最新在上、按天分组。
+  每次请求不带历史。建议问题固定在输入框上方，一行横向滑动。
+- **草稿不跨刷新**：刷新后没处理的草稿变 Not used，按钮消失，避免同一笔记两次。
+
+### A-6 — 隐私：发出去的是什么  `[x]`
+- Ask：默认只发今天的日期。「Share my figures」打开才附带数字摘要（整数令吉、百分比）。
+  **开关每次打开页面都回到关闭**（你测出来原本会被记住，改的）。
+- Ask 历史界面上保留，但**只把这次访问的对话发给模型**，中间一条「New conversation」分隔线
+  （不然开关关了，旧回答里的数字还会被重新发出去）。
+- Record：只发类别 / 账户 / 股票 / 券商的**名字**，从不发金额——填表需要名字，这个开关打开也不发数字。
+
+### 实测抓到的两个问题（接真实模型才暴露）
+1. **模型编造汇率**：「bought 500 usd of VOO at 520.50, fee 3 myr」→ 自己猜 4.40 汇率填 `amountMyr: 2200`，
+   又用 500÷520.50 算出 `units`。猜出来的令吉数字会变成持仓成本基础。
+   **修法**：`figureAppearsIn()`——你没说过的数字一律不填，卡片上说明留空了哪个。记账金额对不上直接拒绝整张草稿。
+2. **reasoning 模型吃光输出预算**：思考和正文共用 `max_tokens`，交易那条返回空字符串。Record 上限提到 2400，
+   Ask 1200；提示词里禁止换算货币、禁止自己算数量。
+
+- 验证：typecheck / 884 测试 / build 全绿；CDP 真实浏览器验证（Ask / Record / 预填后账目条数不变、按 Save 才 +1 /
+  四种失败路径 / 刷新后开关关闭、旧对话不重发）；你手动跑完 25 项测试清单。
+
+### 待办 / FUTURE IDEAS（记录，不自动做）
+- **上线顺序**：先重新部署 Cloud Function（线上还是只支持 Ask 的 A-1 版本），再合并 PR。
+  合并会触发 Vercel 自动发布前端，顺序反过来 Record 在线上会直接失败。
+- **换 OpenRouter key**：key 在对话里贴过两次，建议上线前换一把。
+- 聊天记录改存 Firestore（跟账号走、换设备可见、不串号）。现在是浏览器 localStorage。SQLite 讨论过，不适合。
+- `firebase-functions` 版本偏旧，CLI 部署时提示升级（有破坏性变更，单独做）。
+- 更多 Record 动作（目标、预算桶、换汇、每月定投）；流式输出。
+
+---
+
 ## V1 待办（全部完成）
 
 ### V1-1 — `pwo-save-error` 事件补一个监听器  `[x]`  （PR #12，merged）
