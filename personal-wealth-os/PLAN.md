@@ -341,7 +341,7 @@ https://claude.ai/artifact/DWFjJPJ2Nof42eZSZTtZZB
 - 做了独立的 Preview：并排对比现在和玻璃，可以切换主题，在电脑上模拟 iPhone Safari，用滑块调参数。项目代码没有改动。
 - 在 Preview 里确认了上面的决定和参数。
 
-### G-1 — 玻璃 token + 材质 + L1 浮层  `[x]`（2026-09-15，PR #45）
+### G-1 — 玻璃 token + 材质 + L1 浮层  `[x]`（2026-09-15，PR #45，merged）
 - 在 `theme.css` 加 `--glass-*` token；在 `components.css` 加共用材质：高光边、按下鼓起、光点跟手，以及「减少透明度」和「减少动态效果」的退路。
 - 手机顶栏改成玻璃；底部 Tab 栏改成悬浮胶囊，加上滑动的选中镜片；Ask 按钮改成绿色玻璃。
 - 这一步只用「模糊 + 高光」，所有浏览器效果一致；折射放到 G-4。
@@ -359,7 +359,7 @@ https://claude.ai/artifact/DWFjJPJ2Nof42eZSZTtZZB
   - 安全区（刘海屏和 Home 指示条的留白）在 Edge 模拟里全是 0，只能在真机上确认。
   - 「减少透明度」开关 Edge 模拟不了。
 
-### G-2 — L2 按钮：primary / secondary / danger  `[x]`（2026-09-15，PR #45）
+### G-2 — L2 按钮：primary / secondary / danger  `[x]`（2026-09-15，PR #45，merged）
 - 只改 `.wu-btn` 的这三个变体，全站约 52 处会自动跟着变，不改任何页面模板。
 - 检查绿色玻璃上白字的对比度，深色和浅色主题都要达到 AA。
 - **完成标准**：逐页截图，重点看 Ledger、Portfolio、Settings 这些按钮多的页面。
@@ -373,7 +373,7 @@ https://claude.ai/artifact/DWFjJPJ2Nof42eZSZTtZZB
   - hover 在深色主题变亮、在浅色主题变暗，避免浅色下白字变淡。
 - **一处保留原意**：Settings 的 Reset 原来特意加了一圈红色边框，改成玻璃版的红色描边。
 
-### G-3 — L3 文字按钮：胶囊圆角  `[x]`（2026-09-15，跟 G-1、G-2 同一个 commit，PR #45）
+### G-3 — L3 文字按钮：胶囊圆角  `[x]`（2026-09-15，跟 G-1、G-2 同一个 commit，PR #45，merged）
 - `ghost` 和 `icon` 按钮的圆角改成胶囊形，其他不变。改动很小，也可以跟 G-2 合并成一个 PR，由你决定。
 - **结果**：
   - 只改了 `components.css` 里两条规则，测试和 build 通过。
@@ -409,7 +409,7 @@ https://claude.ai/artifact/BqULCH7RnCChqE2RdzDwPR
   - 新增一个小模块（例如 `src/sidebarScrollbar.ts`）：根据滚动位置计算细条的位置和长度，处理出现、淡出和拖动；在 `renderApp` 渲染后接上。
   - 不碰任何页面逻辑。
 
-### S-1 — iOS 式侧栏滚动条  `[x]`（2026-09-15，PR #46，叠在 #45 上）
+### S-1 — iOS 式侧栏滚动条  `[x]`（2026-09-15，PR #46，merged）
 - 做上面的 Proposed Solution。
 - **两个要特别处理的坑**：
   1. **切换页面不能闪**：每次切换页面都会重新渲染侧栏。「打开时闪一下」只能在整个 App 第一次加载时出现一次，否则每点一次导航都会闪。
