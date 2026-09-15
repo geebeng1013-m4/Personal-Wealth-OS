@@ -115,6 +115,7 @@
 
     /* side rays at the top of the page (DG-1) */
     --rays-opacity: 0.65;
+    --rays-boost-phone: 1.5; /* DG-6 */
     --rays-blend: normal;
 
     /* overlay scrollbar thumb (sidebar, S-1) */
@@ -233,6 +234,7 @@
     --surface-overlay-glass: rgba(38, 34, 28, 0.16);
     --sidebar-glow: 0.2;
     --rays-opacity: 0.5;
+    --rays-boost-phone: 1.1;
     --rays-blend: multiply; /* light on a light ground vanishes; multiply tints it instead */
     --scrollbar-thumb: rgb(38 34 28 / 0.38);
     --scrollbar-thumb-strong: rgb(38 34 28 / 0.55);

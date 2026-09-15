@@ -351,7 +351,7 @@
   height: 600px;
   pointer-events: none;
   /* Brand-coloured light (DG-1). Strength per theme lives in theme.css. */
-  opacity: var(--rays-opacity);
+  opacity: calc(var(--rays-opacity) * var(--rays-boost, 1));
   mix-blend-mode: var(--rays-blend);
   /* Fade out downwards with a mask, not a colour overlay: a colour overlay
      shows as a hard band once the light theme multiplies it. */
@@ -634,8 +634,12 @@
   .main {
     padding-bottom: calc(84px + var(--tabbar-gap));
   }
+  /* DG-6: on a phone the light sits in the top-right corner, right under the
+     glass brand bar, and barely showed. A taller box spreads it further down
+     past the bar, and a boost on the per-theme strength makes it read. */
   .side-rays {
-    height: 360px;
+    height: 560px;
+    --rays-boost: var(--rays-boost-phone);
   }
   /* The phone has its own glass brand bar; no second bar on top of it. */
   .titlebar {
