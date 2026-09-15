@@ -571,6 +571,8 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
 https://claude.ai/artifact/L4w2Sgyeucw9ibNutwv4xN
 其他 11 个页面的整齐版（每页并排：真实截图 · 整齐版 · 改了什么）：
 https://claude.ai/artifact/LYCovFF3EQ2krqLKfsKLZE
+电脑版整齐版（12 个页面，窗口里切换「现在 / 整齐版」）：
+https://claude.ai/artifact/FBx3QM1pbR9Nrf2HGQ2G9a
 
 - **Problem**：你看了 Preview 里的手机截图，觉得那个很整齐，真实 App 反而显得乱。2026-09-16 用 demo 数据在手机宽度下逐页检查，结果：
   - Portfolio 页面长 4,965px，有 90 个徽章。
