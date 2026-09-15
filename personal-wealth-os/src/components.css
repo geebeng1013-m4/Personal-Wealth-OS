@@ -328,8 +328,9 @@
   }
 
   /* ---- the user's financial goal on the Overview --------------------- */
-  /* One line under the page header. A button because it opens the Goals page
-     where the sentence is written; styled as a quiet line, not a call to action. */
+  /* Under the page header. A button because it opens the Goals page where the
+     sentence is written. With no goal it is a quiet prompt line; with one it is
+     the glow card below. */
   .wu-goal-line {
     display: flex;
     align-items: baseline;
@@ -364,41 +365,39 @@
     min-width: 0;
     overflow-wrap: anywhere;
   }
-  /* The user's own sentence sits in the true centre of the bar, not just the
-     space left after the label: a hidden copy of the label balances the right
-     side, so the two outer columns are always the same width. */
+  /* A written goal gets the "glow" card: a soft accent wash from the top, an
+     accent border and halo, the label in accent above the sentence, both centred.
+     Built only from theme tokens, so light mode gets a lighter wash on its own. */
   .wu-goal-line:not(.wu-goal-line--empty) {
     display: grid;
-    grid-template-columns: max-content minmax(0, 1fr) max-content;
-    align-items: center;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    row-gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius-md);
+    background:
+      radial-gradient(120% 140% at 50% 0%, var(--accent-soft), transparent 70%),
+      var(--surface-raised);
+    box-shadow: 0 0 24px -8px var(--accent-line);
   }
-  /* Larger than body copy and in full-strength text colour: it is a goal, not a
+  .wu-goal-line:not(.wu-goal-line--empty):hover {
+    border-color: var(--accent);
+  }
+  .wu-goal-line:not(.wu-goal-line--empty):focus-visible {
+    box-shadow: 0 0 24px -8px var(--accent-line), 0 0 0 2px var(--focus);
+  }
+  .wu-goal-line:not(.wu-goal-line--empty) .wu-goal-line__label {
+    color: var(--accent);
+  }
+  /* A step above heading size, in full-strength text colour: it is a goal, not a
      status line. Set in Lato Regular (loaded in index.html, 400 only) — the one
      place it is used. Lato has no CJK glyphs, so a Chinese goal falls through to
      the system font. */
   .wu-goal-line:not(.wu-goal-line--empty) .wu-goal-line__text {
     text-align: center;
-    font: var(--weight-regular) var(--text-heading) / var(--leading-snug) "Lato", var(--font-sans);
+    font: var(--weight-regular) calc(var(--text-heading) + 2px) / var(--leading-snug) "Lato", var(--font-sans);
     letter-spacing: 0.01em;
-  }
-  .wu-goal-line:not(.wu-goal-line--empty)::after {
-    content: "Financial goal";
-    visibility: hidden;
-    font: var(--weight-semibold) var(--text-overline) / 1 var(--font-sans);
-    letter-spacing: var(--tracking-wide);
-    text-transform: uppercase;
-  }
-  /* On a phone the side columns would squeeze the sentence into a narrow strip,
-     so the label sits above it instead, both centred. */
-  @media (max-width: 640px) {
-    .wu-goal-line:not(.wu-goal-line--empty) {
-      grid-template-columns: minmax(0, 1fr);
-      justify-items: center;
-      row-gap: var(--space-1);
-    }
-    .wu-goal-line:not(.wu-goal-line--empty)::after {
-      content: none;
-    }
   }
   .wu-goal-line--empty {
     border-left-color: var(--border-strong);
