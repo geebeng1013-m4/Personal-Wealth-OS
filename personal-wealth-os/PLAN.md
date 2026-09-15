@@ -539,7 +539,7 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
   - 截图检查了深色 Dashboard（顶部和滚动后）、浅色 Ledger、900 宽，以及侧栏底部。
 - **改动的文件**：`shell.css`、`theme.css`（新增 `--sidebar-glow`）、`titleBar.ts`（吸顶栏出现的判断线从 56px 改成 60px，对应悬浮后的位置）。
 
-### DG-6 — 手机上的顶部光线加强  `[x]`（2026-09-16，PR 待合并）
+### DG-6 — 手机上的顶部光线加强  `[x]`（2026-09-16，PR #52，merged）
 - **Problem**：DG-1 以后，桌面能看出绿色和铜色的光；手机上几乎看不到。光线区域只有 360px 高，光源在右上角，正好被玻璃顶栏盖住。
 - **做法**：只在手机宽度（≤720px）调整：提高 `--rays-opacity`，并把光线区域调高或往下移，让光从顶栏下面露出来。不改桌面。
 - **完成标准**：手机 390 宽，深色、浅色截图；光线看得出来，但不影响 Dashboard 第一张卡片的文字。
@@ -552,7 +552,7 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
 - **限制**：手机和电脑的 `intensity` 是在光线挂载时按屏幕宽度决定的。在电脑上把窗口拖过 720px 时不会马上变，要等页面下一次渲染（切换页面或保存数据）。
 - **改动的文件**：`ui.ts`、`shell.css`、`theme.css`。桌面版没有变化。
 
-### DG-7 — iPhone「安装到主屏幕」说明弹窗改成玻璃  `[x]`（2026-09-16，PR 待合并，叠在 DG-6 的 PR #52 上）
+### DG-7 — iPhone「安装到主屏幕」说明弹窗改成玻璃  `[x]`（2026-09-16，PR #53，merged）
 - **Problem**：DG-3 只改了 Ask 面板和 Version History 弹窗。`main.ts` 里的 `showIOSInstructions` 还是实色卡片加深色遮罩。
 - **做法**：跟 Version History 一样，卡片加上 `wu-glass wu-glass--sheet`，遮罩换成 `--surface-overlay-glass`。
 - **完成标准**：在手机 390 宽下打开这个弹窗，深色、浅色截图，文字清楚。
