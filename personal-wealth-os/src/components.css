@@ -330,7 +330,7 @@
   /* ---- the user's financial goal on the Overview --------------------- */
   /* Under the page header. A button because it opens the Goals page where the
      sentence is written. With no goal it is a quiet prompt line; with one it is
-     the glow card below. */
+     a card below. */
   .wu-goal-line {
     display: flex;
     align-items: baseline;
@@ -365,30 +365,21 @@
     min-width: 0;
     overflow-wrap: anywhere;
   }
-  /* A written goal gets the "glow" card: a soft accent wash from the top, an
-     accent border and halo, the label in accent above the sentence, both centred.
-     Built only from theme tokens, so light mode gets a lighter wash on its own. */
+  /* A written goal is a card in the same colours as every other Overview card
+     (surface, border, radius; label in the standard label colour), with the
+     label above the sentence, both centred. */
   .wu-goal-line:not(.wu-goal-line--empty) {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     justify-items: center;
     row-gap: var(--space-2);
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--accent-line);
-    border-radius: var(--radius-md);
-    background:
-      radial-gradient(120% 140% at 50% 0%, var(--accent-soft), transparent 70%),
-      var(--surface-raised);
-    box-shadow: 0 0 24px -8px var(--accent-line);
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
   }
   .wu-goal-line:not(.wu-goal-line--empty):hover {
-    border-color: var(--accent);
-  }
-  .wu-goal-line:not(.wu-goal-line--empty):focus-visible {
-    box-shadow: 0 0 24px -8px var(--accent-line), 0 0 0 2px var(--focus);
-  }
-  .wu-goal-line:not(.wu-goal-line--empty) .wu-goal-line__label {
-    color: var(--accent);
+    border-color: var(--border-strong);
   }
   /* A step above heading size, in full-strength text colour: it is a goal, not a
      status line. Set in Lato Regular (loaded in index.html, 400 only) — the one
