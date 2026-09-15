@@ -77,6 +77,9 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 
 - **AI 助手已上线**（2026-09-14）：先部署了新版 Cloud Function，再合并 PR #35。线上函数 Ask / Record 实测正常，
   wealthup.cc 的前端包里有助手、指向生产函数、不含 key。
+- **助手理财原则 R-1 已部署**（2026-09-15）：Ask 按六大原则回答 + 紧急资金安全网。模拟器 22/22 守原则。
+  **免费额度今天用光**（每天 50 次、全 app 共用），线上 08:00 MYT 后恢复，恢复后再验生产回答。下一步 R-2（等你说）。
+- **要你决定：OpenRouter 充值 10 credits**（每天 50 次 → 1000 次），否则上线后真实用户很快会遇到「busy」。
 - **待做：换 OpenRouter key**（对话里贴过两次）。你生成新 key 放进 `functions/.secret.local`，我写进 Secret Manager
   并让函数用上，不用改代码、不用重新合并。
 
