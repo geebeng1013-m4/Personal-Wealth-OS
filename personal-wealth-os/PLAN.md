@@ -552,10 +552,16 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
 - **限制**：手机和电脑的 `intensity` 是在光线挂载时按屏幕宽度决定的。在电脑上把窗口拖过 720px 时不会马上变，要等页面下一次渲染（切换页面或保存数据）。
 - **改动的文件**：`ui.ts`、`shell.css`、`theme.css`。桌面版没有变化。
 
-### DG-7 — iPhone「安装到主屏幕」说明弹窗改成玻璃  `[ ]`  ← **Current Task**
+### DG-7 — iPhone「安装到主屏幕」说明弹窗改成玻璃  `[x]`（2026-09-16，PR 待合并，叠在 DG-6 的 PR #52 上）
 - **Problem**：DG-3 只改了 Ask 面板和 Version History 弹窗。`main.ts` 里的 `showIOSInstructions` 还是实色卡片加深色遮罩。
 - **做法**：跟 Version History 一样，卡片加上 `wu-glass wu-glass--sheet`，遮罩换成 `--surface-overlay-glass`。
 - **完成标准**：在手机 390 宽下打开这个弹窗，深色、浅色截图，文字清楚。
+- **结果**：
+  - 958/958 测试通过，build 通过，控制台没有报错。
+  - `main.ts` 里的卡片加上 `wu-glass wu-glass--sheet`，遮罩改成 `--surface-overlay-glass`，跟 Version History 弹窗一致。
+  - 这个弹窗只在 iPhone 上出现。测试时把浏览器伪装成 iPhone Safari，调用 `__pwoInstall()` 打开。
+  - 深色（Dashboard 上）和浅色（Settings 上）都截图检查过：卡片是厚玻璃，文字清楚，后面的页面隐约可见。
+- **DG 系列到这里全部完成。**
 
 ---
 

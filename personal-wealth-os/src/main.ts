@@ -43,9 +43,10 @@ function isStandalone(): boolean {
 
 function showIOSInstructions(): void {
   const overlay = document.createElement("div");
-  overlay.style.cssText = "position:fixed;inset:0;background:var(--surface-overlay);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;";
+  // Thick glass sheet on a light dim, like Version History (DG-3 / DG-7).
+  overlay.style.cssText = "position:fixed;inset:0;background:var(--surface-overlay-glass);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;";
   overlay.innerHTML = `
-    <div class="wu wu-card" style="max-width:320px;text-align:center;">
+    <div class="wu wu-card wu-glass wu-glass--sheet" style="max-width:320px;text-align:center;">
       <h3 class="t-heading" style="margin:0 0 16px;">Install Wealth OS</h3>
       <div class="t-body-sm t-muted" style="text-align:left;line-height:1.8;">
         <p>1. Tap the <strong>Share</strong> button <span style="font-size:18px;">⬆️</span> at the bottom of Safari</p>
