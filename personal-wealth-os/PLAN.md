@@ -503,12 +503,22 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
   - 删除、导入前的确认框是浏览器自带的 `confirm()`，样式改不了。
 - **改动的文件**：`theme.css`、`components.css`、`assistant.css`、`assistantWidget.ts`、`ui.ts`。
 
-### DG-4 — 分段选择器加滑动镜片  `[ ]`  ← **Current Task**
+### DG-4 — 分段选择器加滑动镜片  `[x]`（2026-09-16，PR 待合并，叠在 DG-3 的 PR #49 上）
 - `wu-segmented` 和 Ask/Record 切换，改成玻璃镜片滑到选中项。
 - **坑**：Ledger 点选项后会重新渲染页面，镜片没办法自己滑。要像 Tab 栏一样记住上一个选中项，再从那里滑过来。每个选择器分开记。
 - **完成标准**：三个真实的选择器都要实测镜片位置和滑动；键盘操作仍然可用。
+- **结果**：
+  - 958/958 测试通过，build 通过，控制台没有报错。
+  - 实测了 Ledger 交易类型、Ledger 时间范围、Rules 分类、Ask/Record 切换：
+    - 镜片和选中项完全重合（误差不超过 1px）。
+    - 点击后页面重新渲染时，镜片会从上一个选项滑过去（截到了滑动中途的位置）。
+  - 截图检查了深色和浅色。
+- **做法**：`liquidGlass.ts` 用一个 MutationObserver（每帧最多检查一次）找到页面上所有的 `.wu-segmented` 和 `.assistant-tabs`，自动加上镜片，并按「aria-label + 选项的 data 属性」记住上一次选中哪一项。**没有改任何页面模板**，以后新增的分段选择器会自动带上镜片。
+- **顺带的外观变化**：`.wu-segmented` 从圆角矩形改成胶囊形，跟 Preview 和 Ask/Record 切换一致。
+- **键盘**：选项还是原来的按钮，Tab 和回车照常能用；选中项获得焦点时，焦点框照常显示（样式规则里用了 `:not(:focus-visible)`）。这一点只检查了样式规则，没有实际用键盘测试。
+- **改动的文件**：`liquidGlass.ts`、`components.css`、`assistant.css`、`theme.css`（新增 `--glass-lens-raised`）。
 
-### DG-5 — 侧栏变成悬浮玻璃面板  `[ ]`（改动最大，最后做）
+### DG-5 — 侧栏变成悬浮玻璃面板  `[ ]`（改动最大，最后做）  ← **Current Task**（要先确认做不做）
 - 侧栏四周留空、圆角，浮在页面上。要让光线延伸到侧栏后面，玻璃才看得出效果，所以要调整页面布局和光线的位置。
 - **会互相影响的地方**：S-1 的滚动条（细条放在侧栏的留白里）、DG-2 的吸顶栏（左边从哪里开始）、页面内容区的宽度。
 - 做完 DG-1 到 DG-4 看过效果以后，再确认要不要做。

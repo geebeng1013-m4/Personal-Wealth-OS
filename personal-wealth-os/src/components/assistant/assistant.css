@@ -108,6 +108,18 @@
   color: var(--text);
   box-shadow: var(--shadow-xs);
 }
+/* DG-4: the glass lens (components.css .wu-seg-lens) marks the active tab. */
+.assistant-tabs.has-lens {
+  position: relative;
+}
+.assistant-tabs.has-lens > .assistant-tab {
+  position: relative;
+  z-index: 1;
+}
+.assistant-tabs.has-lens > .assistant-tab.is-active:not(:focus-visible) {
+  background: transparent;
+  box-shadow: none;
+}
 .assistant-tab:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--focus);
