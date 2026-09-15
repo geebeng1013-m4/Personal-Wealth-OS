@@ -256,3 +256,149 @@ export function getFinancialRulesOfKind<K extends FinancialRuleKind>(
 ): Array<FinancialRuleOfKind<K>> {
   return getFinancialRules(state).filter((rule): rule is FinancialRuleOfKind<K> => rule.kind === kind);
 }
+
+// --- Keeping rules in step with Settings -------------------------------------
+//
+// The structured rules are the policy the Advisor (and the assistant) reads.
+// They were only ever written once — seeded from the planning config when a state
+// was created or migrated — while Settings kept writing the planning fields they
+// were seeded from. So a user who signed up (every rule a disabled zero
+// placeholder) and then entered an emergency target of MYR 4,500 still had a
+// rule saying MYR 0: the Advisor printed "Emergency Fund is 33% complete" beside
+// "Hold at least MYR 0", and the assistant was sent none of the user's rules.
+//
+// The fix keeps the rules the canonical policy and adds the missing write path:
+// saving a setting updates the rule it corresponds to. Two things are never
+// overwritten, because the rules are meant to be the user's configuration:
+//   - a rule's `enabled` flag, unless it is still an untouched placeholder;
+//   - any rule a Settings form does not own (drift tolerance, deployment steps).
+
+/** Rule kinds that mirror one planning setting a Settings form saves. */
+export type PlanningRuleKind =
+  | "emergency-fund-minimum"
+  | "monthly-spending-limit"
+  | "dca-monthly-amount"
+  | "target-allocation";
+
+type RulePlanningSource = Pick<WealthState, "emergency" | "cashflow" | "dca" | "opportunity" | "goals" | "financialRules">;
+
+/** True when the rule asserts nothing: a zero amount, or no weight on any ticker. */
+function assertsNothing(rule: FinancialRule): boolean {
+  switch (rule.kind) {
+    case "emergency-fund-minimum": return rule.targetAmount <= 0;
+    case "monthly-spending-limit": return rule.limitAmount <= 0;
+    case "dca-monthly-amount": return rule.amount <= 0;
+    case "target-allocation": return !Object.values(rule.targets).some((weight) => weight > 0);
+    case "goal-contribution": return rule.monthlyAmount <= 0;
+    default: return false;
+  }
+}
+
+/**
+ * A rule seeded before the user had set anything: disabled AND asserting
+ * nothing. Only a placeholder may be switched on by a save. A rule that is
+ * disabled while holding a real value was switched off on purpose, and stays off.
+ */
+export function isPlaceholderRule(rule: FinancialRule): boolean {
+  return !rule.enabled && assertsNothing(rule);
+}
+
+/** The value a planning save carries into an existing rule, keeping its id and flag rules. */
+function carryInto(existing: FinancialRule, candidate: FinancialRule): FinancialRule {
+  const enabled = assertsNothing(candidate)
+    ? false
+    : isPlaceholderRule(existing) ? true : existing.enabled;
+  return { ...candidate, id: existing.id, enabled } as FinancialRule;
+}
+
+/**
+ * Rules after the user saved planning values: each named kind takes its value
+ * from the state's (already updated) planning fields.
+ *
+ * An existing rule keeps its id, takes the new value, and keeps its `enabled`
+ * flag — except a placeholder, which turns on once it holds a real value, and
+ * any rule, which turns off when the saved value is zero. A missing rule is
+ * added, because saving the setting is the user configuring that policy. Every
+ * other rule is returned untouched and in its original order.
+ */
+export function syncPlanningRules(state: RulePlanningSource, kinds: readonly PlanningRuleKind[]): FinancialRule[] {
+  const candidates = new Map(getDefaultFinancialRules(state).map((rule) => [rule.kind, rule]));
+  const wanted = new Set<string>(kinds);
+  const rules = getFinancialRules(state);
+  const seen = new Set<string>();
+
+  const updated = rules.map((rule) => {
+    if (!wanted.has(rule.kind) || seen.has(rule.kind)) return rule;
+    seen.add(rule.kind);
+    const candidate = candidates.get(rule.kind);
+    return candidate ? carryInto(rule, candidate) : rule;
+  });
+
+  for (const kind of kinds) {
+    if (seen.has(kind)) continue;
+    const candidate = candidates.get(kind);
+    if (candidate) updated.push(candidate);
+  }
+  return normalizeFinancialRules(updated);
+}
+
+/**
+ * Rules after the goals changed (saved, added or deleted).
+ *
+ * One goal-contribution rule per goal that contributes: an existing rule keeps
+ * its id and flag and takes the new monthly amount; a goal that now contributes
+ * gains one; a goal that stopped contributing, or was deleted, loses its rule.
+ * Non-goal rules are untouched and stay first, as seeding orders them.
+ */
+export function syncGoalContributionRules(state: RulePlanningSource): FinancialRule[] {
+  const rules = getFinancialRules(state);
+  const others = rules.filter((rule) => rule.kind !== "goal-contribution");
+  const existingByGoal = new Map(
+    rules
+      .filter((rule): rule is FinancialRuleOfKind<"goal-contribution"> => rule.kind === "goal-contribution")
+      .map((rule) => [rule.goalId, rule]),
+  );
+
+  const goalRules: FinancialRule[] = [];
+  for (const goal of state.goals ?? []) {
+    if (!goal || typeof goal.id !== "string" || !goal.id.trim()) continue;
+    const monthlyAmount = safeAmount(goal.monthlyContribution);
+    if (monthlyAmount === null || monthlyAmount <= 0) continue;
+    const candidate: FinancialRule = {
+      id: goalContributionRuleId(goal.id),
+      kind: "goal-contribution",
+      enabled: true,
+      goalId: goal.id,
+      monthlyAmount,
+    };
+    const existing = existingByGoal.get(goal.id);
+    goalRules.push(existing ? carryInto(existing, candidate) : candidate);
+  }
+  return normalizeFinancialRules([...others, ...goalRules]);
+}
+
+/**
+ * Repair on load: switch on placeholder rules whose setting now holds a value.
+ *
+ * This is the one-time mend for users who already hit the bug — signed up, then
+ * set values in Settings that never reached their rules. It only ever touches
+ * placeholders (disabled, asserting nothing), so a rule the user configured —
+ * even one deliberately disabled with a value — is never changed, and a stored
+ * empty rules array stays empty. Rules that hold a stale non-zero value are left
+ * alone: whether that difference was intended cannot be known here, and the
+ * next save of that setting brings it in line.
+ */
+export function repairPlaceholderRules(state: RulePlanningSource): FinancialRule[] {
+  const rules = getFinancialRules(state);
+  if (rules.length === 0) return rules;
+  const candidates = new Map(getDefaultFinancialRules(state).map((rule) => [rule.kind, rule]));
+  let changed = false;
+  const repaired = rules.map((rule) => {
+    if (rule.kind === "goal-contribution" || !isPlaceholderRule(rule)) return rule;
+    const candidate = candidates.get(rule.kind);
+    if (!candidate || assertsNothing(candidate)) return rule;
+    changed = true;
+    return carryInto(rule, candidate);
+  });
+  return changed ? normalizeFinancialRules(repaired) : rules;
+}
