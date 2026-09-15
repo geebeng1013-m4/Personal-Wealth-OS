@@ -372,10 +372,12 @@
     grid-template-columns: max-content minmax(0, 1fr) max-content;
     align-items: center;
   }
-  /* A touch larger and bolder than body copy: it is a goal, not a status line. */
+  /* A touch larger and bolder than body copy: it is a goal, not a status line.
+     Set in Lato Bold (loaded in index.html, 700 only) — the one place it is used.
+     Lato has no CJK glyphs, so a Chinese goal falls through to the system font. */
   .wu-goal-line:not(.wu-goal-line--empty) .wu-goal-line__text {
     text-align: center;
-    font: var(--weight-bold) var(--text-heading) / var(--leading-snug) var(--font-sans);
+    font: var(--weight-bold) var(--text-heading) / var(--leading-snug) "Lato", var(--font-sans);
     letter-spacing: 0.01em;
   }
   .wu-goal-line:not(.wu-goal-line--empty)::after {
