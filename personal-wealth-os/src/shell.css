@@ -213,22 +213,12 @@
   flex-direction: column;
   gap: 8px;
 }
-.sidebar-actions-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
 /* Always visible: the app gives estimates from the user's own data, not advice. */
 .sidebar-disclaimer {
   margin: 4px 0 0;
   font-size: 10.5px;
   line-height: 1.4;
   color: var(--text-faint);
-}
-.sidebar-actions-row button,
-.sidebar-actions-row .file-button {
-  flex: 1;
-  min-height: 0;
 }
 .sidebar-actions .user-badge {
   display: flex;
@@ -252,52 +242,6 @@
 }
 .sidebar-actions .user-badge .logout-btn {
   flex: none;
-}
-.sidebar-tools {
-  border: none;
-}
-.sidebar-tools > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 4px;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  list-style: none;
-}
-.sidebar-tools > summary::-webkit-details-marker {
-  display: none;
-}
-.sidebar-tools__chevron {
-  transition: transform var(--dur-fast) var(--ease-standard);
-}
-.sidebar-tools[open] .sidebar-tools__chevron {
-  transform: rotate(90deg);
-}
-.sidebar-tools__content {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 6px 0 2px;
-}
-.theme-toggle {
-  width: 38px;
-  height: 38px;
-  flex: none;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  font-size: 18px;
-  border: 1px solid var(--border-strong);
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-.theme-toggle:hover {
-  background: var(--surface-hover);
 }
 .file-button {
   position: relative;

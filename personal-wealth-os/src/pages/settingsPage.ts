@@ -6,15 +6,18 @@
  * of the state; percentages are stored as fractions and shown as whole numbers,
  * so the templates multiply and the handlers divide by 100.
  *
- * Export / import, snapshots and version history are NOT here — they live in
- * the sidebar drawer.
+ * Plus the data tools — theme, add to home screen, export, import, version
+ * history and reset — which used to sit in the sidebar drawer and on the phone
+ * More page. Their buttons render here; their handlers are bound in ui.ts
+ * (bindCommon) by data-tool, because they reach beyond this page (the theme
+ * re-renders the shell, reset and import replace the whole state).
  */
 
 import type { WealthState } from "../models";
 import { createId } from "../state";
 import { syncPlanningRules } from "../financialRules";
-import { money } from "../rules";
-import { escapeHtml } from "../html";
+import { DEFAULT_EMERGENCY_MONTHS, money, suggestedEmergencyTarget } from "../rules";
+import { escapeHtml, getTheme } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
@@ -35,6 +38,61 @@ function settingsCard(title: string, formId: string, saveLabel: string, body: st
       ${body}
       <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">${saveLabel}</button></div>
     </form>
+  </div>`;
+}
+
+/**
+ * Under the emergency form: a suggested target from the essential spending
+ * already entered, with a button that fills the target field. It never saves —
+ * the user presses Save Emergency — because the target is their decision.
+ */
+function emergencySuggestion(state: WealthState): string {
+  const suggestion = suggestedEmergencyTarget(state);
+  if (!suggestion) {
+    return `<p class="wu-field-row--wide t-caption t-faint">Enter your transport, food and other fixed costs under Cashflow &amp; DCA to get a suggested target.</p>`;
+  }
+  const already = state.emergency.target === suggestion.target;
+  return `<div class="wu-field-row--wide settings-suggest">
+    <p class="t-caption t-muted">Suggested target: <strong>${money(suggestion.target)}</strong> &mdash; ${suggestion.months} months of your essential spending (${money(suggestion.monthlyEssential)}/month). WealthUp's standard is 3&ndash;6 months.</p>
+    ${already
+      ? `<span class="t-caption t-faint">Your target already matches.</span>`
+      : `<button class="wu-btn wu-btn--secondary wu-btn--sm" type="button" data-suggest-emergency="${suggestion.target}">Use ${DEFAULT_EMERGENCY_MONTHS} months</button>`}
+  </div>`;
+}
+
+/**
+ * The data tools, formerly in the sidebar drawer and the phone More page.
+ * Reset sits last and apart, marked as the one destructive action.
+ */
+function dataTools(): string {
+  const nextTheme = getTheme() === "dark" ? "light" : "dark";
+  return `<div class="wu-card settings-data">
+    <div class="wu-card__header"><h3 class="wu-card__title t-heading">Data &amp; App</h3></div>
+    <div class="wu-stack">
+      <div class="settings-data__row">
+        <div class="settings-data__text"><span class="t-subheading">Theme</span><span class="t-caption t-muted">Currently ${getTheme()}.</span></div>
+        <button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="theme" type="button">Switch to ${nextTheme}</button>
+      </div>
+      <div class="settings-data__row">
+        <div class="settings-data__text"><span class="t-subheading">Backup</span><span class="t-caption t-muted">Export saves all your data as a file. Import replaces your data with a file; a copy of what you have now is kept in Version History first.</span></div>
+        <div class="wu-row wu-row--tight">
+          <button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="export" type="button">Export</button>
+          <label class="wu-btn wu-btn--secondary wu-btn--sm file-button">Import<input data-tool="import" type="file" accept="application/json"></label>
+        </div>
+      </div>
+      <div class="settings-data__row">
+        <div class="settings-data__text"><span class="t-subheading">Version History</span><span class="t-caption t-muted">Earlier copies saved before big changes such as an import, a reset or a restore.</span></div>
+        <button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="version" type="button">Open</button>
+      </div>
+      <div class="settings-data__row">
+        <div class="settings-data__text"><span class="t-subheading">Add to Home Screen</span><span class="t-caption t-muted">Open WealthUp like an app on this device.</span></div>
+        <button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="install" type="button">Install</button>
+      </div>
+      <div class="settings-data__row settings-data__row--danger">
+        <div class="settings-data__text"><span class="t-subheading">Reset</span><span class="t-caption t-muted">Clears everything to a blank WealthUp. A copy is kept in Version History first.</span></div>
+        <button class="wu-btn wu-btn--danger wu-btn--sm" data-tool="reset" type="button">Reset all data</button>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -103,7 +161,8 @@ export function settingsTemplate(state: WealthState): string {
     num("current", "Current Emergency MYR", String(state.emergency.current), "1") +
     num("target", "Target Emergency MYR", String(state.emergency.target), "1") +
     num("monthlyTopUp", "Monthly Top-Up MYR", String(state.emergency.monthlyTopUp), "1") +
-    num("annualYield", "Annual Yield %", String(Math.round(state.emergency.annualYield * 10000) / 100), "0.01"));
+    num("annualYield", "Annual Yield %", String(Math.round(state.emergency.annualYield * 10000) / 100), "0.01") +
+    emergencySuggestion(state));
 
   const targets = settingsCard("DCA Targets", "targetsForm", "Save Targets",
     num("vooTarget", "VOO Target %", String(Math.round(state.dca.targets.VOO * 100)), "1") +
@@ -127,6 +186,7 @@ export function settingsTemplate(state: WealthState): string {
         ${cashflow}
         ${emergency}
         ${targets}
+        ${dataTools()}
       </div>
     </div>
   `;
@@ -181,6 +241,15 @@ export function bindSettings(root: HTMLElement, state: WealthState, setState: Se
     next.financialRules = syncPlanningRules(next, ["monthly-spending-limit", "dca-monthly-amount"]);
     setState(next);
     rerender(root, next, setState, "settings", navigate);
+  });
+
+  // "Use 6 months" fills the target field only; Save Emergency is still the save.
+  root.querySelector<HTMLButtonElement>("[data-suggest-emergency]")?.addEventListener("click", (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    const target = root.querySelector<HTMLInputElement>('#emergencyForm input[name="target"]');
+    if (!target) return;
+    target.value = button.dataset.suggestEmergency ?? target.value;
+    target.focus();
   });
 
   root.querySelector<HTMLFormElement>("#emergencyForm")?.addEventListener("submit", (event) => {

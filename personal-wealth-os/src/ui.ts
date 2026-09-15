@@ -1,5 +1,5 @@
 import type { WealthState } from "./models";
-import { cloneDefaultState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, IMPORT_SNAPSHOT_LABEL, type Snapshot } from "./state";
+import { emptyState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, IMPORT_SNAPSHOT_LABEL, type Snapshot } from "./state";
 import {
   emergencyRatio,
   money,
@@ -10,7 +10,7 @@ import { refreshLivePrices, priceRefreshCleanup, PRICE_POLL_INTERVAL_MS } from "
 import { getGoalsSnapshot } from "./goalSummary";
 import { getBudgetSnapshot } from "./budgetSummary";
 import { bindTvmCalculator, tvmCalculatorTemplate } from "./pages/tvmPage";
-import { escapeHtml, getTheme } from "./html";
+import { escapeHtml } from "./html";
 import { pageHeader } from "./components/pageHeader";
 import { assistantTemplate, mountAssistant } from "./components/assistant/assistantWidget";
 import { DISCLAIMER_SHORT } from "./components/disclaimer";
@@ -32,6 +32,13 @@ import { bindAdvisor, advisorPageTemplate } from "./pages/advisorPage";
 const sideRaysCleanup = new WeakMap<HTMLElement, () => void>();
 const calculatorCleanup = new WeakMap<HTMLElement, () => void>();
 const sidebarScrollPositions = new WeakMap<HTMLElement, number>();
+
+/**
+ * The signed-in user as the shell sees it. `uid` is what every stored copy of
+ * the user's data is keyed by — including Version History — so it is the id to
+ * read those copies back with, never the email.
+ */
+type AppUser = { uid?: string | null; displayName?: string | null; email?: string | null; photoURL?: string | null };
 
 type Page = readonly [id: string, english: string, subtitle: string];
 type PageGroup = readonly [title: string, pages: readonly Page[]];
@@ -124,7 +131,8 @@ function tabbarTemplate(activePage: string): string {
 /*
  * The "More" page — a Discover-style landing list of every page that does not
  * have its own tab, in the same groups as the desktop sidebar, plus the account
- * row and the data tools. On a phone this replaces the slide-in drawer
+ * row. The data tools (theme, export, import, version history, reset) live on
+ * the Settings page. On a phone this replaces the slide-in drawer
  * entirely; the drawer markup stays only for the desktop sidebar.
  */
 const MORE_ICONS: Record<string, string> = {
@@ -147,7 +155,7 @@ function moreRow(id: string, label: string, sub: string): string {
     + `</span><span class="more-row__chev" aria-hidden="true">›</span></button>`;
 }
 
-function moreTemplate(user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }): string {
+function moreTemplate(user?: AppUser): string {
   const tabIds = new Set(primaryTabs.map(([id]) => id));
   const groups = pageGroups
     .map(([title, groupPages]) => {
@@ -163,17 +171,9 @@ function moreTemplate(user?: { displayName?: string | null; email?: string | nul
   const account = user
     ? `<section class="more-account"><img src="${escapeHtml(user.photoURL || "")}" alt="" class="more-account__avatar" referrerpolicy="no-referrer"><span class="more-account__name">${escapeHtml(user.displayName || user.email || "User")}</span><button class="wu-btn wu-btn--ghost wu-btn--sm logout-btn" type="button">Sign Out</button></section>`
     : "";
-  const tools = `<section class="more-group"><p class="more-group__title t-overline">Data &amp; tools</p><div class="more-tools">`
-    + `<button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="theme" type="button">Toggle theme</button>`
-    + `<button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="install" type="button">Add to Home Screen</button>`
-    + `<button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="export" type="button">Export</button>`
-    + `<label class="wu-btn wu-btn--secondary wu-btn--sm file-button">Import<input data-tool="import" type="file" accept="application/json"></label>`
-    + `<button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="version" type="button">Version History</button>`
-    + `<button class="wu-btn wu-btn--danger wu-btn--sm" data-tool="reset" type="button">Reset</button>`
-    + `</div></section>`;
   return `<div class="wu">
     ${pageHeader({ title: "More", sub: "Everything else WealthUp does." })}
-    <div class="more-list">${groups}${account}${tools}</div>
+    <div class="more-list">${groups}${account}</div>
   </div>`;
 }
 
@@ -191,10 +191,8 @@ function navTemplate(activePage: string): string {
 }
 
 // Map ticker to TradingView symbol format (EXCHANGE:SYMBOL)
-function shellTemplate(activePage: string, state: WealthState, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }): string {
-  const themeIcon = getTheme() === "dark" ? "☀️" : "🌙";
+function shellTemplate(activePage: string, state: WealthState, user?: AppUser): string {
   const active = pages.find(([id]) => id === activePage);
-  const toolsOpen = sidebarToolsOpen();
   const userBadge = user ? `<div class="user-badge"><img src="${escapeHtml(user.photoURL || "")}" alt="" class="user-avatar" referrerpolicy="no-referrer"><span class="user-name">${escapeHtml(user.displayName || user.email || "User")}</span><button class="wu-btn wu-btn--ghost wu-btn--sm logout-btn" type="button">Sign Out</button></div>` : "";
   return `
     <button class="hamburger" id="sidebarToggle" type="button" aria-label="Open navigation" aria-expanded="false">☰</button>
@@ -219,25 +217,6 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
       </div>
       <div class="sidebar-actions">
         ${userBadge}
-        <!-- Everything below the account row is occasional: installing the app,
-             exporting, restoring a version, resetting. Collapsed by default so
-             the sidebar ends on the one row that is always relevant, and the
-             Reset button is not sitting under the user's thumb. -->
-        <details class="sidebar-tools" id="sidebarTools"${toolsOpen ? " open" : ""}>
-          <summary><span>Data &amp; tools</span><span class="sidebar-tools__chevron" aria-hidden="true">›</span></summary>
-          <div class="sidebar-tools__content">
-            <button class="wu-btn wu-btn--secondary wu-btn--sm wu-btn--block install-btn" id="installPwa" type="button">Add to Home Screen</button>
-            <div class="sidebar-actions-row">
-              <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme" title="Toggle theme">${themeIcon}</button>
-              <button class="wu-btn wu-btn--secondary wu-btn--sm" id="exportJson" type="button">Export</button>
-              <label class="wu-btn wu-btn--secondary wu-btn--sm file-button">Import<input id="importJson" type="file" accept="application/json"></label>
-            </div>
-            <div class="sidebar-actions-row">
-              <button class="wu-btn wu-btn--secondary wu-btn--sm" id="versionHistory" type="button">Version History</button>
-              <button class="wu-btn wu-btn--danger wu-btn--sm" id="resetData" type="button">Reset</button>
-            </div>
-          </div>
-        </details>
         <p class="sidebar-disclaimer">${DISCLAIMER_SHORT}</p>
       </div>
     </aside>
@@ -260,32 +239,6 @@ function shellTemplate(activePage: string, state: WealthState, user?: { displayN
     ${tabbarTemplate(activePage)}
     ${assistantTemplate()}
   `;
-}
-
-/**
- * Whether the sidebar's tools drawer is open.
- *
- * Kept in localStorage rather than in a module variable, because the point of
- * remembering it is to survive a reload — a module variable only lasts until
- * the tab is closed, which is exactly when the preference stops being useful.
- * Every access is guarded: private windows and blocked site data make the
- * accessor itself throw, and a sidebar that cannot render is a worse outcome
- * than a drawer that forgets.
- */
-const SIDEBAR_TOOLS_KEY = "wealthup-sidebar-tools-open";
-
-function sidebarToolsOpen(): boolean {
-  try {
-    return localStorage.getItem(SIDEBAR_TOOLS_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-function setSidebarToolsOpen(open: boolean): void {
-  try {
-    localStorage.setItem(SIDEBAR_TOOLS_KEY, String(open));
-  } catch { /* the drawer still works, it just will not be remembered */ }
 }
 
 /**
@@ -338,7 +291,7 @@ export function quickViewTemplate(state: WealthState): string {
   `;
 }
 
-export function renderApp(root: HTMLElement, state: WealthState, setState: Setter, activePage = "dashboard", navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
+export function renderApp(root: HTMLElement, state: WealthState, setState: Setter, activePage = "dashboard", navigate?: Navigate, user?: AppUser, onLogout?: () => void): void {
   document.body.classList.toggle("mask-financial-amounts", state.privacy.maskAmounts);
   const currentSidebarScrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
   if (currentSidebarScrollArea) {
@@ -446,7 +399,7 @@ function keepActiveNavigationVisible(root: HTMLElement): void {
   }
 }
 
-function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
+function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate, user?: AppUser, onLogout?: () => void): void {
   const doNavigate = navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user));
 
   root.querySelectorAll<HTMLButtonElement>(".nav-item").forEach((button) => {
@@ -465,19 +418,14 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     button.addEventListener("click", () => doNavigate(button.dataset.page ?? "dashboard"));
   });
 
-  // Remember whether the tools drawer is open across reloads.
-  root.querySelector<HTMLDetailsElement>("#sidebarTools")?.addEventListener("toggle", (event) => {
-    setSidebarToolsOpen((event.currentTarget as HTMLDetailsElement).open);
-  });
-
-  // The account row and the data tools appear twice — the desktop sidebar (by
-  // id) and the phone "More" page (by data-tool) — so bind every match, not the
-  // first.
+  // The account row appears in two places (desktop sidebar, phone More page),
+  // so bind every match. The data tools live on the Settings page and are found
+  // by data-tool, so these handlers follow the buttons wherever they render.
   const bindAll = (selector: string, type: string, handler: (event: Event) => void): void => {
     root.querySelectorAll<HTMLElement>(selector).forEach((el) => el.addEventListener(type, handler));
   };
 
-  bindAll("#themeToggle, [data-tool='theme']", "click", () => {
+  bindAll("[data-tool='theme']", "click", () => {
     const w = window as unknown as Record<string, Record<string, () => void>>;
     w.__pwo?.toggleTheme();
     renderApp(root, state, setState, activePageFromNav(root) ?? "dashboard", navigate, user);
@@ -490,7 +438,7 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
   // Install PWA button — hide if already standalone.
   const standalone = window.matchMedia("(display-mode: standalone)").matches
     || (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-  root.querySelectorAll<HTMLButtonElement>("#installPwa, [data-tool='install']").forEach((btn) => {
+  root.querySelectorAll<HTMLButtonElement>("[data-tool='install']").forEach((btn) => {
     if (standalone) btn.style.display = "none";
     btn.addEventListener("click", () => {
       (window as unknown as Record<string, () => Promise<void>>).__pwoInstall?.();
@@ -499,11 +447,11 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
 
   bindSidebar(root);
 
-  bindAll("#exportJson, [data-tool='export']", "click", () => {
+  bindAll("[data-tool='export']", "click", () => {
     if (state.privacy.requireExportConfirmation && !confirm("Export a file containing your financial data? Store it securely.")) return;
     exportState(state);
   });
-  bindAll("#importJson, [data-tool='import']", "change", async (event) => {
+  bindAll("[data-tool='import']", "change", async (event) => {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
@@ -514,16 +462,22 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     doNavigate("dashboard");
   });
 
-  bindAll("#versionHistory, [data-tool='version']", "click", () => {
-    const snapshots = loadSnapshots(user?.email ?? undefined);
+  bindAll("[data-tool='version']", "click", () => {
+    // Copies are written under the user's uid (saveState in main.ts), so they are
+    // read back under it. Reading by email found nothing: Version History showed
+    // empty for every real account, and the copies Reset and Import take were
+    // unreachable.
+    const snapshots = loadSnapshots(user?.uid ?? undefined);
     renderVersionHistoryModal(root, setState, snapshots, navigate, user, onLogout);
   });
 
-  bindAll("#resetData, [data-tool='reset']", "click", () => {
+  bindAll("[data-tool='reset']", "click", () => {
     if (!confirm("Reset to a blank Personal Wealth OS? Your current data will be saved to Version History first, and can be restored from there.")) return;
-    const next = cloneDefaultState();
+    // A blank state, as the dialog says — not the sample "Student Investor"
+    // template (sample goals, a MYR 400 bear-market reserve) it used to load.
+    const next = emptyState();
     // No localStorage.clear() here — this app shares the browser origin with
-    // the theme preference, the sidebar's open/closed state and the device id
+    // the theme preference and the device id
     // that cloud-sync conflict resolution keys off. Passing a changeLabel is
     // what makes this recoverable: saveState reads the state still on disk
     // before overwriting it and snapshots that copy under the label, the same
@@ -567,11 +521,11 @@ function bindSidebar(root: HTMLElement): void {
   });
 }
 
-function renderVersionHistoryModal(root: HTMLElement, setState: Setter, snapshots: Snapshot[], navigate?: Navigate, user?: { displayName?: string | null; email?: string | null; photoURL?: string | null }, onLogout?: () => void): void {
+function renderVersionHistoryModal(root: HTMLElement, setState: Setter, snapshots: Snapshot[], navigate?: Navigate, user?: AppUser, onLogout?: () => void): void {
   // Remove existing modal if any
   root.querySelector("#versionHistoryModal")?.remove();
 
-  const uid = user?.email ?? undefined;
+  const uid = user?.uid ?? undefined;
 
   function formatTime(ts: number): string {
     return new Date(ts).toLocaleString("en-MY", {
@@ -628,7 +582,9 @@ function renderVersionHistoryModal(root: HTMLElement, setState: Setter, snapshot
       if (!confirm("Restore this version? Your current state will be saved as a snapshot first.")) return;
       const restored = restoreSnapshot(snapId, uid);
       if (!restored) { alert("Snapshot not found."); return; }
-      setState(restored);
+      // The dialog above promises the current state is saved first; the label is
+      // what does that (saveState snapshots the data on disk before overwriting).
+      setState(restored, "Before restore");
       modal.remove();
       renderApp(root, restored, setState, activePageFromNav(root) ?? "dashboard", navigate, user, onLogout);
     });
