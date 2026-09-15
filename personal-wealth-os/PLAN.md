@@ -256,7 +256,7 @@
   Settings 卡片 6 个工具 Reset 在最后；建议 MYR 7,200 → 按钮填入不保存；主题切换；Reset → 设置全 0、Goals 空、显示提示；
   Version History 出现「Before reset」，Restore 后多出「Before restore」；手机无横向溢出。
 
-#### R-5 — 原则存成正式文件  `[x]`（PR 待开）
+#### R-5 — 原则存成正式文件  `[x]`（PR #43）
 - 新文件 `docs/assistant-principles.md`：适用范围（Ask 受约束；Record 不给建议；Advisor 零 AI）、优先级、六大原则
   （每条附提示词里的英文标题）、助手能看到什么（Share my figures 开/关、Record 只看名称）、安全网、已做的决定
   （③ ⑥甲 ⑦甲 ⑧ R-4 A/B1/C）、**改原则的流程**（先改文件 → 改提示词 → 本地跑 22 题 → PR → **部署函数**，
