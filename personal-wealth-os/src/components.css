@@ -567,7 +567,7 @@
   }
   /* Reset is the one destructive action: last, red, with its own border. */
   .settings-data__pill.wu-btn--danger {
-    --_bd: var(--negative);
+    box-shadow: var(--glass-inner), 0 0 0 1px rgb(var(--glass-danger-rgb) / 0.6);
   }
   .settings-suggest {
     display: flex;
@@ -625,34 +625,45 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
+  /* primary / secondary / danger are L2 "light glass" (PLAN.md G-2): capsule,
+     rim light, press bulge + glow (shared with .wu-glass below). No backdrop
+     blur — they sit on flat cards, where blur shows nothing and costs a lot. */
   .wu-btn--primary {
-    --_bg: var(--accent);
-    --_fg: var(--accent-contrast);
-  }
-  .wu-btn--primary:hover {
-    --_bg: var(--accent-hover);
+    border-color: transparent;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(180deg, rgb(255 255 255 / calc(var(--glass-highlight) * 0.16)), transparent 58%),
+      rgb(var(--glass-tint-rgb) / var(--glass-tint));
+    color: #fff;
+    box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.14), 0 6px 16px rgb(var(--glass-tint-rgb) / 0.26);
   }
   .wu-btn--secondary {
-    --_bg: var(--surface);
-    --_fg: var(--text);
-    --_bd: var(--border-strong);
+    border-color: transparent;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(180deg, rgb(255 255 255 / calc(var(--glass-highlight) * 0.1)), transparent 60%),
+      var(--glass-fill-lite);
+    color: var(--text);
+    box-shadow: var(--glass-inner), var(--glass-shadow-sm), 0 0 0 0.5px var(--glass-edge);
   }
-  .wu-btn--secondary:hover {
-    --_bg: var(--surface-hover);
+  :is(.wu-btn--primary, .wu-btn--secondary, .wu-btn--danger):hover:not(:disabled) {
+    filter: var(--glass-hover);
   }
+  /* L3 (G-3): text buttons stay plain — no glass — but share the capsule shape,
+     which shows on hover / press. */
   .wu-btn--ghost {
     --_fg: var(--text-muted);
+    border-radius: var(--radius-pill);
   }
   .wu-btn--ghost:hover {
     --_bg: var(--surface-hover);
     --_fg: var(--text);
   }
   .wu-btn--danger {
-    --_fg: var(--negative);
-    --_bd: var(--border);
-  }
-  .wu-btn--danger:hover {
-    --_bg: var(--negative-soft);
+    border-color: transparent;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(180deg, rgb(255 255 255 / calc(var(--glass-highlight) * 0.08)), transparent 60%),
+      rgb(var(--glass-danger-rgb) / 0.14);
+    color: var(--negative);
+    box-shadow: var(--glass-inner), 0 0 0 0.5px rgb(var(--glass-danger-rgb) / 0.32);
   }
   .wu-btn--sm {
     min-height: 30px;
@@ -663,10 +674,123 @@
     min-height: 32px;
     width: 32px;
     padding: 0;
+    border-radius: var(--radius-pill);
   }
   .wu-btn--block {
     display: flex;
     width: 100%;
+  }
+
+  /* ---- liquid glass material ------------------------------------------- */
+  /* iOS 26 "Liquid Glass" for the floating layer only (brand bar, tab bar, Ask
+     button) — never content, never glass on glass. Blur + saturation + a rim
+     light; pressable pieces bulge and glow under the finger (liquidGlass.ts
+     sets --glass-x/--glass-y and .is-pressed). The owner (shell.css,
+     assistant.css) keeps position and size; this class owns the surface, so
+     those rules must not set background, border or box-shadow of their own. */
+  .wu-glass,
+  .wu-btn--primary,
+  .wu-btn--secondary,
+  .wu-btn--danger {
+    position: relative;
+    isolation: isolate;
+    transition: transform 520ms cubic-bezier(0.34, 1.56, 0.64, 1), filter var(--dur-fast) var(--ease-standard),
+      color var(--dur-fast) var(--ease-standard);
+  }
+  .wu-btn--primary,
+  .wu-btn--secondary,
+  .wu-btn--danger {
+    --glass-press: 1.04;
+  }
+  .wu-btn--block {
+    --glass-press: 1.015;
+  }
+  .wu-glass {
+    background: linear-gradient(180deg, rgb(255 255 255 / calc(var(--glass-highlight) * 0.07)), transparent 55%),
+      var(--glass-fill);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    box-shadow: var(--glass-inner), var(--glass-shadow), 0 0 0 0.5px var(--glass-edge);
+  }
+  :is(.wu-glass, .wu-btn--primary, .wu-btn--secondary, .wu-btn--danger)::before,
+  :is(.wu-glass, .wu-btn--primary, .wu-btn--secondary, .wu-btn--danger)::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  /* rim light: bright top-left, softer bottom-right — the glass's thickness */
+  :is(.wu-glass, .wu-btn--primary, .wu-btn--secondary, .wu-btn--danger)::before {
+    padding: 1px;
+    background: linear-gradient(135deg, var(--glass-rim) 0%, transparent 32%, transparent 64%, var(--glass-rim-soft) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: var(--glass-highlight);
+  }
+  /* press glow that follows the finger */
+  :is(.wu-glass, .wu-btn--primary, .wu-btn--secondary, .wu-btn--danger)::after {
+    background: radial-gradient(140px circle at var(--glass-x, 50%) var(--glass-y, 50%), var(--glass-glow), transparent 62%);
+    opacity: 0;
+    transition: opacity 360ms var(--ease-standard);
+  }
+  .is-pressed:is(.wu-glass, .wu-btn--primary, .wu-btn--secondary, .wu-btn--danger) {
+    transform: scale(var(--glass-press, 1.06));
+    transition-duration: 220ms;
+  }
+  .is-pressed:is(.wu-glass, .wu-btn--primary, .wu-btn--secondary, .wu-btn--danger)::after {
+    opacity: 1;
+    transition-duration: var(--dur-fast);
+  }
+  /* green tinted glass — the iOS "prominent" button */
+  .wu-glass--tint {
+    background: linear-gradient(180deg, rgb(255 255 255 / calc(var(--glass-highlight) * 0.16)), transparent 60%),
+      rgb(var(--glass-tint-rgb) / var(--glass-tint));
+    color: #fff;
+  }
+  /* full-width bar: no rim box, just a hairline highlight along the bottom */
+  .wu-glass--bar {
+    box-shadow: inset 0 -0.5px 0 var(--glass-rim-soft), 0 8px 24px rgb(0 0 0 / 0.08);
+  }
+  .wu-glass--bar::before {
+    display: none;
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .wu-glass {
+      background: var(--surface-raised);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      box-shadow: 0 0 0 1px var(--border), var(--shadow-sm);
+    }
+    .wu-glass--tint {
+      background: rgb(var(--glass-tint-rgb));
+    }
+    .wu-glass--bar {
+      box-shadow: inset 0 -1px 0 var(--border);
+    }
+    .wu-btn--primary {
+      background: rgb(var(--glass-tint-rgb));
+    }
+    .wu-btn--secondary,
+    .wu-btn--danger {
+      background: var(--surface);
+      box-shadow: 0 0 0 1px var(--border-strong);
+    }
+    :is(.wu-glass, .wu-btn--primary, .wu-btn--secondary, .wu-btn--danger)::before,
+    :is(.wu-glass, .wu-btn--primary, .wu-btn--secondary, .wu-btn--danger)::after {
+      display: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :is(.wu-glass, .wu-btn--primary, .wu-btn--secondary, .wu-btn--danger),
+    :is(.wu-glass, .wu-btn--primary, .wu-btn--secondary, .wu-btn--danger)::after {
+      transition: none;
+    }
+    .is-pressed:is(.wu-glass, .wu-btn--primary, .wu-btn--secondary, .wu-btn--danger) {
+      transform: none;
+    }
   }
 
   /* ---- fields --------------------------------------------------------- */

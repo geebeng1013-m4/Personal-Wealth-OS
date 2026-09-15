@@ -341,22 +341,46 @@ https://claude.ai/artifact/DWFjJPJ2Nof42eZSZTtZZB
 - 做了独立的 Preview：并排对比现在和玻璃，可以切换主题，在电脑上模拟 iPhone Safari，用滑块调参数。项目代码没有改动。
 - 在 Preview 里确认了上面的决定和参数。
 
-### G-1 — 玻璃 token + 材质 + L1 浮层  `[ ]`  ← **Current Task**
+### G-1 — 玻璃 token + 材质 + L1 浮层  `[x]`（2026-09-15，代码未 commit，PR 待开）
 - 在 `theme.css` 加 `--glass-*` token；在 `components.css` 加共用材质：高光边、按下鼓起、光点跟手，以及「减少透明度」和「减少动态效果」的退路。
 - 手机顶栏改成玻璃；底部 Tab 栏改成悬浮胶囊，加上滑动的选中镜片；Ask 按钮改成绿色玻璃。
 - 这一步只用「模糊 + 高光」，所有浏览器效果一致；折射放到 G-4。
 - 要检查：`.main` 底部留白仍然能让最后一张卡片露出来；Ask 按钮不压到悬浮 Tab 栏；Tab 栏避开 iPhone 的 Home 指示条。
 - **完成标准**：typecheck、测试、build 全部通过；手机 390 宽 × 深色/浅色截图，桌面 1280 宽截图。
+- **结果**：
+  - 958/958 测试通过，build 通过。
+  - demo 模式截图检查了：手机深色、手机浅色、Ledger 滚到底、打开 Ask 面板、桌面深色。
+  - 实测正常：选中镜片滑到新 Tab 后和按钮中心对齐；按下 Ask 按钮会放大到 1.12 倍，松手恢复；控制台没有报错。
+  - 最后一张卡片不会被 Tab 栏盖住；Ask 面板打开后在 Tab 栏上方。
+- **跟 Preview 不同的一处**：Ask 按钮的绿色改成直接用 `--glass-tint`（0.78）。Preview 里是 0.78 × 0.82，在浅色主题下太淡，白色图标看不清。
+- **改动的文件**：`theme.css`、`components.css`、`shell.css`、`assistant.css`、`assistantWidget.ts`、`ui.ts`、`main.ts`，新增 `src/liquidGlass.ts`。
+- **没验证到的**：
+  - 真 iPhone Safari 上还没看过。
+  - 安全区（刘海屏和 Home 指示条的留白）在 Edge 模拟里全是 0，只能在真机上确认。
+  - 「减少透明度」开关 Edge 模拟不了。
 
-### G-2 — L2 按钮：primary / secondary / danger  `[ ]`
+### G-2 — L2 按钮：primary / secondary / danger  `[x]`（2026-09-15，代码未 commit，跟 G-1 同一批）
 - 只改 `.wu-btn` 的这三个变体，全站约 52 处会自动跟着变，不改任何页面模板。
 - 检查绿色玻璃上白字的对比度，深色和浅色主题都要达到 AA。
 - **完成标准**：逐页截图，重点看 Ledger、Portfolio、Settings 这些按钮多的页面。
+- **结果**：
+  - 958/958 测试通过，build 通过，控制台没有报错。
+  - 截图检查了 Ledger（深色、浅色）、Settings（深色、浅色）、手机 Portfolio（深色）、手机 Goals（浅色）。
+  - 三种按钮都是胶囊形，带高光边；按下会鼓起，还有跟手的光点；禁用的按钮不响应按下。
+  - 只改了 `components.css`、`theme.css` 和 `liquidGlass.ts` 里「哪些按钮能按下」的选择器，没有改任何页面模板。
+- **对比度**：
+  - 绿色玻璃上的白字，深色主题约 5.7:1，浅色约 4.6:1，都达到 AA。
+  - hover 在深色主题变亮、在浅色主题变暗，避免浅色下白字变淡。
+- **一处保留原意**：Settings 的 Reset 原来特意加了一圈红色边框，改成玻璃版的红色描边。
 
-### G-3 — L3 文字按钮：胶囊圆角  `[ ]`
+### G-3 — L3 文字按钮：胶囊圆角  `[x]`（2026-09-15，跟 G-1、G-2 同一个 commit）
 - `ghost` 和 `icon` 按钮的圆角改成胶囊形，其他不变。改动很小，也可以跟 G-2 合并成一个 PR，由你决定。
+- **结果**：
+  - 只改了 `components.css` 里两条规则，测试和 build 通过。
+  - 全站每个 `.wu-btn` 都带变体，没有漏掉的按钮。
+  - 截图确认 Dashboard 的「Open portfolio →」在 hover 时是胶囊形。Portfolio 表格里的删除图标只确认了圆角是 999px，截图没拍到。
 
-### G-4 — Chrome 真折射  `[ ]`（最低优先级，可能不做）
+### G-4 — Chrome 真折射  `[ ]`（最低优先级，可能不做）  ← 下一个待决定
 - 注意：底部 Tab 栏和顶栏只在手机宽度出现，而你用手机时是 Safari，看不到折射。**所以在电脑 Chrome 上，折射实际只会出现在 Ask 按钮上**。
 - 做完 G-1..G-3 之后，再决定这一步值不值得做。
 

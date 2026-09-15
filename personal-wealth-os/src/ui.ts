@@ -28,6 +28,7 @@ import { bindMarket, marketTemplate } from "./pages/marketPage";
 import { bindDashboard, dashboardTemplate } from "./pages/dashboardPage";
 import { bindMoneyLeaks, moneyLeaksTemplate, setSelectedMoneyLeakId } from "./pages/moneyLeaksPage";
 import { bindAdvisor, advisorPageTemplate } from "./pages/advisorPage";
+import { settleTabbarLens } from "./liquidGlass";
 
 const sideRaysCleanup = new WeakMap<HTMLElement, () => void>();
 const calculatorCleanup = new WeakMap<HTMLElement, () => void>();
@@ -125,7 +126,10 @@ function tabbarTemplate(activePage: string): string {
   // from it, so the bar never shows nothing selected.
   const moreActive = !primaryTabs.some(([id]) => id === activePage);
   const more = `<button class="tabbar__btn tabbar__btn--more${moreActive ? " is-active" : ""}" data-page="more" type="button"><span class="tabbar__icon" aria-hidden="true">${TAB_ICONS.more}</span><span class="tabbar__label">More</span></button>`;
-  return `<nav class="tabbar" aria-label="Primary">${items}${more}</nav>`;
+  // The lens is the liquid-glass pill under the active tab; liquidGlass.ts
+  // slides it over from the previous tab after each render.
+  const tabCount = primaryTabs.length + 1;
+  return `<nav class="tabbar wu-glass wu-glass--press" aria-label="Primary" style="--tab-count:${tabCount}"><span class="tabbar__lens" aria-hidden="true"></span>${items}${more}</nav>`;
 }
 
 /*
@@ -224,7 +228,7 @@ function shellTemplate(activePage: string, state: WealthState, user?: AppUser): 
       <div class="side-rays" aria-hidden="true">
         <div class="side-rays-container" id="sideRays"></div>
       </div>
-      <header class="mobile-brandbar">
+      <header class="mobile-brandbar wu-glass wu-glass--bar">
         <span class="mobile-brandbar__mark"><img src="/brand/wealth-mark.png" alt=""></span>
         <span class="mobile-brandbar__name">WealthUp</span>
       </header>
@@ -318,6 +322,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
 
   root.className = "app-shell";
   root.innerHTML = shellTemplate(activePage, state, user);
+  settleTabbarLens(root);
   const sidebarScrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
   if (sidebarScrollArea) {
     if (preservedSidebarScrollTop !== undefined) {
