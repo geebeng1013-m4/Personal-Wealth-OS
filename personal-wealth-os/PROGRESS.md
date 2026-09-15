@@ -12,6 +12,11 @@
 - **`main`**：`c5cb80f`。PR #34（Dashboard 具体化 headline + TVM What-if）待 merge，见下。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 
+## 侧栏滚动条（S-1，完成）
+
+电脑版左侧栏的滚动条改成 iOS 式：平时隐藏，滚动时出现，停下后淡出，可以拖动；首次打开闪现一次；上下边缘渐隐。
+分支 `feat/sidebar-scrollbar`，小 PR 叠在 #45 上（#45 合并后自动改成对 `main`）。详见 `PLAN.md` S 系列。
+
 ## 液态玻璃按钮（G 系列，进行中）
 
 按钮和浮层改成 iOS 26 液态玻璃风格。详见 `PLAN.md` G 系列。

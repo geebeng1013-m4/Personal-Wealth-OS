@@ -32,6 +32,16 @@
   border-right: 1px solid var(--border);
   overflow: hidden;
 }
+/* iOS-style scrolling (PLAN.md S-1): the native scrollbar is hidden and
+   sidebarScrollbar.ts draws an overlay thumb that only shows while scrolling.
+   Edge fades hint that there is more above / below. */
+.sidebar-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .sidebar-scroll-area {
   flex: 1;
   overflow-y: auto;
@@ -41,6 +51,66 @@
   flex-direction: column;
   gap: 20px;
   min-height: 0;
+  scrollbar-width: none;
+}
+.sidebar-scroll-area::-webkit-scrollbar {
+  display: none;
+}
+@property --sidebar-fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --sidebar-fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+.sidebar-scroll-area.has-overflow {
+  --sidebar-fade-top: 0px;
+  --sidebar-fade-bottom: 36px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--sidebar-fade-top), #000 calc(100% - var(--sidebar-fade-bottom)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--sidebar-fade-top), #000 calc(100% - var(--sidebar-fade-bottom)), transparent 100%);
+  transition: --sidebar-fade-top 250ms ease, --sidebar-fade-bottom 250ms ease;
+}
+.sidebar-scroll-area.has-overflow.is-scrolled {
+  --sidebar-fade-top: 24px;
+}
+.sidebar-scroll-area.has-overflow.is-at-end {
+  --sidebar-fade-bottom: 0px;
+}
+/* Sits in the sidebar's right padding, so it never covers a nav item. */
+.sidebar-scrollbar {
+  position: absolute;
+  top: 0;
+  right: -11px;
+  width: 5px;
+  border-radius: 3px;
+  background: var(--scrollbar-thumb);
+  opacity: 0;
+  pointer-events: none;
+  touch-action: none;
+  transition: opacity 600ms ease, width 150ms ease, background-color 150ms ease;
+}
+.sidebar-scrollbar.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: grab;
+  transition-duration: 120ms, 150ms, 150ms;
+}
+.sidebar-scrollbar.is-visible:hover,
+.sidebar-scrollbar.is-dragging {
+  width: 8px;
+  background: var(--scrollbar-thumb-strong);
+}
+.sidebar-scrollbar.is-dragging {
+  cursor: grabbing;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-scroll-area.has-overflow,
+  .sidebar-scrollbar {
+    transition: none;
+  }
 }
 
 .brand {
