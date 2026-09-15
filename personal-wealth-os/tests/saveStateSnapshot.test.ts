@@ -7,6 +7,8 @@ import {
   clearSnapshots,
   migrateState,
   cloneDefaultState,
+  importStateFromFile,
+  IMPORT_SNAPSHOT_LABEL,
   STORAGE_KEY,
   CURRENT_VERSION,
 } from "../src/state";
@@ -108,6 +110,23 @@ test("saveState: resetting to a blank state is recoverable from the snapshot it 
   const [snapshot] = loadSnapshots(UID);
   const restored = restoreSnapshot(snapshot.id, UID);
   assert.deepEqual(tradeIds(restored!), ["about-to-be-reset"]);
+});
+
+test("saveState: importing a file is recoverable from the snapshot it took", async () => {
+  startClean();
+  saveState(stateWith("my-real-data"), UID);
+
+  // A file from somewhere else — here, another user's export.
+  const file = new File([JSON.stringify(stateWith("someone-elses-file"))], "wealthup-backup.json", { type: "application/json" });
+  const imported = await importStateFromFile(file);
+  saveState(imported, UID, IMPORT_SNAPSHOT_LABEL);
+
+  assert.deepEqual(localTradeIds(), ["someone-elses-file"], "the import did replace the data");
+
+  const [snapshot] = loadSnapshots(UID);
+  assert.equal(snapshot.label, IMPORT_SNAPSHOT_LABEL, "and Version History names what happened");
+  const restored = restoreSnapshot(snapshot.id, UID);
+  assert.deepEqual(tradeIds(restored!), ["my-real-data"], "the data from before the import is one restore away");
 });
 
 test("saveState: teardown", () => {
