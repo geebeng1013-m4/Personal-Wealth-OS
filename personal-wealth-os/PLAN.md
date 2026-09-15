@@ -565,6 +565,53 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
 
 ---
 
+## 全站整理：干净整齐（T 系列）
+
+目标：把每个页面整理成跟液态玻璃 Preview 手机截图一样干净、整齐、清楚。Preview（Dashboard 前后对比 + 全站检查结果）：
+https://claude.ai/artifact/L4w2Sgyeucw9ibNutwv4xN
+
+- **Problem**：你看了 Preview 里的手机截图，觉得那个很整齐，真实 App 反而显得乱。2026-09-16 用 demo 数据在手机宽度下逐页检查，结果：
+  - Portfolio 页面长 4,965px，有 90 个徽章。
+  - Dashboard 有 16 个标题，11 行备注一换行就对不齐。
+  - Settings 有 32 个输入框、6 个 Save 按钮。
+  - Ledger 有 29 个标题、71 个按钮。
+  - 详细数字见 Preview。
+- **Why**：页面乱会让人看不出重点，跟 WealthUp「一眼看清状态」的目标相反。
+- **所有页面共同的原因**：
+  1. 同一张「检查卡」出现在 Ledger、Advisor、Review、Rules 顶部。
+  2. 一个数字占一整张卡（Ledger 连续 5 张、Money Leaks 连续 4 张）。
+  3. 表单一直全部展开。
+  4. 长列表全部摊开。
+  5. 数字字体、彩色竖条、徽章、标签和标题重复，各页面写法都不统一。
+- **Proposed Solution：一套规则，全站都用**
+  1. 一张卡的结构固定：小标签 → 一个主数字或状态 → 最多一行说明 → 可选一个小图。
+  2. 数字用 Inter 半粗体，并让每位数字宽度一致方便对齐；「MYR」缩小变淡；等宽字体只用在小标签上。
+  3. 一页只有一个标题，卡片之间不再加区块标题和副标题。
+  4. 同一个数字只出现一次。
+  5. 状态只用小 chip 和横向比例条；去掉左侧彩色竖条、带符号的徽章、环形图。
+  6. 列表每行只放「名称 · 短值」；长解释放到详情。
+  7. 表单收进按钮；长列表只显示最近几条，再加「查看全部」。
+- **玻璃**：只用「模糊 + 高光边」，所有浏览器效果一致（真实 App 本来就是这样）；另外可以加一个「边缘厚度」效果。
+- **Architecture**：先在 `components.css` 做好共用的整齐组件（摘要卡、数字写法、chip、列表行、收起的表单），再逐页替换模板。每页一个 Task，每个 Task 先做 Preview，你看过后说「执行」才改代码。
+
+### 需要你确认的决定
+- **Dashboard 移走的内容**：Financial Health 明细、Money Leaks 细节、Monthly Position、CFO briefing、目标下拉选择器，改成最下面「看更多」的入口，链接到本来就有的 Advisor、Money Leaks、Ledger、Goals 页面。
+- **重复的检查卡**：只留在 Dashboard 的 Priority 和 Money Leaks 页，其他页面拿掉。
+- **财务目标那一行保留 Lato 字体**：那是你之前自己选的，整齐版不改它。
+
+### T-1 — 共用整齐组件 + Dashboard  `[ ]`  ← **Current Task**（Preview 已做，等你确认上面的决定和「执行」）
+### T-2 — 重复的检查卡只留一处（Ledger / Advisor / Review / Rules）  `[ ]`
+### T-3 — Ledger：摘要卡合并、「+ 记一笔」收起表单、筛选收起  `[ ]`
+### T-4 — Portfolio：摘要卡 + 持仓、表单收起、记录只显示最近 5 条  `[ ]`
+### T-5 — Settings：改成 iOS 式分组列表，点进去再编辑  `[ ]`
+### T-6 — Money Leaks：摘要卡合并，列表 + 点开看详情  `[ ]`
+### T-7 — Advisor：建议合成一个列表，去掉竖条，免责声明移到页底  `[ ]`
+### T-8 — Review：历史改成「月份 · 分数」短行  `[ ]`
+### T-9 — Goals + Budget：去掉重复的标签，统一数字写法（改动小）  `[ ]`
+### T-10 — Rules + TVM + Market：统一卡片和数字写法（Market 要用真实行情数据再检查）  `[ ]`
+
+---
+
 ## V1 待办（全部完成）
 
 ### V1-1 — `pwo-save-error` 事件补一个监听器  `[x]`  （PR #12，merged）
