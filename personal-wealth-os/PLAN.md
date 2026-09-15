@@ -295,6 +295,73 @@
 
 ---
 
+## 液态玻璃按钮（G 系列）
+
+目标：按钮和浮层改成 iOS 26 的 **Liquid Glass（液态玻璃）** 风格。Preview（不改代码，只用来定方向和参数）：
+https://claude.ai/artifact/DWFjJPJ2Nof42eZSZTtZZB
+
+- **Problem**：现在的按钮是扁平实色，浮层（Tab 栏、顶栏）是 94% 实色，跟你每天用的 iPhone 风格不统一。
+- **Why**：纯视觉打磨，不影响正确性。按 `CLAUDE.md` §10，一次只做一小步，每步截图确认。
+- **Current System**：
+  - 所有按钮统一走 `.wu-btn`（`src/components.css`），全站约 170 处：`sm` 69、`ghost` 32、`secondary` 25、`primary` 20、`icon` 13、`danger` 7。
+  - 手机顶栏 `.mobile-brandbar` 和底部 `.tabbar` 在 `src/shell.css` 的 `@media (max-width: 720px)` 里。
+  - Ask 按钮是 `.assistant-fab`（`src/components/assistant/assistant.css`）。
+  - Dashboard 顶部有 WebGL 光线（`side-rays`）。
+- **Proposed Solution**：分三层，不一刀切。
+  - **L1 浮层 = 完整玻璃**：模糊、提饱和、高光边、按下鼓起发亮。电脑 Chrome 额外加真折射。
+  - **L2 按钮 = 轻玻璃**：只有胶囊形、高光边、按下动画，不加背景模糊。
+  - **L3 文字按钮 = 只改圆角**。
+- **Architecture**：
+  - `theme.css` 加 `--glass-*` token，深色、浅色各一套。
+  - `components.css` 加共用的玻璃材质，并改 `.wu-btn` 的几个变体。
+  - `shell.css` 改 Tab 栏和顶栏，`assistant.css` 改 Ask 按钮。
+  - 新增一个小模块 `src/liquidGlass.ts`，负责按下时的光点跟手，以及 Chrome 的折射。
+  - 不碰任何页面逻辑。
+
+### 已定的决定（2026-09-15，Preview 里确认）
+| 项 | 结论 |
+| --- | --- |
+| 范围 | L1：底部 Tab 栏（改成悬浮胶囊）+ 手机顶栏（**做成玻璃**）+ Ask 按钮<br>L2：`primary` / `secondary` / `danger`<br>L3：`ghost` 和表格里的图标按钮，只改胶囊圆角 |
+| 主按钮 | 绿色着色玻璃，白字，跟 iOS `glassProminent` 一样 |
+| L2 背景模糊 | **不加**。按钮后面都是纯色卡片，加了看不出来，只会更吃性能 |
+| 顶部光线 | **保留** |
+| 平台 | 以 iPhone Safari 的模糊版为主设计；折射只是电脑 Chrome 上的额外效果 |
+| 无障碍 | 系统「减少透明度」时退回实心；「减少动态效果」时关掉动画 |
+
+参数：
+```
+--glass-blur: 10px;
+--glass-refraction: 55;   /* 只在 Chrome */
+--glass-tint: 0.78;
+--glass-highlight: 0.70;
+```
+
+### G-0 — 讨论方向 + Preview 定参数  `[x]`
+- 讨论 iOS 液态玻璃的原则：玻璃只放在浮层上，不叠玻璃；定下分层方案。
+- 做了独立的 Preview：并排对比现在和玻璃，可以切换主题，在电脑上模拟 iPhone Safari，用滑块调参数。项目代码没有改动。
+- 在 Preview 里确认了上面的决定和参数。
+
+### G-1 — 玻璃 token + 材质 + L1 浮层  `[ ]`  ← **Current Task**
+- 在 `theme.css` 加 `--glass-*` token；在 `components.css` 加共用材质：高光边、按下鼓起、光点跟手，以及「减少透明度」和「减少动态效果」的退路。
+- 手机顶栏改成玻璃；底部 Tab 栏改成悬浮胶囊，加上滑动的选中镜片；Ask 按钮改成绿色玻璃。
+- 这一步只用「模糊 + 高光」，所有浏览器效果一致；折射放到 G-4。
+- 要检查：`.main` 底部留白仍然能让最后一张卡片露出来；Ask 按钮不压到悬浮 Tab 栏；Tab 栏避开 iPhone 的 Home 指示条。
+- **完成标准**：typecheck、测试、build 全部通过；手机 390 宽 × 深色/浅色截图，桌面 1280 宽截图。
+
+### G-2 — L2 按钮：primary / secondary / danger  `[ ]`
+- 只改 `.wu-btn` 的这三个变体，全站约 52 处会自动跟着变，不改任何页面模板。
+- 检查绿色玻璃上白字的对比度，深色和浅色主题都要达到 AA。
+- **完成标准**：逐页截图，重点看 Ledger、Portfolio、Settings 这些按钮多的页面。
+
+### G-3 — L3 文字按钮：胶囊圆角  `[ ]`
+- `ghost` 和 `icon` 按钮的圆角改成胶囊形，其他不变。改动很小，也可以跟 G-2 合并成一个 PR，由你决定。
+
+### G-4 — Chrome 真折射  `[ ]`（最低优先级，可能不做）
+- 注意：底部 Tab 栏和顶栏只在手机宽度出现，而你用手机时是 Safari，看不到折射。**所以在电脑 Chrome 上，折射实际只会出现在 Ask 按钮上**。
+- 做完 G-1..G-3 之后，再决定这一步值不值得做。
+
+---
+
 ## V1 待办（全部完成）
 
 ### V1-1 — `pwo-save-error` 事件补一个监听器  `[x]`  （PR #12，merged）

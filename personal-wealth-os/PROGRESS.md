@@ -12,6 +12,15 @@
 - **`main`**：`c5cb80f`。PR #34（Dashboard 具体化 headline + TVM What-if）待 merge，见下。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 
+## 液态玻璃按钮（G 系列，进行中）
+
+按钮和浮层改成 iOS 26 液态玻璃风格。详见 `PLAN.md` G 系列。
+
+- **最近完成（2026-09-15）**：G-0 讨论和 Preview。分层方案、主按钮颜色、L2 不加模糊、顶栏做成玻璃、保留光线、四个参数都已定。
+  项目代码没有改动。Preview：https://claude.ai/artifact/DWFjJPJ2Nof42eZSZTtZZB
+- **当前**：G-1（玻璃 token + 材质 + L1 浮层），等你说「执行」。
+- **下一步**：G-2 L2 按钮 → G-3 L3 圆角 → G-4 Chrome 折射（可能不做）。
+
 ## V1 收尾（全部合并）
 
 | 项 | PR | 内容 |
