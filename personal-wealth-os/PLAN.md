@@ -380,9 +380,10 @@ https://claude.ai/artifact/DWFjJPJ2Nof42eZSZTtZZB
   - 全站每个 `.wu-btn` 都带变体，没有漏掉的按钮。
   - 截图确认 Dashboard 的「Open portfolio →」在 hover 时是胶囊形。Portfolio 表格里的删除图标只确认了圆角是 999px，截图没拍到。
 
-### G-4 — Chrome 真折射  `[ ]`（最低优先级，可能不做）  ← 下一个待决定
+### G-4 — Chrome 真折射  `[-]`（2026-09-15 决定不做，移到 FUTURE IDEAS）
 - 注意：底部 Tab 栏和顶栏只在手机宽度出现，而你用手机时是 Safari，看不到折射。**所以在电脑 Chrome 上，折射实际只会出现在 Ask 按钮上**。
 - 做完 G-1..G-3 之后，再决定这一步值不值得做。
+- **决定（2026-09-15）：不做。** 电脑宽度下只有 Ask 按钮会用到，要多写约 120 行代码，Chrome 也要多一份性能负担，不划算。以后电脑版如果有更多浮在内容上的玻璃元素，再重新考虑。
 
 ---
 
@@ -497,6 +498,8 @@ https://claude.ai/artifact/BqULCH7RnCChqE2RdzDwPR
 ---
 
 ## FUTURE IDEAS（V1 之后 / 待决定，不自动做）
+
+- **液态玻璃真折射（原 G-4）**：只有 Chromium 内核的浏览器支持，iPhone Safari 看不到。等电脑版有更多浮在内容上的玻璃元素时再考虑。G-0 Preview 里已经有可用的实现（位移贴图 + SVG 滤镜）。
 
 - `COMMERCIALIZATION_PLAN.md` 全部内容（Capacitor 打包、付费订阅、AI 视频增长）。
 - 阶段 0 里偏商业化的项：Apple / 邮箱登录、账号删除流程、数据导出复核。
