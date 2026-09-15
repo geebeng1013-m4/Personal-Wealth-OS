@@ -454,7 +454,7 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
 - 光线改成手机 Preview 里的**绿色 + 铜色**，并且要真的看得出颜色：去掉灰色滤镜，调高不透明度。手机和电脑一起改。
 - G-4 真折射不做（见上）。
 
-### DG-1 — 光线改成绿色 + 铜色  `[x]`（2026-09-16，PR 待合并）
+### DG-1 — 光线改成绿色 + 铜色  `[x]`（2026-09-16，PR #47，merged）
 - `ui.ts` 里 `mountSideRays` 的两个颜色改成品牌绿和铜色；`shell.css` 里去掉 `grayscale(1)`，把 `opacity: 0.09` 调高。强度对照 Preview，深色和浅色都要检查。
 - 光线底部渐隐到背景色的那层（`.side-rays::after`）保留，所以不会影响下面卡片的文字。
 - **完成标准**：手机 390 宽和桌面 1280 宽，深色、浅色各截一张；光线不影响文字可读性。
@@ -468,13 +468,26 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
 - **没解决的**：桌面上能看出绿色光束；手机上几乎看不到，光源在右上角，被玻璃顶栏盖住了。要不要给手机单独加强，看真机再决定。
 - **跟 Preview 的差别**：Preview 里的光线是用 CSS 画的条纹，比较锐利；真实 App 是 WebGL 动态光，更柔和。
 
-### DG-2 — 吸顶玻璃栏 + 去掉重复大标题  `[ ]`  ← **Current Task**
+### DG-2 — 吸顶玻璃栏 + 去掉重复大标题  `[x]`（2026-09-16，PR 待合并）
 - 电脑版隐藏 `.topbar`，跟手机版一样只保留每页自己的标题。
 - 往下滚、页面标题离开视线后，顶部出现一条细玻璃栏显示页面名称；滚回顶部时消失。用 IntersectionObserver 判断，不在每次滚动时计算。
 - 只在电脑宽度生效。手机版已经有玻璃顶栏，不叠第二条。
 - **完成标准**：Dashboard、Ledger、Portfolio 滚动截图；玻璃栏不盖住侧栏；控制台没有报错。
+- **结果**：
+  - 958/958 测试通过，build 通过，控制台没有报错。
+  - 实测：
+    - 页面在顶部时，玻璃栏隐藏，也没有重复的大标题。
+    - 往下滚、页面标题离开视线后，玻璃栏出现（从 270px 到右边缘，高 56px），卡片从下面经过时被模糊。
+    - 滚回顶部时，玻璃栏消失。
+    - 切换页面时页面回到顶部，玻璃栏立即隐藏，不会闪。
+    - 手机上玻璃栏不显示。
+  - 截图检查了深色 Dashboard、深色 Ledger、浅色 Portfolio。
+- **跟计划不同的两处**：
+  1. **用 `position: fixed`，不用 sticky**：`.main` 设置了 `overflow: hidden`，sticky 会粘在 `.main` 上而不是屏幕顶部。
+  2. **不用 IntersectionObserver，改成滚动时检查（每帧最多一次）**：页面会整页重新渲染，换掉标题元素，IntersectionObserver 盯着的旧元素就失效了。
+- **改动的文件**：`ui.ts`（`.topbar` 换成 `.titlebar`）、`shell.css`（删掉 `.topbar` 样式，新增 `.titlebar`），新增 `src/titleBar.ts`。
 
-### DG-3 — Ask 面板和弹窗改成玻璃  `[ ]`
+### DG-3 — Ask 面板和弹窗改成玻璃  `[ ]`  ← **Current Task**
 - 新增更厚的玻璃 token（比如 `--glass-sheet`）：模糊更强、底色更实，保证文字清楚。
 - 这一步只做 Ask 面板和 Version History 弹窗；弹窗后面的遮罩调淡。App 里其他弹窗先列出来，由你决定要不要一起改。
 - **完成标准**：面板里文字的对比度达到 AA；深色和浅色截图检查。
@@ -555,6 +568,8 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
 ---
 
 ## FUTURE IDEAS（V1 之后 / 待决定，不自动做）
+
+- **Ledger 记账表单的吸顶可能不生效**（做 DG-2 时发现，2026-09-16）：`.wu-ledger-entry` 设置了 `position: sticky`，但外层 `.main` 是 `overflow: hidden`，sticky 会粘在 `.main` 上，滚动时表单不会跟着。没有实测确认，也没改。修法可能是把 `.main` 改成 `overflow: clip`，但它会影响光线裁切，需要单独验证。
 
 - **液态玻璃真折射（原 G-4）**：只有 Chromium 内核的浏览器支持，iPhone Safari 看不到。等电脑版有更多浮在内容上的玻璃元素时再考虑。G-0 Preview 里已经有可用的实现（位移贴图 + SVG 滤镜）。
 
