@@ -65,6 +65,15 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 实测抓到并修掉：模型会**编造汇率**填进令吉金额（现在你没说过的数字一律不填）；reasoning 模型思考吃光
 输出预算导致空回复。
 
+## 助手理财原则（R 系列）+ 修 bug
+
+| PR | 内容 | 状态 |
+| --- | --- | --- |
+| #36–#39 | R-1 原则 + 安全网 · 额度用光提示 · R-2 发送用户规则 · R-3 财务目标 | 待 merge（按顺序） |
+| #40 | BUG：Settings 保存后规则不跟着变 | 待 merge |
+| #41 | Import 前先存 Version History | 待 merge |
+| #42 | R-4：工具移到 Settings · Reset 真空白 · 紧急资金 6 个月建议 · 修 Version History 真实账号永远空 · Restore 先备份 | 待 merge |
+
 ## App / 订阅方向（暂停）
 
 - 因预算不足，`COMMERCIALIZATION_PLAN.md` 阶段 1（Capacitor 打包上架）+ 付费订阅**暂停**，

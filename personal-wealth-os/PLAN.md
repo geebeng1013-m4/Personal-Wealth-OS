@@ -235,13 +235,26 @@
   ②「Advisor 显示 Hold at least MYR 0」—— 那句只存在于建议数据里，页面没显示；页面上受影响的是 DCA 金额和预算/计划检查。
 - 验证：948 测试（含原 bug 完整重现、不覆盖配置、幂等）；原重现脚本修复后：规则 4,500、AI 收到紧急资金目标和 DCA；浏览器实测 DCA 同步。
 
-#### R-4 — 新用户默认值  `[ ]`（你的决定：A 做 · B1 · C 记录）
-- A：Settings 紧急资金卡片在填了必要支出后显示「建议目标 = 6 个月必要支出」+ 按钮，不自动设。
-- B1：Reset 改成真正空白（和它的确认文字一致），不再载入带熊市储备的示例模板。
-- ~~Import 前先存 Version History~~ **已做**（PR 待开）：Import 以前直接覆盖、不留备份，选错文件就是一键丢数据且同步到云端；
-  现在和 Reset 一样先存一份，Version History 里标注「Before import」。测试覆盖「导入别人的文件 → 从备份恢复出原数据」。
-- **你的新决定**：侧栏整排工具（主题切换、Export、Import、Version History、Reset）**全部移到 Settings**，和 Reset 改空白（B1）、
-  紧急资金建议（A）合成下一个 Task。
+#### R-4 — 新用户默认值 + 数据工具移到 Settings  `[x]`（你的决定：A 做 · B1 · C 记录；PR #42）
+- **A 做**：Settings 紧急资金卡片，填了必要支出（交通 + 饮食 + 其他固定）后显示「Suggested target: MYR X —
+  6 months of your essential spending · WealthUp's standard is 3–6 months」+「Use 6 months」按钮。按钮只填进输入框，
+  **不保存**，还是要你按 Save Emergency。没填必要支出时显示提示去填 Cashflow。目标已相同时不显示按钮。
+- **B1**：Reset 改成真正空白（`emptyState()`），和确认文字一致；不再载入带示例目标、MYR 400 熊市储备的示例模板。仍先存 Version History。
+- **Import 前先存 Version History**（PR #41）：Import 以前直接覆盖、不留备份；现在标注「Before import」。
+- **工具全部移到 Settings**：侧栏抽屉（主题、Add to Home Screen、Export、Import、Version History、Reset）和手机 More 页底部
+  同一排按钮都移到 Settings 最后一张「Data & App」卡片，Reset 放最底、红字。侧栏账号行（头像、名字、Sign Out）和免责声明保留。
+  删掉了抽屉的代码、记住开合状态的 localStorage 和相关 CSS。
+- **胶囊样式（你的 idea，选甲）**：卡片里去掉说明文字，只留一排圆角胶囊「Theme · Export · Import · Version History ·
+  Add to Home Screen · Reset」，Reset 最后、红框红字；鼠标停留有一句说明（title）。桌面卡片横跨整行、一排排完；手机自动换行。
+  说明文字拿掉后 **Import 加了确认框**（以前选完文件直接覆盖）：「Replace all your data with this file? …saved to Version History first.」
+  取消 → 数据不变、可重选同一文件；确认 → 先存「Before import」再导入（浏览器实测两种都对）。
+- **做这个时发现的两个 bug，一起修了**：
+  1. **Version History 对真实账号永远是空的**：保存按 `uid` 存，打开时按 `email` 读，两个 key 对不上。所以 Reset / Import
+     存的备份在真实账号里**根本打不开**（demo 模式看不出，因为 demo 没有 email）。改成按 uid 读、清空、恢复。
+  2. **Restore 没有先存当前数据**：确认框写着「当前状态会先存一份」，实际没存。现在恢复前存「Before restore」。
+- 验证：955 测试（建议目标计算、只算必要支出、空值/坏值、Reset 空白）；浏览器实测：侧栏/More 页工具已无、账号行在；
+  Settings 卡片 6 个工具 Reset 在最后；建议 MYR 7,200 → 按钮填入不保存；主题切换；Reset → 设置全 0、Goals 空、显示提示；
+  Version History 出现「Before reset」，Restore 后多出「Before restore」；手机无横向溢出。
 
 #### R-5  `[ ]`
 - R-4 新用户默认：紧急资金 6 个月、熊市储备关闭 · R-5 原则存成 `docs/` 正式文件
