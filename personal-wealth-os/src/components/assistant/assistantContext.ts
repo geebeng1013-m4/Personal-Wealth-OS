@@ -132,6 +132,11 @@ export function buildUserRulesContext(state: WealthState, now: Date): string {
   const goals = getGoalsSnapshot(state);
   const lines: string[] = [];
 
+  // --- the goal sentence: the direction everything below serves ---
+  if (state.financialGoal) {
+    lines.push(`The user's financial goal, in their own words: "${state.financialGoal}". Frame advice around it.`);
+  }
+
   // --- rules ---
   const rules: string[] = [];
   const essential = budget.plannedSpending;
