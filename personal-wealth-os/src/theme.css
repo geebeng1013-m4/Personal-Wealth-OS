@@ -110,6 +110,9 @@
     --glass-lens-raised: rgb(255 255 255 / 0.14); /* segmented-control lens (DG-4) */
     --surface-overlay-glass: rgba(0, 0, 0, 0.3); /* lighter dim, so a glass dialog shows the page */
 
+    /* soft glow behind the floating sidebar (DG-5) */
+    --sidebar-glow: 0.28;
+
     /* side rays at the top of the page (DG-1) */
     --rays-opacity: 0.65;
     --rays-blend: normal;
@@ -228,6 +231,7 @@
     --glass-well: rgb(255 255 255 / 0.55);
     --glass-lens-raised: rgb(255 255 255 / 0.92);
     --surface-overlay-glass: rgba(38, 34, 28, 0.16);
+    --sidebar-glow: 0.2;
     --rays-opacity: 0.5;
     --rays-blend: multiply; /* light on a light ground vanishes; multiply tints it instead */
     --scrollbar-thumb: rgb(38 34 28 / 0.38);
