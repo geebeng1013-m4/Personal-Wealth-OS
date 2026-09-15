@@ -313,3 +313,52 @@ export function parseOpenRouterReply(json: unknown): ReplyResult {
   }
   return { ok: true, reply: content.trim() };
 }
+
+/**
+ * Why OpenRouter refused a request with 429.
+ *
+ *   daily — the free tier's per-day request allowance is used up. It comes back
+ *           at a fixed reset time, usually hours away, for every user at once:
+ *           the whole app shares one key.
+ *   burst — a short-term limit. Trying again in a moment is the right advice.
+ *
+ * The two need different words. Telling someone to "try again shortly" when the
+ * answer is "tomorrow morning" was what users actually saw the first time the
+ * daily allowance ran out.
+ */
+export type UpstreamLimit =
+  | { kind: "daily"; resetAt: number | null }
+  | { kind: "burst" };
+
+/** A reset time as epoch ms, or null. Accepts seconds or ms; rejects the absurd. */
+function toResetAt(value: unknown, now: number): number | null {
+  const n = typeof value === "string" ? Number(value) : typeof value === "number" ? value : Number.NaN;
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const ms = n < 1e12 ? n * 1000 : n;
+  // A daily reset is never in the past and never more than two days out.
+  if (ms < now - 60_000 || ms > now + 2 * 24 * 60 * 60 * 1000) return null;
+  return ms;
+}
+
+/**
+ * Read an OpenRouter 429 body (and its X-RateLimit-Reset header).
+ *
+ * Total, like the other readers here: any shape it does not recognise is treated
+ * as a burst limit, which is the conservative reading — it only ever produces the
+ * old "try again shortly" wording, never a wrong promise about tomorrow.
+ */
+export function readUpstreamLimit(json: unknown, resetHeader: string | null, now: number): UpstreamLimit {
+  const error = isPlainObject(json) ? (json as { error?: unknown }).error : undefined;
+  if (!isPlainObject(error)) return { kind: "burst" };
+
+  const message = typeof error.message === "string" ? error.message : "";
+  const metadata = isPlainObject(error.metadata) ? error.metadata : {};
+  const source = typeof metadata.limit_source === "string" ? metadata.limit_source : "";
+
+  const daily = /per[-\s]?day/i.test(message) || /daily/i.test(source);
+  if (!daily) return { kind: "burst" };
+
+  const metaHeaders = isPlainObject(metadata.headers) ? metadata.headers : {};
+  const resetAt = toResetAt(resetHeader, now) ?? toResetAt(metaHeaders["X-RateLimit-Reset"], now);
+  return { kind: "daily", resetAt };
+}
