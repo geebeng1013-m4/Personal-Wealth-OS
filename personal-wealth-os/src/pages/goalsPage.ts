@@ -15,6 +15,7 @@ import { escapeHtml } from "../html";
 import { leakInsightStrip } from "../components/leakInsightStrip";
 import { pageHeader } from "../components/pageHeader";
 import { getGoalsSnapshot } from "../goalSummary";
+import { syncGoalContributionRules } from "../financialRules";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
 /**
@@ -186,6 +187,8 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
         note: String(data.get("note") ?? goals[index].note),
       };
       const next = { ...state, goals };
+      // Each contributing goal has a goal-contribution rule the Advisor reads.
+      next.financialRules = syncGoalContributionRules(next);
       setState(next, "Updated goal");
       const saved = form.querySelector<HTMLElement>(".goal-form-error");
       if (saved) {
@@ -214,6 +217,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
         ? getGoalsSnapshot({ ...state, goals, overviewGoalId: "" }).featuredGoalId
         : state.overviewGoalId;
       const next = { ...state, goals, overviewGoalId };
+      next.financialRules = syncGoalContributionRules(next);
       setState(next);
       doNavigate("goals");
     });
@@ -231,6 +235,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
       note: "",
     }];
     const next = { ...state, goals };
+    next.financialRules = syncGoalContributionRules(next);
     setState(next);
     doNavigate("goals");
   });

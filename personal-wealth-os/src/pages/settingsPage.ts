@@ -12,6 +12,7 @@
 
 import type { WealthState } from "../models";
 import { createId } from "../state";
+import { syncPlanningRules } from "../financialRules";
 import { money } from "../rules";
 import { escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
@@ -175,6 +176,9 @@ export function bindSettings(root: HTMLElement, state: WealthState, setState: Se
         monthly: Number(data.get("dcaMonthly")) || 0,
       },
     };
+    // The spending limit and DCA rules are the policy the Advisor reads; keep
+    // them in step with what was just saved (see syncPlanningRules).
+    next.financialRules = syncPlanningRules(next, ["monthly-spending-limit", "dca-monthly-amount"]);
     setState(next);
     rerender(root, next, setState, "settings", navigate);
   });
@@ -193,6 +197,7 @@ export function bindSettings(root: HTMLElement, state: WealthState, setState: Se
         annualYield: (Number(data.get("annualYield")) || 3.5) / 100,
       },
     };
+    next.financialRules = syncPlanningRules(next, ["emergency-fund-minimum"]);
     setState(next);
     rerender(root, next, setState, "settings", navigate);
   });
@@ -219,6 +224,7 @@ export function bindSettings(root: HTMLElement, state: WealthState, setState: Se
         },
       },
     };
+    next.financialRules = syncPlanningRules(next, ["target-allocation"]);
     setState(next);
     rerender(root, next, setState, "settings", navigate);
   });

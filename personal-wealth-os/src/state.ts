@@ -1,5 +1,5 @@
 import type { LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
-import { getDefaultFinancialRules, normalizeFinancialRules } from "./financialRules";
+import { getDefaultFinancialRules, normalizeFinancialRules, repairPlaceholderRules } from "./financialRules";
 import { normalizeActionRecords } from "./actionRecords";
 import { normalizeCurrencyExchanges } from "./currencyExchange";
 import {
@@ -529,6 +529,10 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   merged.financialRules = Array.isArray(candidate.financialRules)
     ? normalizeFinancialRules(candidate.financialRules)
     : getDefaultFinancialRules(merged);
+  // Mend the rules of anyone who signed up and then set values in Settings
+  // before Settings wrote to rules: placeholders whose setting now holds a value
+  // are switched on. Configured rules are never touched (repairPlaceholderRules).
+  merged.financialRules = repairPlaceholderRules(merged);
 
   // v17: action records. Purely additive — a state without them starts empty,
   // and an existing array is normalized rather than replaced. Malformed
