@@ -364,6 +364,24 @@
     min-width: 0;
     overflow-wrap: anywhere;
   }
+  /* The user's own sentence sits in the true centre of the bar, not just the
+     space left after the label: a hidden copy of the label balances the right
+     side, so the two outer columns are always the same width. */
+  .wu-goal-line:not(.wu-goal-line--empty) {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    align-items: center;
+  }
+  .wu-goal-line:not(.wu-goal-line--empty) .wu-goal-line__text {
+    text-align: center;
+  }
+  .wu-goal-line:not(.wu-goal-line--empty)::after {
+    content: "My goal";
+    visibility: hidden;
+    font: var(--weight-semibold) var(--text-overline) / 1 var(--font-sans);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+  }
   .wu-goal-line--empty {
     border-left-color: var(--border-strong);
     color: var(--text-muted);
