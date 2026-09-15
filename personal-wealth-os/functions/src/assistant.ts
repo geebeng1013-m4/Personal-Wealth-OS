@@ -23,6 +23,7 @@ import {
   OPENROUTER_CHAT_URL,
   buildOpenRouterPayload,
   parseOpenRouterReply,
+  readUpstreamLimit,
 } from "./openrouterRequest.js";
 
 const OPENROUTER_API_KEY = defineSecret("OPENROUTER_API_KEY");
@@ -115,6 +116,20 @@ export const assistant = onRequest(
     }
 
     if (upstream.status === 429) {
+      let limitBody: unknown = null;
+      try {
+        limitBody = await upstream.json();
+      } catch { /* an unreadable 429 is read as a short-term limit */ }
+      const limit = readUpstreamLimit(limitBody, upstream.headers.get("x-ratelimit-reset"), Date.now());
+      if (limit.kind === "daily") {
+        logger.warn("assistant daily free-model allowance used up", { resetAt: limit.resetAt });
+        response.status(429).json({
+          error: "The assistant has used today's free allowance.",
+          reason: "daily-limit",
+          ...(limit.resetAt !== null ? { retryAt: limit.resetAt } : {}),
+        });
+        return;
+      }
       response.status(429).json({ error: "The assistant is busy. Try again shortly." });
       return;
     }
