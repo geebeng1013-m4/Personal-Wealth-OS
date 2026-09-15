@@ -74,6 +74,7 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 | #41 | Import 前先存 Version History | 待 merge |
 | #42 | R-4：工具移到 Settings · Reset 真空白 · 紧急资金 6 个月建议 · 修 Version History 真实账号永远空 · Restore 先备份 | 待 merge |
 | #43 | R-5：原则正式文件 `docs/assistant-principles.md` + 文件与提示词同步测试 | 待 merge |
+| #44 | Overview「FINANCIAL GOAL」：目标文字居中、加大加粗；手机标签在上 | 待 merge |
 
 ## App / 订阅方向（暂停）
 

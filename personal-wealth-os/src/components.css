@@ -372,15 +372,30 @@
     grid-template-columns: max-content minmax(0, 1fr) max-content;
     align-items: center;
   }
+  /* A touch larger and bolder than body copy: it is a goal, not a status line. */
   .wu-goal-line:not(.wu-goal-line--empty) .wu-goal-line__text {
     text-align: center;
+    font: var(--weight-bold) var(--text-heading) / var(--leading-snug) var(--font-sans);
+    letter-spacing: 0.01em;
   }
   .wu-goal-line:not(.wu-goal-line--empty)::after {
-    content: "My goal";
+    content: "Financial goal";
     visibility: hidden;
     font: var(--weight-semibold) var(--text-overline) / 1 var(--font-sans);
     letter-spacing: var(--tracking-wide);
     text-transform: uppercase;
+  }
+  /* On a phone the side columns would squeeze the sentence into a narrow strip,
+     so the label sits above it instead, both centred. */
+  @media (max-width: 640px) {
+    .wu-goal-line:not(.wu-goal-line--empty) {
+      grid-template-columns: minmax(0, 1fr);
+      justify-items: center;
+      row-gap: var(--space-1);
+    }
+    .wu-goal-line:not(.wu-goal-line--empty)::after {
+      content: none;
+    }
   }
   .wu-goal-line--empty {
     border-left-color: var(--border-strong);
