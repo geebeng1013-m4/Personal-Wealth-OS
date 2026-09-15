@@ -102,6 +102,10 @@
     --glass-danger-rgb: 220 139 125;
     --glass-hover: brightness(1.08); /* lighter on dark ground keeps white text legible */
 
+    /* overlay scrollbar thumb (sidebar, S-1) */
+    --scrollbar-thumb: rgb(255 255 255 / 0.34);
+    --scrollbar-thumb-strong: rgb(255 255 255 / 0.52);
+
     /* ---- radius --------------------------------------------------------- */
     --radius-xs: 4px;
     --radius-sm: 8px;
@@ -208,6 +212,8 @@
     --glass-shadow-sm: 0 2px 6px rgb(38 34 28 / 0.1);
     --glass-danger-rgb: 165 69 59;
     --glass-hover: brightness(0.94); /* darker on light ground: white-on-green stays AA */
+    --scrollbar-thumb: rgb(38 34 28 / 0.38);
+    --scrollbar-thumb-strong: rgb(38 34 28 / 0.55);
   }
 
   @media (prefers-reduced-motion: reduce) {

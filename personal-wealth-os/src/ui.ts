@@ -29,8 +29,10 @@ import { bindDashboard, dashboardTemplate } from "./pages/dashboardPage";
 import { bindMoneyLeaks, moneyLeaksTemplate, setSelectedMoneyLeakId } from "./pages/moneyLeaksPage";
 import { bindAdvisor, advisorPageTemplate } from "./pages/advisorPage";
 import { settleTabbarLens } from "./liquidGlass";
+import { mountSidebarScrollbar } from "./sidebarScrollbar";
 
 const sideRaysCleanup = new WeakMap<HTMLElement, () => void>();
+const sidebarScrollbarCleanup = new WeakMap<HTMLElement, () => void>();
 const calculatorCleanup = new WeakMap<HTMLElement, () => void>();
 const sidebarScrollPositions = new WeakMap<HTMLElement, number>();
 
@@ -202,6 +204,7 @@ function shellTemplate(activePage: string, state: WealthState, user?: AppUser): 
     <button class="hamburger" id="sidebarToggle" type="button" aria-label="Open navigation" aria-expanded="false">☰</button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
     <aside class="sidebar" id="sidebar">
+      <div class="sidebar-scroll">
       <div class="sidebar-scroll-area">
         <div class="brand">
           <span class="brand-mark"><img src="/brand/wealth-mark.png" alt=""></span>
@@ -218,6 +221,8 @@ function shellTemplate(activePage: string, state: WealthState, user?: AppUser): 
           <strong>${escapeHtml(state.profile.riskTolerance)} risk · ${state.profile.investmentHorizonYears}+ years</strong>
           <small>${escapeHtml(state.profile.stage)} · MYR base currency</small>
         </div>
+      </div>
+      <div class="sidebar-scrollbar" aria-hidden="true" hidden></div>
       </div>
       <div class="sidebar-actions">
         ${userBadge}
@@ -307,6 +312,8 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   calculatorCleanup.delete(root);
   sideRaysCleanup.get(root)?.();
   sideRaysCleanup.delete(root);
+  sidebarScrollbarCleanup.get(root)?.();
+  sidebarScrollbarCleanup.delete(root);
   priceRefreshCleanup.get(root)?.();
   priceRefreshCleanup.delete(root);
 
@@ -331,6 +338,8 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
       keepActiveNavigationVisible(root);
     }
   }
+  // After the scroll position is restored, so restoring it can't show the thumb.
+  sidebarScrollbarCleanup.set(root, mountSidebarScrollbar(root));
   const sideRays = root.querySelector<HTMLElement>("#sideRays");
   if (sideRays) {
     const cleanup = mountSideRays(sideRays, {
