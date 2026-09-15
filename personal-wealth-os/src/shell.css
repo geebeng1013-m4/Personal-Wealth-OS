@@ -372,28 +372,45 @@
   height: 100%;
 }
 
-.topbar {
+/* ---- desktop glass title bar (DG-2) ---- */
+/* Each page's wu-page-header is the one title. Once it scrolls up behind the
+   top edge, this slim glass bar fades in with the page name (titleBar.ts).
+   position: fixed, not sticky — .main clips with overflow: hidden, which
+   would pin a sticky bar to .main instead of the viewport. Surface comes from
+   .wu-glass .wu-glass--bar. */
+.titlebar {
+  position: fixed;
+  top: 0;
+  left: 270px;
+  right: 0;
+  z-index: 110;
+  height: 56px;
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-end;
-  margin-bottom: 32px;
-}
-.topbar h2 {
-  display: flex;
-  gap: 11px;
   align-items: baseline;
-  margin: 7px 0 0;
-  font-size: clamp(30px, 3.5vw, 44px);
-  font-weight: 700;
-  letter-spacing: -0.045em;
+  gap: 10px;
+  padding: 19px clamp(28px, 4vw, 68px) 0;
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  transition: opacity var(--dur-mid) var(--ease-standard), transform var(--dur-mid) var(--ease-standard);
+}
+.titlebar.is-on {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.titlebar.is-instant {
+  transition: none;
+}
+.titlebar__title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--text);
 }
-.topbar h2 span {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0;
-  color: var(--text-faint);
+.titlebar__sub {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .skip-link {
@@ -543,16 +560,9 @@
   .side-rays {
     height: 360px;
   }
-  /* The shell topbar repeats the page name and a generic subtitle that every
-     page's own wu-page-header already carries. On a phone that second header is
-     ~120px of duplication before any content — drop it and let wu-page-header
-     be the one header. */
-  .topbar {
+  /* The phone has its own glass brand bar; no second bar on top of it. */
+  .titlebar {
     display: none;
-  }
-  .topbar h2 span {
-    display: block;
-    font-size: 13px;
   }
   /* ---- bottom tab bar (phone only) ---- */
   /* A floating liquid-glass capsule, iOS 26 style: inset from the edges, sitting

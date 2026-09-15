@@ -30,9 +30,11 @@ import { bindMoneyLeaks, moneyLeaksTemplate, setSelectedMoneyLeakId } from "./pa
 import { bindAdvisor, advisorPageTemplate } from "./pages/advisorPage";
 import { settleTabbarLens } from "./liquidGlass";
 import { mountSidebarScrollbar } from "./sidebarScrollbar";
+import { mountTitleBar } from "./titleBar";
 
 const sideRaysCleanup = new WeakMap<HTMLElement, () => void>();
 const sidebarScrollbarCleanup = new WeakMap<HTMLElement, () => void>();
+const titleBarCleanup = new WeakMap<HTMLElement, () => void>();
 const calculatorCleanup = new WeakMap<HTMLElement, () => void>();
 const sidebarScrollPositions = new WeakMap<HTMLElement, number>();
 
@@ -237,12 +239,10 @@ function shellTemplate(activePage: string, state: WealthState, user?: AppUser): 
         <span class="mobile-brandbar__mark"><img src="/brand/wealth-mark.png" alt=""></span>
         <span class="mobile-brandbar__name">WealthUp</span>
       </header>
-      <header class="topbar">
-        <div>
-          <span class="eyebrow t-overline">Personal CFO Operating System</span>
-          <h2>${active?.[1] ?? "Overview"}<span>${active?.[2] ?? "Dashboard"}</span></h2>
-        </div>
-      </header>
+      <div class="titlebar wu-glass wu-glass--bar" aria-hidden="true">
+        <strong class="titlebar__title">${active?.[1] ?? "Overview"}</strong>
+        <span class="titlebar__sub">${active?.[2] ?? "Dashboard"}</span>
+      </div>
       <section id="pageMount"></section>
     </main>
     ${tabbarTemplate(activePage)}
@@ -314,6 +314,8 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   sideRaysCleanup.delete(root);
   sidebarScrollbarCleanup.get(root)?.();
   sidebarScrollbarCleanup.delete(root);
+  titleBarCleanup.get(root)?.();
+  titleBarCleanup.delete(root);
   priceRefreshCleanup.get(root)?.();
   priceRefreshCleanup.delete(root);
 
@@ -391,6 +393,9 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
       headerBar.insertAdjacentHTML("afterbegin", backToMoreButton());
     }
   }
+
+  // After the page content is in, so the bar can find the page header.
+  titleBarCleanup.set(root, mountTitleBar(root));
 
   bindCommon(root, state, setState, navigate, user, onLogout);
   bindPage(root, state, setState, activePage, navigate);
