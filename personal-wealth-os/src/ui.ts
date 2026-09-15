@@ -350,7 +350,8 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
       // blend 0.75 weights rayColor2, so green leads and bronze accents.
       rayColor1: "#c79b57",
       rayColor2: "#57a78f",
-      intensity: 2.6,
+      // Phones get brighter light (DG-6): the source is tucked under the brand bar.
+      intensity: window.matchMedia("(max-width: 720px)").matches ? 4 : 2.6,
       spread: 2,
       origin: "top-right",
       tilt: 0,
