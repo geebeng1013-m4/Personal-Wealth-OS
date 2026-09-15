@@ -296,7 +296,7 @@ export function assistantTemplate(): string {
   const open = isPanelOpen();
   return `<div class="assistant${open ? " is-open" : ""}" id="assistant">
     ${open ? panelHtml() : ""}
-    <button class="assistant-fab" id="assistantFab" type="button"
+    <button class="assistant-fab wu-glass wu-glass--tint wu-glass--press" id="assistantFab" type="button"
       aria-expanded="${open ? "true" : "false"}" aria-controls="assistantPanel"
       aria-label="${open ? "Close assistant" : "Open assistant"}">
       <span class="assistant-fab__icon" aria-hidden="true">${open ? ICON_CLOSE : ICON_SPARK}</span>

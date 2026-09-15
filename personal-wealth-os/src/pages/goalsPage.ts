@@ -9,13 +9,35 @@
  */
 
 import type { WealthState } from "../models";
-import { createId } from "../state";
+import { MAX_FINANCIAL_GOAL_CHARS, createId, normalizeFinancialGoal } from "../state";
 import { money, percent } from "../rules";
 import { escapeHtml } from "../html";
 import { leakInsightStrip } from "../components/leakInsightStrip";
 import { pageHeader } from "../components/pageHeader";
 import { getGoalsSnapshot } from "../goalSummary";
+import { syncGoalContributionRules } from "../financialRules";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
+
+/**
+ * The one-sentence financial goal the Overview shows.
+ *
+ * Written here, beside the goals it gives a direction to, and shown on the
+ * Overview — the Overview only displays it, keeping editing out of the page that
+ * is meant to be read at a glance.
+ */
+function financialGoalCard(state: WealthState): string {
+  return `<section class="wu-card wu-card--pad-sm wu-financial-goal" aria-labelledby="financialGoalLabel">
+    <form class="wu-stack wu-stack--sm" id="financialGoalForm">
+      <label class="wu-label" id="financialGoalLabel" for="financialGoalInput">My financial goal</label>
+      <p class="t-caption t-muted">One sentence you want in front of you every time you open WealthUp. It shows on the Overview.</p>
+      <div class="wu-row wu-row--tight wu-financial-goal__row">
+        <input class="wu-field" id="financialGoalInput" name="financialGoal" type="text" maxlength="${MAX_FINANCIAL_GOAL_CHARS}"
+          placeholder="e.g. RM80,000 house deposit by 35" value="${escapeHtml(state.financialGoal)}">
+        <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button>
+      </div>
+    </form>
+  </section>`;
+}
 
 export function goalsTemplate(state: WealthState): string {
   // Goal facts come from the canonical read model.
@@ -85,6 +107,7 @@ export function goalsTemplate(state: WealthState): string {
         title: "Goals",
         sub: "What you're saving for, and how close you are.",
       })}
+      ${financialGoalCard(state)}
       ${leakInsightStrip(state, ["goal"], "Goal pace")}
       ${goalsEmptyState}
       <div class="wu-grid wu-grid--2">
@@ -97,6 +120,16 @@ export function goalsTemplate(state: WealthState): string {
 
 export function bindGoals(root: HTMLElement, state: WealthState, setState: Setter, navigate: Navigate | undefined, rerender: RenderApp): void {
   const doNavigate = navigate ?? ((page: string) => rerender(root, state, setState, page, navigate));
+
+  root.querySelector<HTMLFormElement>("#financialGoalForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = root.querySelector<HTMLInputElement>("#financialGoalInput");
+    const financialGoal = normalizeFinancialGoal(input?.value ?? "");
+    if (financialGoal === state.financialGoal) return;
+    const next = { ...state, financialGoal };
+    setState(next, financialGoal ? "Set financial goal" : "Cleared financial goal");
+    rerender(root, next, setState, "goals", navigate);
+  });
 
   // Edit button toggle
   root.querySelectorAll<HTMLButtonElement>(".edit-goal").forEach((button) => {
@@ -154,6 +187,8 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
         note: String(data.get("note") ?? goals[index].note),
       };
       const next = { ...state, goals };
+      // Each contributing goal has a goal-contribution rule the Advisor reads.
+      next.financialRules = syncGoalContributionRules(next);
       setState(next, "Updated goal");
       const saved = form.querySelector<HTMLElement>(".goal-form-error");
       if (saved) {
@@ -182,6 +217,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
         ? getGoalsSnapshot({ ...state, goals, overviewGoalId: "" }).featuredGoalId
         : state.overviewGoalId;
       const next = { ...state, goals, overviewGoalId };
+      next.financialRules = syncGoalContributionRules(next);
       setState(next);
       doNavigate("goals");
     });
@@ -199,6 +235,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
       note: "",
     }];
     const next = { ...state, goals };
+    next.financialRules = syncGoalContributionRules(next);
     setState(next);
     doNavigate("goals");
   });

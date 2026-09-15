@@ -79,6 +79,29 @@
     --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.45); /* overlays / menus only */
 
+    /* ---- liquid glass (iOS 26 style, see PLAN.md G series) ----------------
+       Only for the floating layer: phone brand bar, tab bar, Ask button.
+       The four knobs below were picked in the G-0 preview and are the same in
+       both themes; the material colours after them are per theme. */
+    --glass-blur: 10px;
+    --glass-saturate: 1.7;
+    --glass-tint: 0.78; /* opacity of the green on tinted glass */
+    --glass-highlight: 0.7; /* strength of the rim light */
+    --glass-fill: rgb(30 30 34 / 0.36);
+    --glass-rim: rgb(255 255 255 / 0.55);
+    --glass-rim-soft: rgb(255 255 255 / 0.2);
+    --glass-edge: rgb(255 255 255 / 0.07);
+    --glass-inner: inset 0 1px 0 rgb(255 255 255 / 0.1), inset 0 -1px 0 rgb(0 0 0 / 0.3);
+    --glass-shadow: 0 12px 32px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.4);
+    --glass-glow: rgb(255 255 255 / 0.22);
+    --glass-lens: rgb(255 255 255 / 0.12);
+    --glass-tint-rgb: 47 140 114;
+    /* L2 buttons (G-2): light glass — no backdrop blur, they sit on flat cards */
+    --glass-fill-lite: rgb(255 255 255 / 0.07);
+    --glass-shadow-sm: 0 2px 8px rgb(0 0 0 / 0.35);
+    --glass-danger-rgb: 220 139 125;
+    --glass-hover: brightness(1.08); /* lighter on dark ground keeps white text legible */
+
     /* ---- radius --------------------------------------------------------- */
     --radius-xs: 4px;
     --radius-sm: 8px;
@@ -171,6 +194,20 @@
     --shadow-xs: 0 1px 2px rgba(38, 34, 28, 0.04);
     --shadow-sm: 0 2px 8px rgba(38, 34, 28, 0.06);
     --shadow-md: 0 12px 32px rgba(38, 34, 28, 0.12);
+
+    --glass-fill: rgb(255 255 255 / 0.42);
+    --glass-rim: rgb(255 255 255 / 0.95);
+    --glass-rim-soft: rgb(255 255 255 / 0.55);
+    --glass-edge: rgb(38 34 28 / 0.12);
+    --glass-inner: inset 0 1px 1px rgb(255 255 255 / 0.75), inset 0 -1px 1px rgb(38 34 28 / 0.06);
+    --glass-shadow: 0 10px 28px rgb(38 34 28 / 0.14), 0 1px 3px rgb(38 34 28 / 0.1);
+    --glass-glow: rgb(255 255 255 / 0.6);
+    --glass-lens: rgb(38 34 28 / 0.07);
+    --glass-tint-rgb: 26 92 76;
+    --glass-fill-lite: rgb(255 255 255 / 0.72);
+    --glass-shadow-sm: 0 2px 6px rgb(38 34 28 / 0.1);
+    --glass-danger-rgb: 165 69 59;
+    --glass-hover: brightness(0.94); /* darker on light ground: white-on-green stays AA */
   }
 
   @media (prefers-reduced-motion: reduce) {

@@ -25,30 +25,26 @@
 
 /* ---- the button -------------------------------------------------------- */
 
+/* Surface, press bulge and glow come from .wu-glass .wu-glass--tint
+   (components.css) — green tinted liquid glass. Don't set background, border,
+   box-shadow or transform here: this file is unlayered and would win. */
 .assistant-fab {
   width: 52px;
   height: 52px;
+  border: 0;
   border-radius: var(--radius-pill);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  background: var(--accent);
-  color: var(--accent-contrast);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: var(--shadow-md);
-  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+  --glass-press: 1.12;
 }
 .assistant-fab:hover {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
-}
-.assistant-fab:active {
-  transform: translateY(0);
+  filter: brightness(1.07);
 }
 .assistant-fab:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-md), 0 0 0 3px var(--focus);
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 .assistant-fab__icon {
   display: block;
@@ -589,11 +585,12 @@
 /* ---- phone ------------------------------------------------------------- */
 
 @media (max-width: 720px) {
-  /* The tab bar owns the bottom edge (52px + its own safe-area padding). */
+  /* The floating tab bar owns the bottom edge: 64px tall, --tabbar-gap off
+     the bottom (shell.css), plus 12px of air. */
   .assistant {
     right: 16px;
     left: 16px;
-    bottom: calc(64px + env(safe-area-inset-bottom));
+    bottom: calc(76px + var(--tabbar-gap));
     align-items: flex-end;
   }
   .assistant-fab {

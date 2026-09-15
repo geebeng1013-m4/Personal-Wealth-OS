@@ -345,6 +345,13 @@ export interface WealthState {
   financialRules: FinancialRule[];
   /** Whether the user acted on Advisor recommendations. Execution state only. */
   actionRecords: ActionRecord[];
+  /**
+   * The user's financial goal in one sentence of their own ("RM80,000 house
+   * deposit by 35"). Written on the Goals page, shown on the Overview so it is in
+   * view every visit. Free text, not a Goal record: it is the direction the goals
+   * serve, not a target any figure is measured against. "" when not set. (v21)
+   */
+  financialGoal: string;
 }
 
 export interface PortfolioPosition {

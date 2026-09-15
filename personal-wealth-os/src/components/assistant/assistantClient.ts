@@ -8,6 +8,7 @@
  */
 
 import type { AssistantMode } from "./assistantTypes";
+import { dailyLimitMessage } from "./quotaMessage";
 
 /**
  * The deployed function. Overridable so a local run can point at the Firebase
@@ -46,7 +47,14 @@ function messageForStatus(status: number, body: unknown): string {
     ? (body as { error: string }).error
     : "";
 
-  if (status === 429) return serverError || "Too many requests just now. Give it a moment and try again.";
+  if (status === 429) {
+    // The free daily allowance is a different problem from a busy moment: it
+    // lasts hours, so say when it comes back instead of "try again shortly".
+    if ((body as { reason?: unknown } | null)?.reason === "daily-limit") {
+      return dailyLimitMessage((body as { retryAt?: unknown }).retryAt, new Date());
+    }
+    return serverError || "Too many requests just now. Give it a moment and try again.";
+  }
   if (status === 403) return "This page is not allowed to reach the assistant.";
   if (status === 400) return serverError || "That request could not be sent.";
   if (status === 504) return "The assistant took too long to answer. Try again.";

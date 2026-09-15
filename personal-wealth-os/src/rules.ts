@@ -46,6 +46,28 @@ export function emergencyRatio(state: WealthState): number {
   return Math.min(state.emergency.current / state.emergency.target, 1);
 }
 
+/**
+ * WealthUp's default emergency-fund size: months of ESSENTIAL spending (needs
+ * only — transport, food and other fixed costs), within the 3-6 month standard.
+ */
+export const DEFAULT_EMERGENCY_MONTHS = 6;
+
+/**
+ * A suggested emergency target from the essential spending the user has
+ * entered, or null when there is nothing to base it on. A suggestion only: the
+ * target is the user's decision and is never set without them choosing it.
+ */
+export function suggestedEmergencyTarget(
+  state: Pick<WealthState, "cashflow">,
+  months = DEFAULT_EMERGENCY_MONTHS,
+): { monthlyEssential: number; months: number; target: number } | null {
+  const monthlyEssential = [state.cashflow.transport, state.cashflow.food, state.cashflow.otherFixed]
+    .map((value) => (Number.isFinite(value) && value > 0 ? value : 0))
+    .reduce((sum, value) => sum + value, 0);
+  if (monthlyEssential <= 0) return null;
+  return { monthlyEssential, months, target: Math.round(monthlyEssential * months) };
+}
+
 export function monthsToEmergencyTarget(state: WealthState): number {
   const gap = Math.max(state.emergency.target - state.emergency.current, 0);
   if (gap === 0) return 0;

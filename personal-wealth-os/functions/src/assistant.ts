@@ -16,12 +16,14 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
+import { guardHelpReply } from "./answerGuard.js";
 import { resolveCors } from "./cors.js";
 import { checkRateLimit, clientKeyFromHeaders } from "./rateLimit.js";
 import {
   OPENROUTER_CHAT_URL,
   buildOpenRouterPayload,
   parseOpenRouterReply,
+  readUpstreamLimit,
 } from "./openrouterRequest.js";
 
 const OPENROUTER_API_KEY = defineSecret("OPENROUTER_API_KEY");
@@ -114,6 +116,20 @@ export const assistant = onRequest(
     }
 
     if (upstream.status === 429) {
+      let limitBody: unknown = null;
+      try {
+        limitBody = await upstream.json();
+      } catch { /* an unreadable 429 is read as a short-term limit */ }
+      const limit = readUpstreamLimit(limitBody, upstream.headers.get("x-ratelimit-reset"), Date.now());
+      if (limit.kind === "daily") {
+        logger.warn("assistant daily free-model allowance used up", { resetAt: limit.resetAt });
+        response.status(429).json({
+          error: "The assistant has used today's free allowance.",
+          reason: "daily-limit",
+          ...(limit.resetAt !== null ? { retryAt: limit.resetAt } : {}),
+        });
+        return;
+      }
       response.status(429).json({ error: "The assistant is busy. Try again shortly." });
       return;
     }
@@ -136,6 +152,21 @@ export const assistant = onRequest(
     if (!parsed.ok) {
       logger.error("assistant reply not usable", { reason: parsed.error });
       response.status(502).json({ error: "The assistant returned nothing usable." });
+      return;
+    }
+
+    // Ask answers get one last check for the mistake WealthUp must never deliver
+    // (see answerGuard.ts). Record answers are JSON actions the browser validates,
+    // so they are left alone.
+    if (built.mode === "help") {
+      const lastUser = [...built.payload.messages].reverse().find((message) => message.role === "user");
+      const guarded = guardHelpReply(parsed.reply, lastUser?.content ?? "");
+      if (guarded.replaced) {
+        // Log that it happened, never what was said: the text can hold the
+        // user's own figures.
+        logger.warn("assistant reply replaced by emergency-fund guard");
+      }
+      response.status(200).json({ reply: guarded.reply, mode: built.mode });
       return;
     }
 

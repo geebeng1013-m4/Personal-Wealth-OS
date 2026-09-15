@@ -12,6 +12,20 @@
 - **`main`**：`c5cb80f`。PR #34（Dashboard 具体化 headline + TVM What-if）待 merge，见下。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 
+## 液态玻璃按钮（G 系列，进行中）
+
+按钮和浮层改成 iOS 26 液态玻璃风格。详见 `PLAN.md` G 系列。
+
+- **最近完成（2026-09-15）**：G-0 讨论和 Preview。分层方案、主按钮颜色、L2 不加模糊、顶栏做成玻璃、保留光线、四个参数都已定。
+  项目代码没有改动。Preview：https://claude.ai/artifact/DWFjJPJ2Nof42eZSZTtZZB
+- **G-1 完成（2026-09-15）**：手机顶栏改成玻璃，Tab 栏改成悬浮玻璃胶囊并加了滑动镜片，Ask 按钮改成绿色玻璃。
+  测试、build 通过，截图检查过。还需要在真 iPhone 上检查。
+- **G-2 完成（2026-09-15）**：primary、secondary、danger 三种按钮改成轻玻璃（胶囊形、高光边、按下鼓起），不加背景模糊，
+  也没有改页面模板。测试、build 通过，截图检查过。
+- **G-3 完成（2026-09-15）**：ghost 和 icon 按钮改成胶囊圆角。
+- **提交**：G-1..G-3 在分支 `feat/liquid-glass`，PR #45（里面也带着 #44 那个分支上还没合并的 commit）。
+- **下一步**：真 iPhone 检查；决定 G-4 Chrome 折射做不做。
+
 ## V1 收尾（全部合并）
 
 | 项 | PR | 内容 |
@@ -65,6 +79,17 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 实测抓到并修掉：模型会**编造汇率**填进令吉金额（现在你没说过的数字一律不填）；reasoning 模型思考吃光
 输出预算导致空回复。
 
+## 助手理财原则（R 系列）+ 修 bug
+
+| PR | 内容 | 状态 |
+| --- | --- | --- |
+| #36–#39 | R-1 原则 + 安全网 · 额度用光提示 · R-2 发送用户规则 · R-3 财务目标 | 待 merge（按顺序） |
+| #40 | BUG：Settings 保存后规则不跟着变 | 待 merge |
+| #41 | Import 前先存 Version History | 待 merge |
+| #42 | R-4：工具移到 Settings · Reset 真空白 · 紧急资金 6 个月建议 · 修 Version History 真实账号永远空 · Restore 先备份 | 待 merge |
+| #43 | R-5：原则正式文件 `docs/assistant-principles.md` + 文件与提示词同步测试 | 待 merge |
+| #44 | Overview「FINANCIAL GOAL」：卡片（和其他卡片同色）：标签在上、目标居中、Lato Regular 加大 | 待 merge |
+
 ## App / 订阅方向（暂停）
 
 - 因预算不足，`COMMERCIALIZATION_PLAN.md` 阶段 1（Capacitor 打包上架）+ 付费订阅**暂停**，
@@ -77,6 +102,9 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 
 - **AI 助手已上线**（2026-09-14）：先部署了新版 Cloud Function，再合并 PR #35。线上函数 Ask / Record 实测正常，
   wealthup.cc 的前端包里有助手、指向生产函数、不含 key。
+- **助手理财原则 R-1 已部署**（2026-09-15）：Ask 按六大原则回答 + 紧急资金安全网。模拟器 22/22 守原则。
+  **免费额度今天用光**（每天 50 次、全 app 共用），线上 08:00 MYT 后恢复，恢复后再验生产回答。下一步 R-2（等你说）。
+- **要你决定：OpenRouter 充值 10 credits**（每天 50 次 → 1000 次），否则上线后真实用户很快会遇到「busy」。
 - **待做：换 OpenRouter key**（对话里贴过两次）。你生成新 key 放进 `functions/.secret.local`，我写进 Secret Manager
   并让函数用上，不用改代码、不用重新合并。
 

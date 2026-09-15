@@ -1,5 +1,5 @@
 import type { LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
-import { getDefaultFinancialRules, normalizeFinancialRules } from "./financialRules";
+import { getDefaultFinancialRules, normalizeFinancialRules, repairPlaceholderRules } from "./financialRules";
 import { normalizeActionRecords } from "./actionRecords";
 import { normalizeCurrencyExchanges } from "./currencyExchange";
 import {
@@ -9,7 +9,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 20;
+export const CURRENT_VERSION = 21;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -157,11 +157,24 @@ export const defaultState: WealthState = {
   financialRules: [],
   actionRecords: [],
   currencyExchanges: [],
+  financialGoal: "",
 };
 
 // Derived from defaultState's own planning config so the seed rules and the
 // planning values they mirror can never drift apart.
 defaultState.financialRules = getDefaultFinancialRules(defaultState);
+
+/** Longest financial-goal sentence kept. One line on the Overview, not an essay. */
+export const MAX_FINANCIAL_GOAL_CHARS = 160;
+
+/**
+ * A financial-goal sentence as it is stored: one line, trimmed, capped.
+ * Anything that is not a string is no goal at all.
+ */
+export function normalizeFinancialGoal(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim().slice(0, MAX_FINANCIAL_GOAL_CHARS);
+}
 
 export function createId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -254,6 +267,7 @@ export function emptyState(): WealthState {
     financialRules: [],
     actionRecords: [],
     currencyExchanges: [],
+    financialGoal: "",
   };
   // A brand-new user has no planning values yet, so these seed rules are
   // mostly disabled placeholders — present and valid, but asserting nothing.
@@ -515,6 +529,10 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   merged.financialRules = Array.isArray(candidate.financialRules)
     ? normalizeFinancialRules(candidate.financialRules)
     : getDefaultFinancialRules(merged);
+  // Mend the rules of anyone who signed up and then set values in Settings
+  // before Settings wrote to rules: placeholders whose setting now holds a value
+  // are switched on. Configured rules are never touched (repairPlaceholderRules).
+  merged.financialRules = repairPlaceholderRules(merged);
 
   // v17: action records. Purely additive — a state without them starts empty,
   // and an existing array is normalized rather than replaced. Malformed
@@ -525,6 +543,10 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   // state without them keeps whatever ringgit figures its trades already
   // carry. Purely additive: absent means an empty list, never a guessed rate.
   merged.currencyExchanges = normalizeCurrencyExchanges(candidate.currencyExchanges);
+
+  // v21: the user's financial goal sentence. Purely additive — older data has
+  // none and starts empty; a stored value is tidied, never discarded.
+  merged.financialGoal = normalizeFinancialGoal(candidate.financialGoal);
   const requestedOverviewGoalId = typeof candidate.overviewGoalId === "string" ? candidate.overviewGoalId : "";
   merged.overviewGoalId = merged.goals.some((goal) => goal.id === requestedOverviewGoalId)
     ? requestedOverviewGoalId
@@ -902,6 +924,15 @@ export function exportState(state: WealthState): void {
   anchor.click();
   URL.revokeObjectURL(url);
 }
+
+/**
+ * The Version History label written just before an import replaces the data.
+ *
+ * An import overwrites everything — locally and, once saved, in the cloud. Reset
+ * already snapshotted first; import did not, so a wrong file (or the right file
+ * from the wrong day) was a one-click loss with no way back.
+ */
+export const IMPORT_SNAPSHOT_LABEL = "Before import";
 
 export async function importStateFromFile(file: File): Promise<WealthState> {
   const raw = await file.text();
