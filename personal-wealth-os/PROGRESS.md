@@ -19,11 +19,11 @@
 - **最近完成（2026-09-15）**：G-0 讨论和 Preview。分层方案、主按钮颜色、L2 不加模糊、顶栏做成玻璃、保留光线、四个参数都已定。
   项目代码没有改动。Preview：https://claude.ai/artifact/DWFjJPJ2Nof42eZSZTtZZB
 - **G-1 完成（2026-09-15）**：手机顶栏改成玻璃，Tab 栏改成悬浮玻璃胶囊并加了滑动镜片，Ask 按钮改成绿色玻璃。
-  测试、build 通过，截图检查过。代码还没 commit，PR 待开；还需要在真 iPhone 上检查。
+  测试、build 通过，截图检查过。还需要在真 iPhone 上检查。
 - **G-2 完成（2026-09-15）**：primary、secondary、danger 三种按钮改成轻玻璃（胶囊形、高光边、按下鼓起），不加背景模糊，
-  也没有改页面模板。测试、build 通过，截图检查过。G-1 和 G-2 的代码都还没 commit。
+  也没有改页面模板。测试、build 通过，截图检查过。
 - **G-3 完成（2026-09-15）**：ghost 和 icon 按钮改成胶囊圆角。
-- **提交**：G-1..G-3 一起 commit 到新分支 `feat/liquid-glass`，还没 push，也还没开 PR。
+- **提交**：G-1..G-3 在分支 `feat/liquid-glass`，PR #45（里面也带着 #44 那个分支上还没合并的 commit）。
 - **下一步**：真 iPhone 检查；决定 G-4 Chrome 折射做不做。
 
 ## V1 收尾（全部合并）
