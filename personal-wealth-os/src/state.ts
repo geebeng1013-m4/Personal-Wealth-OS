@@ -925,6 +925,15 @@ export function exportState(state: WealthState): void {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * The Version History label written just before an import replaces the data.
+ *
+ * An import overwrites everything — locally and, once saved, in the cloud. Reset
+ * already snapshotted first; import did not, so a wrong file (or the right file
+ * from the wrong day) was a one-click loss with no way back.
+ */
+export const IMPORT_SNAPSHOT_LABEL = "Before import";
+
 export async function importStateFromFile(file: File): Promise<WealthState> {
   const raw = await file.text();
   return migrateState(JSON.parse(raw) as Partial<WealthState>);

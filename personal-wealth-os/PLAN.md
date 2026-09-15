@@ -238,7 +238,10 @@
 #### R-4 — 新用户默认值  `[ ]`（你的决定：A 做 · B1 · C 记录）
 - A：Settings 紧急资金卡片在填了必要支出后显示「建议目标 = 6 个月必要支出」+ 按钮，不自动设。
 - B1：Reset 改成真正空白（和它的确认文字一致），不再载入带熊市储备的示例模板。
-- 另：Import 前先存 Version History；Reset 按钮移到 Settings（你已决定，排在 bug 修复之后）。
+- ~~Import 前先存 Version History~~ **已做**（PR 待开）：Import 以前直接覆盖、不留备份，选错文件就是一键丢数据且同步到云端；
+  现在和 Reset 一样先存一份，Version History 里标注「Before import」。测试覆盖「导入别人的文件 → 从备份恢复出原数据」。
+- **你的新决定**：侧栏整排工具（主题切换、Export、Import、Version History、Reset）**全部移到 Settings**，和 Reset 改空白（B1）、
+  紧急资金建议（A）合成下一个 Task。
 
 #### R-5  `[ ]`
 - R-4 新用户默认：紧急资金 6 个月、熊市储备关闭 · R-5 原则存成 `docs/` 正式文件

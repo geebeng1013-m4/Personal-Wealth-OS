@@ -1,5 +1,5 @@
 import type { WealthState } from "./models";
-import { cloneDefaultState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, type Snapshot } from "./state";
+import { cloneDefaultState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, IMPORT_SNAPSHOT_LABEL, type Snapshot } from "./state";
 import {
   emergencyRatio,
   money,
@@ -508,7 +508,9 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     const file = input.files?.[0];
     if (!file) return;
     const imported = await importStateFromFile(file);
-    setState(imported);
+    // The label is what makes this recoverable: saveState snapshots the data
+    // still on disk before overwriting it, the same path Reset uses.
+    setState(imported, IMPORT_SNAPSHOT_LABEL);
     doNavigate("dashboard");
   });
 
