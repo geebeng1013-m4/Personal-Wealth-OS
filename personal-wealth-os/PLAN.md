@@ -569,6 +569,8 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
 
 目标：把每个页面整理成跟液态玻璃 Preview 手机截图一样干净、整齐、清楚。Preview（Dashboard 前后对比 + 全站检查结果）：
 https://claude.ai/artifact/L4w2Sgyeucw9ibNutwv4xN
+其他 11 个页面的整齐版（每页并排：真实截图 · 整齐版 · 改了什么）：
+https://claude.ai/artifact/LYCovFF3EQ2krqLKfsKLZE
 
 - **Problem**：你看了 Preview 里的手机截图，觉得那个很整齐，真实 App 反而显得乱。2026-09-16 用 demo 数据在手机宽度下逐页检查，结果：
   - Portfolio 页面长 4,965px，有 90 个徽章。
