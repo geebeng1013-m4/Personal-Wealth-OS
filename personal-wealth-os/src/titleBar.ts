@@ -12,7 +12,8 @@
  * scroll costs one querySelector + one rect read per frame.
  */
 
-const BAR_HEIGHT_PX = 56;
+// Bottom edge of the bar: 48px tall, floating 12px from the top on desktop (DG-5).
+const BAR_HEIGHT_PX = 60;
 const FALLBACK_SCROLL_PX = 120;
 
 export function mountTitleBar(root: ParentNode): () => void {

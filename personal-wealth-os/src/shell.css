@@ -466,6 +466,83 @@
   pointer-events: auto;
 }
 
+/* ---- floating glass sidebar (desktop, DG-5) ---- */
+/* macOS 26 style: the sidebar floats inset from the window as a thick glass
+   panel, and the page runs full width underneath it. Page content keeps
+   clear of it with padding; what shows through the glass is a soft fixed
+   glow in the rays' colours, so there is always something to blur. The
+   title bar floats alongside, aligned to the same inset. Desktop only — the
+   phone drawer and tab bar are unchanged. */
+@media (min-width: 721px) {
+  :root {
+    --sidebar-inset: 12px;
+    --sidebar-width: 256px;
+    --content-left: calc(var(--sidebar-inset) * 2 + var(--sidebar-width));
+  }
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sidebar {
+    position: fixed;
+    top: var(--sidebar-inset);
+    bottom: var(--sidebar-inset);
+    left: var(--sidebar-inset);
+    z-index: 100;
+    width: var(--sidebar-width);
+    height: auto;
+    border-right: 0;
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgb(255 255 255 / calc(var(--glass-highlight) * 0.05)), transparent 40%),
+      var(--glass-sheet);
+    -webkit-backdrop-filter: blur(var(--glass-sheet-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-sheet-blur)) saturate(var(--glass-saturate));
+    box-shadow: var(--glass-inner), var(--glass-shadow), 0 0 0 0.5px var(--glass-edge);
+  }
+  /* the footer had a solid ground to cover the old flat sidebar; on glass it
+     would read as a square slab */
+  .sidebar-actions {
+    background: transparent;
+    border-top-color: var(--border-subtle);
+  }
+  .main {
+    padding-left: calc(var(--content-left) + clamp(16px, 3vw, 56px));
+  }
+  .main::after {
+    content: "";
+    position: fixed;
+    z-index: -1;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 520px;
+    pointer-events: none;
+    background:
+      radial-gradient(60% 45% at 0% 0%, rgb(87 167 143 / var(--sidebar-glow)), transparent 70%),
+      radial-gradient(55% 40% at 10% 100%, rgb(199 155 87 / calc(var(--sidebar-glow) * 0.8)), transparent 70%);
+  }
+  .titlebar {
+    top: var(--sidebar-inset);
+    left: var(--content-left);
+    right: var(--sidebar-inset);
+    height: 48px;
+    align-items: center;
+    padding: 0 20px;
+    border-radius: 16px;
+    box-shadow: var(--glass-inner), var(--glass-shadow), 0 0 0 0.5px var(--glass-edge);
+  }
+  .titlebar::before {
+    display: block;
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .sidebar {
+      background: var(--surface-raised);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      box-shadow: 0 0 0 1px var(--border), var(--shadow-sm);
+    }
+  }
+}
+
 @media (max-width: 720px) {
   body.sidebar-menu-open {
     overflow: hidden;
