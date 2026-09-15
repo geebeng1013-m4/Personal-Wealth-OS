@@ -518,7 +518,7 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
 - **键盘**：选项还是原来的按钮，Tab 和回车照常能用；选中项获得焦点时，焦点框照常显示（样式规则里用了 `:not(:focus-visible)`）。这一点只检查了样式规则，没有实际用键盘测试。
 - **改动的文件**：`liquidGlass.ts`、`components.css`、`assistant.css`、`theme.css`（新增 `--glass-lens-raised`）。
 
-### DG-5 — 侧栏变成悬浮玻璃面板  `[x]`（2026-09-16，PR 待合并）
+### DG-5 — 侧栏变成悬浮玻璃面板  `[x]`（2026-09-16，PR #51，merged）
 - 侧栏四周留空、圆角，浮在页面上。要让光线延伸到侧栏后面，玻璃才看得出效果，所以要调整页面布局和光线的位置。
 - **会互相影响的地方**：S-1 的滚动条（细条放在侧栏的留白里）、DG-2 的吸顶栏（左边从哪里开始）、页面内容区的宽度。
 - 做完 DG-1 到 DG-4 看过效果以后，再确认要不要做。
@@ -538,6 +538,16 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
     - 手机 390 宽保持原样：侧栏还是隐藏的抽屉，没有玻璃也没有圆角；底部 Tab 栏照常显示。
   - 截图检查了深色 Dashboard（顶部和滚动后）、浅色 Ledger、900 宽，以及侧栏底部。
 - **改动的文件**：`shell.css`、`theme.css`（新增 `--sidebar-glow`）、`titleBar.ts`（吸顶栏出现的判断线从 56px 改成 60px，对应悬浮后的位置）。
+
+### DG-6 — 手机上的顶部光线加强  `[ ]`  ← **Current Task**（2026-09-16 你同意做，等「执行」）
+- **Problem**：DG-1 以后，桌面能看出绿色和铜色的光；手机上几乎看不到。光线区域只有 360px 高，光源在右上角，正好被玻璃顶栏盖住。
+- **做法**：只在手机宽度（≤720px）调整：提高 `--rays-opacity`，并把光线区域调高或往下移，让光从顶栏下面露出来。不改桌面。
+- **完成标准**：手机 390 宽，深色、浅色截图；光线看得出来，但不影响 Dashboard 第一张卡片的文字。
+
+### DG-7 — iPhone「安装到主屏幕」说明弹窗改成玻璃  `[ ]`（2026-09-16 你同意做，等「执行」）
+- **Problem**：DG-3 只改了 Ask 面板和 Version History 弹窗。`main.ts` 里的 `showIOSInstructions` 还是实色卡片加深色遮罩。
+- **做法**：跟 Version History 一样，卡片加上 `wu-glass wu-glass--sheet`，遮罩换成 `--surface-overlay-glass`。
+- **完成标准**：在手机 390 宽下打开这个弹窗，深色、浅色截图，文字清楚。
 
 ---
 
