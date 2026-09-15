@@ -344,15 +344,17 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   if (sideRays) {
     const cleanup = mountSideRays(sideRays, {
       speed: 2.5,
-      rayColor1: "#EAB308",
-      rayColor2: "#96c8ff",
-      intensity: 2,
+      // Brand bronze + green (theme.css --c-bronze-400 / --c-green-500), DG-1.
+      // blend 0.75 weights rayColor2, so green leads and bronze accents.
+      rayColor1: "#c79b57",
+      rayColor2: "#57a78f",
+      intensity: 2.6,
       spread: 2,
       origin: "top-right",
       tilt: 0,
       saturation: 1.5,
       blend: 0.75,
-      falloff: 1.6,
+      falloff: 1.1,
       opacity: 1,
     });
     sideRaysCleanup.set(root, cleanup);
