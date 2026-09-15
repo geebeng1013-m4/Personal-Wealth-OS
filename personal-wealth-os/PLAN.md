@@ -468,7 +468,7 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
 - **没解决的**：桌面上能看出绿色光束；手机上几乎看不到，光源在右上角，被玻璃顶栏盖住了。要不要给手机单独加强，看真机再决定。
 - **跟 Preview 的差别**：Preview 里的光线是用 CSS 画的条纹，比较锐利；真实 App 是 WebGL 动态光，更柔和。
 
-### DG-2 — 吸顶玻璃栏 + 去掉重复大标题  `[x]`（2026-09-16，PR 待合并）
+### DG-2 — 吸顶玻璃栏 + 去掉重复大标题  `[x]`（2026-09-16，PR #48，merged）
 - 电脑版隐藏 `.topbar`，跟手机版一样只保留每页自己的标题。
 - 往下滚、页面标题离开视线后，顶部出现一条细玻璃栏显示页面名称；滚回顶部时消失。用 IntersectionObserver 判断，不在每次滚动时计算。
 - 只在电脑宽度生效。手机版已经有玻璃顶栏，不叠第二条。
@@ -487,12 +487,23 @@ https://claude.ai/artifact/CwUnAFNNqpuozceC6bYTSY
   2. **不用 IntersectionObserver，改成滚动时检查（每帧最多一次）**：页面会整页重新渲染，换掉标题元素，IntersectionObserver 盯着的旧元素就失效了。
 - **改动的文件**：`ui.ts`（`.topbar` 换成 `.titlebar`）、`shell.css`（删掉 `.topbar` 样式，新增 `.titlebar`），新增 `src/titleBar.ts`。
 
-### DG-3 — Ask 面板和弹窗改成玻璃  `[ ]`  ← **Current Task**
+### DG-3 — Ask 面板和弹窗改成玻璃  `[x]`（2026-09-16，PR 待合并）
 - 新增更厚的玻璃 token（比如 `--glass-sheet`）：模糊更强、底色更实，保证文字清楚。
 - 这一步只做 Ask 面板和 Version History 弹窗；弹窗后面的遮罩调淡。App 里其他弹窗先列出来，由你决定要不要一起改。
 - **完成标准**：面板里文字的对比度达到 AA；深色和浅色截图检查。
+- **结果**：
+  - 958/958 测试通过，build 通过，控制台没有报错。
+  - 新增厚玻璃 `.wu-glass--sheet`：模糊 24px，底色深色 `rgb(24 24 28 / 0.72)`、浅色 `rgb(255 255 255 / 0.7)`，比 Preview 里的 0.62 更实，因为真实页面比 Preview 更花。
+  - Ask 面板：面板本身换成厚玻璃；输入框换成半透明的「凹槽」色 `--glass-well`。
+  - Version History 弹窗：卡片换成厚玻璃；遮罩从 `--surface-overlay` 换成更淡的 `--surface-overlay-glass`，并去掉遮罩原来的 4px 模糊，避免跟玻璃重复模糊。
+  - 系统开了「减少透明度」时，厚玻璃退回实色。
+  - 截图检查了 Ledger 页打开 Ask 面板、Settings 页打开弹窗，深色和浅色都看过：文字清楚，面板后面隐约能看到页面。
+- **没有改的其他弹窗（等你决定）**：
+  - iPhone「安装到主屏幕」说明（`main.ts` 的 `showIOSInstructions`），还是实色卡片加深色遮罩。
+  - 删除、导入前的确认框是浏览器自带的 `confirm()`，样式改不了。
+- **改动的文件**：`theme.css`、`components.css`、`assistant.css`、`assistantWidget.ts`、`ui.ts`。
 
-### DG-4 — 分段选择器加滑动镜片  `[ ]`
+### DG-4 — 分段选择器加滑动镜片  `[ ]`  ← **Current Task**
 - `wu-segmented` 和 Ask/Record 切换，改成玻璃镜片滑到选中项。
 - **坑**：Ledger 点选项后会重新渲染页面，镜片没办法自己滑。要像 Tab 栏一样记住上一个选中项，再从那里滑过来。每个选择器分开记。
 - **完成标准**：三个真实的选择器都要实测镜片位置和滑动；键盘操作仍然可用。
