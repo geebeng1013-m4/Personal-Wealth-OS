@@ -455,6 +455,12 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
+    // Settings no longer spells out that Import replaces everything, so the
+    // confirmation does. Clearing the input lets the same file be picked again.
+    if (!confirm("Replace all your data with this file? Your current data will be saved to Version History first.")) {
+      input.value = "";
+      return;
+    }
     const imported = await importStateFromFile(file);
     // The label is what makes this recoverable: saveState snapshots the data
     // still on disk before overwriting it, the same path Reset uses.

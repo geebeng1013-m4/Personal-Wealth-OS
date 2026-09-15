@@ -244,6 +244,10 @@
 - **工具全部移到 Settings**：侧栏抽屉（主题、Add to Home Screen、Export、Import、Version History、Reset）和手机 More 页底部
   同一排按钮都移到 Settings 最后一张「Data & App」卡片，Reset 放最底、红字。侧栏账号行（头像、名字、Sign Out）和免责声明保留。
   删掉了抽屉的代码、记住开合状态的 localStorage 和相关 CSS。
+- **胶囊样式（你的 idea，选甲）**：卡片里去掉说明文字，只留一排圆角胶囊「Theme · Export · Import · Version History ·
+  Add to Home Screen · Reset」，Reset 最后、红框红字；鼠标停留有一句说明（title）。桌面卡片横跨整行、一排排完；手机自动换行。
+  说明文字拿掉后 **Import 加了确认框**（以前选完文件直接覆盖）：「Replace all your data with this file? …saved to Version History first.」
+  取消 → 数据不变、可重选同一文件；确认 → 先存「Before import」再导入（浏览器实测两种都对）。
 - **做这个时发现的两个 bug，一起修了**：
   1. **Version History 对真实账号永远是空的**：保存按 `uid` 存，打开时按 `email` 读，两个 key 对不上。所以 Reset / Import
      存的备份在真实账号里**根本打不开**（demo 模式看不出，因为 demo 没有 email）。改成按 uid 读、清空、恢复。

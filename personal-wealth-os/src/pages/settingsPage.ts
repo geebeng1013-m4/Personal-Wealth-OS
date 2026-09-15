@@ -17,7 +17,7 @@ import type { WealthState } from "../models";
 import { createId } from "../state";
 import { syncPlanningRules } from "../financialRules";
 import { DEFAULT_EMERGENCY_MONTHS, money, suggestedEmergencyTarget } from "../rules";
-import { escapeHtml, getTheme } from "../html";
+import { escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
@@ -61,37 +61,22 @@ function emergencySuggestion(state: WealthState): string {
 }
 
 /**
- * The data tools, formerly in the sidebar drawer and the phone More page.
- * Reset sits last and apart, marked as the one destructive action.
+ * The data tools, formerly in the sidebar drawer and the phone More page: one
+ * row of pill buttons, titles only. What each one does is in its tooltip and,
+ * for the ones that replace data (Import, Reset, Restore), in the confirmation
+ * it asks for first. Reset sits last, in red.
  */
 function dataTools(): string {
-  const nextTheme = getTheme() === "dark" ? "light" : "dark";
+  const pill = "wu-btn wu-btn--secondary wu-btn--sm settings-data__pill";
   return `<div class="wu-card settings-data">
     <div class="wu-card__header"><h3 class="wu-card__title t-heading">Data &amp; App</h3></div>
-    <div class="wu-stack">
-      <div class="settings-data__row">
-        <div class="settings-data__text"><span class="t-subheading">Theme</span><span class="t-caption t-muted">Currently ${getTheme()}.</span></div>
-        <button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="theme" type="button">Switch to ${nextTheme}</button>
-      </div>
-      <div class="settings-data__row">
-        <div class="settings-data__text"><span class="t-subheading">Backup</span><span class="t-caption t-muted">Export saves all your data as a file. Import replaces your data with a file; a copy of what you have now is kept in Version History first.</span></div>
-        <div class="wu-row wu-row--tight">
-          <button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="export" type="button">Export</button>
-          <label class="wu-btn wu-btn--secondary wu-btn--sm file-button">Import<input data-tool="import" type="file" accept="application/json"></label>
-        </div>
-      </div>
-      <div class="settings-data__row">
-        <div class="settings-data__text"><span class="t-subheading">Version History</span><span class="t-caption t-muted">Earlier copies saved before big changes such as an import, a reset or a restore.</span></div>
-        <button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="version" type="button">Open</button>
-      </div>
-      <div class="settings-data__row">
-        <div class="settings-data__text"><span class="t-subheading">Add to Home Screen</span><span class="t-caption t-muted">Open WealthUp like an app on this device.</span></div>
-        <button class="wu-btn wu-btn--secondary wu-btn--sm" data-tool="install" type="button">Install</button>
-      </div>
-      <div class="settings-data__row settings-data__row--danger">
-        <div class="settings-data__text"><span class="t-subheading">Reset</span><span class="t-caption t-muted">Clears everything to a blank WealthUp. A copy is kept in Version History first.</span></div>
-        <button class="wu-btn wu-btn--danger wu-btn--sm" data-tool="reset" type="button">Reset all data</button>
-      </div>
+    <div class="settings-data__pills">
+      <button class="${pill}" data-tool="theme" type="button" title="Switch between light and dark">Theme</button>
+      <button class="${pill}" data-tool="export" type="button" title="Save all your data as a file">Export</button>
+      <label class="${pill} file-button" title="Replace your data with a file; a copy is kept in Version History">Import<input data-tool="import" type="file" accept="application/json"></label>
+      <button class="${pill}" data-tool="version" type="button" title="Earlier copies saved before an import, reset or restore">Version History</button>
+      <button class="${pill}" data-tool="install" type="button" title="Open WealthUp like an app on this device">Add to Home Screen</button>
+      <button class="wu-btn wu-btn--danger wu-btn--sm settings-data__pill" data-tool="reset" type="button" title="Clear everything to a blank WealthUp; a copy is kept in Version History">Reset</button>
     </div>
   </div>`;
 }
