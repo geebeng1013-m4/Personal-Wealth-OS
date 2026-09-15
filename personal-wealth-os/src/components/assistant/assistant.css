@@ -64,10 +64,8 @@
   max-height: min(600px, calc(100vh - 140px));
   display: flex;
   flex-direction: column;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
+  /* surface: .wu-glass .wu-glass--sheet (components.css, DG-3) */
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
   overflow: hidden;
   animation: assistant-rise var(--dur-mid) var(--ease-out);
 }
@@ -517,7 +515,7 @@
   resize: none;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--surface-bg);
+  background: var(--glass-well);
   color: var(--text);
   font: var(--weight-regular) var(--text-body-sm) / var(--leading-normal) var(--font-sans);
   padding: 9px 11px;

@@ -572,9 +572,9 @@ function renderVersionHistoryModal(root: HTMLElement, setState: Setter, snapshot
   const modal = document.createElement("div");
   modal.id = "versionHistoryModal";
   modal.className = "wu";
-  modal.style.cssText = "position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:var(--surface-overlay);backdrop-filter:blur(4px);";
+  modal.style.cssText = "position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:var(--surface-overlay-glass);";
   modal.innerHTML =
-    '<div class="wu-card" style="width:90%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;padding:0">' +
+    '<div class="wu-card wu-glass wu-glass--sheet" style="width:90%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;padding:0">' +
       '<div class="wu-card__header" style="margin:0;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border)">' +
         '<div class="wu-stack wu-stack--sm"><span class="wu-label">Version History</span><strong class="t-heading">📋 Version History</strong></div>' +
         '<div class="wu-row wu-row--tight">' +

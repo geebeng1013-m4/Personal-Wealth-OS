@@ -267,7 +267,7 @@ function panelHtml(): string {
       </label>`
     : `<p class="assistant-share assistant-share--static">Sends your category and account names, never amounts.</p>`;
 
-  return `<div class="assistant-panel" id="assistantPanel" role="dialog" aria-label="WealthUp assistant" aria-modal="false">
+  return `<div class="assistant-panel wu-glass wu-glass--sheet" id="assistantPanel" role="dialog" aria-label="WealthUp assistant" aria-modal="false">
     <header class="assistant-head">
       <div class="assistant-tabs" role="group" aria-label="Assistant mode">${tab("help", "Ask")}${tab("fill", "Record")}</div>
       <div class="assistant-head__actions">
