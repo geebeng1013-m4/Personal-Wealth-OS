@@ -72,7 +72,7 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 | #36–#39 | R-1 原则 + 安全网 · 额度用光提示 · R-2 发送用户规则 · R-3 财务目标 | 待 merge（按顺序） |
 | #40 | BUG：Settings 保存后规则不跟着变 | 待 merge |
 | #41 | Import 前先存 Version History | 待 merge |
-| 待开 | R-4：工具移到 Settings · Reset 真空白 · 紧急资金 6 个月建议 · 修 Version History 真实账号永远空 · Restore 先备份 | 待 merge |
+| #42 | R-4：工具移到 Settings · Reset 真空白 · 紧急资金 6 个月建议 · 修 Version History 真实账号永远空 · Restore 先备份 | 待 merge |
 
 ## App / 订阅方向（暂停）
 
