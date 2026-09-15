@@ -154,7 +154,7 @@ VITE_DEMO_MODE=          # 只在 build:demo 时 true，生产绝不能设
 
 ## 7. 数据模型与持久化契约（改动前必看）
 
-- `WealthState.version` **当前 = 19**（`state.ts` 的 `CURRENT_VERSION`）。
+- `WealthState.version` **当前 = 21**（`state.ts` 的 `CURRENT_VERSION`）。v21 新增 `financialGoal`（一句话财务目标）。
 - **新增 / 删除 / 重命名字段或改语义 → 必须提升 version 并在 `migrateState` 写向后兼容迁移。**
 - 迁移必须保留旧数据：缺字段用明确默认值；**单个无效字段不得导致整份状态重置**。
 - 状态更新走不可变语义：构造新对象/数组交给顶层 `setState`，不在渲染中原地改。

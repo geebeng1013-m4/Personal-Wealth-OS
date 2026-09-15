@@ -9,7 +9,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 20;
+export const CURRENT_VERSION = 21;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -157,11 +157,24 @@ export const defaultState: WealthState = {
   financialRules: [],
   actionRecords: [],
   currencyExchanges: [],
+  financialGoal: "",
 };
 
 // Derived from defaultState's own planning config so the seed rules and the
 // planning values they mirror can never drift apart.
 defaultState.financialRules = getDefaultFinancialRules(defaultState);
+
+/** Longest financial-goal sentence kept. One line on the Overview, not an essay. */
+export const MAX_FINANCIAL_GOAL_CHARS = 160;
+
+/**
+ * A financial-goal sentence as it is stored: one line, trimmed, capped.
+ * Anything that is not a string is no goal at all.
+ */
+export function normalizeFinancialGoal(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim().slice(0, MAX_FINANCIAL_GOAL_CHARS);
+}
 
 export function createId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -254,6 +267,7 @@ export function emptyState(): WealthState {
     financialRules: [],
     actionRecords: [],
     currencyExchanges: [],
+    financialGoal: "",
   };
   // A brand-new user has no planning values yet, so these seed rules are
   // mostly disabled placeholders — present and valid, but asserting nothing.
@@ -525,6 +539,10 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   // state without them keeps whatever ringgit figures its trades already
   // carry. Purely additive: absent means an empty list, never a guessed rate.
   merged.currencyExchanges = normalizeCurrencyExchanges(candidate.currencyExchanges);
+
+  // v21: the user's financial goal sentence. Purely additive — older data has
+  // none and starts empty; a stored value is tidied, never discarded.
+  merged.financialGoal = normalizeFinancialGoal(candidate.financialGoal);
   const requestedOverviewGoalId = typeof candidate.overviewGoalId === "string" ? candidate.overviewGoalId : "";
   merged.overviewGoalId = merged.goals.some((goal) => goal.id === requestedOverviewGoalId)
     ? requestedOverviewGoalId

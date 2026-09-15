@@ -327,6 +327,64 @@
     margin-top: var(--space-1);
   }
 
+  /* ---- the user's financial goal on the Overview --------------------- */
+  /* One line under the page header. A button because it opens the Goals page
+     where the sentence is written; styled as a quiet line, not a call to action. */
+  .wu-goal-line {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    width: 100%;
+    margin: calc(var(--space-2) * -1) 0 var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    color: var(--text);
+    font: var(--weight-medium) var(--text-body-sm) / var(--leading-snug) var(--font-sans);
+    text-align: left;
+    cursor: pointer;
+  }
+  .wu-goal-line:hover {
+    border-color: var(--border-strong);
+  }
+  .wu-goal-line:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--focus);
+  }
+  .wu-goal-line__label {
+    flex: none;
+    color: var(--text-faint);
+    font: var(--weight-semibold) var(--text-overline) / 1 var(--font-sans);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+  }
+  .wu-goal-line__text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .wu-goal-line--empty {
+    border-left-color: var(--border-strong);
+    color: var(--text-muted);
+    font-weight: var(--weight-regular);
+  }
+  /* The Goals page card sits above the goal grid, which does not space itself. */
+  .wu-financial-goal {
+    margin-bottom: var(--space-4);
+  }
+  /* Input and Save stay on one line; the input takes the room and can shrink. */
+  .wu-financial-goal__row {
+    flex-wrap: nowrap;
+  }
+  .wu-financial-goal__row .wu-field {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .wu-financial-goal__row .wu-btn {
+    flex: none;
+  }
+
   /* ---- back to "More" (phone nav) ---------------------------------- */
   /* Pages opened from the phone "More" list carry a back arrow to the left of
      their title. renderApp injects the button and adds --back to the bar (a

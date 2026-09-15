@@ -83,6 +83,12 @@ export function dashboardTemplate(state: WealthState): string {
       sub: overview.headline,
     })}
 
+    <!-- The user's own goal sentence, in view every visit. Display only: it is
+         written on the Goals page, so this stays a line, not a form. -->
+    ${state.financialGoal
+      ? `<button class="wu-goal-line dashboard-nav" data-page="goals" type="button" aria-label="My financial goal: ${escapeHtml(state.financialGoal)}. Edit on the Goals page"><span class="wu-goal-line__label">My goal</span><span class="wu-goal-line__text">${escapeHtml(state.financialGoal)}</span></button>`
+      : `<button class="wu-goal-line wu-goal-line--empty dashboard-nav" data-page="goals" type="button"><span class="wu-goal-line__text">Write down your financial goal</span><span aria-hidden="true">→</span></button>`}
+
     <div class="wu-stack wu-stack--lg">
       <!-- Filled by bindDashboard after an async price check: shown only when a
            dip-buy tranche is reached and not yet deployed. -->
