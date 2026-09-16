@@ -51,7 +51,11 @@ export type AllocationRouting = Pick<AllocationPlan, "steps" | "overflowStepId">
 export interface AllocationRow {
   stepId: string;
   name: string;
-  kind: AllocationStepKind;
+  /**
+   * The rule this layer was written with. Named stepKind rather than kind so a
+   * snapshot carrying these rows cannot be mistaken for carrying rule records.
+   */
+  stepKind: AllocationStepKind;
   /** What the rule asks for, measured on the month's cumulative income. */
   want: number;
   /** What it has received this month, including any overflow. */
@@ -156,14 +160,14 @@ export function allocateIncome(plan: AllocationRouting, allocatedSoFar: number, 
   const rows: AllocationRow[] = steps.map((step, index) => ({
     stepId: step.id,
     name: step.name,
-    kind: step.kind,
+    stepKind: step.kind,
     want: current.want[index],
     got: current.got[index],
     added: current.got[index] - previous.got[index],
     overflow: current.overflow[index],
   }));
 
-  const essential = rows.find((row) => row.kind === "fill");
+  const essential = rows.find((row) => row.stepKind === "fill");
 
   return {
     rows,

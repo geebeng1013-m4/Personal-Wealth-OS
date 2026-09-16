@@ -17,15 +17,17 @@
  *           getLedgerSnapshot(). Prefixed `actual*`.
  *
  * A planned figure must never be presented as a recorded one, or vice versa.
+ * `allocation` holds both, routed through the same plan and kept apart by name.
  *
  * ── Boundaries ────────────────────────────────────────────────────────────
  * Ledger facts are read from the canonical ledger snapshot rather than
  * re-scanning transactions. Spending *limits* stay in FinancialRules; this
  * module reports what was spent, and the Advisor compares the two.
  */
-import type { WealthState } from "./models";
+import type { AllocationPlan, WealthState } from "./models";
 import { getLedgerSnapshot, type LedgerSnapshot } from "./ledgerSummary";
 import { monthlyBasicExpense, monthlySurplus } from "./rules";
+import { allocateMonth, cashMonths, validatePlan, type AllocationResult, type PlanWarning } from "./allocation";
 
 export type BucketCadence = "monthly" | "one-time";
 
@@ -47,6 +49,27 @@ export interface BudgetBucketSnapshot {
   allocationBase: number;
   /** amount / allocationBase, capped at 1. Zero when the base is zero. */
   allocationRatio: number;
+}
+
+/**
+ * The allocation plan applied twice: to the month the user planned for, and to
+ * the money that actually arrived. Same waterfall, two inputs — which is the
+ * whole point, since a thin month routes differently from a normal one.
+ */
+export interface BudgetAllocationSnapshot {
+  /** The plan routed over plannedIncome — what a normal month looks like. */
+  planned: AllocationResult;
+  /** The plan routed over the income the ledger recorded this month. */
+  actual: AllocationResult;
+  /** Facts about a plan the user could have mis-configured. Wording is the UI's. */
+  warnings: PlanWarning[];
+  /**
+   * Bank and wallet balances — the money a shortfall could be covered from.
+   * Investment accounts are excluded: selling to eat is a different decision.
+   */
+  cashOnHand: number;
+  /** cashOnHand measured in months of the plan's essential layer. */
+  cashMonths: number;
 }
 
 export interface BudgetSnapshot {
@@ -79,6 +102,9 @@ export interface BudgetSnapshot {
 
   // --- Buckets ---
   buckets: BudgetBucketSnapshot[];
+
+  // --- Allocation ---
+  allocation: BudgetAllocationSnapshot;
 }
 
 /**
@@ -133,6 +159,19 @@ export function getBudgetSnapshot(
 
   const actualSpending = ledger.currentMonth.personalExpenses;
 
+  // The plan routes the month the user planned for and the month they actually
+  // had. Sponsored money is already excluded upstream (personalIncome), so a
+  // parent's dinner money never reads as income the plan may invest.
+  const plan: AllocationPlan = state.allocation ?? { incomeType: "fixed", baseIncome: 0, steps: [] };
+  const cashOnHand = ledger.accountTypeBalances.bank + ledger.accountTypeBalances.wallet;
+  const allocation: BudgetAllocationSnapshot = {
+    planned: allocateMonth(plan, plannedIncome),
+    actual: allocateMonth(plan, ledger.currentMonth.personalIncome),
+    warnings: validatePlan(plan),
+    cashOnHand,
+    cashMonths: cashMonths(cashOnHand, plan),
+  };
+
   return {
     monthKey: ledger.currentMonth.key,
     plannedAllowance,
@@ -147,6 +186,7 @@ export function getBudgetSnapshot(
     spendingVariance: actualSpending - plannedSpending,
     isOverPlannedSpending: actualSpending > plannedSpending,
     buckets,
+    allocation,
   };
 }
 
