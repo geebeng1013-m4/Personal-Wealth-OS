@@ -309,7 +309,7 @@ export function ledgerTemplate(state: WealthState): string {
       
       <div class="wu-dash__half wu-stack wu-stack--sm">
         <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ledgerCategoryLabel">
-        <div class="wu-tc__top"><span class="wu-label" id="ledgerCategoryLabel">Spending by category</span><span class="wu-chip wu-chip--muted">${amountOf(personalExpenseTotal)} personal</span></div>
+        <div class="wu-tc__top"><span class="wu-label" id="ledgerCategoryLabel">Spending by category</span></div>
         ${personalExpenseTotal > 0 ? `
           <div class="wu-split" aria-hidden="true">
             ${topCategories.map((item, index) => `<span style="flex:${Math.max(item.amount, 0.01)};background:${categoryPalette[index]}"></span>`).join("")}
@@ -319,6 +319,7 @@ export function ledgerTemplate(state: WealthState): string {
             ${topCategories.map((item, index) => `<li><i style="background:${categoryPalette[index]}"></i><span>${escapeHtml(item.category.icon ?? "")} ${escapeHtml(item.category.label)}</span><span><b>${amountOf(item.amount)}</b><small>${Math.round(item.share * 100)}%</small></span></li>`).join("")}
             ${otherTotal > 0 ? `<li><i style="background:var(--text-faint)"></i><span>Other categories</span><span><b>${amountOf(otherTotal)}</b><small>${Math.round((otherTotal / personalExpenseTotal) * 100)}%</small></span></li>` : ""}
           </ul>
+          <p class="wu-dash__note">${amountOf(personalExpenseTotal)} of your own money${totals.expense > personalExpenseTotal ? ` · ${amountOf(totals.expense - personalExpenseTotal)} sponsored, not counted here` : ""}</p>
         ` : `<p class="wu-dash__note">No personal spending recorded in this period.</p>`}
       </section>
         <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ledgerTrendLabel">
