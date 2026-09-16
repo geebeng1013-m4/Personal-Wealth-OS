@@ -664,10 +664,27 @@ Preview（另一个会话做的，项目代码没有改动）：
   - 桌面 1280 宽整页只有 825px 高，一屏看得完；手机 1,568px。
   - 目标选择器改小，放进「Next goal」磁贴的标签行。
 
-### T-2 — Ledger  `[ ]`  ← **Current Task**
+### T-2 — Ledger  `[x]`（2026-09-16，PR 待合并）
 - 重复的「检查卡」只留在 Dashboard 和 Money Leaks；5 张单数字卡合并成一张摘要卡；记账表单和筛选收起来（按钮点开）。
+- **结果（demo 数据）**：
+  | | 改前 | 改后 |
+  | --- | --- | --- |
+  | 手机页面长度 | 3,037px | 1,359px |
+  | 桌面页面长度 | — | 1,070px |
+  | 标题 | 29 | 1 |
+- **做了什么**：
+  - 5 张单数字卡 → 一张「This period」摘要卡：时间范围选择器 + 收入/支出/净额三栏 + 按类别分色的支出比例条（取代 Category Share 环形图）。
+  - 记账表单收进页头的「+ Add transaction」按钮，点开才出现；保存后自动收起；点某一行的 ✎ 会自动打开并填好。
+  - 筛选收进「Filter」按钮。
+  - 账户合成一张卡：总资产 + 每个账户一行，底部一行「Opening funds」。
+  - 最近交易只显示 5 笔，点「See all N」展开；每行只有「备注 / 类别 · 日期 · 账户 / 金额」，去掉了 Sponsored 徽章（改成那行文字的一部分）。
+  - 全年 12 个月的柱状图 → 最近 3 个月的小图。
+  - 顶部重复的「Transaction check」检查卡拿掉（它留在 Dashboard 和 Money Leaks）。
+  - History、Category Manager、Account Manager 三个面板保留在页底，默认收起。
+- **实测（demo 模式）**：958/958 测试通过，build 通过，控制台没有报错。真的记了一笔（−12.34）、编辑、取消、删除、筛选、展开全部，全部正常。
+- **顺手改的 Dashboard 一行**（你提的）：所有持仓都取到价格时，不再显示「Market data may be delayed · last traded 9h ago」；取不到价格时的「Partial valuation / No market price」照常显示，因为那代表数字不完整。
 
-### T-3 — Portfolio  `[ ]`
+### T-3 — Portfolio  `[ ]`  ← **Current Task**
 - 摘要卡 + 持仓；60 多行贡献记录只显示最近 5 条；记账表单、汇率粘贴框收起来；去掉每行的徽章。
 
 ### T-4 — Settings  `[ ]`
