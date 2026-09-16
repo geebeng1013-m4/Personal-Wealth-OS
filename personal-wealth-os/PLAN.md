@@ -616,6 +616,53 @@ https://claude.ai/artifact/FBx3QM1pbR9Nrf2HGQ2G9a
 
 ---
 
+## 整齐版（T 系列）
+
+目标：页面本身排得整齐、好读。液态玻璃（G / S / DG）解决的是「看起来现代」，这一轮解决「看起来乱」。
+Preview（另一个会话做的，项目代码没有改动）：
+- 整齐版 Dashboard（6 个原因 + 6 条规则 + 12 页检查表）：https://claude.ai/artifact/L4w2Sgyeucw9ibNutwv4xN
+- 整齐版全站（手机版其他 11 页）：https://claude.ai/artifact/LYCovFF3EQ2krqLKfsKLZE
+- 整齐版电脑版 v2：https://claude.ai/artifact/FBx3QM1pbR9Nrf2HGQ2G9a
+
+- **Problem**：页面很长、卡片结构各不相同、同一个数字出现两次、装饰种类太多。实测：Portfolio 4,965px、Settings 3,468px（32 个输入框）、Dashboard 3,718px。
+- **Why**：纯前端排版和信息取舍，不改任何计算逻辑。
+- **Current System**：每个页面模板各写各的（`src/pages/*.ts`），卡片结构不统一。
+- **Proposed Solution**：手机版 6 条规则 + 电脑版 4 条规则（见 Preview），先在 Dashboard 落地，再逐页推广。
+
+### 已定的决定（2026-09-16）
+- **表单收起来**：Ledger、Portfolio、Review 的输入表单改成点按钮才出现（手机上从底部弹出）。你确认「值得」。
+- **长列表只显示最近 5 条** + 「查看全部」。你确认「可以」。
+- **顺序**：Dashboard → Ledger → Portfolio → Settings → 其余页面 → Market 最后（demo 里图表是空的，要真实行情数据才看得准）。
+- **不改计算逻辑**，只改页面模板和样式。
+
+### ⚠️ 跟液态玻璃不同的风险
+液态玻璃只改 CSS，页面结构没动。这一轮要动页面模板，而现有 958 个测试测的是算钱的逻辑，**不测页面长什么样**，所以测试全绿不代表页面没坏。每个 Task 都要在 demo 模式里实际打开页面，把该页的功能逐个点一遍再截图。
+
+### T-1 — Dashboard 整理 + 共用件  `[ ]`  ← **Current Task**（等你说「执行」）
+- **共用件**（后面每一页都会用）：统一的卡片结构（小标签 → 主数字 → 一行说明 → 可选小图）、数字写法（Inter 半粗体 + 等宽数字对齐，「MYR」缩小变淡）、状态 chip（绿 / 铜 / 红）、横向比例条。
+- **Dashboard 本身**：13 张卡 → 7 张；整页只留一个标题（去掉 Financial Snapshot / Details / Wealth Details 等 6 个区块标题）；同一个数字只出现一次；去掉左竖条、符号徽章、环形图；放不下的细节改成页底「看更多」入口，链到已有的 Advisor、Money Leaks、Ledger。
+- **完成标准**：typecheck、测试、build 通过；demo 模式下手机 390 和桌面 1280、深色和浅色各截图；页面上每个按钮和链接都点一遍确认能用；页面长度记录改前改后。
+
+### T-2 — Ledger  `[ ]`
+- 重复的「检查卡」只留在 Dashboard 和 Money Leaks；5 张单数字卡合并成一张摘要卡；记账表单和筛选收起来（按钮点开）。
+
+### T-3 — Portfolio  `[ ]`
+- 摘要卡 + 持仓；60 多行贡献记录只显示最近 5 条；记账表单、汇率粘贴框收起来；去掉每行的徽章。
+
+### T-4 — Settings  `[ ]`
+- 7 个常驻表单改成 iOS 式分组列表：每项显示当前值，点进去再编辑。
+
+### T-5 — Advisor / Review / Money Leaks / Rules  `[ ]`
+- 去掉重复的检查卡；建议和规则改成列表；免责声明移到页底；历史改成短行、点开看详情。
+
+### T-6 — Goals / Budget / TVM  `[ ]`
+- 小改：去掉标签和标题重复（「JAPAN TRIP」+「Japan Trip 2027」），统一数字写法。
+
+### T-7 — Market  `[ ]`（最后做）
+- demo 里图表是空的，需要真实行情数据才能判断。
+
+---
+
 ## V1 待办（全部完成）
 
 ### V1-1 — `pwo-save-error` 事件补一个监听器  `[x]`  （PR #12，merged）
