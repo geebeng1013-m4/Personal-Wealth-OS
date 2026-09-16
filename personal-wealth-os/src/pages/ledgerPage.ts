@@ -296,7 +296,7 @@ export function ledgerTemplate(state: WealthState): string {
       </div>
 
       <!-- ROW 2 — recent transactions | spending and trend -->
-      <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ledgerRecentLabel">
+      <section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-ledger-recent" aria-labelledby="ledgerRecentLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ledgerRecentLabel">Recent transactions</span></div>
         ${filtered.length === 0
           ? `<p class="wu-empty">No transactions match this filter yet.</p>`
@@ -307,18 +307,18 @@ export function ledgerTemplate(state: WealthState): string {
       </section>
 
       
-      <div class="wu-dash__half wu-stack wu-stack--sm">
+      <div class="wu-dash__half wu-dash__col">
         <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ledgerCategoryLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ledgerCategoryLabel">Spending by category</span><span class="wu-chip wu-chip--muted">${amountOf(personalExpenseTotal)} personal</span></div>
         ${personalExpenseTotal > 0 ? `
-          <div class="wu-split" aria-hidden="true">
-            ${topCategories.map((item, index) => `<span style="flex:${Math.max(item.amount, 0.01)};background:${categoryPalette[index]}"></span>`).join("")}
-            ${otherTotal > 0 ? `<span style="flex:${otherTotal};background:var(--text-faint)"></span>` : ""}
-          </div>
           <ul class="wu-cat-rows">
             ${topCategories.map((item, index) => `<li><i style="background:${categoryPalette[index]}"></i><span>${escapeHtml(item.category.icon ?? "")} ${escapeHtml(item.category.label)}</span><span><b>${amountOf(item.amount)}</b><small>${Math.round(item.share * 100)}%</small></span></li>`).join("")}
             ${otherTotal > 0 ? `<li><i style="background:var(--text-faint)"></i><span>Other categories</span><span><b>${amountOf(otherTotal)}</b><small>${Math.round((otherTotal / personalExpenseTotal) * 100)}%</small></span></li>` : ""}
           </ul>
+          <div class="wu-split" aria-hidden="true">
+            ${topCategories.map((item, index) => `<span style="flex:${Math.max(item.amount, 0.01)};background:${categoryPalette[index]}"></span>`).join("")}
+            ${otherTotal > 0 ? `<span style="flex:${otherTotal};background:var(--text-faint)"></span>` : ""}
+          </div>
           ${totals.expense > personalExpenseTotal ? `<p class="wu-dash__note">${amountOf(totals.expense - personalExpenseTotal)} sponsored money is not counted here</p>` : ""}
         ` : `<p class="wu-dash__note">No personal spending recorded in this period.</p>`}
       </section>
