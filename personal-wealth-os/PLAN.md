@@ -727,7 +727,12 @@ Preview（另一个会话做的，项目代码没有改动）：
   - 电脑：两张一行、一样高：Profile | Plan → Money in & out | Privacy → Data | Danger zone。
   - 每行「名称 · 当前值 ›」，点开编辑那一项，编辑面板只有一个 Save；隐私开关直接切换即保存；Emergency 的建议目标放进它的编辑面板；Theme/Export/Import/Version history/Add to Home Screen 保留 data-tool 绑定。
   - 不改计算。
-- **待你决定**：编辑面板的形式；DCA targets 只存 VOO/QQQM 会丢掉 VXUS（现有 bug）；Stage 下拉没有 demo 的值（现有 bug）；Dip-buy tranches 行在 Settings 里没有编辑功能。
+- **已定（2026-09-16）**：
+  1. 编辑面板在那一行下面展开（A）。
+  2. DCA targets 改成每只 ETF 一个输入框，不再丢 VXUS；你另外希望新加的股票/ETF 也一起出现在这里（提议见下，等你确认）。
+  3. Stage 下拉加上当前存的值，保存不再被覆盖。
+  4. Dip-buy tranches 只显示当前值，不能编辑。
+- **提议（等确认）**：targets 列表 = 已有目标 ∪ 交易过的代码 ∪ 自定义代码，新代码默认 0%；编辑面板里可以「+ Add ETF」；在 Settings 加的代码也出现在 Portfolio 记账表单的下拉里；Opportunity reserve 的分配同样每只一个输入框（现在也只存 VOO/QQQM）；显示目标合计，不是 100% 时提示但不阻止保存。
 
 ### T-5 — Advisor / Review / Money Leaks / Rules  `[ ]`
 - 去掉重复的检查卡；建议和规则改成列表；免责声明移到页底；历史改成短行、点开看详情。
