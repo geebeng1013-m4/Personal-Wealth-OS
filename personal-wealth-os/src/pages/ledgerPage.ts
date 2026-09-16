@@ -295,7 +295,7 @@ export function ledgerTemplate(state: WealthState): string {
         </section>
       </div>
 
-      <!-- ROW 2 — recent transactions | where the money went -->
+      <!-- ROW 2 — recent transactions | spending and trend -->
       <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ledgerRecentLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ledgerRecentLabel">Recent transactions</span></div>
         ${filtered.length === 0
@@ -306,7 +306,9 @@ export function ledgerTemplate(state: WealthState): string {
           : ""}
       </section>
 
-      <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ledgerCategoryLabel">
+      
+      <div class="wu-dash__half wu-stack wu-stack--sm">
+        <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ledgerCategoryLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ledgerCategoryLabel">Spending by category</span><span class="wu-chip wu-chip--muted">${amountOf(personalExpenseTotal)} personal</span></div>
         ${personalExpenseTotal > 0 ? `
           <div class="wu-split" aria-hidden="true">
@@ -319,10 +321,24 @@ export function ledgerTemplate(state: WealthState): string {
           </ul>
         ` : `<p class="wu-dash__note">No personal spending recorded in this period.</p>`}
       </section>
+        <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ledgerTrendLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="ledgerTrendLabel">Last 3 months</span></div>
+        <div class="wu-minibars">
+          ${lastThree.map((item) => `<div class="wu-minibars__month">
+            <div class="wu-minibars__pair">
+              <i style="height:${Math.round((item.income / lastThreeMax) * 100)}%;background:var(--accent)" title="Income ${amountOf(item.income)}"></i>
+              <i style="height:${Math.round((item.expense / lastThreeMax) * 100)}%;background:var(--highlight)" title="Spent ${amountOf(item.expense)}"></i>
+            </div>
+            <small>${monthLabel(item.month)}</small>
+          </div>`).join("")}
+        </div>
+        <div class="wu-legend"><span><i style="background:var(--accent)"></i>Income</span><span><i style="background:var(--highlight)"></i>Spent</span></div>
+      </section>
+      </div>
 
-      <!-- ROW 3 — accounts | three-month trend -->
-      <section class="wu-card wu-dash__wide wu-stack wu-stack--sm" aria-labelledby="ledgerAccountsLabel2">
-        <div class="wu-tc__top"><span class="wu-label" id="ledgerAccountsLabel2">Accounts</span><span class="wu-chip wu-chip--muted">Opening ${amountOf(totalOpeningFunds)}</span></div>
+      <!-- ROW 3 — every account, grouped -->
+      <section class="wu-card wu-dash__full wu-stack wu-stack--sm" aria-labelledby="ledgerAccountsLabel2">
+        <div class="wu-tc__top"><span class="wu-label" id="ledgerAccountsLabel2">Accounts</span></div>
         <!-- Grouped by kind and laid out across the card: a flat list of a
              dozen accounts is a long scroll that says nothing about which
              money is spendable. -->
@@ -340,25 +356,14 @@ export function ledgerTemplate(state: WealthState): string {
               <ul class="wu-facts wu-facts--plain">
                 ${group.map(({ account, balance }: AccountBalance) => `<li><span>${escapeHtml(account.icon ?? meta.icon)} ${escapeHtml(account.name)}</span><span class="${balance < 0 ? "t-negative" : ""}">${balance < 0 ? "−" : ""}${amountOf(Math.abs(balance))}</span></li>`).join("")}
               </ul>
-            </section>`;
+      </section>`;
           }).join("")}
         </div>
+        <p class="wu-dash__note">Opening funds ${amountOf(totalOpeningFunds)} · ${state.ledgerAccounts.length} ${state.ledgerAccounts.length === 1 ? "account" : "accounts"}</p>
       </section>
 
-      <section class="wu-card wu-dash__narrow wu-stack wu-stack--sm" aria-labelledby="ledgerTrendLabel">
-        <div class="wu-tc__top"><span class="wu-label" id="ledgerTrendLabel">Last 3 months</span></div>
-        <div class="wu-minibars">
-          ${lastThree.map((item) => `<div class="wu-minibars__month">
-            <div class="wu-minibars__pair">
-              <i style="height:${Math.round((item.income / lastThreeMax) * 100)}%;background:var(--accent)" title="Income ${amountOf(item.income)}"></i>
-              <i style="height:${Math.round((item.expense / lastThreeMax) * 100)}%;background:var(--highlight)" title="Spent ${amountOf(item.expense)}"></i>
-            </div>
-            <small>${monthLabel(item.month)}</small>
-          </div>`).join("")}
-        </div>
-        <div class="wu-legend"><span><i style="background:var(--accent)"></i>Income</span><span><i style="background:var(--highlight)"></i>Spent</span></div>
-      </section>
-
+      
+      
       <!-- MANAGERS — history, categories and accounts stay, collapsed -->
       <div class="wu-dash__full wu-stack wu-stack--sm">
         <details id="ledgerHistoryPanel" class="wu-details"${ledgerHistoryOpen ? " open" : ""}><summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-heading">History</strong><span class="t-caption t-faint">${filtered.length} records</span></span></summary><div class="wu-stack wu-stack--sm">${transactionRows || `<p class="wu-empty">No transactions match this view. Add your first record above.</p>`}</div></details>
