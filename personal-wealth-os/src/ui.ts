@@ -668,14 +668,14 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
     bindPortfolio(root, state, setState, navigate, renderApp);
     // Prices land after the first paint, and go stale after
     // PRICE_STALE_AFTER_MS if the page stays open. On each (re)fetch, repaint
-    // only the price-driven regions — the hero valuation, the rebalance split,
-    // the allocation panel and the Position Detail rows.
+    // only the price-driven regions — the four figure tiles, the holdings,
+    // the next-contribution split and the Position Detail rows.
     //
     // This used to re-render the entire #pageMount (and earlier still, a full
     // navigate("portfolio") that also rebuilt the sidebar and WebGL). Both
     // discarded whatever the user had half-typed into the contribution form on
     // every background tick, as often as every PRICE_POLL_INTERVAL_MS.
-    // patchPortfolioValuation touches only those four display regions — none of
+    // patchPortfolioValuation touches only those display regions — none of
     // which holds an input or a bound control — so nothing the user is
     // interacting with is disturbed and no rebind is needed.
     //

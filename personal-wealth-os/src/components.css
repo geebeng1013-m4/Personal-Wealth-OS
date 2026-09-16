@@ -55,6 +55,12 @@
   .t-faint {
     color: var(--text-faint);
   }
+  .t-positive {
+    color: var(--positive);
+  }
+  .t-negative {
+    color: var(--negative);
+  }
   .wu-self-end {
     align-self: end;
   }
@@ -1416,7 +1422,10 @@
     align-items: center;
     flex-wrap: wrap;
     gap: var(--space-2);
-    min-height: 22px;
+    /* tall enough for a chip (the padding is extra), so a label row with one
+       and a label row without start their figures on the same line */
+    box-sizing: content-box;
+    min-height: 23px;
     padding-bottom: var(--space-2);
   }
   /* liquid glass, chip-sized: a thin tinted pane with a rim light, the same
@@ -1917,6 +1926,188 @@
   .wu-minibars small {
     font: var(--weight-medium) var(--text-overline) / 1 var(--font-mono);
     color: var(--text-faint);
+  }
+
+  /* ---- portfolio (T-3) -------------------------------------------------- */
+  /* a trade row has a title and an amount, no edit controls */
+  .wu-ledger-row--plain {
+    grid-template-columns: minmax(0, 1fr) minmax(var(--row-value-w), auto);
+  }
+  .wu-dash .wu-portfolio-recent > .wu-portfolio-see-all {
+    margin-top: auto;
+  }
+  .wu-portfolio-lead {
+    font-size: var(--text-body);
+    line-height: 1.5;
+  }
+  .wu-portfolio-lead b {
+    font-weight: var(--weight-semibold);
+  }
+  .wu-navlist button[aria-expanded="true"] > span[aria-hidden] {
+    display: inline-block;
+    transform: rotate(90deg);
+  }
+  /* The page actions: in the header on a desktop, under the holdings on a
+     phone — one place each, never both. */
+  .wu-portfolio-actions {
+    display: flex;
+    gap: var(--space-2);
+  }
+  .wu-portfolio-actions__main {
+    flex: 1;
+  }
+  @media (max-width: 720px) {
+    .wu-portfolio-page .wu-page-header__actions {
+      display: none;
+    }
+  }
+  /* Phone: one Market value card carries the four figures, as in the
+     preview; the four tiles are the desktop's. */
+  .wu-portfolio-summary {
+    grid-column: 1 / -1;
+  }
+  @media (max-width: 720px) {
+    .wu-portfolio-tile {
+      display: none;
+    }
+  }
+  @media (min-width: 721px) {
+    .wu-portfolio-actions,
+    .wu-portfolio-summary {
+      display: none;
+    }
+    /* Desktop reading order: form, figures, holdings, then next contribution
+       beside recent activity. The phone keeps the source order, which puts the
+       next contribution before the holdings. */
+    .wu-dash > .wu-portfolio-entry {
+      order: -3;
+    }
+    .wu-dash > #pfTiles {
+      order: -2;
+    }
+    .wu-dash > #pfHoldings {
+      order: -1;
+    }
+  }
+  /* One line per holding. Phone: disc · name · value, the weight bar below.
+     Desktop: one row, the bars in a column of their own so every target mark
+     lines up with the rows above and below it. */
+  .wu-hold-list {
+    display: grid;
+  }
+  .wu-hold {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "tick name value"
+      "weight weight weight";
+    align-items: center;
+    column-gap: var(--space-3);
+    row-gap: var(--space-2);
+    padding-block: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+  }
+  .wu-hold--head {
+    display: none;
+  }
+  .wu-hold--head + .wu-hold {
+    border-top: 0;
+  }
+  .wu-hold__tick {
+    grid-area: tick;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    color: #fff;
+    font: 700 9px / 1 var(--font-mono);
+  }
+  .wu-hold__name {
+    grid-area: name;
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    font-size: var(--text-body);
+    font-weight: var(--weight-semibold);
+  }
+  .wu-hold__name small {
+    font-size: var(--text-body-sm);
+    font-weight: var(--weight-regular);
+    color: var(--text-faint);
+  }
+  .wu-hold__weight {
+    grid-area: weight;
+    display: grid;
+    gap: var(--space-2);
+  }
+  .wu-hold__meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--text-caption);
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .wu-hold__value {
+    grid-area: value;
+    display: grid;
+    gap: 2px;
+    text-align: right;
+    font: var(--weight-semibold) var(--text-body) / 1.3 var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .wu-hold__value small {
+    font-size: var(--text-caption);
+    font-weight: var(--weight-medium);
+  }
+  .wu-weight {
+    position: relative;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--surface-hover);
+  }
+  .wu-weight > span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: 3px;
+    background: var(--accent);
+  }
+  .wu-weight > i {
+    position: absolute;
+    top: -4px;
+    width: 2px;
+    height: 14px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: var(--text);
+    opacity: 0.6;
+  }
+  @media (min-width: 721px) {
+    .wu-hold {
+      grid-template-columns: 36px minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 0.9fr);
+      grid-template-areas: "tick name weight value";
+      column-gap: var(--space-4);
+    }
+    .wu-hold--head {
+      display: grid;
+      padding-block: 0 var(--space-1);
+      border-top: 0;
+      font: var(--weight-medium) var(--text-overline) / 1 var(--font-mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .wu-hold--head .wu-hold__tick,
+    .wu-hold--head .wu-hold__value {
+      background: none;
+      height: auto;
+      font: inherit;
+      color: inherit;
+    }
+    .wu-hold--head .wu-hold__name {
+      font: inherit;
+    }
   }
 
   /* ---- badge --------------------------------------------------------- */
