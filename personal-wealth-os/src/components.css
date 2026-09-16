@@ -558,23 +558,7 @@
     color: var(--text);
   }
 
-  /* ---- Settings: data tools + suggestion ----------------------------------- */
-  /* Full width: a short card of pills, not a half-column box with a gap below. */
-  .settings-data {
-    grid-column: 1 / -1;
-  }
-  .settings-data__pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-  .settings-data__pill {
-    border-radius: var(--radius-pill);
-  }
-  /* Reset is the one destructive action: last, red, with its own border. */
-  .settings-data__pill.wu-btn--danger {
-    box-shadow: var(--glass-inner), 0 0 0 1px rgb(var(--glass-danger-rgb) / 0.6);
-  }
+  /* ---- Settings: the emergency-target suggestion ------------------------ */
   .settings-suggest {
     display: flex;
     align-items: center;
@@ -2107,6 +2091,183 @@
     }
     .wu-hold--head .wu-hold__name {
       font: inherit;
+    }
+  }
+
+  /* ---- settings (T-4) --------------------------------------------------- */
+  /* A grouped list: one row per setting, "name · current value ›". The editor
+     for a row opens underneath it. Phone: the group name sits above a flush
+     list card, as in the phone preview. Desktop: two group cards per row, the
+     name in the card's top-left. */
+  .wu-set__list {
+    display: grid;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .wu-set__item + .wu-set__item {
+    border-top: 1px solid var(--border-subtle);
+  }
+  .wu-set__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: var(--row-h);
+    padding: var(--space-1) 0;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: var(--weight-medium) var(--text-body) / 1.3 var(--font-sans);
+    text-align: left;
+    cursor: pointer;
+  }
+  div.wu-set__row--static {
+    cursor: default;
+  }
+  button.wu-set__row:hover .wu-set__title,
+  label.wu-set__row.file-button:hover .wu-set__title {
+    color: var(--accent);
+  }
+  .wu-set__row:focus-visible,
+  .wu-set__row:has(input:focus-visible) {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+    border-radius: var(--radius-sm);
+  }
+  .wu-set__title {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .wu-set__title small {
+    font-size: var(--text-body-sm);
+    font-weight: var(--weight-regular);
+    color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .wu-set__value {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: none;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .wu-set__chev {
+    color: var(--text-faint);
+    transition: transform var(--dur-fast) var(--ease-standard);
+  }
+  .wu-set__item.is-open .wu-set__chev {
+    transform: rotate(90deg);
+  }
+  .wu-set__editor {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-1) 0 var(--space-4);
+  }
+  .wu-set__form {
+    display: grid;
+    gap: var(--space-3);
+  }
+  .wu-set__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+  }
+  .wu-set__tickers {
+    display: grid;
+    gap: var(--space-2);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .wu-set__ticker {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 132px 32px;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .wu-set__ticker-name {
+    font-weight: var(--weight-semibold);
+  }
+  .wu-set__ticker-input {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .wu-set__ticker-input input {
+    min-width: 0;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .wu-set__unit {
+    color: var(--text-faint);
+  }
+  .wu-set__add {
+    display: flex;
+    gap: var(--space-2);
+  }
+  .wu-set__add input {
+    flex: 1;
+    min-width: 0;
+    text-transform: uppercase;
+  }
+  .wu-set__add input::placeholder {
+    text-transform: none;
+  }
+  .wu-set__total {
+    color: var(--text-muted);
+  }
+  .wu-set__danger-phone {
+    display: none;
+  }
+  @media (max-width: 720px) {
+    .wu-set.wu-card {
+      padding: 0;
+      border: 0;
+      background: none;
+    }
+    .wu-set__head {
+      padding: 0 var(--space-1) var(--space-2);
+    }
+    .wu-set__list {
+      padding: 0 var(--space-5);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+    }
+    .wu-set__item--desk,
+    .wu-set--danger .wu-set__head,
+    .wu-set__danger-note,
+    .wu-set__danger-desk {
+      display: none;
+    }
+    .wu-set .wu-set__danger-phone {
+      display: grid;
+    }
+    /* the source order pairs groups for the desktop rows; the phone preview
+       reads Profile, Money in & out, Plan, Privacy, Data, Reset */
+    .wu-set--plan {
+      order: 1;
+    }
+    .wu-set--privacy {
+      order: 2;
+    }
+    .wu-set--data {
+      order: 3;
+    }
+    .wu-set--danger {
+      order: 4;
+    }
+  }
+  @media (min-width: 721px) {
+    .wu-set__item--phone {
+      display: none;
     }
   }
 
