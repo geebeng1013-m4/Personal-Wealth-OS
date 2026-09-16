@@ -695,7 +695,7 @@ Preview（另一个会话做的，项目代码没有改动）：
   3. chip 改成玻璃效果，而且标题优先占位，chip 不会挡住标题。
   - 958/958 测试通过，build 通过。
 
-### T-3 — Portfolio  `[ ]`  ← **Current Task**
+### T-3 — Portfolio  `[x]`（2026-09-16，PR #58 已合并）
 - 摘要卡 + 持仓；60 多行贡献记录只显示最近 5 条；记账表单、汇率粘贴框收起来；去掉每行的徽章。
 - **照这两个 Preview 的 Portfolio 部分做**：手机 https://claude.ai/artifact/LYCovFF3EQ2krqLKfsKLZE 、电脑 v2 https://claude.ai/artifact/FBx3QM1pbR9Nrf2HGQ2G9a 。
 - **计划（2026-09-16，等「执行 T-3」）**：
@@ -704,10 +704,30 @@ Preview（另一个会话做的，项目代码没有改动）：
   - 记账表单点开才出现、保存后收起；助手预填要先打开表单；See all 展开完整表格（含 ✕ 和 Clear all）；Allocation health 小卡拿掉，状态改用 chip。
   - 行情轮询只重画新的价格区域，不能关掉已打开的表单。
   - 不改计算，不改金额小数位（两位小数问题未决定）。
-- **未决**：Fees 卡说明行写「Across N contributions」（Preview）还是「Before fees +X (+Y%)」（保留扣手续费前的收益）。
+- **决定**：Fees 卡说明行用 B「Before fees +X (+Y%)」，保留扣手续费前的收益；没有手续费或没有价格时退回「Across N contributions」。
+- **结果（demo 数据）**：
+  | | 改前 | 改后 |
+  | --- | --- | --- |
+  | 手机页面长度 | 5,001px | 1,528px |
+  | 电脑页面长度 | 3,887px | 1,049px |
+  | 徽章 | 90 | 0 |
+  | 看得见的按钮 | 51 | 4 |
+- **手机**照手机 Preview：一张 Market value 卡（Invested · fees · holdings + Before fees 一行）→ Next contribution → Holdings → 按钮行 → Recent activity → More detail。
+- **实测**：962/962 测试（新增 4 个「下一笔放哪里」测试）、build 通过、控制台无报错。记一笔、See all + 删除、CSV 导入、两个面板、汇率粘贴错误提示、助手预填（自动打开表单）、行情刷新（约 90 秒一次，不清空表单）都点过。
+- **影响其他页面的两处**：
+  1. 补上 `.t-positive` / `.t-negative`（Ledger 早就在用但没定义），Ledger 的收入/支出现在有绿/红色。
+  2. `.wu-tc__top` 预留 chip 的高度，有 chip 和没 chip 的卡数字对齐；所有卡标签行高约 7px。
+- **没做到**：电脑版第 3 行两张卡底边对齐，但卡里的行没有上下对齐（左边先有一句话）。
 
-### T-4 — Settings  `[ ]`
+### T-4 — Settings  `[ ]`  ← **Current Task**
 - 7 个常驻表单改成 iOS 式分组列表：每项显示当前值，点进去再编辑。
+- **照 Preview 的 Settings 部分做**（同上两个链接）。
+- **计划（2026-09-16，等「执行 T-4」）**：
+  - 手机：Profile / Money in & out / Plan / Privacy / Data 五组列表，最后单独一行红色 Reset。
+  - 电脑：两张一行、一样高：Profile | Plan → Money in & out | Privacy → Data | Danger zone。
+  - 每行「名称 · 当前值 ›」，点开编辑那一项，编辑面板只有一个 Save；隐私开关直接切换即保存；Emergency 的建议目标放进它的编辑面板；Theme/Export/Import/Version history/Add to Home Screen 保留 data-tool 绑定。
+  - 不改计算。
+- **待你决定**：编辑面板的形式；DCA targets 只存 VOO/QQQM 会丢掉 VXUS（现有 bug）；Stage 下拉没有 demo 的值（现有 bug）；Dip-buy tranches 行在 Settings 里没有编辑功能。
 
 ### T-5 — Advisor / Review / Money Leaks / Rules  `[ ]`
 - 去掉重复的检查卡；建议和规则改成列表；免责声明移到页底；历史改成短行、点开看详情。
