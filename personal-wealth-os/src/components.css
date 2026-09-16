@@ -1396,6 +1396,14 @@
   /* One anatomy for every card: label row → one headline figure → at most one
      line of explanation → an optional small graphic. Status is a chip or a
      proportion bar, never a rail, ring or symbol badge. */
+  /* the label gives way before the chip does, so a chip can never sit on top
+     of the heading it belongs to */
+  .wu-tc__top > .wu-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .wu-tc__top {
     display: flex;
     justify-content: space-between;
@@ -1405,11 +1413,12 @@
     min-height: 22px;
   }
   .wu-chip {
-    padding: 5px 9px;
+    flex: none;
+    padding: 3px 8px;
     border-radius: var(--radius-pill);
     background: var(--accent-soft);
     color: var(--accent);
-    font: var(--weight-medium) var(--text-caption) / 1 var(--font-sans);
+    font: var(--weight-medium) var(--text-overline) / 1.35 var(--font-sans);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
