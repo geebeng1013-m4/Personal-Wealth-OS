@@ -638,12 +638,28 @@ Preview（另一个会话做的，项目代码没有改动）：
 ### ⚠️ 跟液态玻璃不同的风险
 液态玻璃只改 CSS，页面结构没动。这一轮要动页面模板，而现有 958 个测试测的是算钱的逻辑，**不测页面长什么样**，所以测试全绿不代表页面没坏。每个 Task 都要在 demo 模式里实际打开页面，把该页的功能逐个点一遍再截图。
 
-### T-1 — Dashboard 整理 + 共用件  `[ ]`  ← **Current Task**（等你说「执行」）
+### T-1 — Dashboard 整理 + 共用件  `[x]`（2026-09-16，PR 待合并）
 - **共用件**（后面每一页都会用）：统一的卡片结构（小标签 → 主数字 → 一行说明 → 可选小图）、数字写法（Inter 半粗体 + 等宽数字对齐，「MYR」缩小变淡）、状态 chip（绿 / 铜 / 红）、横向比例条。
 - **Dashboard 本身**：13 张卡 → 7 张；整页只留一个标题（去掉 Financial Snapshot / Details / Wealth Details 等 6 个区块标题）；同一个数字只出现一次；去掉左竖条、符号徽章、环形图；放不下的细节改成页底「看更多」入口，链到已有的 Advisor、Money Leaks、Ledger。
 - **完成标准**：typecheck、测试、build 通过；demo 模式下手机 390 和桌面 1280、深色和浅色各截图；页面上每个按钮和链接都点一遍确认能用；页面长度记录改前改后。
+- **结果（demo 数据，手机 390 宽）**：
+  | | 改前 | 改后 |
+  | --- | --- | --- |
+  | 页面长度 | 3,718px | 1,551px |
+  | 卡片 | 13 | 7 |
+  | 标题 | 16 | 1 |
+- **7 张卡**：Net worth / This month / Priority / Health / Where it sits / Next goal / More detail。
+- **共用件**（`components.css`，后面每页都会用）：`.wu-tc__top`（标签行）、`.wu-chip`（状态）、`.wu-money`（大数字，MYR 缩小变淡）、`.wu-split` + `.wu-legend`（比例条）、`.wu-three`（三栏数字）、`.wu-facts`（等高事实行）、`.wu-navlist`（页底入口）。
+- **实测（demo 模式）**：958/958 测试通过，build 通过，控制台没有报错。
+  - 5 个链接（Advisor、Money Leaks、Ledger、Portfolio、Goals）都点过，能正确跳转。
+  - 「Mark as done」有效：按钮消失，出现「You marked this done」。
+  - 目标选择器有效：切换后刷新仍保留。
+  - 实时价格更新的元素（净值、市值、手续费、未实现盈亏、说明行）都改成了新结构并同步更新。
+  - 手机、桌面、深色、浅色都截图检查过，没有横向溢出。
+- **搬走的内容**（没有删，只是移到各自页面，用页底「More detail」进去）：Financial Health 明细、Money Leaks 详情、Monthly Position、Personal CFO briefing。
+- **⚠️ 跟 Preview 不同的一处**：Preview 建议去掉「Featured goal」下拉选择器。**我保留了它**，因为它是全 App 唯一能选「Dashboard 显示哪个目标」的地方，去掉等于删功能。要搬到 Goals 页的话，放在 T-6 一起做。
 
-### T-2 — Ledger  `[ ]`
+### T-2 — Ledger  `[ ]`  ← **Current Task**
 - 重复的「检查卡」只留在 Dashboard 和 Money Leaks；5 张单数字卡合并成一张摘要卡；记账表单和筛选收起来（按钮点开）。
 
 ### T-3 — Portfolio  `[ ]`
