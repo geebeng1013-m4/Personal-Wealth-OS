@@ -1392,6 +1392,287 @@
     }
   }
 
+  /* ---- tidy card parts (PLAN.md T series) -------------------------------- */
+  /* One anatomy for every card: label row → one headline figure → at most one
+     line of explanation → an optional small graphic. Status is a chip or a
+     proportion bar, never a rail, ring or symbol badge. */
+  .wu-tc__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 22px;
+  }
+  .wu-chip {
+    padding: 5px 9px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font: var(--weight-medium) var(--text-caption) / 1 var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .wu-chip--warning {
+    background: var(--warning-soft);
+    color: var(--warning);
+  }
+  .wu-chip--negative {
+    background: var(--negative-soft);
+    color: var(--negative);
+  }
+  .wu-chip--muted {
+    background: var(--surface-hover);
+    color: var(--text-muted);
+  }
+  /* Figures in the app font, not the mono face: mono is wide and wraps in a
+     two-column card. Tabular numerals keep columns aligned; the currency is
+     small and quiet so the number leads. */
+  .wu-money {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-1);
+    font: var(--weight-semibold) var(--text-num-xl) / 1.05 var(--font-sans);
+    letter-spacing: -0.025em;
+    font-variant-numeric: tabular-nums;
+  }
+  .wu-money--md {
+    font-size: var(--text-num-lg);
+  }
+  .wu-money__cur,
+  .wu-money__of {
+    font: var(--weight-medium) var(--text-body-sm) / 1 var(--font-sans);
+    letter-spacing: 0;
+    color: var(--text-faint);
+  }
+  .wu-split {
+    display: flex;
+    gap: 2px;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .wu-split > span {
+    display: block;
+    height: 100%;
+  }
+  .wu-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-4);
+    font-size: var(--text-caption);
+    color: var(--text-muted);
+  }
+  .wu-legend > span {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .wu-legend i {
+    display: block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+  .wu-legend b {
+    font-weight: var(--weight-semibold);
+    color: var(--text);
+  }
+  .wu-three {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+  .wu-three span {
+    display: block;
+    font-size: var(--text-caption);
+    color: var(--text-faint);
+  }
+  .wu-three b {
+    font: var(--weight-semibold) var(--text-subheading) / 1.2 var(--font-sans);
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Status list: every row the same height, value short enough to stay on one
+     line. Long explanations belong on the page the row links to. */
+  .wu-facts {
+    display: grid;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .wu-facts li {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 38px;
+    border-top: 1px solid var(--border-subtle);
+    font-size: var(--text-body);
+  }
+  .wu-facts li:first-child {
+    border-top: 0;
+  }
+  .wu-facts li > span:last-child {
+    font-size: var(--text-body-sm);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  /* same rows without the status dot, e.g. a valuation breakdown */
+  .wu-facts--plain li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .wu-facts i {
+    display: block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--positive);
+  }
+  .wu-facts i.is-watch {
+    background: var(--warning);
+  }
+  .wu-facts i.is-alert {
+    background: var(--negative);
+  }
+  /* The "more detail" list at the foot of a tidy page: one row per page the
+     detail moved to. */
+  .wu-navlist {
+    display: grid;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .wu-navlist button {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: 46px;
+    padding: 0;
+    border: 0;
+    border-top: 1px solid var(--border-subtle);
+    background: none;
+    color: var(--text);
+    font: var(--weight-medium) var(--text-body) / 1.3 var(--font-sans);
+    text-align: left;
+    cursor: pointer;
+  }
+  .wu-navlist li:first-child button {
+    border-top: 0;
+  }
+  .wu-navlist small {
+    margin-left: var(--space-2);
+    color: var(--text-faint);
+    font-size: var(--text-body-sm);
+    font-weight: var(--weight-regular);
+  }
+  .wu-navlist button:hover {
+    color: var(--accent);
+  }
+  .wu-navlist button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+    border-radius: var(--radius-sm);
+  }
+  .wu-navlist span[aria-hidden] {
+    color: var(--text-faint);
+  }
+
+  /* ---- dashboard grid (T-1) ---------------------------------------------
+     Phone: one column. Desktop: a strict 12-column grid — four figure tiles
+     across the top (3 columns each), then priority and health side by side
+     (6 each), then the links row full width. Every tile in a row shares its
+     top and bottom edge. */
+  .wu-dash {
+    display: grid;
+    gap: var(--space-4);
+  }
+  .wu-dash > * {
+    min-width: 0;
+  }
+  .wu-dash__tile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  /* the small graphic always sits on the bottom edge, so a row of tiles lines
+     up however long the note above it runs */
+  .wu-dash__tile > .wu-split,
+  .wu-dash__tile > .wu-bar {
+    margin-top: auto;
+  }
+  .wu-dash__half {
+    display: flex;
+    flex-direction: column;
+  }
+  /* buttons sit on the bottom edge so a pair of half-width cards match */
+  .wu-dash__actions {
+    margin-top: auto;
+    padding-top: var(--space-2);
+  }
+  /* the featured-goal picker rides in the tile's label row, small and quiet */
+  .wu-dash__tile .wu-label {
+    white-space: nowrap;
+  }
+  .wu-dash__pick select {
+    min-height: 28px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-bg);
+    color: var(--text-muted);
+    font-size: var(--text-caption);
+    max-width: 116px;
+  }
+  .wu-dash__note {
+    font-size: var(--text-body-sm);
+    line-height: 1.45;
+    color: var(--text-muted);
+  }
+  @media (min-width: 721px) {
+    .wu-dash {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      align-items: stretch;
+    }
+    .wu-dash__tile {
+      grid-column: span 3;
+    }
+    .wu-dash__half {
+      grid-column: span 6;
+    }
+    .wu-dash__full {
+      grid-column: 1 / -1;
+    }
+    /* the links stop being a card and become one quiet row under the grid */
+    .wu-dash__more {
+      padding: 0;
+      border: 0;
+      background: none;
+    }
+    .wu-dash__more > .wu-label {
+      display: none;
+    }
+    .wu-navlist--inline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2) var(--space-6);
+    }
+    .wu-navlist--inline button {
+      width: auto;
+      min-height: 32px;
+      border-top: 0;
+      gap: var(--space-2);
+      color: var(--accent);
+      font-weight: var(--weight-semibold);
+    }
+    .wu-navlist--inline small {
+      color: var(--text-faint);
+    }
+  }
+
   /* ---- badge --------------------------------------------------------- */
   .wu-badge {
     display: inline-flex;
