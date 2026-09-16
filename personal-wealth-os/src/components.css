@@ -1581,6 +1581,98 @@
     color: var(--text-faint);
   }
 
+  /* ---- dashboard grid (T-1) ---------------------------------------------
+     Phone: one column. Desktop: a strict 12-column grid — four figure tiles
+     across the top (3 columns each), then priority and health side by side
+     (6 each), then the links row full width. Every tile in a row shares its
+     top and bottom edge. */
+  .wu-dash {
+    display: grid;
+    gap: var(--space-4);
+  }
+  .wu-dash > * {
+    min-width: 0;
+  }
+  .wu-dash__tile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  /* the small graphic always sits on the bottom edge, so a row of tiles lines
+     up however long the note above it runs */
+  .wu-dash__tile > .wu-split,
+  .wu-dash__tile > .wu-bar {
+    margin-top: auto;
+  }
+  .wu-dash__half {
+    display: flex;
+    flex-direction: column;
+  }
+  /* buttons sit on the bottom edge so a pair of half-width cards match */
+  .wu-dash__actions {
+    margin-top: auto;
+    padding-top: var(--space-2);
+  }
+  /* the featured-goal picker rides in the tile's label row, small and quiet */
+  .wu-dash__tile .wu-label {
+    white-space: nowrap;
+  }
+  .wu-dash__pick select {
+    min-height: 28px;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface-bg);
+    color: var(--text-muted);
+    font-size: var(--text-caption);
+    max-width: 116px;
+  }
+  .wu-dash__note {
+    font-size: var(--text-body-sm);
+    line-height: 1.45;
+    color: var(--text-muted);
+  }
+  @media (min-width: 721px) {
+    .wu-dash {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      align-items: stretch;
+    }
+    .wu-dash__tile {
+      grid-column: span 3;
+    }
+    .wu-dash__half {
+      grid-column: span 6;
+    }
+    .wu-dash__full {
+      grid-column: 1 / -1;
+    }
+    /* the links stop being a card and become one quiet row under the grid */
+    .wu-dash__more {
+      padding: 0;
+      border: 0;
+      background: none;
+    }
+    .wu-dash__more > .wu-label {
+      display: none;
+    }
+    .wu-navlist--inline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2) var(--space-6);
+    }
+    .wu-navlist--inline button {
+      width: auto;
+      min-height: 32px;
+      border-top: 0;
+      gap: var(--space-2);
+      color: var(--accent);
+      font-weight: var(--weight-semibold);
+    }
+    .wu-navlist--inline small {
+      color: var(--text-faint);
+    }
+  }
+
   /* ---- badge --------------------------------------------------------- */
   .wu-badge {
     display: inline-flex;

@@ -264,9 +264,9 @@
       --text-overline: 0.625rem;
       --text-num-lg: 1.125rem;
       --text-num-xl: 1.5rem;
-      --space-5: 14px;
-      --space-6: 16px;
-      --space-8: 20px;
+      --space-5: 16px;
+      --space-6: 20px;
+      --space-8: 28px;
     }
   }
 }

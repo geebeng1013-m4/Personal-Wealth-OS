@@ -25,13 +25,9 @@ import {
   PRICE_POLL_INTERVAL_MS,
 } from "../livePrices";
 import {
-  moneyOrUnknown,
-  pnlText,
-  pnlTone,
   joinNotes,
   valuationNote,
   usdPnlNote,
-  feeFreeReturnNote,
 } from "./valuationFormat";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
@@ -45,7 +41,6 @@ export function dashboardTemplate(state: WealthState): string {
   const nextGoal = overview.goals.featured;
   const nextGoalCurrent = nextGoal?.currentAmount ?? 0;
   const nextGoalRatio = nextGoal?.progress ?? 0;
-  const opportunity = tracked.reserve;
   const investedShare = tracked.investedShare;
   const safetyShare = tracked.safetyShare;
   const reserveShare = tracked.reserveShare;
@@ -62,7 +57,9 @@ export function dashboardTemplate(state: WealthState): string {
   const statusTone = (s: string): string => s === "healthy" || s === "positive" ? "positive" : s === "watch" ? "warning" : "negative";
 
   // One card anatomy everywhere (PLAN.md T-1): label row -> one headline
-  // figure -> at most one line of explanation -> an optional small graphic.
+  // figure -> at most one line of explanation -> a small graphic on the bottom
+  // edge. Desktop lays the same cards out on a 12-column grid: four figure
+  // tiles, then priority and health side by side, then the links row.
   // Figures print without the "MYR" prefix so the currency can be set small
   // beside them; money() stays the single formatter.
   const amount = (value: number): string => money(value, "").trim();
@@ -76,9 +73,10 @@ export function dashboardTemplate(state: WealthState): string {
     : 0;
   const pnl = portfolio.unrealizedPnlMyr ?? 0;
   const pnlKnown = portfolio.unrealizedPnlMyr !== null;
+  const investedNote = `${pnlKnown ? `Unrealised ${pnl >= 0 ? "+" : "−"}${amount(Math.abs(pnl))}` : "No market price yet"} · safety ${amount(state.emergency.current)}`;
   const pnlChip = portfolio.unrealizedPnlPercentMyr === null || !pnlKnown
     ? ""
-    : `<span class="wu-chip${pnl >= 0 ? "" : " wu-chip--negative"}">${pnl >= 0 ? "+" : "−"}${percent(Math.abs(portfolio.unrealizedPnlPercentMyr))} invested</span>`;
+    : `<span class="wu-chip${pnl >= 0 ? "" : " wu-chip--negative"}">${pnl >= 0 ? "+" : "−"}${percent(Math.abs(portfolio.unrealizedPnlPercentMyr))}</span>`;
 
   return `<div class="wu">
     <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -95,45 +93,68 @@ export function dashboardTemplate(state: WealthState): string {
       ? `<button class="wu-goal-line dashboard-nav" data-page="goals" type="button" aria-label="My financial goal: ${escapeHtml(state.financialGoal)}. Edit on the Goals page"><span class="wu-goal-line__label">Financial goal</span><span class="wu-goal-line__text">${escapeHtml(state.financialGoal)}</span></button>`
       : `<button class="wu-goal-line wu-goal-line--empty dashboard-nav" data-page="goals" type="button"><span class="wu-goal-line__text">Write down your financial goal</span><span aria-hidden="true">→</span></button>`}
 
-    <div class="wu-stack">
-      <!-- Filled by bindDashboard after an async price check: shown only when a
-           dip-buy tranche is reached and not yet deployed. -->
-      <div id="dipAlert" hidden></div>
+    <!-- Filled by bindDashboard after an async price check: shown only when a
+         dip-buy tranche is reached and not yet deployed. -->
+    <div id="dipAlert" hidden></div>
 
+    <div class="wu-dash">
       <!-- 1 — NET WORTH -->
-      <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ovNetWorthLabel">
-        <div class="wu-tc__top"><span class="wu-label" id="ovNetWorthLabel">Net worth</span>${pnlChip}</div>
+      <section class="wu-card wu-dash__tile" aria-labelledby="ovNetWorthLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="ovNetWorthLabel">Net worth</span></div>
         <p class="wu-money"><span class="wu-money__cur">MYR</span><span id="ovNetWorth">${amount(overview.netWorth)}</span></p>
+        <p class="wu-dash__note" id="ovNetWorthNote">Assets ${amount(overview.totalAssets)} · liabilities ${amount(overview.totalLiabilities)}</p>
         <div class="wu-split" aria-hidden="true" id="ovNetWorthSplit"><span style="flex:${Math.max(assetsShare, 0.02)};background:var(--accent)"></span><span style="flex:${Math.max(1 - assetsShare, 0.02)};background:var(--highlight)"></span></div>
-        <div class="wu-legend" id="ovNetWorthNote"><span><i style="background:var(--accent)"></i>Assets <b>${amount(overview.totalAssets)}</b></span><span><i style="background:var(--highlight)"></i>Liabilities <b>${amount(overview.totalLiabilities)}</b></span></div>
       </section>
 
       <!-- 2 — THIS MONTH -->
-      <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ovMonthLabel">
+      <section class="wu-card wu-dash__tile" aria-labelledby="ovMonthLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ovMonthLabel">This month</span>${expenseChange !== null
-          ? `<span class="wu-chip${expenseChange <= 0 ? "" : " wu-chip--warning"}">Spending ${expenseChange <= 0 ? "↓" : "↑"} ${percent(Math.abs(expenseChange), 0)}</span>`
-          : `<span class="wu-chip wu-chip--muted">First month recorded</span>`}</div>
-        <div class="wu-three">
-          <div><span>Income</span><b>${amount(overview.cashFlow.income)}</b></div>
-          <div><span>Spent</span><b>${amount(overview.cashFlow.expenses)}</b></div>
-          <div><span>Surplus</span><b class="${overview.cashFlow.surplus >= 0 ? "t-positive" : "t-negative"}">${overview.cashFlow.surplus >= 0 ? "+" : "−"}${amount(Math.abs(overview.cashFlow.surplus))}</b></div>
-        </div>
+          ? `<span class="wu-chip${expenseChange <= 0 ? "" : " wu-chip--warning"}">${expenseChange <= 0 ? "↓" : "↑"} ${percent(Math.abs(expenseChange), 0)}</span>`
+          : ""}</div>
+        <p class="wu-money ${overview.cashFlow.surplus >= 0 ? "t-positive" : "t-negative"}"><span class="wu-money__cur">MYR</span><span>${overview.cashFlow.surplus >= 0 ? "+" : "−"}${amount(Math.abs(overview.cashFlow.surplus))}</span></p>
+        <p class="wu-dash__note">Income ${amount(overview.cashFlow.income)} · spent ${amount(overview.cashFlow.expenses)}</p>
         <div class="wu-bar" role="progressbar" aria-valuenow="${Math.round(keptRatio * 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="Share of income kept this month">
           <span class="wu-bar__fill" style="width:${Math.round(keptRatio * 100)}%"></span>
         </div>
-        <p class="t-caption t-muted">${Math.round(keptRatio * 100)}% of income kept this month</p>
       </section>
 
-      <!-- 3 — PRIORITY -->
+      <!-- 3 — INVESTED -->
+      <section class="wu-card wu-dash__tile" aria-labelledby="ovInvestedLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="ovInvestedLabel">Invested</span>${pnlChip}</div>
+        <p class="wu-money"><span class="wu-money__cur">MYR</span><span>${amount(portfolio.totalInvestedMyr)}</span></p>
+        <p class="wu-dash__note" id="ovInvestedNote">${escapeHtml(investedNote)}</p>
+        <p class="t-caption t-faint" id="ovValuationNote">${escapeHtml(joinNotes(valuationNote(portfolio), usdPnlNote(portfolio)))}</p>
+        <div class="wu-split" aria-label="Tracked capital split">
+          <span style="flex:${Math.max(investedShare, 0.02)};background:var(--accent)"></span>
+          <span style="flex:${Math.max(safetyShare, 0.02)};background:var(--highlight)"></span>
+          <span style="flex:${Math.max(reserveShare, 0.02)};background:var(--text-faint)"></span>
+        </div>
+      </section>
+
+      <!-- 4 — NEXT GOAL -->
+      <section class="wu-card wu-dash__tile" aria-labelledby="ovGoalLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="ovGoalLabel">Next goal</span>${state.goals.length > 0
+          ? `<label class="wu-dash__pick"><span class="visually-hidden">Featured goal</span><select class="wu-field" id="overviewGoalSelect" aria-label="Choose the goal shown on the Dashboard">${overviewGoalOptions}</select></label>`
+          : ""}</div>
+        ${nextGoal ? `
+          <p class="wu-money"><span class="wu-money__cur">MYR</span><span>${amount(nextGoalCurrent)}</span></p>
+          <p class="wu-dash__note">${escapeHtml(nextGoal.name)} · of ${amount(nextGoal.targetAmount)}${nextGoal.estimatedMonthsToTarget !== null ? ` · ~${nextGoal.estimatedMonthsToTarget} mo left` : ""}</p>
+          <div class="wu-bar" role="progressbar" aria-valuenow="${Math.round(nextGoalRatio * 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(nextGoal.name)} progress">
+            <span class="wu-bar__fill" style="width:${Math.round(Math.min(nextGoalRatio, 1) * 100)}%"></span>
+          </div>
+        ` : `<p class="wu-dash__note">Create a goal to turn long-term wealth building into a visible journey.</p>`}
+      </section>
+
+      <!-- 5 — PRIORITY -->
       ${overview.priorityAction ? `
-        <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ovPriorityTitle">
+        <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ovPriorityTitle">
           <div class="wu-tc__top"><span class="wu-label">Priority</span><span class="wu-chip wu-chip--${statusTone(overview.priorityAction.severity)}">${overview.priorityAction.severity === "watch" ? "Watch" : "Needs action"}</span></div>
-          <h3 class="t-subheading" id="ovPriorityTitle">${escapeHtml(overview.priorityAction.title)}</h3>
+          <h3 class="t-heading" id="ovPriorityTitle">${escapeHtml(overview.priorityAction.title)}</h3>
           <p class="t-body-sm t-muted">${escapeHtml(overview.priorityAction.actionLabel)}</p>
           ${isRecommendationCompleted(state, overview.priorityAction.recommendationId)
             ? `<p class="t-caption t-muted">You marked this done.</p>`
             : ""}
-          <div class="wu-row">
+          <div class="wu-row wu-dash__actions">
             <button class="wu-btn wu-btn--primary wu-btn--sm dashboard-nav" data-page="${escapeHtml(overview.priorityAction.destination)}" type="button">Go to ${escapeHtml(overview.priorityAction.destination.replace(/-/g, " "))}</button>
             ${isRecommendationCompleted(state, overview.priorityAction.recommendationId)
               ? ""
@@ -141,15 +162,15 @@ export function dashboardTemplate(state: WealthState): string {
           </div>
         </section>
       ` : `
-        <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ovPriorityTitle">
+        <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ovPriorityTitle">
           <div class="wu-tc__top"><span class="wu-label">Priority</span><span class="wu-chip">All clear</span></div>
-          <h3 class="t-subheading" id="ovPriorityTitle">Nothing needs your attention</h3>
+          <h3 class="t-heading" id="ovPriorityTitle">Nothing needs your attention</h3>
           <p class="t-body-sm t-muted">No exceptions were detected against your configured rules.</p>
         </section>
       `}
 
-      <!-- 4 — HEALTH -->
-      <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ovHealthLabel">
+      <!-- 6 — HEALTH -->
+      <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ovHealthLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ovHealthLabel">Health</span><span class="wu-chip${watchCount > 0 ? " wu-chip--warning" : ""}">${watchCount > 0 ? `${watchCount} to watch` : escapeHtml(overview.wealthHealth.label)}</span></div>
         <ul class="wu-facts">
           ${overview.wealthHealth.factors.map((factor) => `<li><i class="${factorTone(factor.status)}" aria-hidden="true"></i><span>${escapeHtml(factor.label)}</span><span>${escapeHtml(factor.detail)}</span><span class="visually-hidden">Status: ${escapeHtml(factor.status)}</span></li>`).join("")}
@@ -159,53 +180,16 @@ export function dashboardTemplate(state: WealthState): string {
         </ul>
       </section>
 
-      <!-- 5 — WHERE IT SITS -->
-      <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ovTrackedLabel">
-        <div class="wu-tc__top"><span class="wu-label" id="ovTrackedLabel">Where it sits</span>${pnlKnown ? `<span class="wu-chip${pnl >= 0 ? "" : " wu-chip--negative"}">${pnl >= 0 ? "+" : "−"}${amount(Math.abs(pnl))} P&amp;L</span>` : ""}</div>
-        <div class="wu-split" aria-label="Tracked capital split">
-          <span style="flex:${Math.max(investedShare, 0.02)};background:var(--accent)"></span>
-          <span style="flex:${Math.max(safetyShare, 0.02)};background:var(--highlight)"></span>
-          <span style="flex:${Math.max(reserveShare, 0.02)};background:var(--text-faint)"></span>
-        </div>
-        <div class="wu-legend">
-          <span><i style="background:var(--accent)"></i>Invested <b>${amount(portfolio.totalInvestedMyr)}</b></span>
-          <span><i style="background:var(--highlight)"></i>Safety <b>${amount(state.emergency.current)}</b></span>
-          <span><i style="background:var(--text-faint)"></i>Reserve <b>${amount(opportunity)}</b></span>
-        </div>
-        <ul class="wu-facts wu-facts--plain wu-valuation" data-valuation-status="${portfolio.valuationStatus}">
-          <li><span>Market value</span><span id="ovMarketValue">${moneyOrUnknown(portfolio.totalInvestmentValueMyr)}</span></li>
-          <li id="ovFeeRow"${portfolio.feesInCostBasisMyr > 0.005 ? "" : " hidden"}><span>Trading costs</span><span id="ovFeeDrag">${money(portfolio.feesInCostBasisMyr)}</span></li>
-          <li><span>Unrealised P&amp;L</span><span id="ovUnrealised" class="${pnlTone(portfolio.unrealizedPnlMyr)}">${pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr)}</span></li>
-        </ul>
-        <p class="t-caption t-faint" id="ovValuationNote">${escapeHtml(joinNotes(valuationNote(portfolio), usdPnlNote(portfolio), feeFreeReturnNote(portfolio)))}</p>
-      </section>
-
-      <!-- 6 — NEXT GOAL -->
-      <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ovGoalLabel">
-        <div class="wu-tc__top"><span class="wu-label" id="ovGoalLabel">Next goal</span>${nextGoal ? `<span class="wu-chip${nextGoalRatio >= 1 ? "" : " wu-chip--muted"}">${nextGoalRatio >= 1 ? "Funded" : `${percent(nextGoalRatio)} funded`}</span>` : ""}</div>
-        ${nextGoal ? `
-          <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amount(nextGoalCurrent)}</span><span class="wu-money__of">of ${amount(nextGoal.targetAmount)}</span></p>
-          <div class="wu-bar" role="progressbar" aria-valuenow="${Math.round(nextGoalRatio * 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(nextGoal.name)} progress">
-            <span class="wu-bar__fill" style="width:${Math.round(Math.min(nextGoalRatio, 1) * 100)}%"></span>
-          </div>
-          <p class="t-caption t-muted">${escapeHtml(nextGoal.name)}${nextGoal.estimatedMonthsToTarget !== null ? ` · about ${nextGoal.estimatedMonthsToTarget} months left at ${amount(nextGoal.monthlyContribution)}/mo` : " · add a monthly contribution for a timeline"}</p>
-        ` : `<p class="wu-empty">Create a goal to turn long-term wealth building into a visible, measurable journey.</p>`}
-        <div class="wu-row wu-row--between wu-card__footer">
-          ${state.goals.length > 0 ? `<label class="wu-field-row"><span class="wu-field-row__label">Featured</span><select class="wu-field" id="overviewGoalSelect" aria-label="Choose the goal shown on the Dashboard">${overviewGoalOptions}</select></label>` : `<span></span>`}
-          <button class="wu-btn wu-btn--ghost wu-btn--sm wu-self-end dashboard-nav" data-page="goals" type="button">All goals →</button>
-        </div>
-      </section>
-
       <!-- 7 — MORE DETAIL -->
       <!-- Everything the summary above leaves out lives on its own page; these
            are the ways in, so no detail is lost, only moved. -->
-      <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ovMoreLabel">
+      <section class="wu-card wu-dash__full wu-dash__more wu-stack wu-stack--sm" aria-labelledby="ovMoreLabel">
         <span class="wu-label" id="ovMoreLabel">More detail</span>
-        <ul class="wu-navlist">
+        <ul class="wu-navlist wu-navlist--inline">
           <li><button class="dashboard-nav" data-page="advisor" type="button"><span>Guidance<small>What to do next</small></span><span aria-hidden="true">›</span></button></li>
           <li><button class="dashboard-nav" data-page="money-leaks" type="button"><span>Money leaks<small>${leakSummary.leaks.length} found · ${amount(leakSummary.monthlyImpact)}/mo</small></span><span aria-hidden="true">›</span></button></li>
           <li><button class="dashboard-nav" data-page="ledger" type="button"><span>This month's activity<small>Income, spending and accounts</small></span><span aria-hidden="true">›</span></button></li>
-          <li><button class="dashboard-nav" data-page="portfolio" type="button"><span>Portfolio<small>Holdings and contributions</small></span><span aria-hidden="true">›</span></button></li>
+          <li><button class="dashboard-nav" data-page="portfolio" type="button"><span>Portfolio<small>Holdings, market value and costs</small></span><span aria-hidden="true">›</span></button></li>
         </ul>
       </section>
     </div>
@@ -267,29 +251,20 @@ export function bindDashboard(
     const netWorthSplitEl = root.querySelector<HTMLElement>("#ovNetWorthSplit");
     if (netWorthEl) netWorthEl.textContent = plain(updated.netWorth);
     if (netWorthNoteEl) {
-      netWorthNoteEl.innerHTML = `<span><i style="background:var(--accent)"></i>Assets <b>${plain(updated.totalAssets)}</b></span><span><i style="background:var(--highlight)"></i>Liabilities <b>${plain(updated.totalLiabilities)}</b></span>`;
+      netWorthNoteEl.textContent = `Assets ${plain(updated.totalAssets)} · liabilities ${plain(updated.totalLiabilities)}`;
     }
     if (netWorthSplitEl) {
       const total = updated.totalAssets + updated.totalLiabilities;
       const share = total > 0 ? updated.totalAssets / total : 1;
       netWorthSplitEl.innerHTML = `<span style="flex:${Math.max(share, 0.02)};background:var(--accent)"></span><span style="flex:${Math.max(1 - share, 0.02)};background:var(--highlight)"></span>`;
     }
-    const valueEl = root.querySelector<HTMLElement>("#ovMarketValue");
-    const pnlEl = root.querySelector<HTMLElement>("#ovUnrealised");
+    const investedNoteEl = root.querySelector<HTMLElement>("#ovInvestedNote");
     const noteEl = root.querySelector<HTMLElement>("#ovValuationNote");
-    if (valueEl) valueEl.textContent = moneyOrUnknown(portfolio.totalInvestmentValueMyr);
-    if (pnlEl) {
-      pnlEl.className = pnlTone(portfolio.unrealizedPnlMyr);
-      pnlEl.textContent = pnlText(portfolio.unrealizedPnlMyr, portfolio.unrealizedPnlPercentMyr);
+    if (investedNoteEl) {
+      const livePnl = portfolio.unrealizedPnlMyr;
+      investedNoteEl.textContent = `${livePnl === null ? "No market price yet" : `Unrealised ${livePnl >= 0 ? "+" : "−"}${plain(Math.abs(livePnl))}`} · safety ${plain(state.emergency.current)}`;
     }
-    if (noteEl) noteEl.textContent = joinNotes(valuationNote(portfolio), usdPnlNote(portfolio), feeFreeReturnNote(portfolio));
-    // The fee-free return moves with the price, so it is repainted with the
-    // rest. The fee itself does not, but the two live on one line.
-    const feeEl = root.querySelector<HTMLElement>("#ovFeeDrag");
-    const feeRow = root.querySelector<HTMLElement>("#ovFeeRow");
-    if (feeEl) feeEl.textContent = money(portfolio.feesInCostBasisMyr);
-    if (feeRow) feeRow.hidden = portfolio.feesInCostBasisMyr <= 0.005;
-    root.querySelector<HTMLElement>(".wu-valuation")?.setAttribute("data-valuation-status", portfolio.valuationStatus);
+    if (noteEl) noteEl.textContent = joinNotes(valuationNote(portfolio), usdPnlNote(portfolio));
   };
   refreshLivePrices(state, patchDashboardValuation);
   // Keep asking while this Dashboard stays on screen, so a tab left open
