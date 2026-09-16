@@ -307,7 +307,7 @@ export function ledgerTemplate(state: WealthState): string {
       </section>
 
       
-      <div class="wu-dash__half wu-stack wu-stack--sm">
+      <div class="wu-dash__half wu-dash__col">
         <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ledgerCategoryLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ledgerCategoryLabel">Spending by category</span><span class="wu-chip wu-chip--muted">${amountOf(personalExpenseTotal)} personal</span></div>
         ${personalExpenseTotal > 0 ? `

@@ -1412,27 +1412,63 @@
     gap: var(--space-2);
     min-height: 22px;
   }
+  /* liquid glass, chip-sized: a thin tinted pane with a rim light, the same
+     material as the floating layer (PLAN.md G series) at a smaller scale */
   .wu-chip {
+    position: relative;
+    isolation: isolate;
     flex: none;
-    padding: 3px 8px;
+    padding: 3px 9px;
     border-radius: var(--radius-pill);
-    background: var(--accent-soft);
+    background: linear-gradient(180deg, rgb(255 255 255 / calc(var(--glass-highlight) * 0.12)), transparent 60%),
+      var(--chip-fill, var(--accent-soft));
+    -webkit-backdrop-filter: blur(8px) saturate(1.5);
+    backdrop-filter: blur(8px) saturate(1.5);
+    box-shadow: var(--glass-inner), 0 1px 3px rgb(0 0 0 / 0.16), 0 0 0 0.5px var(--glass-edge);
     color: var(--accent);
     font: var(--weight-medium) var(--text-overline) / 1.35 var(--font-sans);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
+  .wu-chip::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, var(--glass-rim) 0%, transparent 38%, transparent 62%, var(--glass-rim-soft) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: var(--glass-highlight);
+    pointer-events: none;
+  }
   .wu-chip--warning {
-    background: var(--warning-soft);
+    --chip-fill: var(--warning-soft);
     color: var(--warning);
   }
   .wu-chip--negative {
-    background: var(--negative-soft);
+    --chip-fill: var(--negative-soft);
     color: var(--negative);
   }
   .wu-chip--muted {
-    background: var(--surface-hover);
+    --chip-fill: var(--glass-fill-lite);
     color: var(--text-muted);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .wu-chip {
+      background: var(--chip-fill, var(--accent-soft));
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      box-shadow: none;
+    }
+    .wu-chip--muted {
+      --chip-fill: var(--surface-hover);
+    }
+    .wu-chip::before {
+      display: none;
+    }
   }
   /* Figures in the app font, not the mono face: mono is wide and wraps in a
      two-column card. Tabular numerals keep columns aligned; the currency is
@@ -1770,12 +1806,23 @@
   }
 
   /* ---- ledger rows and mini bars (T-2) ---------------------------------- */
-  /* the recent list fills its half of the row, so its bottom edge meets the
-     stack of cards beside it instead of stopping short */
+  /* both halves of a row stretch to the taller one, and the stacked column's
+     last card takes the slack, so the two bottom edges stay level however the
+     lists grow (expanding "See all", a longer filter result) */
+  .wu-dash > .wu-dash__half {
+    align-self: stretch;
+  }
+  .wu-dash__col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .wu-dash__col > :last-child {
+    flex: 1;
+  }
   .wu-dash .wu-ledger-recent {
     display: flex;
     flex-direction: column;
-    align-self: stretch;
   }
   .wu-dash .wu-ledger-recent > #ledgerSeeAll {
     margin-top: auto;
