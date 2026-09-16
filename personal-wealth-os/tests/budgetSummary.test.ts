@@ -571,3 +571,95 @@ test("budget/H: the allocation facts are pure and change nothing", () => {
   assert.deepEqual(twice, once);
   assert.equal(JSON.stringify(state), before, "building a snapshot mutated the state");
 });
+
+// --- I. the months the user actually had ------------------------------------
+
+/**
+ * An average month is the least useful thing to show someone whose income
+ * swings — it is the month they never have. What these pin is that the worst
+ * month is a month that really happened, and that missing data never poses as
+ * a bad month.
+ */
+
+const variablePlan = {
+  incomeType: "variable" as const,
+  baseIncome: 0,
+  steps: [
+    { id: "survival", name: "Survival", kind: "fill" as const, value: 1500 },
+    { id: "growth", name: "Growth", kind: "pct" as const, value: 100 },
+  ],
+  overflowStepId: "growth",
+};
+
+/** Income of `amount` recorded in the month `back` months before NOW. */
+function incomeIn(back: number, amount: number, id: string): LedgerTransaction {
+  const when = new Date(2026, 7 - back, 10, 12, 0, 0);
+  return { id, amount, type: "income", categoryId: "income-salary", accountId: "acc-bank", date: when.toISOString() };
+}
+
+function freelancer(...income: LedgerTransaction[]): WealthState {
+  return plannedState({ ledgerAccounts: accounts, allocation: variablePlan, ledgerTransactions: income });
+}
+
+test("budget/I: the leanest month is a month that really happened", () => {
+  const state = freelancer(
+    incomeIn(1, 2400, "m1"),
+    incomeIn(2, 800, "m2"),
+    incomeIn(3, 4500, "m3"),
+  );
+  const outlook = getBudgetSnapshot(state, NOW).allocation.outlook!;
+  assert.ok(outlook, "three recorded months is enough to speak");
+  assert.equal(outlook.worst.income, 800);
+  assert.equal(outlook.worst.monthKey, "2026-06", "two months before August is June");
+  assert.equal(outlook.median.income, 2400);
+  assert.equal(outlook.best.income, 4500);
+  // And the plan is measured against each, not against an average nobody had.
+  assert.equal(outlook.worst.result.shortfall, 700);
+  assert.equal(outlook.median.result.shortfall, 0);
+  assert.equal(outlook.best.result.rows[1].got, 3000);
+});
+
+test("budget/I: the current month is left out — it is still being lived", () => {
+  const state = freelancer(
+    incomeIn(0, 50, "this-month-so-far"),
+    incomeIn(1, 2400, "m1"),
+    incomeIn(2, 2300, "m2"),
+  );
+  const outlook = getBudgetSnapshot(state, NOW).allocation.outlook!;
+  assert.equal(outlook.history.length, 2, "a half-recorded month always looks like the worst one");
+  assert.equal(outlook.worst.income, 2300);
+});
+
+test("budget/I: a month before recording began is missing data, not a bad month", () => {
+  const state = freelancer(incomeIn(1, 2400, "m1"), incomeIn(2, 2000, "m2"));
+  const outlook = getBudgetSnapshot(state, NOW).allocation.outlook!;
+  assert.deepEqual(outlook.history.map((month) => month.income), [2000, 2400]);
+  assert.equal(outlook.worst.income, 2000, "the four empty months are not four worst months");
+});
+
+test("budget/I: one month of history says nothing, and says so", () => {
+  assert.equal(getBudgetSnapshot(freelancer(incomeIn(1, 2400, "m1")), NOW).allocation.outlook, null);
+  assert.equal(getBudgetSnapshot(freelancer(), NOW).allocation.outlook, null);
+});
+
+test("budget/I: cash cover is counted in worst months, not average ones", () => {
+  // Worst month is 700 short; bank + wallet hold 5,000, so three such months.
+  const state = freelancer(incomeIn(1, 800, "m1"), incomeIn(2, 3000, "m2"));
+  const allocation = getBudgetSnapshot(state, NOW).allocation;
+  assert.equal(allocation.outlook!.worst.result.shortfall, 700);
+  assert.equal(allocation.cashOnHand, 5000 + 3800);
+  assert.equal(allocation.outlook!.worstMonthsCovered, Math.floor((5000 + 3800) / 700));
+});
+
+test("budget/I: a plan that holds in the leanest month reports no cover needed", () => {
+  const state = freelancer(incomeIn(1, 2000, "m1"), incomeIn(2, 3000, "m2"));
+  const outlook = getBudgetSnapshot(state, NOW).allocation.outlook!;
+  assert.equal(outlook.worst.result.shortfall, 0);
+  assert.equal(outlook.worstMonthsCovered, 0, "nothing to cover");
+});
+
+test("budget/I: the swing between the leanest and best month is reported as a fact", () => {
+  const state = freelancer(incomeIn(1, 1000, "m1"), incomeIn(2, 4000, "m2"));
+  const outlook = getBudgetSnapshot(state, NOW).allocation.outlook!;
+  assert.equal(outlook.spread, 0.75);
+});

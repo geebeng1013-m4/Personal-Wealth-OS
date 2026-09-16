@@ -11,7 +11,7 @@
  * arithmetic happens here beyond turning a ratio into a bar width.
  */
 
-import type { BudgetSnapshot } from "../budgetSummary";
+import type { BudgetSnapshot, OutlookMonth } from "../budgetSummary";
 import type { AllocationRow, PlanWarning } from "../allocation";
 import type { AllocationPlan } from "../models";
 import { money } from "../rules";
@@ -48,6 +48,84 @@ function warningText(warning: PlanWarning): string {
     default:
       return "";
   }
+}
+
+/** "2026-08" → "Aug 2026". */
+function shortMonth(monthKey: string): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  if (!year || !month) return monthKey;
+  return new Date(year, month - 1, 1).toLocaleDateString("en-MY", { month: "short", year: "numeric" });
+}
+
+/** What the plan did with one recorded month, in a sentence. */
+function outcomeText(month: OutlookMonth): string {
+  const { result } = month;
+  if (result.shortfall > 0.005) {
+    return `${result.rows[0]?.name ?? "The first layer"} short ${money(result.shortfall)} — nothing below it funded`;
+  }
+  const caught = result.rows.find((row) => row.overflow > 0.005);
+  if (caught) return `every layer filled, ${money(caught.overflow)} extra into ${caught.name}`;
+  if (result.unassigned > 0.005) return `every layer filled, ${money(result.unassigned)} left unassigned`;
+  return "every layer filled";
+}
+
+function outlookRow(label: string, month: OutlookMonth, tone: "bad" | "plain"): string {
+  return `<div class="wu-list__row">
+    <div class="wu-stack wu-stack--sm" style="flex:1;min-width:0">
+      <div class="wu-row wu-row--between">
+        <span class="wu-row wu-row--tight" style="min-width:0">
+          <strong class="t-body">${label}</strong>
+          <span class="wu-label--plain t-caption">${shortMonth(month.monthKey)}</span>
+        </span>
+        <span class="wu-metric__value t-num${tone === "bad" ? " wu-metric__value--negative" : ""}">${money(month.income)}</span>
+      </div>
+      <span class="wu-label--plain t-caption">${escapeHtml(outcomeText(month))}</span>
+    </div>
+  </div>`;
+}
+
+/**
+ * The plan measured against months the user actually had.
+ *
+ * An average month is the least useful thing to show someone whose income
+ * swings — it is the month they never have. The worst one decides whether the
+ * plan holds.
+ */
+function outlookCard(budget: BudgetSnapshot): string {
+  const { outlook, cashOnHand } = budget.allocation;
+
+  if (!outlook) {
+    return `<article class="wu-card wu-card--bare">
+      <div class="wu-stack wu-stack--sm">
+        <span class="wu-label">Your worst month</span>
+        <p class="wu-label--plain t-caption">Record income for two or more months and this will show what your leanest month does to the plan — the month that decides whether it holds.</p>
+      </div>
+    </article>`;
+  }
+
+  const short = outlook.worst.result.shortfall > 0.005;
+  const cover = short
+    ? `Cash on hand is ${money(cashOnHand)} — enough to cover ${outlook.worstMonthsCovered} ${outlook.worstMonthsCovered === 1 ? "month" : "months"} that bad.`
+    : `Even your leanest month covered living costs.`;
+
+  return `<article class="wu-card" style="margin-top:var(--space-4)">
+    <div class="wu-stack">
+      <div class="wu-row wu-row--between">
+        <span class="wu-label">The months you actually had</span>
+        <span class="wu-chip wu-chip--muted">${outlook.history.length} recorded &middot; ${Math.round(outlook.spread * 100)}% swing</span>
+      </div>
+      <div class="wu-list">
+        ${outlookRow("Leanest", outlook.worst, short ? "bad" : "plain")}
+        ${/* With only two months on record the middle one IS the leanest or the
+             best, and printing it again says the same thing twice. */
+          outlook.median.monthKey !== outlook.worst.monthKey && outlook.median.monthKey !== outlook.best.monthKey
+            ? outlookRow("Typical", outlook.median, "plain")
+            : ""}
+        ${outlook.best.monthKey !== outlook.worst.monthKey ? outlookRow("Best", outlook.best, "plain") : ""}
+      </div>
+      <p class="wu-note t-caption">${escapeHtml(cover)}</p>
+    </div>
+  </article>`;
 }
 
 /** The inline rule editor, hidden until its row's Edit button is pressed. */
@@ -189,5 +267,6 @@ export function allocationPanel(budget: BudgetSnapshot, plan: AllocationPlan): s
       </div>
       ${addLayer}
     </div>
-  </article>`;
+  </article>
+  ${outlookCard(budget)}`;
 }

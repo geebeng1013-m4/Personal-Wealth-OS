@@ -126,6 +126,24 @@ export function ledgerMonthTotals(transactions: LedgerTransaction[], key: string
  * month immediately before it. Both use the same local-time month bounds, so
  * every consumer agrees on where a month starts and ends.
  */
+/**
+ * Personal income for each of the `months` complete months before `now`,
+ * oldest first. The current month is left out on purpose: it is still being
+ * lived, and a month half-recorded always looks like the worst one.
+ */
+export function recentMonthlyIncome(
+  transactions: LedgerTransaction[],
+  now: Date,
+  months: number,
+): Array<{ monthKey: string; income: number }> {
+  const history: Array<{ monthKey: string; income: number }> = [];
+  for (let back = months; back >= 1; back -= 1) {
+    const key = monthKeyOf(new Date(now.getFullYear(), now.getMonth() - back, 1));
+    history.push({ monthKey: key, income: ledgerMonthTotals(transactions, key).personalIncome });
+  }
+  return history;
+}
+
 export function getLedgerSnapshot(state: WealthState, now = new Date()): LedgerSnapshot {
   const transactions = state.ledgerTransactions;
   const accounts = state.ledgerAccounts;

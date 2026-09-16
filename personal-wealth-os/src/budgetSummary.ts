@@ -25,7 +25,7 @@
  * module reports what was spent, and the Advisor compares the two.
  */
 import type { AllocationPlan, WealthState } from "./models";
-import { getLedgerSnapshot, type LedgerSnapshot } from "./ledgerSummary";
+import { getLedgerSnapshot, recentMonthlyIncome, type LedgerSnapshot } from "./ledgerSummary";
 import { monthlyBasicExpense, monthlySurplus } from "./rules";
 import { allocateMonth, cashMonths, validatePlan, type AllocationResult, type PlanWarning } from "./allocation";
 
@@ -56,6 +56,36 @@ export interface BudgetBucketSnapshot {
  * the money that actually arrived. Same waterfall, two inputs — which is the
  * whole point, since a thin month routes differently from a normal one.
  */
+/** How many complete months of recorded income the outlook looks back over. */
+export const OUTLOOK_MONTHS = 6;
+
+/** One recorded month, and what the current plan would do with that income. */
+export interface OutlookMonth {
+  /** "YYYY-MM" of the month this income was recorded in. */
+  monthKey: string;
+  income: number;
+  result: AllocationResult;
+}
+
+/**
+ * The plan measured against months the user actually had.
+ *
+ * An average month is the least useful thing to show someone whose income
+ * swings: it is the month they never have. What decides whether a plan holds is
+ * the worst one.
+ */
+export interface BudgetOutlook {
+  /** Complete months only, oldest first. The current month is still being lived. */
+  history: Array<{ monthKey: string; income: number }>;
+  worst: OutlookMonth;
+  median: OutlookMonth;
+  best: OutlookMonth;
+  /** How far apart the worst and best months are, as a fraction of the best. */
+  spread: number;
+  /** Whole worst months the cash on hand could cover the shortfall of. */
+  worstMonthsCovered: number;
+}
+
 export interface BudgetAllocationSnapshot {
   /** The plan routed over plannedIncome — what a normal month looks like. */
   planned: AllocationResult;
@@ -70,6 +100,12 @@ export interface BudgetAllocationSnapshot {
   cashOnHand: number;
   /** cashOnHand measured in months of the plan's essential layer. */
   cashMonths: number;
+  /**
+   * The plan against the months actually recorded. Null when fewer than two
+   * complete months carry income: a worst month invented from one data point
+   * would be a guess wearing a fact's clothes.
+   */
+  outlook: BudgetOutlook | null;
 }
 
 export interface BudgetSnapshot {
@@ -170,6 +206,7 @@ export function getBudgetSnapshot(
     warnings: validatePlan(plan),
     cashOnHand,
     cashMonths: cashMonths(cashOnHand, plan),
+    outlook: buildOutlook(state, now, plan, cashOnHand),
   };
 
   return {
@@ -187,6 +224,46 @@ export function getBudgetSnapshot(
     isOverPlannedSpending: actualSpending > plannedSpending,
     buckets,
     allocation,
+  };
+}
+
+/**
+ * Build the outlook from the months the ledger recorded.
+ *
+ * Months with no income at all are dropped rather than counted as the worst
+ * month: a month before the user started recording is missing data, not a bad
+ * month, and treating the two alike would frighten people with their own
+ * onboarding.
+ */
+function buildOutlook(
+  state: WealthState,
+  now: Date,
+  plan: AllocationPlan,
+  cashOnHand: number,
+): BudgetOutlook | null {
+  const history = recentMonthlyIncome(state.ledgerTransactions, now, OUTLOOK_MONTHS)
+    .filter((month) => month.income > 0);
+  if (history.length < 2) return null;
+
+  const sorted = [...history].sort((a, b) => a.income - b.income);
+  const at = (month: { monthKey: string; income: number }): OutlookMonth => ({
+    monthKey: month.monthKey,
+    income: month.income,
+    result: allocateMonth(plan, month.income),
+  });
+
+  const worst = at(sorted[0]);
+  const best = at(sorted[sorted.length - 1]);
+  const median = at(sorted[Math.floor((sorted.length - 1) / 2)]);
+  const worstShortfall = worst.result.shortfall;
+
+  return {
+    history,
+    worst,
+    median,
+    best,
+    spread: best.income > 0 ? (best.income - worst.income) / best.income : 0,
+    worstMonthsCovered: worstShortfall > 0.005 ? Math.floor(cashOnHand / worstShortfall) : 0,
   };
 }
 
