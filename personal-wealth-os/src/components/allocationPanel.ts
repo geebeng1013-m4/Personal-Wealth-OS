@@ -1,9 +1,11 @@
 /**
- * "This month" — the income the Ledger recorded, routed through the plan.
+ * "This month" — the income the Ledger recorded, routed through the plan, and
+ * the editor for the rules that route it.
  *
  * The Budget page has always shown what each bucket is *meant* to get. This
  * shows where the money that actually arrived went, layer by layer, so a thin
- * month reads as a thin month instead of as an unchanged plan.
+ * month reads as a thin month instead of as an unchanged plan. Each row is also
+ * where its rule is edited: one list, one set of figures, nothing to reconcile.
  *
  * Presentation only. Every figure comes from the canonical budget snapshot; no
  * arithmetic happens here beyond turning a ratio into a bar width.
@@ -11,6 +13,7 @@
 
 import type { BudgetSnapshot } from "../budgetSummary";
 import type { AllocationRow, PlanWarning } from "../allocation";
+import type { AllocationPlan } from "../models";
 import { money } from "../rules";
 import { escapeHtml } from "../html";
 
@@ -22,7 +25,7 @@ function monthLabel(monthKey: string): string {
 }
 
 function ruleText(row: AllocationRow): string {
-  if (row.stepKind === "fill") return `Fill to ${money(row.want)}`;
+  if (row.stepKind === "fill") return `Fill to ${money(row.value)}`;
   if (row.stepKind === "gross") return `${row.value}% of everything that comes in`;
   return `${row.value}% of what is left`;
 }
@@ -47,7 +50,33 @@ function warningText(warning: PlanWarning): string {
   }
 }
 
-function layerRow(row: AllocationRow): string {
+/** The inline rule editor, hidden until its row's Edit button is pressed. */
+function layerForm(row: AllocationRow, index: number, total: number): string {
+  const kindOption = (value: string, label: string) =>
+    `<option value="${value}"${row.stepKind === value ? " selected" : ""}>${label}</option>`;
+
+  return `<div class="layer-edit-form is-hidden" id="layerEdit${index}">
+    <form class="wu-stack layerForm" data-index="${index}">
+      <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="name" type="text" value="${escapeHtml(row.name)}"></label>
+      <label class="wu-field-row"><span class="wu-field-row__label">Rule</span><select class="wu-field" name="kind">
+        ${kindOption("fill", "Fill to a fixed amount")}
+        ${kindOption("pct", "A share of what is left")}
+        ${kindOption("gross", "A share of everything that comes in")}
+      </select></label>
+      <label class="wu-field-row"><span class="wu-field-row__label js-value-label">${row.stepKind === "fill" ? "Amount MYR" : "Share %"}</span><input class="wu-field" name="value" type="number" min="0" step="${row.stepKind === "fill" ? "1" : "0.1"}" value="${row.value}"></label>
+      <label class="wu-field-row"><span class="wu-field-row__label">What it is for</span><input class="wu-field" name="note" type="text" value="${escapeHtml(row.note ?? "")}" placeholder="What this money is allowed to do"></label>
+      <div class="wu-row">
+        <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button>
+        <button class="wu-btn wu-btn--secondary wu-btn--sm cancel-layer-edit" data-index="${index}" type="button">Cancel</button>
+        <button class="wu-btn wu-btn--ghost wu-btn--sm move-layer" data-index="${index}" data-dir="up" type="button"${index === 0 ? " disabled" : ""}>Move up</button>
+        <button class="wu-btn wu-btn--ghost wu-btn--sm move-layer" data-index="${index}" data-dir="down" type="button"${index === total - 1 ? " disabled" : ""}>Move down</button>
+        <button class="wu-btn wu-btn--danger wu-btn--sm delete-layer" data-index="${index}" type="button">Delete</button>
+      </div>
+    </form>
+  </div>`;
+}
+
+function layerRow(row: AllocationRow, index: number, total: number): string {
   const filled = row.want > 0 && row.got >= row.want - 0.005;
   const empty = row.got < 0.005;
   const width = row.want > 0 ? Math.min(100, (row.got / row.want) * 100) : 0;
@@ -70,41 +99,49 @@ function layerRow(row: AllocationRow): string {
     <div class="wu-stack wu-stack--sm" style="flex:1;min-width:0">
       <div class="wu-row wu-row--between">
         <span class="wu-row wu-row--tight" style="min-width:0">
+          <span class="wu-label--plain t-caption">${index + 1}</span>
           <strong class="t-body">${escapeHtml(row.name)}</strong>
           ${badge}
         </span>
-        <span class="wu-metric__value t-num">${money(row.got)}</span>
+        <span class="wu-row wu-row--tight">
+          <span class="wu-metric__value t-num">${money(row.got)}</span>
+          <button class="wu-btn wu-btn--ghost wu-btn--sm edit-layer" data-index="${index}" type="button">Edit</button>
+        </span>
       </div>
       <div class="wu-bar"><span class="wu-bar__fill${empty ? " wu-bar__fill--faint" : ""}" style="width:${width}%"></span></div>
       <span class="wu-label--plain t-caption">${escapeHtml(ruleText(row))}${row.note ? ` &middot; ${escapeHtml(row.note)}` : ""}</span>
+      ${layerForm(row, index, total)}
     </div>
   </div>`;
 }
 
-export function allocationPanel(budget: BudgetSnapshot): string {
+export function allocationPanel(budget: BudgetSnapshot, plan: AllocationPlan): string {
   const { allocation } = budget;
   const month = monthLabel(budget.monthKey);
+  const rows = allocation.actual.rows;
 
-  if (allocation.actual.rows.length === 0) {
+  const addLayer = `<button class="wu-add" id="addLayerBtn" type="button">` +
+    `<span class="wu-add__plus" aria-hidden="true">+</span><span>Add a layer</span></button>`;
+
+  if (rows.length === 0) {
     return `<article class="wu-card">
-      <div class="wu-stack wu-stack--sm">
+      <div class="wu-stack">
         <span class="wu-label">This month &middot; ${escapeHtml(month)}</span>
-        <p class="wu-empty">Add a bucket below and it becomes the first layer your income flows into.</p>
+        <p class="wu-empty">No layers yet. Add one and it becomes the first place your income flows into.</p>
+        ${addLayer}
       </div>
     </article>`;
   }
 
-  const rows = allocation.actual.rows.map(layerRow).join("");
-
   const nothingIn = allocation.actual.income < 0.005;
   const lede = nothingIn
-    ? `No income recorded yet this month. Record one in the Ledger and it will flow through these layers.`
-    : `Recorded in the Ledger, routed top to bottom. A layer only gets what the layers above it left.`;
+    ? "No income recorded yet this month. Record one in the Ledger and it will flow through these layers."
+    : "Recorded in the Ledger, routed top to bottom. A layer only gets what the layers above it left.";
 
   const shortfall = allocation.actual.shortfall > 0.005 && !nothingIn
     ? `<aside class="wu-card wu-card--warning wu-card--pad-sm">
         <div class="wu-stack wu-stack--sm">
-          <strong class="t-subheading">${escapeHtml(allocation.actual.rows[0].name)} is ${money(allocation.actual.shortfall)} short</strong>
+          <strong class="t-subheading">${escapeHtml(rows[0].name)} is ${money(allocation.actual.shortfall)} short</strong>
           <p class="t-caption t-muted">Cash on hand is ${money(allocation.cashOnHand)}, about ${allocation.cashMonths.toFixed(1)} months of living costs. Nothing below this layer is funded this month.</p>
         </div>
       </aside>`
@@ -120,6 +157,15 @@ export function allocationPanel(budget: BudgetSnapshot): string {
     .map((text) => `<p class="wu-note t-caption">${escapeHtml(text)}</p>`)
     .join("");
 
+  const needsNormalizing = allocation.warnings.some((warning) => warning.code === "percent-total-not-100");
+  const normalize = needsNormalizing
+    ? `<button class="wu-btn wu-btn--secondary wu-btn--sm" id="normalizeLayersBtn" type="button">Make them add to 100%</button>`
+    : "";
+
+  const overflowOptions = rows
+    .map((row) => `<option value="${escapeHtml(row.stepId)}"${plan.overflowStepId === row.stepId ? " selected" : ""}>${escapeHtml(row.name)}</option>`)
+    .join("");
+
   return `<article class="wu-card">
     <div class="wu-stack">
       <div class="wu-row wu-row--between">
@@ -131,9 +177,17 @@ export function allocationPanel(budget: BudgetSnapshot): string {
         <span class="wu-label--plain t-caption">${escapeHtml(lede)}</span>
       </div>
       ${shortfall}
-      <div class="wu-list">${rows}</div>
+      <div class="wu-list">${rows.map((row, index) => layerRow(row, index, rows.length)).join("")}</div>
       ${leftOver}
       ${warnings}
+      <div class="wu-row wu-row--between" style="flex-wrap:wrap;gap:var(--space-3)">
+        <label class="wu-field-row" style="flex:1;min-width:220px">
+          <span class="wu-field-row__label">Money left at the end goes to</span>
+          <select class="wu-field" id="overflowSelect">${overflowOptions}</select>
+        </label>
+        ${normalize}
+      </div>
+      ${addLayer}
     </div>
   </article>`;
 }

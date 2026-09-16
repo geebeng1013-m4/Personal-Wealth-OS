@@ -96,6 +96,32 @@ export function allocationPlanFromBuckets(
 }
 
 /**
+ * The buckets a plan implies: one monthly bucket per layer, in the plan's
+ * order, followed by the one-time buckets untouched.
+ *
+ * The waterfall is where a monthly figure is set now, so this keeps everything
+ * still reading buckets in step with it rather than letting the two disagree.
+ * A percentage layer has no fixed monthly amount — what it receives depends on
+ * the month — so its bucket carries 0 and the real figure is read from the
+ * budget snapshot, never stored.
+ */
+export function bucketsFromPlan(plan: AllocationPlan, existing: Bucket[]): Bucket[] {
+  const previousById = new Map(existing.map((bucket) => [bucket.id, bucket]));
+  const monthly: Bucket[] = (plan.steps ?? []).map((step) => {
+    const previous = previousById.get(step.id);
+    return {
+      id: step.id,
+      name: step.name,
+      label: previous?.label ?? step.name,
+      amount: step.kind === "fill" ? step.value : 0,
+      cadence: "monthly",
+      note: step.note ?? previous?.note ?? "",
+    };
+  });
+  return [...monthly, ...existing.filter((bucket) => bucket.cadence === "one-time")];
+}
+
+/**
  * v22: the allocation plan. Older data has none, so it is derived from the
  * buckets it already has — same layers, same order, same figures. A stored
  * plan is kept and tidied: malformed layers are dropped, and an overflow
