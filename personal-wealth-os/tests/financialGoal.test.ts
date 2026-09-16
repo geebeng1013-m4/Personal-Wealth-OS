@@ -15,7 +15,7 @@ const NOW = new Date(2026, 8, 15, 12, 0, 0);
 // --- the stored shape ------------------------------------------------------
 
 test("financial goal: v21 is the schema that carries it", () => {
-  assert.equal(CURRENT_VERSION, 21);
+  assert.ok(CURRENT_VERSION >= 21, "the field shipped in v21 and must not be dropped");
 });
 
 test("financial goal: a new or empty state starts with no goal", () => {

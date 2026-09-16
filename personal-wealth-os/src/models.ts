@@ -58,6 +58,44 @@ export interface Bucket {
   note: string;
 }
 
+/**
+ * One layer of the allocation waterfall.
+ *
+ *   fill   take a fixed amount, e.g. "fill to MYR 1,500"
+ *   gross  take a share of everything that came in this month, untouched by
+ *          the layers above — the shape tax withholding needs
+ *   pct    split whatever survived the fills
+ */
+export type AllocationStepKind = "fill" | "gross" | "pct";
+
+export interface AllocationStep {
+  id: string;
+  name: string;
+  kind: AllocationStepKind;
+  /** Base currency for "fill"; a percentage (0–100) for "gross" and "pct". */
+  value: number;
+  /** One line on what this money is allowed to do. */
+  note?: string;
+}
+
+/**
+ * How incoming money is routed. The order of `steps` is the rule: earlier
+ * layers are paid first, so a thin month covers living costs before anything
+ * else runs. See `allocation.ts` for the engine that reads this.
+ */
+export interface AllocationPlan {
+  /**
+   * How the money arrives. This picks the defaults a new user starts from and
+   * the wording the pages use; it never changes how the engine allocates.
+   */
+  incomeType: "fixed" | "variable";
+  /** The part of the month that is the same every time. 0 = none. */
+  baseIncome: number;
+  steps: AllocationStep[];
+  /** Layer that receives whatever survives the last step. */
+  overflowStepId?: string;
+}
+
 export interface Goal {
   id: string;
   name: string;
@@ -310,6 +348,7 @@ export interface WealthState {
   dca: DcaPlan;
   opportunity: OpportunityReserve;
   buckets: Bucket[];
+  allocation: AllocationPlan;
   goals: Goal[];
   overviewGoalId: string;
   trades: Trade[];

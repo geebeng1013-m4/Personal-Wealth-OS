@@ -1,4 +1,4 @@
-import type { LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
+import type { AllocationPlan, AllocationStep, Bucket, LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
 import { getDefaultFinancialRules, normalizeFinancialRules, repairPlaceholderRules } from "./financialRules";
 import { normalizeActionRecords } from "./actionRecords";
 import { normalizeCurrencyExchanges } from "./currencyExchange";
@@ -9,7 +9,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 21;
+export const CURRENT_VERSION = 22;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -55,6 +55,83 @@ function getUserStorageKey(uid?: string): string {
   return uid ? `${STORAGE_KEY}-${uid}` : STORAGE_KEY;
 }
 
+const DEFAULT_BUCKETS: Bucket[] = [
+  { id: "survival", name: "Survival", label: "Survival Bucket", amount: 720, cadence: "monthly", note: "Transport and food come first to keep cash flow stable." },
+  { id: "safety", name: "Safety", label: "Safety Bucket", amount: 0, cadence: "monthly", note: "The Emergency Fund is complete. MYR 40 can be redirected to Growth or Freedom." },
+  { id: "growth", name: "Growth", label: "Growth Bucket", amount: 100, cadence: "monthly", note: "Automated DCA split: 70% VOO and 30% QQQM." },
+  { id: "freedom", name: "Freedom", label: "Freedom Bucket", amount: 50, cadence: "monthly", note: "Travel and wishlist funding, including MYR 20 redirected from Safety." },
+  { id: "learning", name: "Learning", label: "Learning Bucket", amount: 10, cadence: "monthly", note: "Books, courses, tools, and investment education." },
+  { id: "opportunity", name: "Opportunity", label: "Opportunity Bucket", amount: 400, cadence: "one-time", note: "One-time bear-market reserve deployed only according to the rules." },
+];
+
+/**
+ * Every monthly bucket becomes a "fill to its amount" layer, in the order it
+ * already had, so a plan built this way routes a month exactly the way the
+ * Budget page has always shown it. The Opportunity reserve is one-time and
+ * deployed by its own drawdown rules, so it stays out of the waterfall.
+ *
+ * The surplus goes where the plan already puts long-term money, falling back
+ * to the last layer, so no ringgit is ever left without a job.
+ */
+export function allocationPlanFromBuckets(
+  buckets: Bucket[],
+  incomeType: AllocationPlan["incomeType"] = "fixed",
+): AllocationPlan {
+  const steps: AllocationStep[] = buckets
+    .filter((bucket) => bucket.cadence === "monthly")
+    .map((bucket) => ({
+      id: bucket.id,
+      name: bucket.name,
+      kind: "fill" as const,
+      value: Number.isFinite(bucket.amount) && bucket.amount > 0 ? bucket.amount : 0,
+      ...(bucket.note ? { note: bucket.note } : {}),
+    }));
+  const overflow = steps.find((step) => step.id === "growth") ?? steps[steps.length - 1];
+  return {
+    incomeType,
+    baseIncome: 0,
+    steps,
+    ...(overflow ? { overflowStepId: overflow.id } : {}),
+  };
+}
+
+/**
+ * v22: the allocation plan. Older data has none, so it is derived from the
+ * buckets it already has — same layers, same order, same figures. A stored
+ * plan is kept and tidied: malformed layers are dropped, and an overflow
+ * pointing at a layer that no longer exists falls back to the last one.
+ */
+function normalizeAllocationPlan(input: unknown, buckets: Bucket[]): AllocationPlan {
+  const stored = input && typeof input === "object" ? input as Partial<AllocationPlan> : undefined;
+  const incomeType: AllocationPlan["incomeType"] = stored?.incomeType === "variable" ? "variable" : "fixed";
+  const baseIncome = Number.isFinite(stored?.baseIncome) && Number(stored?.baseIncome) > 0
+    ? Number(stored?.baseIncome)
+    : 0;
+
+  const steps: AllocationStep[] = Array.isArray(stored?.steps)
+    ? stored!.steps
+      .filter((step): step is AllocationStep => !!step
+        && typeof step.id === "string" && step.id.length > 0
+        && typeof step.name === "string"
+        && (step.kind === "fill" || step.kind === "gross" || step.kind === "pct")
+        && Number.isFinite(step.value) && step.value >= 0)
+      .map((step) => ({
+        id: step.id,
+        name: step.name,
+        kind: step.kind,
+        value: step.value,
+        ...(typeof step.note === "string" ? { note: step.note } : {}),
+      }))
+    : [];
+
+  if (steps.length === 0) return allocationPlanFromBuckets(buckets, incomeType);
+
+  const overflowStepId = steps.some((step) => step.id === stored?.overflowStepId)
+    ? stored!.overflowStepId
+    : steps[steps.length - 1].id;
+  return { incomeType, baseIncome, steps, overflowStepId };
+}
+
 export const defaultState: WealthState = {
   version: CURRENT_VERSION,
   profile: {
@@ -98,14 +175,8 @@ export const defaultState: WealthState = {
       { drawdown: 20, percent: 0.5, amount: 200, deployed: false },
     ],
   },
-  buckets: [
-    { id: "survival", name: "Survival", label: "Survival Bucket", amount: 720, cadence: "monthly", note: "Transport and food come first to keep cash flow stable." },
-    { id: "safety", name: "Safety", label: "Safety Bucket", amount: 0, cadence: "monthly", note: "The Emergency Fund is complete. MYR 40 can be redirected to Growth or Freedom." },
-    { id: "growth", name: "Growth", label: "Growth Bucket", amount: 100, cadence: "monthly", note: "Automated DCA split: 70% VOO and 30% QQQM." },
-    { id: "freedom", name: "Freedom", label: "Freedom Bucket", amount: 50, cadence: "monthly", note: "Travel and wishlist funding, including MYR 20 redirected from Safety." },
-    { id: "learning", name: "Learning", label: "Learning Bucket", amount: 10, cadence: "monthly", note: "Books, courses, tools, and investment education." },
-    { id: "opportunity", name: "Opportunity", label: "Opportunity Bucket", amount: 400, cadence: "one-time", note: "One-time bear-market reserve deployed only according to the rules." },
-  ],
+  buckets: DEFAULT_BUCKETS,
+  allocation: allocationPlanFromBuckets(DEFAULT_BUCKETS),
   goals: [
     { id: "emergency", name: "Emergency Fund", label: "5-Month Safety Buffer ✅", current: 4000, target: 4000, monthlyContribution: 0, note: "The five-month safety-buffer goal is complete at MYR 4,000." },
     { id: "travel", name: "Travel Fund", label: "Travel Fund", current: 0, target: 1000, monthlyContribution: 30, note: "Start with the suggested target and adjust it later if needed." },
@@ -244,6 +315,7 @@ export function emptyState(): WealthState {
       tranches: [],
     },
     buckets: [],
+    allocation: allocationPlanFromBuckets([]),
     goals: [],
     overviewGoalId: "",
     trades: [],
@@ -579,6 +651,8 @@ export function migrateState(input: Partial<WealthState>): WealthState {
     merged.buckets = merged.buckets.map((bucket) => ({ ...bucket, label: translate(bucket.label), note: translate(bucket.note) }));
     merged.goals = merged.goals.map((goal) => ({ ...goal, label: translate(goal.label), note: translate(goal.note) }));
   }
+
+  merged.allocation = normalizeAllocationPlan(candidate.allocation, merged.buckets);
 
   return merged;
 }

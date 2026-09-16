@@ -70,6 +70,20 @@ export const demoState: WealthState = {
     { id: "learning", name: "Learning", label: "Learning Bucket", amount: 50, cadence: "monthly", note: "Books, courses, online tools, and workshops." },
     { id: "opportunity", name: "Opportunity", label: "Opportunity Bucket", amount: 1500, cadence: "one-time", note: "Bear-market reserve deployed according to drawdown tranches." },
   ],
+  // Authored to mirror the buckets above, the way migrateState derives a plan
+  // for data that predates v22: one "fill" layer per monthly bucket, in order.
+  allocation: {
+    incomeType: "fixed",
+    baseIncome: 0,
+    steps: [
+      { id: "survival", name: "Survival", kind: "fill", value: 1200, note: "Transport, food, and essential living costs." },
+      { id: "safety", name: "Safety", kind: "fill", value: 0, note: "Emergency fund is complete. Surplus redirected to Growth." },
+      { id: "growth", name: "Growth", kind: "fill", value: 300, note: "Automated DCA split: 55% VOO, 25% QQQM, 10% VXUS." },
+      { id: "freedom", name: "Freedom", kind: "fill", value: 150, note: "Travel, entertainment, and personal wishlist." },
+      { id: "learning", name: "Learning", kind: "fill", value: 50, note: "Books, courses, online tools, and workshops." },
+    ],
+    overflowStepId: "growth",
+  },
   goals: [
     { id: "emergency", name: "Emergency Fund", label: "5-Month Safety Buffer ✅", current: 4800, target: 4800, monthlyContribution: 0, note: "Five-month safety buffer complete at MYR 4,800." },
     { id: "travel", name: "Japan Trip", label: "Japan Trip 2027 🇯🇵", current: 680, target: 2500, monthlyContribution: 150, note: "Saving for a two-week backpacking trip across Japan." },

@@ -35,24 +35,18 @@
  * missing, and the caller decides what may fund it.
  */
 
-export type AllocationStepKind = "fill" | "gross" | "pct";
+import type { AllocationPlan, AllocationStep, AllocationStepKind } from "./models";
 
-export interface AllocationStep {
-  id: string;
-  name: string;
-  kind: AllocationStepKind;
-  /** Base currency for "fill"; a percentage (0–100) for "gross" and "pct". */
-  value: number;
-  /** One line on what this money is allowed to do. */
-  note?: string;
-}
+// The persisted shapes live in models.ts; re-exported here so a caller reading
+// the engine does not have to know where they are declared.
+export type { AllocationPlan, AllocationStep, AllocationStepKind };
 
-export interface AllocationPlan {
-  /** Order is the rule: earlier steps are paid first. */
-  steps: AllocationStep[];
-  /** Step that receives whatever survives the last step. */
-  overflowStepId?: string;
-}
+/**
+ * What the engine actually reads: the routing itself. A stored AllocationPlan
+ * satisfies it, and so does a bare list of steps, so callers exploring a
+ * what-if do not have to invent an income type to ask a question.
+ */
+export type AllocationRouting = Pick<AllocationPlan, "steps" | "overflowStepId">;
 
 export interface AllocationRow {
   stepId: string;
@@ -106,7 +100,7 @@ function positive(value: number): number {
 }
 
 /** Allocate one month's whole income. The cumulative building block. */
-function allocateTotal(plan: AllocationPlan, income: number): { got: number[]; overflow: number[]; want: number[]; left: number } {
+function allocateTotal(plan: AllocationRouting, income: number): { got: number[]; overflow: number[]; want: number[]; left: number } {
   const steps = plan.steps ?? [];
   const want: number[] = [];
   const got: number[] = [];
@@ -152,7 +146,7 @@ function allocateTotal(plan: AllocationPlan, income: number): { got: number[]; o
  * `allocatedSoFar` as 0 (or use `allocateMonth`) for a month's whole income at
  * once; pass the month's running total to allocate one arrival of many.
  */
-export function allocateIncome(plan: AllocationPlan, allocatedSoFar: number, amount: number): AllocationResult {
+export function allocateIncome(plan: AllocationRouting, allocatedSoFar: number, amount: number): AllocationResult {
   const before = positive(allocatedSoFar);
   const income = before + positive(amount);
   const previous = allocateTotal(plan, before);
@@ -180,7 +174,7 @@ export function allocateIncome(plan: AllocationPlan, allocatedSoFar: number, amo
 }
 
 /** One month's income allocated in a single pass. */
-export function allocateMonth(plan: AllocationPlan, income: number): AllocationResult {
+export function allocateMonth(plan: AllocationRouting, income: number): AllocationResult {
   return allocateIncome(plan, 0, income);
 }
 
@@ -193,7 +187,7 @@ export function getAllocationRow(result: AllocationResult, stepId: string): Allo
  * The monthly cost the plan treats as essential: the first "fill" step. Zero
  * when the plan has none, which is itself reported by `validatePlan`.
  */
-export function essentialMonthlyNeed(plan: AllocationPlan): number {
+export function essentialMonthlyNeed(plan: AllocationRouting): number {
   const essential = (plan.steps ?? []).find((step) => step.kind === "fill");
   return essential ? positive(essential.value) : 0;
 }
@@ -203,13 +197,13 @@ export function essentialMonthlyNeed(plan: AllocationPlan): number {
  * never returned — a plan with no essential layer answers 0, since "how long
  * would this last" has no meaning without a monthly cost.
  */
-export function cashMonths(cash: number, plan: AllocationPlan): number {
+export function cashMonths(cash: number, plan: AllocationRouting): number {
   const need = essentialMonthlyNeed(plan);
   return need > 0 ? positive(cash) / need : 0;
 }
 
 /** Sum of every "pct" step, in percentage points. */
-export function percentTotal(plan: AllocationPlan): number {
+export function percentTotal(plan: AllocationRouting): number {
   return (plan.steps ?? [])
     .filter((step) => step.kind === "pct")
     .reduce((sum, step) => sum + positive(step.value), 0);
@@ -219,7 +213,7 @@ export function percentTotal(plan: AllocationPlan): number {
  * Facts about a plan a user could have mis-configured. Wording is the caller's
  * job: this reports what is true, not what to say about it.
  */
-export function validatePlan(plan: AllocationPlan): PlanWarning[] {
+export function validatePlan(plan: AllocationRouting): PlanWarning[] {
   const steps = plan.steps ?? [];
   const warnings: PlanWarning[] = [];
 
@@ -260,7 +254,7 @@ export function validatePlan(plan: AllocationPlan): PlanWarning[] {
  * relative sizes. Returns a new plan; the original is untouched. A plan whose
  * percentages already total zero cannot be scaled, so it comes back unchanged.
  */
-export function normalizePercentSteps(plan: AllocationPlan): AllocationPlan {
+export function normalizePercentSteps<T extends AllocationRouting>(plan: T): T {
   const total = percentTotal(plan);
   if (total <= 0) return { ...plan, steps: [...(plan.steps ?? [])] };
   return {
