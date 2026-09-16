@@ -1770,6 +1770,16 @@
   }
 
   /* ---- ledger rows and mini bars (T-2) ---------------------------------- */
+  /* the recent list fills its half of the row, so its bottom edge meets the
+     stack of cards beside it instead of stopping short */
+  .wu-dash .wu-ledger-recent {
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+  }
+  .wu-dash .wu-ledger-recent > #ledgerSeeAll {
+    margin-top: auto;
+  }
   .wu-ledger-list {
     display: grid;
     list-style: none;

@@ -296,7 +296,7 @@ export function ledgerTemplate(state: WealthState): string {
       </div>
 
       <!-- ROW 2 — recent transactions | spending and trend -->
-      <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ledgerRecentLabel">
+      <section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-ledger-recent" aria-labelledby="ledgerRecentLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ledgerRecentLabel">Recent transactions</span></div>
         ${filtered.length === 0
           ? `<p class="wu-empty">No transactions match this filter yet.</p>`
