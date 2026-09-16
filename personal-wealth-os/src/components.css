@@ -1493,6 +1493,30 @@
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
   }
+  /* accounts grouped by kind, side by side when there is room */
+  .wu-acct-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: var(--space-4) var(--space-5);
+  }
+  .wu-acct-group__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding-bottom: var(--space-1);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--space-1);
+  }
+  .wu-acct-group__total {
+    font: var(--weight-semibold) var(--text-body-sm) / 1 var(--font-sans);
+    font-variant-numeric: tabular-nums;
+  }
+  .wu-acct-group .wu-facts li {
+    min-height: 32px;
+    font-size: var(--text-body-sm);
+  }
+
   .wu-cat-rows {
     display: grid;
     list-style: none;

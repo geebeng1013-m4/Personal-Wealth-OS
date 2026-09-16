@@ -321,14 +321,31 @@ export function ledgerTemplate(state: WealthState): string {
       </section>
 
       <!-- ROW 3 — accounts | three-month trend -->
-      <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ledgerAccountsLabel2">
+      <section class="wu-card wu-dash__wide wu-stack wu-stack--sm" aria-labelledby="ledgerAccountsLabel2">
         <div class="wu-tc__top"><span class="wu-label" id="ledgerAccountsLabel2">Accounts</span><span class="wu-chip wu-chip--muted">Opening ${amountOf(totalOpeningFunds)}</span></div>
-        <ul class="wu-facts wu-facts--plain">
-          ${balances.map(({ account, balance }: AccountBalance) => `<li><span>${escapeHtml(account.icon ?? accountTypeMeta(account.type).icon)} ${escapeHtml(account.name)}<small class="wu-ledger-row__sub"> · ${escapeHtml(accountTypeMeta(account.type).label)}</small></span><span class="${balance < 0 ? "t-negative" : ""}">${balance < 0 ? "−" : ""}${amountOf(Math.abs(balance))}</span></li>`).join("")}
-        </ul>
+        <!-- Grouped by kind and laid out across the card: a flat list of a
+             dozen accounts is a long scroll that says nothing about which
+             money is spendable. -->
+        <div class="wu-acct-groups">
+          ${(["bank", "wallet", "investment"] as const).map((type) => {
+            const group = balances.filter(({ account }) => account.type === type);
+            if (group.length === 0) return "";
+            const subtotal = group.reduce((sum, item) => sum + item.balance, 0);
+            const meta = accountTypeMeta(type);
+            return `<section class="wu-acct-group" aria-label="${escapeHtml(meta.label)}">
+              <div class="wu-acct-group__head">
+                <span class="wu-label">${escapeHtml(meta.icon)} ${escapeHtml(type === "bank" ? "Bank" : type === "wallet" ? "E-wallet" : "Investment")}</span>
+                <span class="wu-acct-group__total${subtotal < 0 ? " t-negative" : ""}">${subtotal < 0 ? "−" : ""}${amountOf(Math.abs(subtotal))}</span>
+              </div>
+              <ul class="wu-facts wu-facts--plain">
+                ${group.map(({ account, balance }: AccountBalance) => `<li><span>${escapeHtml(account.icon ?? meta.icon)} ${escapeHtml(account.name)}</span><span class="${balance < 0 ? "t-negative" : ""}">${balance < 0 ? "−" : ""}${amountOf(Math.abs(balance))}</span></li>`).join("")}
+              </ul>
+            </section>`;
+          }).join("")}
+        </div>
       </section>
 
-      <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ledgerTrendLabel">
+      <section class="wu-card wu-dash__narrow wu-stack wu-stack--sm" aria-labelledby="ledgerTrendLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ledgerTrendLabel">Last 3 months</span></div>
         <div class="wu-minibars">
           ${lastThree.map((item) => `<div class="wu-minibars__month">
