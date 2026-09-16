@@ -506,8 +506,9 @@ test("budget/H: sponsored money is not income the plan may invest", () => {
   assert.equal(budget.allocation.actual.rows[1].got, 100);
 });
 
-test("budget/H: cash on hand is bank and wallet money, never holdings", () => {
+test("budget/H: spendable cash is bank and wallet money, never holdings", () => {
   const state = plannedState({
+    emergency: { current: 0, target: 0, annualYield: 0, monthlyTopUp: 0 },
     ledgerAccounts: [
       { id: "acc-bank", name: "Bank", type: "bank", openingBalance: 2000 },
       { id: "acc-wallet", name: "Wallet", type: "wallet", openingBalance: 250 },
@@ -520,8 +521,91 @@ test("budget/H: cash on hand is bank and wallet money, never holdings", () => {
     },
   });
   const budget = getBudgetSnapshot(state, NOW);
-  assert.equal(budget.allocation.cashOnHand, 2250, "selling shares to eat is a different decision");
+  assert.equal(budget.allocation.spendableCash, 2250, "selling shares to eat is a different decision");
+  assert.equal(budget.allocation.emergencyBasis, "none");
   assert.equal(budget.allocation.cashMonths, 2);
+});
+
+// --- the emergency fund is not money for lean months -----------------------
+
+/**
+ * The user decided the emergency fund is for emergencies, and a predictable
+ * lean month is not one. So the cash a shortfall may draw on must never
+ * include it — and where the fund sits decides how it is kept out.
+ */
+
+const oneLayer = {
+  incomeType: "variable" as const, baseIncome: 0,
+  steps: [{ id: "survival", name: "Survival", kind: "fill" as const, value: 1000 }],
+  overflowStepId: "survival",
+};
+
+const emergencyGoal = (accountId?: string) => ({
+  id: "emergency", name: "Emergency Fund", label: "Emergency Fund",
+  current: 0, target: 6000, monthlyContribution: 0, note: "",
+  ...(accountId ? { accountId } : {}),
+});
+
+test("budget/H: an emergency fund nobody linked is assumed to be in the bank, and held back", () => {
+  const state = plannedState({
+    emergency: { current: 4000, target: 6000, annualYield: 0, monthlyTopUp: 0 },
+    goals: [emergencyGoal()],
+    ledgerAccounts: [{ id: "bank", name: "Bank", type: "bank", openingBalance: 6000 }] as LedgerAccount[],
+    allocation: oneLayer,
+  });
+  const allocation = getBudgetSnapshot(state, NOW).allocation;
+  assert.equal(allocation.spendableCash, 2000, "the 4,000 fund is not spending money");
+  assert.equal(allocation.emergencyBasis, "assumed-in-cash", "and the page must say it assumed");
+  assert.equal(allocation.emergencyHeldBack, 4000);
+  assert.equal(allocation.cashMonths, 2);
+});
+
+test("budget/H: an emergency fund linked to a bank account holds back exactly that account", () => {
+  const state = plannedState({
+    // The Settings figure has drifted from the account; the account is the truth.
+    emergency: { current: 4000, target: 6000, annualYield: 0, monthlyTopUp: 0 },
+    goals: [emergencyGoal("bank-ef")],
+    ledgerAccounts: [
+      { id: "bank-main", name: "Main", type: "bank", openingBalance: 3000 },
+      { id: "bank-ef", name: "Savings", type: "bank", openingBalance: 5000 },
+    ] as LedgerAccount[],
+    allocation: oneLayer,
+  });
+  const allocation = getBudgetSnapshot(state, NOW).allocation;
+  assert.equal(allocation.spendableCash, 3000);
+  assert.equal(allocation.emergencyBasis, "linked-account");
+  assert.equal(allocation.emergencyHeldBack, 5000);
+});
+
+test("budget/H: an emergency fund in a broker's money-market fund is not taken out twice", () => {
+  // The shape of a real account: the fund sits in an MMF at the broker, which
+  // is an investment account and so already outside cash. Subtracting it from
+  // the bank as well would leave the user nothing to spend that they have.
+  const state = plannedState({
+    emergency: { current: 4000, target: 6000, annualYield: 0, monthlyTopUp: 0 },
+    goals: [emergencyGoal("moomoo-mmf")],
+    ledgerAccounts: [
+      { id: "bank", name: "Bank", type: "bank", openingBalance: 2500 },
+      { id: "moomoo-mmf", name: "Moomoo MMF", type: "investment", openingBalance: 4352 },
+    ] as LedgerAccount[],
+    allocation: oneLayer,
+  });
+  const allocation = getBudgetSnapshot(state, NOW).allocation;
+  assert.equal(allocation.spendableCash, 2500, "the bank money is all spendable");
+  assert.equal(allocation.emergencyBasis, "linked-account");
+  assert.equal(allocation.emergencyHeldBack, 4352);
+});
+
+test("budget/H: spendable cash never goes below zero", () => {
+  const state = plannedState({
+    emergency: { current: 4000, target: 6000, annualYield: 0, monthlyTopUp: 0 },
+    goals: [emergencyGoal()],
+    ledgerAccounts: [{ id: "bank", name: "Bank", type: "bank", openingBalance: 1000 }] as LedgerAccount[],
+    allocation: oneLayer,
+  });
+  const allocation = getBudgetSnapshot(state, NOW).allocation;
+  assert.equal(allocation.spendableCash, 0);
+  assert.equal(allocation.cashMonths, 0);
 });
 
 test("budget/H: a migrated state routes its own buckets and warns about nothing", () => {
@@ -642,13 +726,16 @@ test("budget/I: one month of history says nothing, and says so", () => {
   assert.equal(getBudgetSnapshot(freelancer(), NOW).allocation.outlook, null);
 });
 
-test("budget/I: cash cover is counted in worst months, not average ones", () => {
-  // Worst month is 700 short; bank + wallet hold 5,000, so three such months.
+test("budget/I: cover is counted in worst months, and never from the emergency fund", () => {
+  // The bank holds 5,000 opening + 3,800 income = 8,800. The seeded 4,000
+  // emergency fund is not linked to an account, so it is held back from that:
+  // 4,800 to spend, against a worst month 700 short — six such months.
   const state = freelancer(incomeIn(1, 800, "m1"), incomeIn(2, 3000, "m2"));
   const allocation = getBudgetSnapshot(state, NOW).allocation;
   assert.equal(allocation.outlook!.worst.result.shortfall, 700);
-  assert.equal(allocation.cashOnHand, 5000 + 3800);
-  assert.equal(allocation.outlook!.worstMonthsCovered, Math.floor((5000 + 3800) / 700));
+  assert.equal(allocation.emergencyHeldBack, 4000);
+  assert.equal(allocation.spendableCash, 8800 - 4000);
+  assert.equal(allocation.outlook!.worstMonthsCovered, Math.floor(4800 / 700));
 });
 
 test("budget/I: a plan that holds in the leanest month reports no cover needed", () => {

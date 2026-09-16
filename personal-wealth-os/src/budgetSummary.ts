@@ -82,7 +82,7 @@ export interface BudgetOutlook {
   best: OutlookMonth;
   /** How far apart the worst and best months are, as a fraction of the best. */
   spread: number;
-  /** Whole worst months the cash on hand could cover the shortfall of. */
+  /** Whole worst months the spendable cash could cover the shortfall of. */
   worstMonthsCovered: number;
 }
 
@@ -94,11 +94,27 @@ export interface BudgetAllocationSnapshot {
   /** Facts about a plan the user could have mis-configured. Wording is the UI's. */
   warnings: PlanWarning[];
   /**
-   * Bank and wallet balances — the money a shortfall could be covered from.
-   * Investment accounts are excluded: selling to eat is a different decision.
+   * The money a lean month may be covered from: bank and wallet balances, less
+   * the emergency fund. Investment accounts are excluded because selling to eat
+   * is a different decision; the emergency fund is excluded because the user
+   * decided it is for emergencies, and a predictable lean month is not one.
+   * Counting it would tell them they are safer than they are.
    */
-  cashOnHand: number;
-  /** cashOnHand measured in months of the plan's essential layer. */
+  spendableCash: number;
+  /**
+   * How the emergency fund was kept out of spendableCash, so the page can say
+   * so rather than let an assumption pass as a fact.
+   *
+   *   linked-account   the Emergency Fund goal is linked to a ledger account;
+   *                    that account is excluded exactly
+   *   assumed-in-cash  not linked, so the recorded fund is assumed to sit in
+   *                    bank or wallet and subtracted — the cautious reading
+   *   none             no emergency fund recorded
+   */
+  emergencyBasis: "linked-account" | "assumed-in-cash" | "none";
+  /** How much was held back as the emergency fund. */
+  emergencyHeldBack: number;
+  /** spendableCash measured in months of the plan's essential layer. */
   cashMonths: number;
   /**
    * The plan against the months actually recorded. Null when fewer than two
@@ -199,14 +215,16 @@ export function getBudgetSnapshot(
   // had. Sponsored money is already excluded upstream (personalIncome), so a
   // parent's dinner money never reads as income the plan may invest.
   const plan: AllocationPlan = state.allocation ?? { incomeType: "fixed", baseIncome: 0, steps: [] };
-  const cashOnHand = ledger.accountTypeBalances.bank + ledger.accountTypeBalances.wallet;
+  const cash = spendableCashOf(state, ledger);
   const allocation: BudgetAllocationSnapshot = {
     planned: allocateMonth(plan, plannedIncome),
     actual: allocateMonth(plan, ledger.currentMonth.personalIncome),
     warnings: validatePlan(plan),
-    cashOnHand,
-    cashMonths: cashMonths(cashOnHand, plan),
-    outlook: buildOutlook(state, now, plan, cashOnHand),
+    spendableCash: cash.spendableCash,
+    emergencyBasis: cash.emergencyBasis,
+    emergencyHeldBack: cash.emergencyHeldBack,
+    cashMonths: cashMonths(cash.spendableCash, plan),
+    outlook: buildOutlook(state, now, plan, cash.spendableCash),
   };
 
   return {
@@ -228,6 +246,47 @@ export function getBudgetSnapshot(
 }
 
 /**
+ * Bank and wallet money the user may spend on a lean month.
+ *
+ * The emergency fund is found through the Emergency Fund goal. When that goal
+ * is linked to a ledger account, the fund is exactly that account: taken out
+ * of cash if it is a bank or wallet account, and left alone if it is anything
+ * else — a money-market fund at a broker is already outside cash and must not
+ * be taken out a second time. When it is not linked, the recorded amount is
+ * assumed to sit in cash and subtracted, because understating what can be
+ * spent is recoverable and overstating it is not.
+ */
+function spendableCashOf(
+  state: WealthState,
+  ledger: LedgerSnapshot,
+): Pick<BudgetAllocationSnapshot, "spendableCash" | "emergencyBasis" | "emergencyHeldBack"> {
+  const cash = ledger.accountTypeBalances.bank + ledger.accountTypeBalances.wallet;
+  const goal = (state.goals ?? []).find((entry) => entry.id === "emergency");
+  const linked = goal?.accountId
+    ? ledger.accountBalances.find((entry) => entry.account.id === goal.accountId)
+    : undefined;
+
+  if (linked) {
+    const inCash = linked.account.type === "bank" || linked.account.type === "wallet";
+    return {
+      spendableCash: Math.max(0, cash - (inCash ? Math.max(0, linked.balance) : 0)),
+      emergencyBasis: "linked-account",
+      emergencyHeldBack: Math.max(0, linked.balance),
+    };
+  }
+
+  const recorded = Math.max(0, state.emergency?.current ?? 0);
+  if (recorded > 0) {
+    return {
+      spendableCash: Math.max(0, cash - recorded),
+      emergencyBasis: "assumed-in-cash",
+      emergencyHeldBack: recorded,
+    };
+  }
+  return { spendableCash: Math.max(0, cash), emergencyBasis: "none", emergencyHeldBack: 0 };
+}
+
+/**
  * Build the outlook from the months the ledger recorded.
  *
  * Months with no income at all are dropped rather than counted as the worst
@@ -239,7 +298,7 @@ function buildOutlook(
   state: WealthState,
   now: Date,
   plan: AllocationPlan,
-  cashOnHand: number,
+  spendableCash: number,
 ): BudgetOutlook | null {
   const history = recentMonthlyIncome(state.ledgerTransactions, now, OUTLOOK_MONTHS)
     .filter((month) => month.income > 0);
@@ -263,7 +322,7 @@ function buildOutlook(
     median,
     best,
     spread: best.income > 0 ? (best.income - worst.income) / best.income : 0,
-    worstMonthsCovered: worstShortfall > 0.005 ? Math.floor(cashOnHand / worstShortfall) : 0,
+    worstMonthsCovered: worstShortfall > 0.005 ? Math.floor(spendableCash / worstShortfall) : 0,
   };
 }
 

@@ -50,6 +50,26 @@ function warningText(warning: PlanWarning): string {
   }
 }
 
+/**
+ * Where the spendable figure came from, said out loud when it rests on an
+ * assumption. A number the page guessed at must not read like one it knows.
+ */
+function assumptionNote(budget: BudgetSnapshot): string {
+  const { emergencyBasis, emergencyHeldBack } = budget.allocation;
+  return emergencyBasis === "assumed-in-cash"
+    ? ` This assumes your ${money(emergencyHeldBack)} emergency fund sits in your bank; link the Emergency Fund goal to its account to make it exact.`
+    : "";
+}
+
+/** The cash a shortfall could draw on, never counting the emergency fund. */
+function cashSentence(budget: BudgetSnapshot): string {
+  const { spendableCash, cashMonths, emergencyBasis } = budget.allocation;
+  const base = emergencyBasis === "none"
+    ? `Cash on hand is ${money(spendableCash)}`
+    : `Cash outside your emergency fund is ${money(spendableCash)}`;
+  return `${base}, about ${cashMonths.toFixed(1)} months of living costs.${assumptionNote(budget)}`;
+}
+
 /** "2026-08" → "Aug 2026". */
 function shortMonth(monthKey: string): string {
   const [year, month] = monthKey.split("-").map(Number);
@@ -92,7 +112,7 @@ function outlookRow(label: string, month: OutlookMonth, tone: "bad" | "plain"): 
  * plan holds.
  */
 function outlookCard(budget: BudgetSnapshot): string {
-  const { outlook, cashOnHand } = budget.allocation;
+  const { outlook, spendableCash } = budget.allocation;
 
   if (!outlook) {
     return `<article class="wu-card wu-card--bare">
@@ -105,7 +125,7 @@ function outlookCard(budget: BudgetSnapshot): string {
 
   const short = outlook.worst.result.shortfall > 0.005;
   const cover = short
-    ? `Cash on hand is ${money(cashOnHand)} — enough to cover ${outlook.worstMonthsCovered} ${outlook.worstMonthsCovered === 1 ? "month" : "months"} that bad.`
+    ? `${money(spendableCash)} outside your emergency fund covers ${outlook.worstMonthsCovered} ${outlook.worstMonthsCovered === 1 ? "month" : "months"} that lean.${assumptionNote(budget)}`
     : `Even your leanest month covered living costs.`;
 
   return `<article class="wu-card" style="margin-top:var(--space-4)">
@@ -220,7 +240,7 @@ export function allocationPanel(budget: BudgetSnapshot, plan: AllocationPlan): s
     ? `<aside class="wu-card wu-card--warning wu-card--pad-sm">
         <div class="wu-stack wu-stack--sm">
           <strong class="t-subheading">${escapeHtml(rows[0].name)} is ${money(allocation.actual.shortfall)} short</strong>
-          <p class="t-caption t-muted">Cash on hand is ${money(allocation.cashOnHand)}, about ${allocation.cashMonths.toFixed(1)} months of living costs. Nothing below this layer is funded this month.</p>
+          <p class="t-caption t-muted">${escapeHtml(cashSentence(budget))} Nothing below this layer is funded this month.</p>
         </div>
       </aside>`
     : "";
