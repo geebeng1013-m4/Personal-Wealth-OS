@@ -638,7 +638,7 @@ Preview（另一个会话做的，项目代码没有改动）：
 ### ⚠️ 跟液态玻璃不同的风险
 液态玻璃只改 CSS，页面结构没动。这一轮要动页面模板，而现有 958 个测试测的是算钱的逻辑，**不测页面长什么样**，所以测试全绿不代表页面没坏。每个 Task 都要在 demo 模式里实际打开页面，把该页的功能逐个点一遍再截图。
 
-### T-1 — Dashboard 整理 + 共用件  `[x]`（2026-09-16，PR 待合并）
+### T-1 — Dashboard 整理 + 共用件  `[x]`（2026-09-16，PR #54 已合并）
 - **共用件**（后面每一页都会用）：统一的卡片结构（小标签 → 主数字 → 一行说明 → 可选小图）、数字写法（Inter 半粗体 + 等宽数字对齐，「MYR」缩小变淡）、状态 chip（绿 / 铜 / 红）、横向比例条。
 - **Dashboard 本身**：13 张卡 → 7 张；整页只留一个标题（去掉 Financial Snapshot / Details / Wealth Details 等 6 个区块标题）；同一个数字只出现一次；去掉左竖条、符号徽章、环形图；放不下的细节改成页底「看更多」入口，链到已有的 Advisor、Money Leaks、Ledger。
 - **完成标准**：typecheck、测试、build 通过；demo 模式下手机 390 和桌面 1280、深色和浅色各截图；页面上每个按钮和链接都点一遍确认能用；页面长度记录改前改后。
@@ -664,14 +664,75 @@ Preview（另一个会话做的，项目代码没有改动）：
   - 桌面 1280 宽整页只有 825px 高，一屏看得完；手机 1,568px。
   - 目标选择器改小，放进「Next goal」磁贴的标签行。
 
-### T-2 — Ledger  `[ ]`  ← **Current Task**
+### T-2 — Ledger  `[x]`（2026-09-16，PR #55 + #57 已合并）
 - 重复的「检查卡」只留在 Dashboard 和 Money Leaks；5 张单数字卡合并成一张摘要卡；记账表单和筛选收起来（按钮点开）。
+- **结果（demo 数据）**：
+  | | 改前 | 改后 |
+  | --- | --- | --- |
+  | 手机页面长度 | 3,037px | 1,359px |
+  | 桌面页面长度 | — | 1,070px |
+  | 标题 | 29 | 1 |
+- **做了什么**：
+  - 5 张单数字卡 → 一张「This period」摘要卡：时间范围选择器 + 收入/支出/净额三栏 + 按类别分色的支出比例条（取代 Category Share 环形图）。
+  - 记账表单收进页头的「+ Add transaction」按钮，点开才出现；保存后自动收起；点某一行的 ✎ 会自动打开并填好。
+  - 筛选收进「Filter」按钮。
+  - 账户合成一张卡：总资产 + 每个账户一行，底部一行「Opening funds」。
+  - 最近交易只显示 5 笔，点「See all N」展开；每行只有「备注 / 类别 · 日期 · 账户 / 金额」，去掉了 Sponsored 徽章（改成那行文字的一部分）。
+  - 全年 12 个月的柱状图 → 最近 3 个月的小图。
+  - 顶部重复的「Transaction check」检查卡拿掉（它留在 Dashboard 和 Money Leaks）。
+  - History、Category Manager、Account Manager 三个面板保留在页底，默认收起。
+- **实测（demo 模式）**：958/958 测试通过，build 通过，控制台没有报错。真的记了一笔（−12.34）、编辑、取消、删除、筛选、展开全部，全部正常。
+- **顺手改的 Dashboard 一行**（你提的）：所有持仓都取到价格时，不再显示「Market data may be delayed · last traded 9h ago」；取不到价格时的「Partial valuation / No market price」照常显示，因为那代表数字不完整。
+- **你看过后的第二轮修改（2026-09-16）**：
+  1. **电脑版排版照 Preview 重排**：一排 4 个数字（Income / Spent / Net / Net assets）→ 最近交易 + 按类别支出 → 账户 + 三个月趋势 → 页底三个管理面板。时间范围、Filter、+ Add transaction 都挪到标题右边。
+  2. **修了一个网格 bug**：`span 3` 这类规则原本也作用到嵌套网格里，导致 4 个数字卡各占一行。改成只对外层网格的直接子元素生效。
+  3. **Dashboard 的三色比例条加了图例**（你问「这个颜色对应什么」）：绿=已投入、铜=安全储备、灰=机动资金，每种都写出金额；鼠标停在色块上也会显示。
+  4. 「按类别支出」卡片每行是「色块 · 类别 · 金额 · 百分比」，颜色不再需要猜。
+  5. **账户改成按类型分组、横向排列**（你的建议）：Bank / E-wallet / Investment 各一组，组标题右边是该组小计，组内每行「账户 · 余额」。宽度够就并排，窄了自动换行。你有 11 个账户，竖着排太长。
+- **#57 补上 #55 漏掉的三个提交**：
+  1. 行对齐：列表行统一高度 `--row-h: 52px`，不同卡片里的行上下对齐。
+  2. Recent 卡片撑满它那一半，底部和右侧跟旁边的卡对齐。
+  3. chip 改成玻璃效果，而且标题优先占位，chip 不会挡住标题。
+  - 958/958 测试通过，build 通过。
 
-### T-3 — Portfolio  `[ ]`
+### T-3 — Portfolio  `[x]`（2026-09-16，PR #58 已合并）
 - 摘要卡 + 持仓；60 多行贡献记录只显示最近 5 条；记账表单、汇率粘贴框收起来；去掉每行的徽章。
+- **照这两个 Preview 的 Portfolio 部分做**：手机 https://claude.ai/artifact/LYCovFF3EQ2krqLKfsKLZE 、电脑 v2 https://claude.ai/artifact/FBx3QM1pbR9Nrf2HGQ2G9a 。
+- **计划（2026-09-16，等「执行 T-3」）**：
+  - 电脑：标题右边 Import CSV / + Record trade → 4 个数字卡（Market value / Invested / Unrealised / Fees）→ Holdings 整行（占比条 + 目标竖线）→ Next contribution | Recent activity（最近 5 条 + See all）→ 页底链接 Currency conversions / Position detail（点开在下面展开，内容不变）。
+  - 手机：一列，顺序照手机 Preview。
+  - 记账表单点开才出现、保存后收起；助手预填要先打开表单；See all 展开完整表格（含 ✕ 和 Clear all）；Allocation health 小卡拿掉，状态改用 chip。
+  - 行情轮询只重画新的价格区域，不能关掉已打开的表单。
+  - 不改计算，不改金额小数位（两位小数问题未决定）。
+- **决定**：Fees 卡说明行用 B「Before fees +X (+Y%)」，保留扣手续费前的收益；没有手续费或没有价格时退回「Across N contributions」。
+- **结果（demo 数据）**：
+  | | 改前 | 改后 |
+  | --- | --- | --- |
+  | 手机页面长度 | 5,001px | 1,528px |
+  | 电脑页面长度 | 3,887px | 1,049px |
+  | 徽章 | 90 | 0 |
+  | 看得见的按钮 | 51 | 4 |
+- **手机**照手机 Preview：一张 Market value 卡（Invested · fees · holdings + Before fees 一行）→ Next contribution → Holdings → 按钮行 → Recent activity → More detail。
+- **实测**：962/962 测试（新增 4 个「下一笔放哪里」测试）、build 通过、控制台无报错。记一笔、See all + 删除、CSV 导入、两个面板、汇率粘贴错误提示、助手预填（自动打开表单）、行情刷新（约 90 秒一次，不清空表单）都点过。
+- **影响其他页面的两处**：
+  1. 补上 `.t-positive` / `.t-negative`（Ledger 早就在用但没定义），Ledger 的收入/支出现在有绿/红色。
+  2. `.wu-tc__top` 预留 chip 的高度，有 chip 和没 chip 的卡数字对齐；所有卡标签行高约 7px。
+- **没做到**：电脑版第 3 行两张卡底边对齐，但卡里的行没有上下对齐（左边先有一句话）。
 
-### T-4 — Settings  `[ ]`
+### T-4 — Settings  `[ ]`  ← **Current Task**
 - 7 个常驻表单改成 iOS 式分组列表：每项显示当前值，点进去再编辑。
+- **照 Preview 的 Settings 部分做**（同上两个链接）。
+- **计划（2026-09-16，等「执行 T-4」）**：
+  - 手机：Profile / Money in & out / Plan / Privacy / Data 五组列表，最后单独一行红色 Reset。
+  - 电脑：两张一行、一样高：Profile | Plan → Money in & out | Privacy → Data | Danger zone。
+  - 每行「名称 · 当前值 ›」，点开编辑那一项，编辑面板只有一个 Save；隐私开关直接切换即保存；Emergency 的建议目标放进它的编辑面板；Theme/Export/Import/Version history/Add to Home Screen 保留 data-tool 绑定。
+  - 不改计算。
+- **已定（2026-09-16）**：
+  1. 编辑面板在那一行下面展开（A）。
+  2. DCA targets 改成每只 ETF 一个输入框，不再丢 VXUS；你另外希望新加的股票/ETF 也一起出现在这里（提议见下，等你确认）。
+  3. Stage 下拉加上当前存的值，保存不再被覆盖。
+  4. Dip-buy tranches 只显示当前值，不能编辑。
+- **提议（等确认）**：targets 列表 = 已有目标 ∪ 交易过的代码 ∪ 自定义代码，新代码默认 0%；编辑面板里可以「+ Add ETF」；在 Settings 加的代码也出现在 Portfolio 记账表单的下拉里；Opportunity reserve 的分配同样每只一个输入框（现在也只存 VOO/QQQM）；显示目标合计，不是 100% 时提示但不阻止保存。
 
 ### T-5 — Advisor / Review / Money Leaks / Rules  `[ ]`
 - 去掉重复的检查卡；建议和规则改成列表；免责声明移到页底；历史改成短行、点开看详情。

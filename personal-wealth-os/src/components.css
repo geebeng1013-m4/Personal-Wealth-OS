@@ -55,6 +55,12 @@
   .t-faint {
     color: var(--text-faint);
   }
+  .t-positive {
+    color: var(--positive);
+  }
+  .t-negative {
+    color: var(--negative);
+  }
   .wu-self-end {
     align-self: end;
   }
@@ -1396,33 +1402,89 @@
   /* One anatomy for every card: label row → one headline figure → at most one
      line of explanation → an optional small graphic. Status is a chip or a
      proportion bar, never a rail, ring or symbol badge. */
+  /* the label gives way before the chip does, so a chip can never sit on top
+     of the heading it belongs to */
+  .wu-tc__top > .wu-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* one row height for the lists that sit side by side, so their rows line up
+     across cards; the denser account groups keep their own */
+  :where(.wu-dash) {
+    --row-h: 52px;
+    --row-value-w: 84px;
+  }
   .wu-tc__top {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--space-2);
-    min-height: 22px;
+    /* tall enough for a chip (the padding is extra), so a label row with one
+       and a label row without start their figures on the same line */
+    box-sizing: content-box;
+    min-height: 23px;
+    padding-bottom: var(--space-2);
   }
+  /* liquid glass, chip-sized: a thin tinted pane with a rim light, the same
+     material as the floating layer (PLAN.md G series) at a smaller scale */
   .wu-chip {
-    padding: 5px 9px;
+    position: relative;
+    isolation: isolate;
+    flex: none;
+    padding: 3px 9px;
     border-radius: var(--radius-pill);
-    background: var(--accent-soft);
+    background: linear-gradient(180deg, rgb(255 255 255 / calc(var(--glass-highlight) * 0.12)), transparent 60%),
+      var(--chip-fill, var(--accent-soft));
+    -webkit-backdrop-filter: blur(8px) saturate(1.5);
+    backdrop-filter: blur(8px) saturate(1.5);
+    box-shadow: var(--glass-inner), 0 1px 3px rgb(0 0 0 / 0.16), 0 0 0 0.5px var(--glass-edge);
     color: var(--accent);
-    font: var(--weight-medium) var(--text-caption) / 1 var(--font-sans);
+    font: var(--weight-medium) var(--text-overline) / 1.35 var(--font-sans);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
+  .wu-chip::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, var(--glass-rim) 0%, transparent 38%, transparent 62%, var(--glass-rim-soft) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: var(--glass-highlight);
+    pointer-events: none;
+  }
   .wu-chip--warning {
-    background: var(--warning-soft);
+    --chip-fill: var(--warning-soft);
     color: var(--warning);
   }
   .wu-chip--negative {
-    background: var(--negative-soft);
+    --chip-fill: var(--negative-soft);
     color: var(--negative);
   }
   .wu-chip--muted {
-    background: var(--surface-hover);
+    --chip-fill: var(--glass-fill-lite);
     color: var(--text-muted);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .wu-chip {
+      background: var(--chip-fill, var(--accent-soft));
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      box-shadow: none;
+    }
+    .wu-chip--muted {
+      --chip-fill: var(--surface-hover);
+    }
+    .wu-chip::before {
+      display: none;
+    }
   }
   /* Figures in the app font, not the mono face: mono is wide and wraps in a
      two-column card. Tabular numerals keep columns aligned; the currency is
@@ -1478,6 +1540,89 @@
     font-weight: var(--weight-semibold);
     color: var(--text);
   }
+  .wu-legend--tight {
+    gap: 2px var(--space-3);
+    font-size: var(--text-caption);
+  }
+  /* a row of equal figure tiles: two across on a phone, four on a desktop */
+  .wu-dash__tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+  @media (min-width: 721px) {
+    .wu-dash__tiles {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  /* accounts grouped by kind, side by side when there is room */
+  .wu-acct-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-4) var(--space-5);
+    /* clear of the chip that rides in the card's label row */
+    margin-top: var(--space-2);
+  }
+  .wu-acct-group__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding-bottom: var(--space-1);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--space-1);
+  }
+  .wu-acct-group__total {
+    font: var(--weight-semibold) var(--text-body-sm) / 1 var(--font-sans);
+    font-variant-numeric: tabular-nums;
+  }
+  .wu-acct-group .wu-facts li {
+    min-height: 44px;
+    font-size: var(--text-body-sm);
+  }
+
+  .wu-cat-rows {
+    display: grid;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .wu-cat-rows li {
+    display: grid;
+    grid-template-columns: 12px minmax(0, 1fr) minmax(var(--row-value-w), auto);
+    align-items: center;
+    gap: var(--space-3);
+    min-height: var(--row-h);
+    padding-block: var(--space-1);
+    border-top: 1px solid var(--border-subtle);
+    font-size: var(--text-body);
+  }
+  .wu-cat-rows li:first-child {
+    border-top: 0;
+  }
+  .wu-cat-rows i {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+  }
+  .wu-cat-rows b {
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
+  }
+  /* the share sits in a column of its own, so every percentage lines up */
+  .wu-cat-rows li > span:last-child {
+    display: grid;
+    grid-template-columns: 1fr 34px;
+    align-items: baseline;
+    gap: var(--space-2);
+    text-align: right;
+  }
+  .wu-cat-rows small {
+    color: var(--text-faint);
+    font-weight: var(--weight-regular);
+  }
+
   .wu-three {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1503,10 +1648,11 @@
   }
   .wu-facts li {
     display: grid;
-    grid-template-columns: 14px minmax(0, 1fr) auto;
+    grid-template-columns: 14px minmax(0, 1fr) minmax(var(--row-value-w), auto);
     align-items: center;
-    gap: var(--space-2);
-    min-height: 38px;
+    gap: var(--space-3);
+    min-height: var(--row-h);
+    padding-block: var(--space-1);
     border-top: 1px solid var(--border-subtle);
     font-size: var(--text-body);
   }
@@ -1521,7 +1667,7 @@
   }
   /* same rows without the status dot, e.g. a valuation breakdown */
   .wu-facts--plain li {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(var(--row-value-w), auto);
   }
   .wu-facts i {
     display: block;
@@ -1637,13 +1783,26 @@
       grid-template-columns: repeat(12, minmax(0, 1fr));
       align-items: stretch;
     }
-    .wu-dash__tile {
+    /* pages whose cards hold lists of different lengths: let each card end
+       where its content ends instead of stretching to the tallest in the row */
+    .wu-dash--start {
+      align-items: start;
+    }
+    /* spans belong to the page grid only — a tile row nested inside it has
+       its own columns */
+    .wu-dash > .wu-dash__tile {
       grid-column: span 3;
     }
-    .wu-dash__half {
+    .wu-dash > .wu-dash__half {
       grid-column: span 6;
     }
-    .wu-dash__full {
+    .wu-dash > .wu-dash__wide {
+      grid-column: span 8;
+    }
+    .wu-dash > .wu-dash__narrow {
+      grid-column: span 4;
+    }
+    .wu-dash > .wu-dash__full {
       grid-column: 1 / -1;
     }
     /* the links stop being a card and become one quiet row under the grid */
@@ -1670,6 +1829,284 @@
     }
     .wu-navlist--inline small {
       color: var(--text-faint);
+    }
+  }
+
+  /* ---- ledger rows and mini bars (T-2) ---------------------------------- */
+  /* both halves of a row stretch to the taller one, and the stacked column's
+     last card takes the slack, so the two bottom edges stay level however the
+     lists grow (expanding "See all", a longer filter result) */
+  .wu-dash > .wu-dash__half {
+    align-self: stretch;
+  }
+  .wu-dash__col {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .wu-dash__col > :last-child {
+    flex: 1;
+  }
+  .wu-dash .wu-ledger-recent {
+    display: flex;
+    flex-direction: column;
+  }
+  .wu-dash .wu-ledger-recent > #ledgerSeeAll {
+    margin-top: auto;
+  }
+  .wu-ledger-list {
+    display: grid;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .wu-ledger-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(var(--row-value-w), auto) auto;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: var(--row-h);
+    border-top: 1px solid var(--border-subtle);
+  }
+  .wu-ledger-row:first-child {
+    border-top: 0;
+  }
+  .wu-ledger-row__title {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    font-size: var(--text-body);
+    font-weight: var(--weight-medium);
+  }
+  .wu-ledger-row__title small {
+    font-size: var(--text-body-sm);
+    font-weight: var(--weight-regular);
+    color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .wu-ledger-row__amount {
+    font: var(--weight-semibold) var(--text-body) / 1.3 var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-align: right;
+  }
+  .wu-minibars {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-3);
+    height: 96px;
+  }
+  .wu-minibars__month {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-1);
+    height: 100%;
+  }
+  .wu-minibars__pair {
+    flex: 1;
+    align-items: flex-end;
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 100%;
+    width: 100%;
+    justify-content: center;
+  }
+  .wu-minibars__pair i {
+    display: block;
+    width: 14px;
+    min-height: 2px;
+    border-radius: 4px 4px 2px 2px;
+  }
+  .wu-minibars small {
+    font: var(--weight-medium) var(--text-overline) / 1 var(--font-mono);
+    color: var(--text-faint);
+  }
+
+  /* ---- portfolio (T-3) -------------------------------------------------- */
+  /* a trade row has a title and an amount, no edit controls */
+  .wu-ledger-row--plain {
+    grid-template-columns: minmax(0, 1fr) minmax(var(--row-value-w), auto);
+  }
+  .wu-dash .wu-portfolio-recent > .wu-portfolio-see-all {
+    margin-top: auto;
+  }
+  .wu-portfolio-lead {
+    font-size: var(--text-body);
+    line-height: 1.5;
+  }
+  .wu-portfolio-lead b {
+    font-weight: var(--weight-semibold);
+  }
+  .wu-navlist button[aria-expanded="true"] > span[aria-hidden] {
+    display: inline-block;
+    transform: rotate(90deg);
+  }
+  /* The page actions: in the header on a desktop, under the holdings on a
+     phone — one place each, never both. */
+  .wu-portfolio-actions {
+    display: flex;
+    gap: var(--space-2);
+  }
+  .wu-portfolio-actions__main {
+    flex: 1;
+  }
+  @media (max-width: 720px) {
+    .wu-portfolio-page .wu-page-header__actions {
+      display: none;
+    }
+  }
+  /* Phone: one Market value card carries the four figures, as in the
+     preview; the four tiles are the desktop's. */
+  .wu-portfolio-summary {
+    grid-column: 1 / -1;
+  }
+  @media (max-width: 720px) {
+    .wu-portfolio-tile {
+      display: none;
+    }
+  }
+  @media (min-width: 721px) {
+    .wu-portfolio-actions,
+    .wu-portfolio-summary {
+      display: none;
+    }
+    /* Desktop reading order: form, figures, holdings, then next contribution
+       beside recent activity. The phone keeps the source order, which puts the
+       next contribution before the holdings. */
+    .wu-dash > .wu-portfolio-entry {
+      order: -3;
+    }
+    .wu-dash > #pfTiles {
+      order: -2;
+    }
+    .wu-dash > #pfHoldings {
+      order: -1;
+    }
+  }
+  /* One line per holding. Phone: disc · name · value, the weight bar below.
+     Desktop: one row, the bars in a column of their own so every target mark
+     lines up with the rows above and below it. */
+  .wu-hold-list {
+    display: grid;
+  }
+  .wu-hold {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "tick name value"
+      "weight weight weight";
+    align-items: center;
+    column-gap: var(--space-3);
+    row-gap: var(--space-2);
+    padding-block: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+  }
+  .wu-hold--head {
+    display: none;
+  }
+  .wu-hold--head + .wu-hold {
+    border-top: 0;
+  }
+  .wu-hold__tick {
+    grid-area: tick;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    color: #fff;
+    font: 700 9px / 1 var(--font-mono);
+  }
+  .wu-hold__name {
+    grid-area: name;
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    font-size: var(--text-body);
+    font-weight: var(--weight-semibold);
+  }
+  .wu-hold__name small {
+    font-size: var(--text-body-sm);
+    font-weight: var(--weight-regular);
+    color: var(--text-faint);
+  }
+  .wu-hold__weight {
+    grid-area: weight;
+    display: grid;
+    gap: var(--space-2);
+  }
+  .wu-hold__meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--text-caption);
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .wu-hold__value {
+    grid-area: value;
+    display: grid;
+    gap: 2px;
+    text-align: right;
+    font: var(--weight-semibold) var(--text-body) / 1.3 var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .wu-hold__value small {
+    font-size: var(--text-caption);
+    font-weight: var(--weight-medium);
+  }
+  .wu-weight {
+    position: relative;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--surface-hover);
+  }
+  .wu-weight > span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: 3px;
+    background: var(--accent);
+  }
+  .wu-weight > i {
+    position: absolute;
+    top: -4px;
+    width: 2px;
+    height: 14px;
+    margin-left: -1px;
+    border-radius: 1px;
+    background: var(--text);
+    opacity: 0.6;
+  }
+  @media (min-width: 721px) {
+    .wu-hold {
+      grid-template-columns: 36px minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 0.9fr);
+      grid-template-areas: "tick name weight value";
+      column-gap: var(--space-4);
+    }
+    .wu-hold--head {
+      display: grid;
+      padding-block: 0 var(--space-1);
+      border-top: 0;
+      font: var(--weight-medium) var(--text-overline) / 1 var(--font-mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .wu-hold--head .wu-hold__tick,
+    .wu-hold--head .wu-hold__value {
+      background: none;
+      height: auto;
+      font: inherit;
+      color: inherit;
+    }
+    .wu-hold--head .wu-hold__name {
+      font: inherit;
     }
   }
 

@@ -16,9 +16,8 @@
 import type { LedgerAccountType, LedgerFundingSource, LedgerTransaction, LedgerTransactionType, WealthState } from "../models";
 import type { LedgerDraft } from "../components/assistant/assistantTypes";
 import { createId } from "../state";
-import { money, percent } from "../rules";
+import { money } from "../rules";
 import { escapeHtml } from "../html";
-import { leakInsightStrip } from "../components/leakInsightStrip";
 import { pageHeader } from "../components/pageHeader";
 import {
   categoryTotals,
@@ -48,6 +47,12 @@ let ledgerEntryDraft = {
   categoryId: "",
   fundingSource: "personal" as LedgerFundingSource,
 };
+// Collapsed by default (PLAN.md T-2): the page opens on what happened, not
+// on a form. Opening any of these is a per-session preference, like the
+// panels below.
+let ledgerEntryOpen = false;
+let ledgerFilterOpen = false;
+let ledgerRecentExpanded = false;
 let ledgerHistoryOpen = false;
 let ledgerCategoriesOpen = false;
 let ledgerAccountsOpen = false;
@@ -96,6 +101,8 @@ export function applyLedgerDraft(draft: LedgerDraft): void {
     categoryId: draft.categoryId ?? "",
     fundingSource: "personal",
   };
+  // The assistant filled the form, so it has to be on screen.
+  ledgerEntryOpen = true;
   // The amount is already filled, so stealing focus to it would only put the
   // caret in a field the user is meant to be checking, not retyping.
   suppressLedgerAmountFocus = true;
@@ -127,13 +134,6 @@ export function ledgerTemplate(state: WealthState): string {
     return { label: "Investment account", emptyLabel: "investment accounts", icon: "📈" };
   };
   const money2 = (value: number): string => `<span class="t-num ${value < 0 ? "wu-metric__value--negative" : ""}">${value < 0 ? "−" : ""}${money(Math.abs(value))}</span>`;
-  const accountGroup = (type: LedgerAccountType, title: string, icon: string): string => {
-    const groupBalances = balances.filter(({ account }) => account.type === type);
-    const subtotal = groupBalances.reduce((sum, { balance }) => sum + balance, 0);
-    const meta = accountTypeMeta(type);
-    const rows = groupBalances.map(({ account, balance }: AccountBalance) => `<li class="wu-list__row"><span>${escapeHtml(account.icon ?? icon)} ${escapeHtml(account.name)} &middot; ${meta.label}</span><strong>${money2(balance)}</strong></li>`).join("");
-    return `<details class="wu-details ledger-account-group" data-ledger-account-group="${type}"${ledgerAccountGroupsOpen[type] ? " open" : ""}><summary class="wu-details__summary"><span class="wu-row wu-row--tight">${icon} <strong class="t-subheading">${title}</strong><span class="t-caption t-faint">${groupBalances.length} ${groupBalances.length === 1 ? "account" : "accounts"}</span></span><strong>${money2(subtotal)}</strong></summary><ul class="wu-list">${rows || `<li class="wu-list__row"><span class="t-faint">No ${meta.emptyLabel} added.</span></li>`}</ul></details>`;
-  };
   const accountName = (id?: string): string => state.ledgerAccounts.find((account) => account.id === id)?.name ?? "Unknown account";
   const accountOptions = (selected?: string): string => state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}"${account.id === selected ? " selected" : ""}>${escapeHtml((account.icon ?? accountTypeMeta(account.type).icon) + " " + account.name)}</option>`).join("");
   const accountIds = new Set(state.ledgerAccounts.map((account) => account.id));
@@ -162,16 +162,7 @@ export function ledgerTemplate(state: WealthState): string {
   const personalExpenseTransactions = filtered.filter((transaction) => transaction.fundingSource !== "sponsored");
   const expenses = categoryTotals(personalExpenseTransactions, state.ledgerCategories, "expense");
   const personalExpenseTotal = ledgerTotals(personalExpenseTransactions).expense;
-  const palette = ["#ef6461", "#f59e0b", "#8b5cf6", "#3b82f6", "#14b8a6", "#ec4899", "#84cc16"];
-  let angle = 0;
-  const donut = expenses.length ? expenses.map((item, index) => {
-    const start = angle;
-    angle += item.share * 360;
-    return `${palette[index % palette.length]} ${start.toFixed(1)}deg ${angle.toFixed(1)}deg`;
-  }).join(",") : "var(--border) 0deg 360deg";
-  const maxCategory = Math.max(...expenses.map((item) => item.amount), 1);
   const monthly = monthlyLedgerTotals(state.ledgerTransactions, new Date().getFullYear());
-  const monthlyMax = Math.max(...monthly.flatMap((item) => [item.income, item.expense]), 1);
   const categoryOptions = state.ledgerCategories.map((category) => `<option value="${escapeHtml(category.id)}"${ledgerFilters.categoryId === category.id ? " selected" : ""}>${escapeHtml(category.icon + " " + category.label)}</option>`).join("");
   const transactionRows = filtered.map((transaction) => {
     const category = state.ledgerCategories.find((item) => item.id === transaction.categoryId);
@@ -185,18 +176,63 @@ export function ledgerTemplate(state: WealthState): string {
   }).join("");
 
   const presetLabel: Record<string, string> = { today: "Today", week: "This week", month: "This month", year: "This year", custom: "Custom" };
+  const entryOpen = ledgerEntryOpen || Boolean(editing);
+
+  // One row per transaction: what it was, then the short facts, then the
+  // amount. Long explanations and badges are gone (PLAN.md T-2).
+  const transactionRow = (transaction: LedgerTransaction): string => {
+    const category = state.ledgerCategories.find((item) => item.id === transaction.categoryId);
+    const title = transaction.type === "transfer"
+      ? `${accountName(transaction.fromAccountId)} → ${accountName(transaction.toAccountId)}`
+      : transaction.note || category?.label || "Transaction";
+    const facts = [
+      transaction.type === "transfer" ? "Transfer" : category?.label ?? "Uncategorised",
+      new Date(transaction.date).toLocaleDateString("en-MY", { day: "numeric", month: "short" }),
+      transaction.type === "transfer" ? "" : accountName(transaction.accountId),
+      transaction.fundingSource === "sponsored" ? "Sponsored" : "",
+    ].filter(Boolean).join(" · ");
+    const prefix = transaction.type === "income" ? "+" : transaction.type === "expense" ? "−" : "↔ ";
+    const tone = transaction.type === "income" ? " t-positive" : transaction.type === "expense" ? " t-negative" : "";
+    return `<li class="wu-ledger-row">
+      <span class="wu-ledger-row__title">${escapeHtml(title)}<small>${escapeHtml(facts)}</small></span>
+      <span class="wu-ledger-row__amount${tone}">${prefix}${money(transaction.amount, "").trim()}</span>
+      <span class="wu-row wu-row--tight">
+        <button class="wu-btn wu-btn--ghost wu-btn--icon edit-ledger" data-id="${escapeHtml(transaction.id)}" type="button" aria-label="Edit transaction">✎</button>
+        <button class="wu-btn wu-btn--ghost wu-btn--icon delete-ledger" data-id="${escapeHtml(transaction.id)}" type="button" aria-label="Delete transaction">✕</button>
+      </span>
+    </li>`;
+  };
+  const RECENT_LIMIT = 5;
+  const netTotal = totals.income - totals.expense;
+  const keptShare = totals.income > 0 ? Math.min(Math.max(netTotal / totals.income, 0), 1) : 0;
+  const shown = ledgerRecentExpanded ? filtered : filtered.slice(0, RECENT_LIMIT);
+  const amountOf = (value: number): string => money(value, "").trim();
+
+  // Where this month's spending went, as one bar instead of a donut: the top
+  // four categories, then everything else.
+  const topCategories = expenses.slice(0, 4);
+  const otherTotal = expenses.slice(4).reduce((sum, item) => sum + item.amount, 0);
+  const categoryPalette = ["var(--accent)", "var(--highlight)", "var(--slate, #6f86a6)", "var(--negative)"];
+  const thisMonthIndex = new Date().getMonth();
+  const monthLabel = (month: number): string => new Date(2000, month, 1).toLocaleDateString("en-MY", { month: "short" });
+  const lastThree = monthly.slice(Math.max(0, thisMonthIndex - 2), thisMonthIndex + 1);
+  const lastThreeMax = Math.max(...lastThree.flatMap((item) => [item.income, item.expense]), 1);
 
   return `<div class="wu ledger-page">
     ${pageHeader({
       eyebrow: "Everyday Money",
       title: "Ledger",
       sub: "Record income and spending, see where the money goes.",
+      actions: `<div class="wu-segmented">${(["today", "week", "month", "year", "custom"] as const).map((preset) => `<button type="button" data-preset="${preset}" class="wu-segmented__option${ledgerFilters.preset === preset ? " is-active" : ""}">${presetLabel[preset]}</button>`).join("")}</div>
+        <button class="wu-btn wu-btn--secondary wu-btn--sm" id="ledgerFilterToggle" type="button" aria-expanded="${ledgerFilterOpen}" aria-controls="ledgerFilterForm">${ledgerFilterOpen ? "Hide filter" : "Filter"}</button>
+        <button class="wu-btn wu-btn--primary wu-btn--sm" id="ledgerAddToggle" type="button" aria-expanded="${entryOpen}" aria-controls="ledgerEntryPanel">${entryOpen ? "Close" : "+ Add transaction"}</button>`,
     })}
-    ${leakInsightStrip(state, ["duplicate", "fee", "subscription"], "Transaction check")}
-    <div class="wu-ledger-layout">
-      <article class="wu-card wu-ledger-entry">
-        <div class="wu-card__header">
-          <h3 class="wu-card__title t-heading">${editing ? "Edit Transaction" : "Add Transaction"}</h3>
+
+    <div class="wu-dash wu-dash--start">
+      <!-- ENTRY FORM — collapsed until asked for, or while editing -->
+      <section class="wu-card wu-dash__full wu-ledger-entry" id="ledgerEntryPanel"${entryOpen ? "" : " hidden"}>
+        <div class="wu-tc__top">
+          <span class="wu-label">${editing ? "Edit transaction" : "Add transaction"}</span>
           ${editing ? '<button id="cancelLedgerEdit" class="wu-btn wu-btn--ghost wu-btn--sm" type="button">Cancel</button>' : ""}
         </div>
         <form id="ledgerForm" class="wu-stack">
@@ -217,26 +253,11 @@ export function ledgerTemplate(state: WealthState): string {
           <p id="ledgerFormError" class="wu-field-row__error" role="alert">${transferUnavailable ? "Add at least two accounts before recording a transfer." : ""}</p>
           <button class="wu-btn wu-btn--primary wu-btn--block" type="submit"${transferUnavailable ? " disabled" : ""}>${editing ? "Save Changes" : "Save Transaction"}</button>
         </form>
-      </article>
-      <div class="wu-stack wu-stack--lg">
-        <div class="wu-grid wu-grid--wide">
-          <div class="wu-card wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">Opening Funds</span><span class="wu-metric__value t-num">${money(totalOpeningFunds)}</span><span class="wu-metric__note t-caption">Starting balance across all accounts</span></div></div>
-          <div class="wu-card wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">Income</span><span class="wu-metric__value t-num wu-metric__value--positive">+${money(totals.income)}</span><span class="wu-metric__note t-caption">In the selected period</span></div></div>
-          <div class="wu-card wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">Expenses</span><span class="wu-metric__value t-num wu-metric__value--negative">&minus;${money(totals.expense)}</span><span class="wu-metric__note t-caption">In the selected period</span></div></div>
-          <div class="wu-card wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">Total Net Assets</span><span class="wu-metric__value t-num${totalNetAssets < 0 ? " wu-metric__value--negative" : ""}">${totalNetAssets < 0 ? "−" : ""}${money(Math.abs(totalNetAssets))}</span><span class="wu-metric__note t-caption">Bank + E-wallet + Investment</span></div></div>
-          <div class="wu-card wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">Liquid Net Assets</span><span class="wu-metric__value t-num${liquidNetAssets < 0 ? " wu-metric__value--negative" : ""}">${liquidNetAssets < 0 ? "−" : ""}${money(Math.abs(liquidNetAssets))}</span><span class="wu-metric__note t-caption">Bank + E-wallet, Investment excluded</span></div></div>
-        </div>
-        <article class="wu-card">
-          <div class="wu-card__header">
-            <div class="wu-stack wu-stack--sm"><span class="wu-label">Cash Locations</span><h3 class="wu-card__title t-heading">Account Balances</h3></div>
-            <div class="wu-metric wu-metric--end"><span class="wu-metric__label wu-label">Total Net Assets</span><span class="wu-metric__value t-num${totalNetAssets < 0 ? " wu-metric__value--negative" : ""}">${totalNetAssets < 0 ? "−" : ""}${money(Math.abs(totalNetAssets))}</span></div>
-          </div>
-          <div class="wu-stack wu-stack--sm">${accountGroup("bank", "Bank", "🏦")}${accountGroup("wallet", "E-wallet", "👛")}${accountGroup("investment", "Investment", "📈")}</div>
-        </article>
-        <article class="wu-card ledger-filters">
-          <form id="ledgerFilterForm" class="wu-stack">
-            <div class="wu-segmented">${(["today", "week", "month", "year", "custom"] as const).map((preset) => `<button type="button" data-preset="${preset}" class="wu-segmented__option${ledgerFilters.preset === preset ? " is-active" : ""}">${presetLabel[preset]}</button>`).join("")}</div>
-            <div class="wu-grid wu-grid--wide wu-ledger-filter-fields ${ledgerFilters.preset === "custom" ? "show-custom" : ""}">
+      </section>
+
+      <!-- FILTER — one panel, shared by the figures and the list below -->
+      <form id="ledgerFilterForm" class="wu-card wu-dash__full wu-stack wu-stack--sm"${ledgerFilterOpen ? "" : " hidden"}>
+        <div class="wu-grid wu-grid--wide wu-ledger-filter-fields ${ledgerFilters.preset === "custom" ? "show-custom" : ""}">
               <label class="wu-field-row custom-date"><span class="wu-field-row__label">From</span><input class="wu-field" name="startDate" type="date" value="${ledgerFilters.startDate}"></label>
               <label class="wu-field-row custom-date"><span class="wu-field-row__label">To</span><input class="wu-field" name="endDate" type="date" value="${ledgerFilters.endDate}"></label>
               <label class="wu-field-row"><span class="wu-field-row__label">Type</span><select class="wu-field" name="type"><option value="all">All types</option><option value="expense"${ledgerFilters.type === "expense" ? " selected" : ""}>Expense</option><option value="income"${ledgerFilters.type === "income" ? " selected" : ""}>Income</option><option value="transfer"${ledgerFilters.type === "transfer" ? " selected" : ""}>Transfer</option></select></label>
@@ -245,12 +266,107 @@ export function ledgerTemplate(state: WealthState): string {
               <label class="wu-field-row"><span class="wu-field-row__label">Search</span><input class="wu-field" name="query" type="search" value="${escapeHtml(ledgerFilters.query)}" placeholder="Note, category, account"></label>
               <div class="wu-row wu-self-end"><button class="wu-btn wu-btn--ghost wu-btn--sm" id="resetLedgerFilters" type="button">Reset</button></div>
             </div>
-          </form>
-        </article>
-        <div class="wu-grid wu-grid--2">
-          <article class="wu-card"><div class="wu-card__header"><h3 class="wu-card__title t-heading">Category Share</h3></div>${expenses.length ? `<div class="ledger-donut-wrap"><div class="ledger-donut" style="background:conic-gradient(${donut})"><span>${money(personalExpenseTotal)}</span></div><div class="ledger-legend">${expenses.map((item, index) => `<div><i style="background:${palette[index % palette.length]}"></i><span>${escapeHtml(item.category.icon + " " + item.category.label)}</span><strong>${percent(item.share, 1)}</strong></div>`).join("")}</div></div><div class="ledger-bars">${expenses.map((item, index) => `<div><span>${escapeHtml(item.category.label)}</span><div><i style="width:${(item.amount / maxCategory) * 100}%;background:${palette[index % palette.length]}"></i></div><strong>${money(item.amount)}</strong></div>`).join("")}</div>` : `<p class="wu-empty">No expense data in this period.</p>`}</article>
-          <article class="wu-card"><div class="wu-card__header"><h3 class="wu-card__title t-heading">Monthly Income vs Expense</h3></div><div class="monthly-chart">${monthly.map((item) => `<div class="month-column"><div class="month-bars"><i class="income" style="height:${Math.max(item.income / monthlyMax * 100, item.income ? 3 : 0)}%" title="Income ${money(item.income)}"></i><i class="expense" style="height:${Math.max(item.expense / monthlyMax * 100, item.expense ? 3 : 0)}%" title="Expense ${money(item.expense)}"></i></div><small>${new Date(2000, item.month).toLocaleString("en", { month: "short" }).slice(0, 1)}</small></div>`).join("")}</div><div class="chart-key"><span><i class="income"></i>Income</span><span><i class="expense"></i>Expense</span></div></article>
+      </form>
+
+      <!-- ROW 1 — the period's four figures, all the same size -->
+      <div class="wu-dash__full wu-dash__tiles">
+        <section class="wu-card wu-dash__tile" aria-labelledby="ledgerIncomeLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="ledgerIncomeLabel">Income</span></div>
+          <p class="wu-money wu-money--md t-positive"><span class="wu-money__cur">MYR</span><span>${amountOf(totals.income)}</span></p>
+          <p class="wu-dash__note">${escapeHtml(presetLabel[ledgerFilters.preset] ?? "Selected range")}</p>
+        </section>
+        <section class="wu-card wu-dash__tile" aria-labelledby="ledgerSpentLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="ledgerSpentLabel">Spent</span></div>
+          <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(totals.expense)}</span></p>
+          <p class="wu-dash__note">${personalExpenseTotal < totals.expense ? `${amountOf(totals.expense - personalExpenseTotal)} sponsored` : "All personal money"}</p>
+        </section>
+        <section class="wu-card wu-dash__tile" aria-labelledby="ledgerNetLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="ledgerNetLabel">Net</span></div>
+          <p class="wu-money wu-money--md ${netTotal >= 0 ? "t-positive" : "t-negative"}"><span class="wu-money__cur">MYR</span><span>${netTotal >= 0 ? "+" : "−"}${amountOf(Math.abs(netTotal))}</span></p>
+          <p class="wu-dash__note">${totals.income > 0 ? `${Math.round(keptShare * 100)}% of income kept` : "No income recorded yet"}</p>
+          <div class="wu-bar" role="progressbar" aria-valuenow="${Math.round(keptShare * 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="Share of income kept">
+            <span class="wu-bar__fill" style="width:${Math.round(keptShare * 100)}%"></span>
+          </div>
+        </section>
+        <section class="wu-card wu-dash__tile" aria-labelledby="ledgerAssetsLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="ledgerAssetsLabel">Net assets</span><span class="wu-chip wu-chip--muted">Liquid ${amountOf(liquidNetAssets)}</span></div>
+          <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(totalNetAssets)}</span></p>
+          <p class="wu-dash__note">Across ${state.ledgerAccounts.length} ${state.ledgerAccounts.length === 1 ? "account" : "accounts"}</p>
+        </section>
+      </div>
+
+      <!-- ROW 2 — recent transactions | spending and trend -->
+      <section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-ledger-recent" aria-labelledby="ledgerRecentLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="ledgerRecentLabel">Recent transactions</span></div>
+        ${filtered.length === 0
+          ? `<p class="wu-empty">No transactions match this filter yet.</p>`
+          : `<ul class="wu-ledger-list">${shown.map(transactionRow).join("")}</ul>`}
+        ${filtered.length > RECENT_LIMIT
+          ? `<button class="wu-btn wu-btn--ghost wu-btn--sm wu-self-end" id="ledgerSeeAll" type="button">${ledgerRecentExpanded ? "Show less" : `See all ${filtered.length}`}</button>`
+          : ""}
+      </section>
+
+      
+      <div class="wu-dash__half wu-dash__col">
+        <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ledgerCategoryLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="ledgerCategoryLabel">Spending by category</span><span class="wu-chip wu-chip--muted">${amountOf(personalExpenseTotal)} personal</span></div>
+        ${personalExpenseTotal > 0 ? `
+          <ul class="wu-cat-rows">
+            ${topCategories.map((item, index) => `<li><i style="background:${categoryPalette[index]}"></i><span>${escapeHtml(item.category.icon ?? "")} ${escapeHtml(item.category.label)}</span><span><b>${amountOf(item.amount)}</b><small>${Math.round(item.share * 100)}%</small></span></li>`).join("")}
+            ${otherTotal > 0 ? `<li><i style="background:var(--text-faint)"></i><span>Other categories</span><span><b>${amountOf(otherTotal)}</b><small>${Math.round((otherTotal / personalExpenseTotal) * 100)}%</small></span></li>` : ""}
+          </ul>
+          <div class="wu-split" aria-hidden="true">
+            ${topCategories.map((item, index) => `<span style="flex:${Math.max(item.amount, 0.01)};background:${categoryPalette[index]}"></span>`).join("")}
+            ${otherTotal > 0 ? `<span style="flex:${otherTotal};background:var(--text-faint)"></span>` : ""}
+          </div>
+          ${totals.expense > personalExpenseTotal ? `<p class="wu-dash__note">${amountOf(totals.expense - personalExpenseTotal)} sponsored money is not counted here</p>` : ""}
+        ` : `<p class="wu-dash__note">No personal spending recorded in this period.</p>`}
+      </section>
+        <section class="wu-card wu-stack wu-stack--sm" aria-labelledby="ledgerTrendLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="ledgerTrendLabel">Last 3 months</span></div>
+        <div class="wu-minibars">
+          ${lastThree.map((item) => `<div class="wu-minibars__month">
+            <div class="wu-minibars__pair">
+              <i style="height:${Math.round((item.income / lastThreeMax) * 100)}%;background:var(--accent)" title="Income ${amountOf(item.income)}"></i>
+              <i style="height:${Math.round((item.expense / lastThreeMax) * 100)}%;background:var(--highlight)" title="Spent ${amountOf(item.expense)}"></i>
+            </div>
+            <small>${monthLabel(item.month)}</small>
+          </div>`).join("")}
         </div>
+        <div class="wu-legend"><span><i style="background:var(--accent)"></i>Income</span><span><i style="background:var(--highlight)"></i>Spent</span></div>
+      </section>
+      </div>
+
+      <!-- ROW 3 — every account, grouped -->
+      <section class="wu-card wu-dash__full wu-stack wu-stack--sm" aria-labelledby="ledgerAccountsLabel2">
+        <div class="wu-tc__top"><span class="wu-label" id="ledgerAccountsLabel2">Accounts</span><span class="wu-chip wu-chip--muted">Opening ${amountOf(totalOpeningFunds)}</span></div>
+        <!-- Grouped by kind and laid out across the card: a flat list of a
+             dozen accounts is a long scroll that says nothing about which
+             money is spendable. -->
+        <div class="wu-acct-groups">
+          ${(["bank", "wallet", "investment"] as const).map((type) => {
+            const group = balances.filter(({ account }) => account.type === type);
+            if (group.length === 0) return "";
+            const subtotal = group.reduce((sum, item) => sum + item.balance, 0);
+            const meta = accountTypeMeta(type);
+            return `<section class="wu-acct-group" aria-label="${escapeHtml(meta.label)}">
+              <div class="wu-acct-group__head">
+                <span class="wu-label">${escapeHtml(meta.icon)} ${escapeHtml(type === "bank" ? "Bank" : type === "wallet" ? "E-wallet" : "Investment")}</span>
+                <span class="wu-acct-group__total${subtotal < 0 ? " t-negative" : ""}">${subtotal < 0 ? "−" : ""}${amountOf(Math.abs(subtotal))}</span>
+              </div>
+              <ul class="wu-facts wu-facts--plain">
+                ${group.map(({ account, balance }: AccountBalance) => `<li><span>${escapeHtml(account.icon ?? meta.icon)} ${escapeHtml(account.name)}</span><span class="${balance < 0 ? "t-negative" : ""}">${balance < 0 ? "−" : ""}${amountOf(Math.abs(balance))}</span></li>`).join("")}
+              </ul>
+      </section>`;
+          }).join("")}
+        </div>
+        <p class="wu-dash__note">${state.ledgerAccounts.length} ${state.ledgerAccounts.length === 1 ? "account" : "accounts"}</p>
+      </section>
+
+      
+      
+      <!-- MANAGERS — history, categories and accounts stay, collapsed -->
+      <div class="wu-dash__full wu-stack wu-stack--sm">
         <details id="ledgerHistoryPanel" class="wu-details"${ledgerHistoryOpen ? " open" : ""}><summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-heading">History</strong><span class="t-caption t-faint">${filtered.length} records</span></span></summary><div class="wu-stack wu-stack--sm">${transactionRows || `<p class="wu-empty">No transactions match this view. Add your first record above.</p>`}</div></details>
         <details id="ledgerCategoriesPanel" class="wu-details"${ledgerCategoriesOpen ? " open" : ""}><summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-heading">Category Manager</strong><span class="t-caption t-faint">${state.ledgerCategories.length} categories</span></span></summary><div class="wu-stack">
           <form id="ledgerCategoryForm" class="wu-grid wu-grid--2">
@@ -379,16 +495,40 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
     const exists = state.ledgerTransactions.some((item) => item.id === id);
     const ledgerTransactions = exists ? state.ledgerTransactions.map((item) => item.id === id ? transaction : item) : [...state.ledgerTransactions, transaction];
     resetLedgerEntry();
+    // Saved: the form folds away again, so the page returns to what happened.
+    ledgerEntryOpen = false;
     refresh({ ...state, ledgerTransactions }, exists ? "Edit ledger transaction" : "Add ledger transaction");
   });
 
   root.querySelectorAll<HTMLButtonElement>(".edit-ledger").forEach((button) => button.addEventListener("click", () => {
     ledgerEditingId = button.dataset.id ?? "";
+    ledgerEntryOpen = true;
     refresh();
   }));
   root.querySelector<HTMLButtonElement>("#cancelLedgerEdit")?.addEventListener("click", () => {
     resetLedgerEntry();
+    ledgerEntryOpen = false;
     refresh();
+  });
+
+  // T-2: the form, the filter and the rest of the list each sit behind a
+  // control, so the page opens on what happened rather than on a form.
+  root.querySelector<HTMLButtonElement>("#ledgerAddToggle")?.addEventListener("click", () => {
+    if (ledgerEntryOpen || ledgerEditingId) {
+      resetLedgerEntry();
+      ledgerEntryOpen = false;
+    } else {
+      ledgerEntryOpen = true;
+    }
+    refresh();
+  });
+  root.querySelector<HTMLButtonElement>("#ledgerFilterToggle")?.addEventListener("click", () => {
+    ledgerFilterOpen = !ledgerFilterOpen;
+    refresh(state, undefined, true);
+  });
+  root.querySelector<HTMLButtonElement>("#ledgerSeeAll")?.addEventListener("click", () => {
+    ledgerRecentExpanded = !ledgerRecentExpanded;
+    refresh(state, undefined, true);
   });
   root.querySelectorAll<HTMLButtonElement>(".delete-ledger").forEach((button) => button.addEventListener("click", () => {
     const id = button.dataset.id;

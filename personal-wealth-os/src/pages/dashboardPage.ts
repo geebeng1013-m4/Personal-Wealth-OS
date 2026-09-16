@@ -13,6 +13,7 @@ import { createId } from "../state";
 import { money, percent } from "../rules";
 import { escapeHtml } from "../html";
 import { buildOverviewModel } from "../overview";
+import type { PortfolioSnapshot } from "../portfolioSummary";
 import { assetDrawdownBelow } from "../drawdowns";
 import { pageHeader } from "../components/pageHeader";
 import { detectMoneyLeaks } from "../advisor";
@@ -73,7 +74,7 @@ export function dashboardTemplate(state: WealthState): string {
     : 0;
   const pnl = portfolio.unrealizedPnlMyr ?? 0;
   const pnlKnown = portfolio.unrealizedPnlMyr !== null;
-  const investedNote = `${pnlKnown ? `Unrealised ${pnl >= 0 ? "+" : "−"}${amount(Math.abs(pnl))}` : "No market price yet"} · safety ${amount(state.emergency.current)}`;
+  const investedNote = pnlKnown ? `Unrealised ${pnl >= 0 ? "+" : "−"}${amount(Math.abs(pnl))} at cost ${amount(portfolio.totalInvestedMyr)}` : "No market price yet";
   const pnlChip = portfolio.unrealizedPnlPercentMyr === null || !pnlKnown
     ? ""
     : `<span class="wu-chip${pnl >= 0 ? "" : " wu-chip--negative"}">${pnl >= 0 ? "+" : "−"}${percent(Math.abs(portfolio.unrealizedPnlPercentMyr))}</span>`;
@@ -123,11 +124,17 @@ export function dashboardTemplate(state: WealthState): string {
         <div class="wu-tc__top"><span class="wu-label" id="ovInvestedLabel">Invested</span>${pnlChip}</div>
         <p class="wu-money"><span class="wu-money__cur">MYR</span><span>${amount(portfolio.totalInvestedMyr)}</span></p>
         <p class="wu-dash__note" id="ovInvestedNote">${escapeHtml(investedNote)}</p>
-        <p class="t-caption t-faint" id="ovValuationNote">${escapeHtml(joinNotes(valuationNote(portfolio), usdPnlNote(portfolio)))}</p>
+        <p class="t-caption t-faint" id="ovValuationNote">${escapeHtml(dashboardValuationNote(portfolio))}</p>
         <div class="wu-split" aria-label="Tracked capital split">
-          <span style="flex:${Math.max(investedShare, 0.02)};background:var(--accent)"></span>
-          <span style="flex:${Math.max(safetyShare, 0.02)};background:var(--highlight)"></span>
-          <span style="flex:${Math.max(reserveShare, 0.02)};background:var(--text-faint)"></span>
+          <span style="flex:${Math.max(investedShare, 0.02)};background:var(--accent)" title="Invested ${amount(portfolio.totalInvestedMyr)}"></span>
+          <span style="flex:${Math.max(safetyShare, 0.02)};background:var(--highlight)" title="Safety ${amount(state.emergency.current)}"></span>
+          <span style="flex:${Math.max(reserveShare, 0.02)};background:var(--text-faint)" title="Reserve ${amount(tracked.reserve)}"></span>
+        </div>
+        <!-- the bar's three colours, named: a colour on its own is a riddle -->
+        <div class="wu-legend wu-legend--tight">
+          <span><i style="background:var(--accent)"></i>Invested <b>${amount(portfolio.totalInvestedMyr)}</b></span>
+          <span><i style="background:var(--highlight)"></i>Safety <b>${amount(state.emergency.current)}</b></span>
+          <span><i style="background:var(--text-faint)"></i>Reserve <b>${amount(tracked.reserve)}</b></span>
         </div>
       </section>
 
@@ -196,6 +203,19 @@ export function dashboardTemplate(state: WealthState): string {
   </div>`;
 }
 
+/*
+ * The Dashboard's one-line valuation note.
+ *
+ * When every holding is priced, "Market data may be delayed · last traded 9h
+ * ago" is noise on a summary page — the Portfolio page still carries it next
+ * to the figures it qualifies. An incomplete valuation is different: that
+ * sentence stays, because the number beside it is not the whole picture.
+ */
+function dashboardValuationNote(portfolio: PortfolioSnapshot): string {
+  const status = portfolio.valuationStatus === "complete" ? "" : valuationNote(portfolio);
+  return joinNotes(status, usdPnlNote(portfolio));
+}
+
 function getGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return "morning";
@@ -262,9 +282,11 @@ export function bindDashboard(
     const noteEl = root.querySelector<HTMLElement>("#ovValuationNote");
     if (investedNoteEl) {
       const livePnl = portfolio.unrealizedPnlMyr;
-      investedNoteEl.textContent = `${livePnl === null ? "No market price yet" : `Unrealised ${livePnl >= 0 ? "+" : "−"}${plain(Math.abs(livePnl))}`} · safety ${plain(state.emergency.current)}`;
+      investedNoteEl.textContent = livePnl === null
+        ? "No market price yet"
+        : `Unrealised ${livePnl >= 0 ? "+" : "−"}${plain(Math.abs(livePnl))} at cost ${plain(portfolio.totalInvestedMyr)}`;
     }
-    if (noteEl) noteEl.textContent = joinNotes(valuationNote(portfolio), usdPnlNote(portfolio));
+    if (noteEl) noteEl.textContent = dashboardValuationNote(portfolio);
   };
   refreshLivePrices(state, patchDashboardValuation);
   // Keep asking while this Dashboard stays on screen, so a tab left open
