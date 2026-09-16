@@ -1,9 +1,12 @@
 /**
- * Budget page — the bucket allocation matrix and its inline editor.
+ * Budget page — where this month's money went, and the buckets behind it.
  *
- * Each bucket's amount and its share of the monthly plan come from
- * getBudgetSnapshot, the canonical model, so the bars always add up to what the
- * Dashboard's budget figures say.
+ * Two halves, in the order the question is actually asked. "This month" routes
+ * the income the Ledger recorded through the allocation plan; the bucket cards
+ * below are the amounts that plan was built from, with their inline editor.
+ *
+ * Every figure comes from getBudgetSnapshot, the canonical model, so the bars
+ * always add up to what the Dashboard's budget figures say.
  */
 
 import type { WealthState } from "../models";
@@ -13,11 +16,14 @@ import { escapeHtml } from "../html";
 import { leakInsightStrip } from "../components/leakInsightStrip";
 import { pageHeader } from "../components/pageHeader";
 import { getBudgetSnapshot } from "../budgetSummary";
+import { allocationPanel } from "../components/allocationPanel";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
 export function bucketsTemplate(state: WealthState): string {
-  // Bucket allocation facts come from the canonical budget read model.
-  const bucketCards = getBudgetSnapshot(state).buckets.map((bucket) => {
+  // One snapshot for the whole page: the waterfall above and the bucket cards
+  // below must never be built from two different reads of the same state.
+  const budget = getBudgetSnapshot(state);
+  const bucketCards = budget.buckets.map((bucket) => {
     const index = bucket.index;
     const width = bucket.allocationRatio * 100;
     const cadence = bucket.cadence === "monthly" ? "Monthly" : "One-time";
@@ -60,9 +66,14 @@ export function bucketsTemplate(state: WealthState): string {
       ${pageHeader({
         eyebrow: "Capital Routing",
         title: "Budget",
-        sub: "Give every ringgit a job before the month starts.",
+        sub: "Where this month's money went, and the buckets behind it.",
       })}
       ${leakInsightStrip(state, ["budget"], "Budget signal")}
+      ${allocationPanel(budget)}
+      <div class="wu-stack wu-stack--sm" style="margin-top:var(--space-5)">
+        <span class="wu-label">Buckets</span>
+        <span class="wu-label--plain t-caption">The amounts above are built from these. Editing one changes where next month's money goes.</span>
+      </div>
       <div class="wu-grid wu-grid--3">
         ${bucketCards}
         ${addBucketCard}

@@ -56,6 +56,10 @@ export interface AllocationRow {
    * snapshot carrying these rows cannot be mistaken for carrying rule records.
    */
   stepKind: AllocationStepKind;
+  /** The rule's own figure: an amount for "fill", a percentage otherwise. */
+  value: number;
+  /** What this money is allowed to do, as the user wrote it. */
+  note?: string;
   /** What the rule asks for, measured on the month's cumulative income. */
   want: number;
   /** What it has received this month, including any overflow. */
@@ -161,6 +165,8 @@ export function allocateIncome(plan: AllocationRouting, allocatedSoFar: number, 
     stepId: step.id,
     name: step.name,
     stepKind: step.kind,
+    value: step.value,
+    ...(step.note ? { note: step.note } : {}),
     want: current.want[index],
     got: current.got[index],
     added: current.got[index] - previous.got[index],
