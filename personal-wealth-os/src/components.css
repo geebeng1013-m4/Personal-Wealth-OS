@@ -1478,6 +1478,55 @@
     font-weight: var(--weight-semibold);
     color: var(--text);
   }
+  .wu-legend--tight {
+    gap: 2px var(--space-3);
+    font-size: var(--text-caption);
+  }
+  /* a row of equal figure tiles: two across on a phone, four on a desktop */
+  .wu-dash__tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+  @media (min-width: 721px) {
+    .wu-dash__tiles {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  .wu-cat-rows {
+    display: grid;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .wu-cat-rows li {
+    display: grid;
+    grid-template-columns: 12px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 36px;
+    border-top: 1px solid var(--border-subtle);
+    font-size: var(--text-body);
+  }
+  .wu-cat-rows li:first-child {
+    border-top: 0;
+  }
+  .wu-cat-rows i {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+  }
+  .wu-cat-rows b {
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
+  }
+  .wu-cat-rows small {
+    margin-left: var(--space-2);
+    color: var(--text-faint);
+    font-weight: var(--weight-regular);
+  }
+
   .wu-three {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1642,19 +1691,21 @@
     .wu-dash--start {
       align-items: start;
     }
-    .wu-dash__tile {
+    /* spans belong to the page grid only — a tile row nested inside it has
+       its own columns */
+    .wu-dash > .wu-dash__tile {
       grid-column: span 3;
     }
-    .wu-dash__half {
+    .wu-dash > .wu-dash__half {
       grid-column: span 6;
     }
-    .wu-dash__wide {
+    .wu-dash > .wu-dash__wide {
       grid-column: span 8;
     }
-    .wu-dash__narrow {
+    .wu-dash > .wu-dash__narrow {
       grid-column: span 4;
     }
-    .wu-dash__full {
+    .wu-dash > .wu-dash__full {
       grid-column: 1 / -1;
     }
     /* the links stop being a card and become one quiet row under the grid */

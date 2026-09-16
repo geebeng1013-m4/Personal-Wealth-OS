@@ -203,6 +203,8 @@ export function ledgerTemplate(state: WealthState): string {
     </li>`;
   };
   const RECENT_LIMIT = 5;
+  const netTotal = totals.income - totals.expense;
+  const keptShare = totals.income > 0 ? Math.min(Math.max(netTotal / totals.income, 0), 1) : 0;
   const shown = ledgerRecentExpanded ? filtered : filtered.slice(0, RECENT_LIMIT);
   const amountOf = (value: number): string => money(value, "").trim();
 
@@ -221,7 +223,9 @@ export function ledgerTemplate(state: WealthState): string {
       eyebrow: "Everyday Money",
       title: "Ledger",
       sub: "Record income and spending, see where the money goes.",
-      actions: `<button class="wu-btn wu-btn--primary wu-btn--sm" id="ledgerAddToggle" type="button" aria-expanded="${entryOpen}" aria-controls="ledgerEntryPanel">${entryOpen ? "Close" : "+ Add transaction"}</button>`,
+      actions: `<div class="wu-segmented">${(["today", "week", "month", "year", "custom"] as const).map((preset) => `<button type="button" data-preset="${preset}" class="wu-segmented__option${ledgerFilters.preset === preset ? " is-active" : ""}">${presetLabel[preset]}</button>`).join("")}</div>
+        <button class="wu-btn wu-btn--secondary wu-btn--sm" id="ledgerFilterToggle" type="button" aria-expanded="${ledgerFilterOpen}" aria-controls="ledgerFilterForm">${ledgerFilterOpen ? "Hide filter" : "Filter"}</button>
+        <button class="wu-btn wu-btn--primary wu-btn--sm" id="ledgerAddToggle" type="button" aria-expanded="${entryOpen}" aria-controls="ledgerEntryPanel">${entryOpen ? "Close" : "+ Add transaction"}</button>`,
     })}
 
     <div class="wu-dash wu-dash--start">
@@ -251,45 +255,9 @@ export function ledgerTemplate(state: WealthState): string {
         </form>
       </section>
 
-      <!-- THIS MONTH — the five single-figure cards, merged -->
-      <section class="wu-card wu-dash__wide wu-stack wu-stack--sm" aria-labelledby="ledgerPeriodLabel">
-        <div class="wu-tc__top"><span class="wu-label" id="ledgerPeriodLabel">This period</span><span class="wu-chip wu-chip--muted">${escapeHtml(presetLabel[ledgerFilters.preset] ?? "Custom")}</span></div>
-        <div class="wu-segmented">${(["today", "week", "month", "year", "custom"] as const).map((preset) => `<button type="button" data-preset="${preset}" class="wu-segmented__option${ledgerFilters.preset === preset ? " is-active" : ""}">${presetLabel[preset]}</button>`).join("")}</div>
-        <div class="wu-three">
-          <div><span>Income</span><b class="t-positive">${amountOf(totals.income)}</b></div>
-          <div><span>Spent</span><b class="t-negative">${amountOf(totals.expense)}</b></div>
-          <div><span>Net</span><b class="${totals.income - totals.expense >= 0 ? "t-positive" : "t-negative"}">${totals.income - totals.expense >= 0 ? "+" : "−"}${amountOf(Math.abs(totals.income - totals.expense))}</b></div>
-        </div>
-        ${personalExpenseTotal > 0 ? `
-          <div class="wu-split" aria-label="Spending by category">
-            ${topCategories.map((item, index) => `<span style="flex:${Math.max(item.amount, 0.01)};background:${categoryPalette[index]}"></span>`).join("")}
-            ${otherTotal > 0 ? `<span style="flex:${otherTotal};background:var(--text-faint)"></span>` : ""}
-          </div>
-          <div class="wu-legend">
-            ${topCategories.map((item, index) => `<span><i style="background:${categoryPalette[index]}"></i>${escapeHtml(item.category.icon ?? "")} ${escapeHtml(item.category.label)} <b>${amountOf(item.amount)}</b></span>`).join("")}
-            ${otherTotal > 0 ? `<span><i style="background:var(--text-faint)"></i>Other <b>${amountOf(otherTotal)}</b></span>` : ""}
-          </div>
-        ` : `<p class="wu-dash__note">No personal spending recorded in this period.</p>`}
-      </section>
-
-      <!-- ACCOUNTS — one card, one row per account -->
-      <section class="wu-card wu-dash__narrow wu-stack wu-stack--sm" aria-labelledby="ledgerAccountsLabel">
-        <div class="wu-tc__top"><span class="wu-label" id="ledgerAccountsLabel">Accounts</span><span class="wu-chip wu-chip--muted">Liquid ${amountOf(liquidNetAssets)}</span></div>
-        <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(totalNetAssets)}</span></p>
-        <ul class="wu-facts wu-facts--plain">
-          ${balances.map(({ account, balance }: AccountBalance) => `<li><span>${escapeHtml(account.icon ?? accountTypeMeta(account.type).icon)} ${escapeHtml(account.name)}</span><span class="${balance < 0 ? "t-negative" : ""}">${balance < 0 ? "−" : ""}${amountOf(Math.abs(balance))}</span></li>`).join("")}
-        </ul>
-        <p class="wu-dash__note">Opening funds ${amountOf(totalOpeningFunds)}</p>
-      </section>
-
-      <!-- RECENT — five rows, the rest behind "See all" -->
-      <section class="wu-card wu-dash__wide wu-stack wu-stack--sm" aria-labelledby="ledgerRecentLabel">
-        <div class="wu-tc__top">
-          <span class="wu-label" id="ledgerRecentLabel">Recent</span>
-          <button class="wu-btn wu-btn--ghost wu-btn--sm" id="ledgerFilterToggle" type="button" aria-expanded="${ledgerFilterOpen}" aria-controls="ledgerFilterForm">${ledgerFilterOpen ? "Hide filter" : "Filter"}</button>
-        </div>
-        <form id="ledgerFilterForm" class="wu-stack wu-stack--sm"${ledgerFilterOpen ? "" : " hidden"}>
-          <div class="wu-grid wu-grid--wide wu-ledger-filter-fields ${ledgerFilters.preset === "custom" ? "show-custom" : ""}">
+      <!-- FILTER — one panel, shared by the figures and the list below -->
+      <form id="ledgerFilterForm" class="wu-card wu-dash__full wu-stack wu-stack--sm"${ledgerFilterOpen ? "" : " hidden"}>
+        <div class="wu-grid wu-grid--wide wu-ledger-filter-fields ${ledgerFilters.preset === "custom" ? "show-custom" : ""}">
               <label class="wu-field-row custom-date"><span class="wu-field-row__label">From</span><input class="wu-field" name="startDate" type="date" value="${ledgerFilters.startDate}"></label>
               <label class="wu-field-row custom-date"><span class="wu-field-row__label">To</span><input class="wu-field" name="endDate" type="date" value="${ledgerFilters.endDate}"></label>
               <label class="wu-field-row"><span class="wu-field-row__label">Type</span><select class="wu-field" name="type"><option value="all">All types</option><option value="expense"${ledgerFilters.type === "expense" ? " selected" : ""}>Expense</option><option value="income"${ledgerFilters.type === "income" ? " selected" : ""}>Income</option><option value="transfer"${ledgerFilters.type === "transfer" ? " selected" : ""}>Transfer</option></select></label>
@@ -298,7 +266,38 @@ export function ledgerTemplate(state: WealthState): string {
               <label class="wu-field-row"><span class="wu-field-row__label">Search</span><input class="wu-field" name="query" type="search" value="${escapeHtml(ledgerFilters.query)}" placeholder="Note, category, account"></label>
               <div class="wu-row wu-self-end"><button class="wu-btn wu-btn--ghost wu-btn--sm" id="resetLedgerFilters" type="button">Reset</button></div>
             </div>
-        </form>
+      </form>
+
+      <!-- ROW 1 — the period's four figures, all the same size -->
+      <div class="wu-dash__full wu-dash__tiles">
+        <section class="wu-card wu-dash__tile" aria-labelledby="ledgerIncomeLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="ledgerIncomeLabel">Income</span></div>
+          <p class="wu-money wu-money--md t-positive"><span class="wu-money__cur">MYR</span><span>${amountOf(totals.income)}</span></p>
+          <p class="wu-dash__note">${escapeHtml(presetLabel[ledgerFilters.preset] ?? "Selected range")}</p>
+        </section>
+        <section class="wu-card wu-dash__tile" aria-labelledby="ledgerSpentLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="ledgerSpentLabel">Spent</span></div>
+          <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(totals.expense)}</span></p>
+          <p class="wu-dash__note">${personalExpenseTotal < totals.expense ? `${amountOf(totals.expense - personalExpenseTotal)} sponsored` : "All personal money"}</p>
+        </section>
+        <section class="wu-card wu-dash__tile" aria-labelledby="ledgerNetLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="ledgerNetLabel">Net</span></div>
+          <p class="wu-money wu-money--md ${netTotal >= 0 ? "t-positive" : "t-negative"}"><span class="wu-money__cur">MYR</span><span>${netTotal >= 0 ? "+" : "−"}${amountOf(Math.abs(netTotal))}</span></p>
+          <p class="wu-dash__note">${totals.income > 0 ? `${Math.round(keptShare * 100)}% of income kept` : "No income recorded yet"}</p>
+          <div class="wu-bar" role="progressbar" aria-valuenow="${Math.round(keptShare * 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="Share of income kept">
+            <span class="wu-bar__fill" style="width:${Math.round(keptShare * 100)}%"></span>
+          </div>
+        </section>
+        <section class="wu-card wu-dash__tile" aria-labelledby="ledgerAssetsLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="ledgerAssetsLabel">Net assets</span><span class="wu-chip wu-chip--muted">Liquid ${amountOf(liquidNetAssets)}</span></div>
+          <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(totalNetAssets)}</span></p>
+          <p class="wu-dash__note">Across ${state.ledgerAccounts.length} ${state.ledgerAccounts.length === 1 ? "account" : "accounts"}</p>
+        </section>
+      </div>
+
+      <!-- ROW 2 — recent transactions | where the money went -->
+      <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ledgerRecentLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="ledgerRecentLabel">Recent transactions</span></div>
         ${filtered.length === 0
           ? `<p class="wu-empty">No transactions match this filter yet.</p>`
           : `<ul class="wu-ledger-list">${shown.map(transactionRow).join("")}</ul>`}
@@ -307,8 +306,29 @@ export function ledgerTemplate(state: WealthState): string {
           : ""}
       </section>
 
-      <!-- LAST 3 MONTHS -->
-      <section class="wu-card wu-dash__narrow wu-stack wu-stack--sm" aria-labelledby="ledgerTrendLabel">
+      <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ledgerCategoryLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="ledgerCategoryLabel">Spending by category</span><span class="wu-chip wu-chip--muted">${amountOf(personalExpenseTotal)} personal</span></div>
+        ${personalExpenseTotal > 0 ? `
+          <div class="wu-split" aria-hidden="true">
+            ${topCategories.map((item, index) => `<span style="flex:${Math.max(item.amount, 0.01)};background:${categoryPalette[index]}"></span>`).join("")}
+            ${otherTotal > 0 ? `<span style="flex:${otherTotal};background:var(--text-faint)"></span>` : ""}
+          </div>
+          <ul class="wu-cat-rows">
+            ${topCategories.map((item, index) => `<li><i style="background:${categoryPalette[index]}"></i><span>${escapeHtml(item.category.icon ?? "")} ${escapeHtml(item.category.label)}</span><span><b>${amountOf(item.amount)}</b><small>${Math.round(item.share * 100)}%</small></span></li>`).join("")}
+            ${otherTotal > 0 ? `<li><i style="background:var(--text-faint)"></i><span>Other categories</span><span><b>${amountOf(otherTotal)}</b><small>${Math.round((otherTotal / personalExpenseTotal) * 100)}%</small></span></li>` : ""}
+          </ul>
+        ` : `<p class="wu-dash__note">No personal spending recorded in this period.</p>`}
+      </section>
+
+      <!-- ROW 3 — accounts | three-month trend -->
+      <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ledgerAccountsLabel2">
+        <div class="wu-tc__top"><span class="wu-label" id="ledgerAccountsLabel2">Accounts</span><span class="wu-chip wu-chip--muted">Opening ${amountOf(totalOpeningFunds)}</span></div>
+        <ul class="wu-facts wu-facts--plain">
+          ${balances.map(({ account, balance }: AccountBalance) => `<li><span>${escapeHtml(account.icon ?? accountTypeMeta(account.type).icon)} ${escapeHtml(account.name)}<small class="wu-ledger-row__sub"> · ${escapeHtml(accountTypeMeta(account.type).label)}</small></span><span class="${balance < 0 ? "t-negative" : ""}">${balance < 0 ? "−" : ""}${amountOf(Math.abs(balance))}</span></li>`).join("")}
+        </ul>
+      </section>
+
+      <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ledgerTrendLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ledgerTrendLabel">Last 3 months</span></div>
         <div class="wu-minibars">
           ${lastThree.map((item) => `<div class="wu-minibars__month">
