@@ -1130,6 +1130,14 @@
     background: var(--surface);
     color: var(--text);
   }
+  /* a card that is also a stack keeps the stack's column and gap — .wu-card's
+     display: block comes later at the same specificity and would flatten
+     every row against the next. :where keeps it no stronger than .wu-card, so
+     the rules that hide a phone-only card still win */
+  :where(.wu-card).wu-stack {
+    display: flex;
+    flex-direction: column;
+  }
   .wu-card--pad-sm {
     padding: var(--space-4);
   }
@@ -3415,9 +3423,11 @@
   .wu-tvm-row--plain {
     grid-template-columns: minmax(96px, 0.9fr) minmax(0, 1.4fr);
   }
+  /* an option has no solve button, so it runs on to the row's right edge —
+     wide enough for "Effective" and "Beginning" on a phone */
   .wu-tvm-row--option > .wu-field,
   .wu-tvm-row--option > .wu-tvm-choice {
-    grid-column: 2;
+    grid-column: 2 / -1;
     justify-self: stretch;
   }
   .wu-tvm-rows:not(:has(.wu-tvm-solve)) .wu-tvm-row--option {
@@ -3457,9 +3467,11 @@
     background: var(--accent-soft);
     color: var(--accent);
   }
+  /* as tall as the number fields beside it, so every row reads evenly */
   .wu-tvm-choice {
     display: flex;
     width: 100%;
+    min-height: 36px;
   }
   .wu-tvm-choice .wu-segmented__option {
     flex: 1 1 0;
