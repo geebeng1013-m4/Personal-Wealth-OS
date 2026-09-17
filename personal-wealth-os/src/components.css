@@ -1038,6 +1038,12 @@
   .wu-table tbody tr:last-child td {
     border-bottom: none;
   }
+  /* A group heading inside a table body — e.g. the holdings in one currency. */
+  .wu-table tr.wu-table__group td {
+    background: var(--surface-raised);
+    color: var(--text-faint);
+    font-size: var(--text-caption);
+  }
 
   /* A caption hung under a figure — where the number came from, or what
      qualifies it. Sits inside a <dd> or beside a value, so it claims its own

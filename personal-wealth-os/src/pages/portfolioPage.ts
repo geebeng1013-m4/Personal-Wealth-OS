@@ -29,11 +29,12 @@ import {
 import { nextContributionLead } from "../nextContribution";
 import {
   getPortfolioSnapshot,
+  type CurrencySubtotal,
   type PortfolioHolding,
   type PortfolioSnapshot,
 } from "../portfolioSummary";
-import { exchangeRateOf, resolveExchangeCoverage } from "../currencyExchange";
-import { ringgitLeg, sidesOf } from "../tradeCurrency";
+import { exchangeRateOf, resolveExchangeCoverage, tradesWithExchangeCost } from "../currencyExchange";
+import { lotsText, marketLabel, ringgitLeg, sidesOf, tradeAmounts } from "../tradeCurrency";
 import { exchangesFromText, mergeExchanges } from "../exchangeImport";
 import { rebalanceContributions, tradeExchangeRate } from "../financialHealth";
 import { recordsFromCsv } from "../csvImport";
@@ -281,6 +282,31 @@ function holdingRole(ticker: string): string {
   return ticker === "VOO" ? "Core market" : ticker === "QQQM" ? "Growth" : ticker === "VXUS" ? "International" : "Holding";
 }
 
+/** An amount in a named currency, statement style: "HKD 12,500". */
+function localMoney(currency: string, value: number): string {
+  return `${currency} ${amountOf(value)}`;
+}
+
+/**
+ * The line under a holding's name. A US listing keeps its role; anywhere else
+ * says where it trades and what it is worth there, because the value column
+ * beside it is in ringgit. A Malaysian holding is already in ringgit, so it
+ * shows its board lots instead.
+ */
+function holdingSubtitle(position: PortfolioHolding): string {
+  if (position.market === "US") return holdingRole(position.ticker);
+  if (position.currency === "MYR") return joinNotes(marketLabel(position.market), lotsText(position.market, position.units));
+  const local = position.marketValueLocal ?? position.investedLocal;
+  return joinNotes(marketLabel(position.market), localMoney(position.currency, local));
+}
+
+/** Currencies whose holdings are priced but have no rate to ringgit yet. */
+function currenciesMissingRate(portfolio: PortfolioSnapshot): string[] {
+  return portfolio.byCurrency
+    .filter((group) => group.marketValueLocal !== null && group.rateToMyr === null)
+    .map((group) => group.currency);
+}
+
 /*
  * The regions below carry every figure that moves with the live price: the
  * four figure tiles, the holdings, the next-contribution split, and the
@@ -291,28 +317,69 @@ function holdingRole(ticker: string): string {
  * an input or a bound control, so replacing their innerHTML needs no rebinding.
  */
 
-/** Position Detail table rows — one per holding, price-driven throughout. */
+/** Columns in the Position Detail table; group rows span all of them. */
+const POSITION_COLUMNS = 11;
+
+/** One Position Detail row, price-driven throughout. */
+function positionRowHtml(position: PortfolioHolding): string {
+  const driftSign = position.drift >= 0 ? "+" : "";
+  // Market price, value and P&L come straight off the holding. A holding with
+  // no usable quote shows "--" rather than being valued at zero.
+  const pnlToneClass = position.unrealizedPnlMyr == null
+    ? "" : position.unrealizedPnlMyr >= 0 ? "t-positive" : "t-negative";
+  const driftToneClass = Math.abs(position.drift) > 0.08 ? "t-negative" : "";
+  // Statement figures in the holding's own currency keep two decimals, as the
+  // dollar columns always did.
+  const local = (value: number | null): string => value == null
+    ? UNKNOWN
+    : `${escapeHtml(position.currency)} ${value.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const lots = lotsText(position.market, position.units);
+  return '<tr>' +
+    '<td><strong>' + escapeHtml(position.ticker) + '</strong></td>' +
+    '<td>' + position.units.toFixed(position.currency === "USD" ? 5 : 0) + (lots ? ' · ' + lots : '') + '</td>' +
+    '<td>' + local(position.averageCostLocal) + '</td>' +
+    '<td>' + local(position.priceLocal) + '</td>' +
+    '<td>' + local(position.investedLocal) + '</td>' +
+    '<td>' + local(position.marketValueLocal) + '</td>' +
+    '<td>' + money(position.investedMyr) + '</td>' +
+    '<td>' + moneyOrUnknown(position.marketValueMyr) + '</td>' +
+    '<td class="' + pnlToneClass + '">' + pnlText(position.unrealizedPnlMyr, position.unrealizedPnlPercentMyr) + '</td>' +
+    '<td>' + percent(position.actualAllocation) + ' / ' + percent(position.targetAllocation) + '</td>' +
+    '<td class="' + driftToneClass + '">' + driftSign + percent(position.drift, 1) + '</td>' +
+    '</tr>';
+}
+
+/** "USD · 3 holdings · USD 1,141.25 → USD 1,175.54 · MYR 4,737.40" */
+function currencyGroupRowHtml(group: CurrencySubtotal): string {
+  const count = group.tickers.length;
+  const value = group.marketValueLocal == null
+    ? ""
+    : ` → ${localMoney(group.currency, group.marketValueLocal)}`;
+  const myr = group.currency === "MYR" || group.marketValueMyr == null ? "" : localMoney("MYR", group.marketValueMyr);
+  const rate = group.currency === "MYR" || group.rateToMyr == null ? "" : `rate ${group.rateToMyr.toFixed(4)}`;
+  const text = joinNotes(
+    group.currency,
+    `${count} ${count === 1 ? "holding" : "holdings"}`,
+    `${localMoney(group.currency, group.investedLocal)}${value}`,
+    myr,
+    rate,
+  );
+  return `<tr class="wu-table__group"><td colspan="${POSITION_COLUMNS}">${escapeHtml(text)}</td></tr>`;
+}
+
+/**
+ * Position Detail rows. With holdings in more than one currency they are
+ * grouped by currency under a subtotal row; a single-currency portfolio has
+ * nothing to group and reads as it always did. Targets not yet held follow.
+ */
 function positionRowsHtml(portfolio: PortfolioSnapshot): string {
-  return portfolio.holdings.map((position) => {
-    const driftSign = position.drift >= 0 ? "+" : "";
-    // Market price, value and P&L come straight off the holding. A holding with
-    // no usable quote shows "--" rather than being valued at zero.
-    const pnlToneClass = position.unrealizedPnlMyr == null
-      ? "" : position.unrealizedPnlMyr >= 0 ? "t-positive" : "t-negative";
-    const driftToneClass = Math.abs(position.drift) > 0.08 ? "t-negative" : "";
-    return '<tr>' +
-      '<td><strong>' + escapeHtml(position.ticker) + '</strong></td>' +
-      '<td>' + money(position.investedMyr) + '</td>' +
-      '<td>USD ' + position.investedUsd.toFixed(2) + '</td>' +
-      '<td>' + position.units.toFixed(5) + '</td>' +
-      '<td>USD ' + position.averageCostUsd.toFixed(2) + '</td>' +
-      '<td>' + (position.priceUsd == null ? UNKNOWN : 'USD ' + position.priceUsd.toFixed(2)) + '</td>' +
-      '<td>' + moneyOrUnknown(position.marketValueMyr) + '</td>' +
-      '<td class="' + pnlToneClass + '">' + pnlText(position.unrealizedPnlMyr, position.unrealizedPnlPercentMyr) + '</td>' +
-      '<td>' + percent(position.actualAllocation) + ' / ' + percent(position.targetAllocation) + '</td>' +
-      '<td class="' + driftToneClass + '">' + driftSign + percent(position.drift, 1) + '</td>' +
-      '</tr>';
-  }).join("");
+  if (portfolio.byCurrency.length <= 1) return portfolio.holdings.map(positionRowHtml).join("");
+  const grouped = portfolio.byCurrency.map((group) => currencyGroupRowHtml(group)
+    + portfolio.holdings
+      .filter((position) => position.units > 0 && position.currency === group.currency)
+      .map(positionRowHtml).join(""));
+  const notHeld = portfolio.holdings.filter((position) => position.units <= 0).map(positionRowHtml);
+  return [...grouped, ...notHeld].join("");
 }
 
 /**
@@ -335,9 +402,14 @@ function portfolioTilesBody(portfolio: PortfolioSnapshot, tradeCount: number): s
   const heldCount = portfolio.holdings.filter((position) => position.units > 0).length;
   const holdingsText = `${heldCount} ${heldCount === 1 ? "holding" : "holdings"}`;
   // A complete valuation only needs its age; an incomplete one says what is missing.
-  const valuationText = portfolio.valuationStatus === "complete"
-    ? joinNotes(holdingsText, quoteAgeLabel(portfolio.valuedAt))
-    : valuationNote(portfolio);
+  // Every holding priced, but a currency with no rate to ringgit leaves the
+  // ringgit total unknown — say which, rather than showing a bare "--".
+  const missingRate = currenciesMissingRate(portfolio);
+  const valuationText = missingRate.length > 0 && portfolio.totalInvestmentValueMyr === null
+    ? `No ${missingRate.join(" / ")} → MYR rate yet`
+    : portfolio.valuationStatus === "complete"
+      ? joinNotes(holdingsText, quoteAgeLabel(portfolio.valuedAt))
+      : valuationNote(portfolio);
   const ratio = portfolio.unrealizedPnlPercentMyr;
   const returnChip = ratio == null
     ? ""
@@ -393,7 +465,7 @@ function holdingsBody(portfolio: PortfolioSnapshot): string {
             const driftTone = Math.abs(position.drift) > 0.08 ? "t-negative" : "t-faint";
             return `<div class="wu-hold">
             <span class="wu-hold__tick" style="background:${TICKER_COLORS[index % TICKER_COLORS.length]}" aria-hidden="true">${escapeHtml(position.ticker.slice(0, 4))}</span>
-            <span class="wu-hold__name">${escapeHtml(position.ticker)}<small>${escapeHtml(holdingRole(position.ticker))}</small></span>
+            <span class="wu-hold__name">${escapeHtml(position.ticker)}<small>${escapeHtml(holdingSubtitle(position))}</small></span>
             <span class="wu-hold__weight">
               <span class="wu-weight" role="img" aria-label="${percent(position.actualAllocation)} of portfolio, target ${percent(position.targetAllocation)}"><span style="width:${actual}%"></span><i style="left:${target}%"></i></span>
               <span class="wu-hold__meta"><span>${percent(position.actualAllocation)}</span><span>Target ${percent(position.targetAllocation)}</span></span>
@@ -432,7 +504,10 @@ function shortDate(date: string): string {
 
 export function portfolioTemplate(state: WealthState): string {
   const portfolio = getPortfolioSnapshot(state, new Date(), livePriceInputs());
-  const sortedTrades = [...state.trades].sort((a, b) => b.date.localeCompare(a.date));
+  // Ringgit amounts as the portfolio costs them: a Hong Kong trade's MYR figure
+  // comes from its HKD conversions, a Malaysian trade's is its own amount.
+  const sortedTrades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? [])
+    .sort((a, b) => b.date.localeCompare(a.date));
   const recentTrades = sortedTrades.slice(0, RECENT_LIMIT);
   const conversions = state.currencyExchanges ?? [];
   const coverage = conversions.length ? resolveExchangeCoverage(state.trades, conversions) : null;
@@ -442,15 +517,17 @@ export function portfolioTemplate(state: WealthState): string {
 
   const tradeRows = sortedTrades
     .map((trade) => {
+      const { currency, amount, price } = tradeAmounts(trade);
+      const rate = currency === "MYR" ? 1 : currency === "USD" ? tradeExchangeRate(trade) : trade.exchangeRate ?? 0;
       return '<tr>' +
         '<td>' + escapeHtml(trade.date) + '</td>' +
         '<td>' + escapeHtml(trade.platform) + '</td>' +
         '<td><strong>' + escapeHtml(trade.ticker) + '</strong></td>' +
         '<td>' + escapeHtml(trade.type) + '</td>' +
         '<td>' + money(trade.amountMyr) + '</td>' +
-        '<td>USD ' + trade.amountUsd.toFixed(2) + '</td>' +
-        '<td>USD ' + trade.priceUsd.toFixed(2) + '</td>' +
-        '<td>' + tradeExchangeRate(trade).toFixed(4) + '</td>' +
+        '<td>' + escapeHtml(currency) + ' ' + amount.toFixed(2) + '</td>' +
+        '<td>' + escapeHtml(currency) + ' ' + price.toFixed(2) + '</td>' +
+        '<td>' + (rate > 0 ? rate.toFixed(4) : UNKNOWN) + '</td>' +
         '<td>' + tradeUnits(trade).toFixed(5) + '</td>' +
         '<td><button class="wu-btn wu-btn--ghost wu-btn--icon delete-trade" data-id="' + escapeHtml(trade.id) + '" type="button" aria-label="Delete trade" title="Delete trade">✕</button></td>' +
         '</tr>';
@@ -521,7 +598,7 @@ export function portfolioTemplate(state: WealthState): string {
           : ""}</div>
         <div class="wu-table-wrap">
           <table class="wu-table">
-            <thead><tr><th>Date</th><th>Platform</th><th>Ticker</th><th>Type</th><th>Amount MYR</th><th>Amount USD</th><th>Price USD</th><th>FX</th><th>Units</th><th></th></tr></thead>
+            <thead><tr><th>Date</th><th>Platform</th><th>Ticker</th><th>Type</th><th>Amount MYR</th><th>Amount</th><th>Price</th><th>FX</th><th>Units</th><th></th></tr></thead>
             <tbody>${tradeRows || `<tr><td colspan="10"><p class="wu-empty">No transactions yet. Add your first transaction to begin tracking.</p></td></tr>`}</tbody>
           </table>
         </div>
@@ -542,7 +619,7 @@ export function portfolioTemplate(state: WealthState): string {
         <div class="wu-tc__top"><span class="wu-label" id="pfPositionsLabel">Position detail</span></div>
         <div class="wu-table-wrap">
           <table class="wu-table">
-            <thead><tr><th>Ticker</th><th>Invested MYR</th><th>Invested USD</th><th>Units</th><th>Avg Cost</th><th>Market Price</th><th>Market Value</th><th>Unrealised P&amp;L</th><th>Actual / Target</th><th>Drift</th></tr></thead>
+            <thead><tr><th>Ticker</th><th>Units</th><th>Avg Cost</th><th>Market Price</th><th>Invested</th><th>Value</th><th>Invested MYR</th><th>Value MYR</th><th>Unrealised P&amp;L</th><th>Actual / Target</th><th>Drift</th></tr></thead>
             <tbody id="pfPositionRows">${positionRowsHtml(portfolio)}</tbody>
           </table>
         </div>

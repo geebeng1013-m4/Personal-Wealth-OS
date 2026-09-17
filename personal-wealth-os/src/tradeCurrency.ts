@@ -33,7 +33,7 @@ import type { CurrencyExchange, Market, Trade } from "./models";
 
 export interface MarketInfo {
   market: Market;
-  /** Chinese name shown to the user. */
+  /** Name shown to the user. */
   label: string;
   /** Yahoo symbol suffix, "" for US listings. */
   suffix: string;
@@ -47,12 +47,27 @@ export interface MarketInfo {
  * market and currency are stored separately rather than one implying the other.
  */
 export const MARKETS: readonly MarketInfo[] = [
-  { market: "US", label: "美股", suffix: "", defaultCurrency: "USD" },
-  { market: "MY", label: "马股", suffix: ".KL", defaultCurrency: "MYR" },
-  { market: "HK", label: "港股", suffix: ".HK", defaultCurrency: "HKD" },
-  { market: "SG", label: "新加坡股", suffix: ".SI", defaultCurrency: "SGD" },
-  { market: "LSE", label: "伦敦 ETF", suffix: ".L", defaultCurrency: "USD" },
+  { market: "US", label: "US", suffix: "", defaultCurrency: "USD" },
+  { market: "MY", label: "Malaysia", suffix: ".KL", defaultCurrency: "MYR" },
+  { market: "HK", label: "Hong Kong", suffix: ".HK", defaultCurrency: "HKD" },
+  { market: "SG", label: "Singapore", suffix: ".SI", defaultCurrency: "SGD" },
+  { market: "LSE", label: "London", suffix: ".L", defaultCurrency: "USD" },
 ];
+
+/** The user-facing name of a market. */
+export function marketLabel(market: Market): string {
+  return MARKETS.find((info) => info.market === market)?.label ?? market;
+}
+
+/** Bursa Malaysia trades in board lots of 100 shares. */
+export const MY_LOT_SIZE = 100;
+
+/** "3 lots" for 300 Malaysian shares; "" for any other market or no units. */
+export function lotsText(market: Market, units: number): string {
+  if (market !== "MY" || !(units > 0)) return "";
+  const lots = Math.round((units / MY_LOT_SIZE) * 100) / 100;
+  return `${lots} ${lots === 1 ? "lot" : "lots"}`;
+}
 
 export function isMarket(value: unknown): value is Market {
   return typeof value === "string" && MARKETS.some((info) => info.market === value);
