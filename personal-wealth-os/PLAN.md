@@ -786,7 +786,11 @@ Preview（另一个会话做的，项目代码没有改动）：
 - **计划**：
   - **T-6a Budget** `[x]`（2026-09-17，PR #64 已合并）：照 Budget Preview 做；拿掉顶部检查卡；层的编辑、上下移、删除、加一层、剩下的钱给谁、Opportunity 编辑都保留。结果（demo）：手机 1,393px → 1,012px，电脑 1,389px → 931px，徽章 5 → 0；修了手机上编辑面板撑出卡片的问题。
   - **T-6b Goals** `[x]`（2026-09-17，PR #65 已合并；手机 1,507px → 805px，电脑 982px → 767px；财务目标点句子才编辑；+ Add goal 自动展开；Dashboard 下拉框拿掉，改在 Goals 点「Show on Dashboard」）：照全站 Preview——手机总进度卡（已存 / 目标总额、完成几个、每月存多少）+ 每个目标一行（名称 · 每月 · 进度条 · % · 金额），完成的排最后；电脑 4 个数字 + 目标表整行；「+ Add goal」收起；去掉重复的大写标签；财务目标句保留 Lato；拿掉顶部检查卡；Dashboard 的 featured goal 选择器移到 Goals。
-  - **T-6c TVM** ← **Current Task**，等你回答问题再说「执行 T-6c」：照 Preview——三个工具用分段选择器切换，一次一个；结果放大数字卡（电脑加本金 vs 利息比例条）；输入整理成清单；不改计算。
+  - **T-6c TVM** ← **Current Task**，等「执行 T-6c」。已定（2026-09-17）：每行右边保留小的「Solve」，点哪行解哪个；第一个分页叫「TVM」，另外两个「Inflation」「What if I spend this?」。计划：照 Preview——三个工具用分段选择器切换，一次一个；结果放大数字卡（电脑加本金 vs 利息比例条）；输入整理成清单；不改计算。
+
+### T-6d — Investment Growth  `[ ]`（2026-09-17 你提出：也要 iOS 感觉）
+- 现在是单独的 React 组件（`src/calculator/InvestmentGrowthCalculator.tsx`，用自己的 Tailwind 样式），跟其他页面的卡片、字体、颜色不是同一套。
+- 还没有整齐版 Preview。做法照 Budget：先做一个手机 + 电脑的 Preview 给你看，你说可以之后再做计划、再执行。
 
 ### T-7 — Market  `[ ]`（最后做）
 - demo 里图表是空的，需要真实行情数据才能判断。

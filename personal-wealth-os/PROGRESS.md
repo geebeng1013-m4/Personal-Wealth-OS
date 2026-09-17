@@ -57,7 +57,7 @@ Bucket 从「写死的月额」改成「按真实收入分配的瀑布」，free
 - **T-5d 完成（2026-09-17）**：Rules 一张规则清单（点开看全文、Edit、Hide，隐藏的可以恢复）+ 笔记卡；规则说明照真实数据（真实台阶金额、所有代码）；手机 1,903px → 895px。PR #63 已合并。**T-5 全部完成。**
 - **T-6a 完成（2026-09-17）**：Budget 电脑 4 个数字 + 层表格 + Your months | Plan rules；手机 This month 卡 + 层分组列表 + Your months + Set aside；点整行展开编辑，规则改三段选择。手机 1,393px → 1,012px。PR #64 已合并。
 - **T-6b 完成（2026-09-17）**：Goals 电脑 4 个数字 + 目标表；手机总进度卡 + 目标行；点目标展开编辑，里面「Show on Dashboard」；Dashboard 的目标下拉框拿掉。手机 1,507px → 805px。PR #65 已合并。
-- **当前**：T-6c TVM，等你回答问题再说「执行 T-6c」。
+- **当前**：T-6c TVM，2 个问题已定，等你说「执行 T-6c」。之后加做 T-6d Investment Growth（先做 Preview）。
 
 ## 侧栏滚动条（S-1，已合并）
 
