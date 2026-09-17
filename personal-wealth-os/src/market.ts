@@ -2,7 +2,9 @@
 // K-line chart powered by TradingView Widget
 
 import { calculatePositionCostBasis, type CostBasisTrade } from "./rules";
-import { normalizeQuotes, type LivePrice, type PriceMap } from "./marketPrices";
+import { majorCurrency, normalizeQuotes, type LivePrice, type PriceMap } from "./marketPrices";
+import { suggestDividends, type DividendEvent, type DividendSuggestion, type RatePoint } from "./dividendSuggestions";
+import type { WealthState } from "./models";
 import { ringgitLeg, sidesOf } from "./tradeCurrency";
 import type { CurrencyExchange } from "./models";
 
@@ -206,7 +208,7 @@ export function pruneMarketCache(): void {
  *
  * A failure means the panel stays empty rather than showing invented data.
  */
-async function fetchMarketData(kind: "fundamentals" | "holdings" | "history", symbol: string, range?: string): Promise<string> {
+async function fetchMarketData(kind: "fundamentals" | "holdings" | "history" | "dividends", symbol: string, range?: string): Promise<string> {
   const query = new URLSearchParams({ kind, symbol });
   if (range) query.set("range", range);
   const response = await fetch(`/api/market?${query.toString()}`, {
@@ -881,6 +883,100 @@ export async function fetchHistoricalPrices(symbol: string, range = "1y"): Promi
 
   setCache(cacheKey, prices);
   return prices;
+}
+
+// --- Dividend history and rate history, for dividend suggestions ---
+
+/**
+ * Parse a Yahoo chart body carrying `events=div` into per-share payouts.
+ *
+ * Payouts are in the listing's quote unit, so a London fund priced in pence
+ * pays in pence too (ISF.L: 5.28 = GBP 0.0528); both are restated in the major
+ * currency. Anything malformed yields no events rather than a guessed one.
+ */
+export function parseDividendEvents(body: unknown): DividendEvent[] {
+  const result = (body as { chart?: { result?: Array<{ meta?: { currency?: unknown }; events?: { dividends?: unknown } }> } } | null)
+    ?.chart?.result?.[0];
+  if (!result) return [];
+  const quoteCurrency = typeof result.meta?.currency === "string" ? result.meta.currency : "USD";
+  const { currency, divisor } = majorCurrency(quoteCurrency);
+  const raw = result.events?.dividends;
+  if (!raw || typeof raw !== "object") return [];
+  const events: DividendEvent[] = [];
+  for (const entry of Object.values(raw as Record<string, unknown>)) {
+    const item = entry as { date?: unknown; amount?: unknown };
+    if (typeof item.date !== "number" || !Number.isFinite(item.date)) continue;
+    if (typeof item.amount !== "number" || !(item.amount > 0)) continue;
+    events.push({
+      exDate: new Date(item.date * 1000).toISOString().slice(0, 10),
+      perShare: item.amount / divisor,
+      currency,
+    });
+  }
+  return events.sort((a, b) => a.exDate.localeCompare(b.exDate));
+}
+
+/** A listing's dividend history. Empty when the feed has none or cannot be reached. */
+export async function fetchDividendEvents(symbol: string, range = "5y"): Promise<DividendEvent[]> {
+  const cacheKey = "divevents_" + symbol + "_" + range;
+  const cached = getCached(cacheKey, DIV_CACHE_TTL);
+  if (cached) return cached as DividendEvent[];
+  try {
+    const events = parseDividendEvents(JSON.parse(await fetchMarketData("dividends", symbol, range)));
+    setCache(cacheKey, events);
+    return events;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Daily MYR-per-unit closes for a currency, from Yahoo's <CODE>MYR=X history.
+ * Empty for ringgit itself, or when the history cannot be reached.
+ */
+export async function fetchRateHistory(currency: string, range = "5y"): Promise<RatePoint[]> {
+  if (currency === "MYR" || !/^[A-Z]{3}$/.test(currency)) return [];
+  try {
+    return (await fetchHistoricalPrices(`${currency}MYR=X`, range))
+      .filter((point) => point.close > 0)
+      .map((point) => ({ date: point.date, close: point.close }));
+  } catch {
+    return [];
+  }
+}
+
+/** The shortest history range that reaches back to `since`. */
+export function rangeSince(since: string, now: Date): string {
+  const years = (now.getTime() - Date.parse(since.slice(0, 10))) / (365.25 * 86_400_000);
+  if (!(years >= 0)) return "1y";
+  return years < 1 ? "1y" : years < 2 ? "2y" : years < 5 ? "5y" : years < 10 ? "10y" : "max";
+}
+
+/**
+ * Suggested dividends for everything the user has traded: each ticker's payout
+ * history since the first trade, and each payout currency's rate history, fed
+ * to suggestDividends. A ticker whose history cannot be fetched simply yields
+ * no suggestions.
+ */
+export async function loadDividendSuggestions(state: WealthState, now = new Date()): Promise<DividendSuggestion[]> {
+  if (state.trades.length === 0) return [];
+  const first = state.trades.reduce((earliest, trade) => (trade.date < earliest ? trade.date : earliest), state.trades[0].date);
+  const range = rangeSince(first, now);
+  const tickers = [...new Set(state.trades.map((trade) => trade.ticker))];
+
+  const events = new Map<string, DividendEvent[]>();
+  await Promise.all(tickers.map(async (ticker) => {
+    const history = await fetchDividendEvents(ticker, range);
+    if (history.length > 0) events.set(ticker, history);
+  }));
+
+  const currencies = [...new Set([...events.values()].flat().map((event) => event.currency))];
+  const rateHistory = new Map<string, RatePoint[]>();
+  await Promise.all(currencies.map(async (currency) => {
+    rateHistory.set(currency, await fetchRateHistory(currency, range));
+  }));
+
+  return suggestDividends({ trades: state.trades, dividends: state.dividends ?? [], events, rateHistory, now });
 }
 
 // --- Risk metrics calculation ---
