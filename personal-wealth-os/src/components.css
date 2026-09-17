@@ -2415,8 +2415,13 @@
     flex-wrap: wrap;
     padding-top: var(--space-1);
   }
-  .wu-dash .wu-leak-list-card > .wu-leak-see-all {
+  .wu-dash .wu-leak-list-card > .wu-leak-see-all,
+  .wu-dash .wu-leak-list-card > .wu-leak-few {
     margin-top: auto;
+  }
+  .wu-leak-few {
+    padding-top: var(--space-3);
+    color: var(--text-faint);
   }
   .wu-leak-foot {
     margin-top: var(--space-4);

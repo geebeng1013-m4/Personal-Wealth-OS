@@ -229,6 +229,11 @@ export function moneyLeaksTemplate(state: WealthState): string {
           ${summary.leaks.length > 0
             ? `<ul class="wu-leak-list">${leakRows}</ul>`
             : `<p class="wu-empty">No material leaks detected. Keep recurring payments and transaction details current so the scan can stay useful.</p>`}
+          ${/* With one or two findings the card beside the detail is mostly empty;
+               say why, so the space reads as "nothing else" rather than as missing rows. */
+            summary.leaks.length > 0 && summary.leaks.length < 3
+              ? `<p class="wu-dash__note wu-leak-few">Only ${summary.leaks.length} ${summary.leaks.length === 1 ? "finding" : "findings"} right now — nothing else detected.</p>`
+              : ""}
           ${summary.leaks.length > LEAK_LIMIT && selectedIndex < LEAK_LIMIT
             ? `<button class="wu-btn wu-btn--ghost wu-btn--sm wu-self-end wu-leak-see-all" id="leakSeeAll" type="button">${leakListExpanded ? "Show less" : `See all ${summary.leaks.length}`}</button>`
             : ""}
