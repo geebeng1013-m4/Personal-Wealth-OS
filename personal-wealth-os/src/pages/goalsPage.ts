@@ -1,31 +1,48 @@
 /**
- * Goals page — progress cards and the inline editor.
+ * Goals page — overall progress, one row per goal, and the editor under it.
  *
- * Every figure on a card (current amount, progress, months to target, linked
- * account) comes from getGoalsSnapshot, the canonical model, so a card cannot
+ * Every figure (current amount, progress, months to target, linked account,
+ * totals) comes from getGoalsSnapshot, the canonical model, so a row cannot
  * disagree with the Dashboard's featured goal. A goal linked to a ledger
  * account shows that account's live balance; an unlinked one tracks a manual
  * number.
+ *
+ * T-6b layout: the financial goal sentence (tap to edit), then desktop's four
+ * figures and goal table, or a phone's progress card and goal list. A goal's
+ * row opens its editor, which is also where it is chosen for the Dashboard.
  */
 
 import type { WealthState } from "../models";
 import { MAX_FINANCIAL_GOAL_CHARS, createId, normalizeFinancialGoal } from "../state";
 import { money, percent } from "../rules";
 import { escapeHtml } from "../html";
-import { leakInsightStrip } from "../components/leakInsightStrip";
 import { pageHeader } from "../components/pageHeader";
-import { getGoalsSnapshot } from "../goalSummary";
+import { getGoalsSnapshot, type GoalSnapshot } from "../goalSummary";
 import { syncGoalContributionRules } from "../financialRules";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
+
+/** The open goal row (by state.goals index) and whether the goal sentence is being edited. */
+let openGoalIndex: number | null = null;
+let editingFinancialGoal = false;
+
+/** A figure without its currency prefix. */
+function amountOf(value: number): string {
+  return money(value, "").trim();
+}
 
 /**
  * The one-sentence financial goal the Overview shows.
  *
  * Written here, beside the goals it gives a direction to, and shown on the
  * Overview — the Overview only displays it, keeping editing out of the page that
- * is meant to be read at a glance.
+ * is meant to be read at a glance. Read as the sentence; tapped to edit.
  */
-function financialGoalCard(state: WealthState): string {
+function financialGoalBlock(state: WealthState): string {
+  if (!editingFinancialGoal) {
+    return state.financialGoal
+      ? `<button class="wu-goal-line wu-goals-goalline financial-goal-edit" type="button" aria-label="My financial goal: ${escapeHtml(state.financialGoal)}. Edit"><span class="wu-goal-line__label">My financial goal · Edit</span><span class="wu-goal-line__text">${escapeHtml(state.financialGoal)}</span></button>`
+      : `<button class="wu-goal-line wu-goal-line--empty wu-goals-goalline financial-goal-edit" type="button"><span class="wu-goal-line__label">My financial goal</span><span class="wu-goal-line__text">Write the one sentence you want in front of you every time you open WealthUp.</span></button>`;
+  }
   return `<section class="wu-card wu-card--pad-sm wu-financial-goal" aria-labelledby="financialGoalLabel">
     <form class="wu-stack wu-stack--sm" id="financialGoalForm">
       <label class="wu-label" id="financialGoalLabel" for="financialGoalInput">My financial goal</label>
@@ -33,119 +50,195 @@ function financialGoalCard(state: WealthState): string {
       <div class="wu-row wu-row--tight wu-financial-goal__row">
         <input class="wu-field" id="financialGoalInput" name="financialGoal" type="text" maxlength="${MAX_FINANCIAL_GOAL_CHARS}"
           placeholder="e.g. RM80,000 house deposit by 35" value="${escapeHtml(state.financialGoal)}">
+        <button class="wu-btn wu-btn--ghost wu-btn--sm financial-goal-cancel" type="button">Cancel</button>
         <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button>
       </div>
     </form>
   </section>`;
 }
 
-export function goalsTemplate(state: WealthState): string {
-  // Goal facts come from the canonical read model.
-  const goalCards = getGoalsSnapshot(state).ordered.map((snapshot) => {
-    const goal = state.goals[snapshot.index];
-    const originalIndex = snapshot.index;
-    const current = snapshot.currentAmount;
-    const linkedAccount = snapshot.linkedAccountName;
-    const ratio = snapshot.progress;
-    const months = snapshot.estimatedMonthsToTarget;
-    // Three-way pace status: on track, part-way, early.
-    const valueTone = ratio >= 0.8 ? " wu-metric__value--positive" : "";
-    const barTone = ratio >= 0.8 ? "" : ratio >= 0.4 ? " wu-bar__fill--warning" : " wu-bar__fill--faint";
-    const extra = months ? " &middot; " + months + " months" : "";
-    const accountLine = linkedAccount
-      ? "Linked account: " + escapeHtml(linkedAccount)
-      : snapshot.isAccountLinked
-        ? "Linked account: Account unavailable"
-        : "Progress: Manual";
-    return `<article class="wu-card">
-      <div class="wu-stack">
-        <div class="wu-row wu-row--between">
-          <span class="wu-label">${escapeHtml(goal.name)}</span>
-          <button class="wu-btn wu-btn--ghost wu-btn--sm edit-goal" data-index="${originalIndex}" type="button">Edit</button>
-        </div>
-        <div class="wu-stack wu-stack--sm">
-          <h3 class="t-heading">${escapeHtml(goal.label)}</h3>
-          <span class="wu-metric__value t-num${valueTone}">${percent(ratio)}</span>
-          <div class="wu-bar"><span class="wu-bar__fill${barTone}" style="width:${Math.round(ratio * 100)}%"></span></div>
-          <span class="wu-label--plain t-caption">${money(current)} / ${money(goal.target)}${extra}</span>
-          <span class="wu-label--plain t-caption">${accountLine}</span>
-        </div>
-        <p class="t-body-sm t-muted">${escapeHtml(goal.note)}</p>
-        <div class="goal-edit-form is-hidden" id="goalEdit${originalIndex}">
-          <form class="wu-stack goalForm" data-index="${originalIndex}">
-            <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="name" type="text" value="${escapeHtml(goal.name)}"></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Label</span><input class="wu-field" name="label" type="text" value="${escapeHtml(goal.label)}"></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Current MYR</span><input class="wu-field" name="current" type="number" min="0" step="1" value="${goal.current}"></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Target MYR</span><input class="wu-field" name="target" type="number" min="0" step="1" value="${goal.target}"></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Monthly MYR</span><input class="wu-field" name="monthlyContribution" type="number" min="0" step="1" value="${goal.monthlyContribution}"></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Linked account</span><select class="wu-field" name="accountId"><option value="">Manual progress</option>${state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}"${account.id === goal.accountId ? " selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}</select></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Note</span><textarea class="wu-field" name="note" rows="2">${escapeHtml(goal.note)}</textarea></label>
-            <p class="wu-field-row__error goal-form-error" role="alert" hidden></p>
-            <div class="wu-row">
-              <button class="wu-btn wu-btn--primary wu-btn--sm save-goal" type="button">Save</button>
-              <button class="wu-btn wu-btn--secondary wu-btn--sm cancel-goal-edit" data-index="${originalIndex}" type="button">Cancel</button>
-              <button class="wu-btn wu-btn--danger wu-btn--sm delete-goal" data-index="${originalIndex}" type="button">Delete</button>
-            </div>
-          </form>
-        </div>
+function goalEditor(state: WealthState, snapshot: GoalSnapshot, featured: boolean): string {
+  const goal = state.goals[snapshot.index];
+  const index = snapshot.index;
+  const accountLine = snapshot.linkedAccountName
+    ? `Progress follows ${escapeHtml(snapshot.linkedAccountName)}`
+    : snapshot.isAccountLinked
+      ? "Linked account unavailable"
+      : "Progress is entered by hand";
+  return `<form class="wu-stack wu-stack--sm goalForm wu-goal-editor" data-index="${index}">
+      <p class="wu-dash__note">${accountLine}</p>
+      <div class="wu-grid wu-grid--2">
+        <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="label" type="text" value="${escapeHtml(goal.label)}"></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Short name</span><input class="wu-field" name="name" type="text" value="${escapeHtml(goal.name)}"></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Current MYR</span><input class="wu-field" name="current" type="number" min="0" step="1" value="${goal.current}"></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Target MYR</span><input class="wu-field" name="target" type="number" min="0" step="1" value="${goal.target}"></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Monthly MYR</span><input class="wu-field" name="monthlyContribution" type="number" min="0" step="1" value="${goal.monthlyContribution}"></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Linked account</span><select class="wu-field" name="accountId"><option value="">Manual progress</option>${state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}"${account.id === goal.accountId ? " selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}</select></label>
+        <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Note</span><textarea class="wu-field" name="note" rows="2">${escapeHtml(goal.note)}</textarea></label>
       </div>
-    </article>`;
-  }).join("");
+      <p class="wu-field-row__error goal-form-error" role="alert" hidden></p>
+      <div class="wu-row wu-row--tight wu-goal-editor__actions">
+        ${featured
+          ? `<span class="wu-chip">On Dashboard</span>`
+          : `<button class="wu-btn wu-btn--secondary wu-btn--sm feature-goal" data-goal-id="${escapeHtml(goal.id)}" type="button">Show on Dashboard</button>`}
+        <button class="wu-btn wu-btn--ghost wu-btn--sm wu-goal-danger delete-goal" data-index="${index}" type="button">Delete</button>
+        <span class="wu-goal-editor__grow"></span>
+        <button class="wu-btn wu-btn--ghost wu-btn--sm cancel-goal-edit" type="button">Cancel</button>
+        <button class="wu-btn wu-btn--primary wu-btn--sm save-goal" type="button">Save</button>
+      </div>
+    </form>`;
+}
 
-  const addGoalCard =
-    `<button class="wu-add" id="addGoalBtn" type="button">` +
-    `<span class="wu-add__plus" aria-hidden="true">+</span><span>Add Goal</span></button>`;
+function goalRow(state: WealthState, snapshot: GoalSnapshot, featuredId: string): string {
+  const open = openGoalIndex === snapshot.index;
+  const featured = snapshot.id === featuredId;
+  const ratio = snapshot.progress;
+  const pace = snapshot.isComplete
+    ? "Done"
+    : snapshot.estimatedMonthsToTarget
+      ? `${snapshot.estimatedMonthsToTarget} months left`
+      : snapshot.targetAmount <= 0 ? "No target yet" : "Nothing put in each month";
+  const monthly = snapshot.isComplete
+    ? `<span class="t-positive">Done</span>`
+    : snapshot.monthlyContribution > 0 ? `+${amountOf(snapshot.monthlyContribution)}` : `<span class="t-faint">0</span>`;
+  return `<li class="wu-goal${open ? " is-open" : ""}${snapshot.isComplete ? " is-done" : ""}">
+      <button class="wu-goal__row goal-row" type="button" data-index="${snapshot.index}" aria-expanded="${open}">
+        <span class="wu-goal__title">${escapeHtml(snapshot.label || snapshot.name)}${featured ? ` <span class="wu-chip wu-chip--muted wu-goal__pin">On Dashboard</span>` : ""}<small>${snapshot.isComplete ? "Complete" : `+${amountOf(snapshot.monthlyContribution)} / mo`} · ${escapeHtml(pace)}</small></span>
+        <span class="wu-goal__monthly">${monthly}</span>
+        <span class="wu-goal__bar"><span class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(ratio * 100)}%"></span></span></span>
+        <span class="wu-goal__pct">${snapshot.isComplete ? `<span class="wu-chip">Done</span>` : percent(ratio)}</span>
+        <span class="wu-goal__amount">${amountOf(snapshot.currentAmount)} / ${amountOf(snapshot.targetAmount)}</span>
+        <span class="wu-goal__chev" aria-hidden="true">›</span>
+      </button>
+      ${open ? goalEditor(state, snapshot, featured) : ""}
+    </li>`;
+}
 
-  const goalsEmptyState = state.goals.length === 0
-    ? `<p class="wu-empty">No goals yet. A goal gives a specific amount of money a job &mdash; a trip, a purchase, a buffer &mdash; so surplus stops drifting. Add one to start tracking progress against a target.</p>`
-    : "";
+export function goalsTemplate(state: WealthState): string {
+  const goals = getGoalsSnapshot(state);
+  // Incomplete first: goals.ordered already puts completed goals last.
+  const rows = goals.ordered.map((snapshot) => goalRow(state, snapshot, goals.featuredGoalId)).join("");
+  const overall = goals.totalTarget > 0 ? Math.min(1, goals.totalCurrent / goals.totalTarget) : 0;
+  const doneGoal = goals.ordered.find((goal) => goal.isComplete);
+  const addButton = (extra: string) => `<button class="wu-btn ${extra ? "wu-btn--secondary" : "wu-btn--primary"} wu-btn--sm add-goal${extra}" type="button">+ Add goal</button>`;
 
   return `
-    <div class="wu">
+    <div class="wu wu-goals-page">
       ${pageHeader({
         eyebrow: "Goal System",
         title: "Goals",
         sub: "What you're saving for, and how close you are.",
+        actions: addButton(""),
       })}
-      ${financialGoalCard(state)}
-      ${leakInsightStrip(state, ["goal"], "Goal pace")}
-      ${goalsEmptyState}
-      <div class="wu-grid wu-grid--2">
-        ${goalCards}
-        ${addGoalCard}
+      ${financialGoalBlock(state)}
+      <div class="wu-dash">
+        ${state.goals.length === 0
+          ? `<section class="wu-card wu-dash__full wu-stack wu-stack--sm"><p class="wu-empty">No goals yet. A goal gives a specific amount of money a job &mdash; a trip, a purchase, a buffer &mdash; so surplus stops drifting. Add one to start tracking progress against a target.</p>${addButton(" wu-btn--block")}</section>`
+          : `
+        <!-- ROW 1 (desktop) — four figures -->
+        <div class="wu-dash__full wu-dash__tiles wu-goals-tiles">
+          <section class="wu-card wu-dash__tile" aria-labelledby="goalsSavedLabel">
+            <div class="wu-tc__top"><span class="wu-label" id="goalsSavedLabel">Saved</span></div>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(goals.totalCurrent)}</span></p>
+            <p class="wu-dash__note">${percent(overall)} of all targets</p>
+            <div class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(overall * 100)}%"></span></div>
+          </section>
+          <section class="wu-card wu-dash__tile" aria-labelledby="goalsTargetLabel">
+            <div class="wu-tc__top"><span class="wu-label" id="goalsTargetLabel">All targets</span></div>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(goals.totalTarget)}</span></p>
+            <p class="wu-dash__note">Across ${state.goals.length} ${state.goals.length === 1 ? "goal" : "goals"}</p>
+          </section>
+          <section class="wu-card wu-dash__tile" aria-labelledby="goalsMonthLabel">
+            <div class="wu-tc__top"><span class="wu-label" id="goalsMonthLabel">Each month</span></div>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(goals.totalMonthlyContribution)}</span></p>
+            <p class="wu-dash__note">Into ${goals.activeCount} open ${goals.activeCount === 1 ? "goal" : "goals"}</p>
+          </section>
+          <section class="wu-card wu-dash__tile" aria-labelledby="goalsDoneLabel">
+            <div class="wu-tc__top"><span class="wu-label" id="goalsDoneLabel">Done</span></div>
+            <p class="wu-money wu-money--md"><span>${goals.completedCount}</span><span class="wu-money__of">of ${state.goals.length}</span></p>
+            <p class="wu-dash__note">${doneGoal ? escapeHtml(doneGoal.label || doneGoal.name) : "None finished yet"}</p>
+          </section>
+        </div>
+
+        <!-- phone — overall progress in one card -->
+        <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-goals-summary" aria-labelledby="goalsAllLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="goalsAllLabel">All goals</span>${goals.completedCount ? `<span class="wu-chip">${goals.completedCount} done</span>` : ""}</div>
+          <p class="wu-money"><span>${amountOf(goals.totalCurrent)}</span><span class="wu-money__of">of ${amountOf(goals.totalTarget)} MYR</span></p>
+          <div class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(overall * 100)}%"></span></div>
+          <p class="wu-dash__note">Putting away MYR ${amountOf(goals.totalMonthlyContribution)} a month across ${goals.activeCount} open ${goals.activeCount === 1 ? "goal" : "goals"}.</p>
+        </section>
+
+        <!-- GOALS — a table on a desktop, rows with a bar on a phone -->
+        <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-goals-list" aria-labelledby="goalsListLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="goalsListLabel">Goals · tap one to edit</span></div>
+          <div class="wu-goal__row wu-goal__head" aria-hidden="true"><span>Goal</span><span>Monthly</span><span>Progress</span><span>%</span><span>Saved</span><span></span></div>
+          <ul class="wu-goal-list">${rows}</ul>
+          ${addButton(" wu-btn--block wu-goals-add-phone")}
+        </section>`}
       </div>
     </div>
   `;
 }
 
 export function bindGoals(root: HTMLElement, state: WealthState, setState: Setter, navigate: Navigate | undefined, rerender: RenderApp): void {
-  const doNavigate = navigate ?? ((page: string) => rerender(root, state, setState, page, navigate));
+  /** Re-render in place, keeping the reader where they were; save first when there is a change. */
+  const repaint = (next?: WealthState, label?: string, focusSelector?: string): void => {
+    const scrollPosition = { x: window.scrollX, y: window.scrollY, documentY: document.scrollingElement?.scrollTop ?? 0 };
+    if (next) setState(next, label);
+    rerender(root, next ?? state, setState, "goals", navigate);
+    const restore = () => {
+      window.scrollTo(scrollPosition.x, scrollPosition.y);
+      document.scrollingElement?.scrollTo(scrollPosition.x, scrollPosition.documentY);
+    };
+    restore();
+    requestAnimationFrame(() => {
+      restore();
+      if (focusSelector) {
+        const target = root.querySelector<HTMLElement>(focusSelector);
+        target?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        target?.focus({ preventScroll: true });
+      }
+    });
+  };
 
+  // --- The financial goal sentence ------------------------------------------
+  root.querySelectorAll<HTMLButtonElement>(".financial-goal-edit").forEach((button) => button.addEventListener("click", () => {
+    editingFinancialGoal = true;
+    repaint(undefined, undefined, "#financialGoalInput");
+  }));
+  root.querySelector<HTMLButtonElement>(".financial-goal-cancel")?.addEventListener("click", () => {
+    editingFinancialGoal = false;
+    repaint();
+  });
   root.querySelector<HTMLFormElement>("#financialGoalForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const input = root.querySelector<HTMLInputElement>("#financialGoalInput");
     const financialGoal = normalizeFinancialGoal(input?.value ?? "");
-    if (financialGoal === state.financialGoal) return;
-    const next = { ...state, financialGoal };
-    setState(next, financialGoal ? "Set financial goal" : "Cleared financial goal");
-    rerender(root, next, setState, "goals", navigate);
+    editingFinancialGoal = false;
+    if (financialGoal === state.financialGoal) {
+      repaint();
+      return;
+    }
+    repaint({ ...state, financialGoal }, financialGoal ? "Set financial goal" : "Cleared financial goal");
   });
 
-  // Edit button toggle
-  root.querySelectorAll<HTMLButtonElement>(".edit-goal").forEach((button) => {
-    button.addEventListener("click", () => {
-      const index = button.dataset.index;
-      root.querySelector<HTMLElement>("#goalEdit" + index)?.classList.toggle("is-hidden");
-    });
-  });
+  // --- Goal rows --------------------------------------------------------------
+  root.querySelectorAll<HTMLButtonElement>(".goal-row").forEach((button) => button.addEventListener("click", () => {
+    const index = Number(button.dataset.index);
+    openGoalIndex = openGoalIndex === index ? null : index;
+    repaint();
+  }));
+  root.querySelectorAll<HTMLButtonElement>(".cancel-goal-edit").forEach((button) => button.addEventListener("click", () => {
+    openGoalIndex = null;
+    repaint();
+  }));
 
-  // Cancel button
-  root.querySelectorAll<HTMLButtonElement>(".cancel-goal-edit").forEach((button) => {
-    button.addEventListener("click", () => {
-      const index = button.dataset.index;
-      root.querySelector<HTMLElement>("#goalEdit" + index)?.classList.add("is-hidden");
-    });
-  });
+  // The goal the Dashboard features, chosen here where the goals are.
+  root.querySelectorAll<HTMLButtonElement>(".feature-goal").forEach((button) => button.addEventListener("click", () => {
+    const overviewGoalId = button.dataset.goalId ?? "";
+    if (!state.goals.some((goal) => goal.id === overviewGoalId)) return;
+    repaint({ ...state, overviewGoalId }, "Changed featured Overview goal");
+  }));
 
   // Save explicitly on click so the action remains reliable across browsers/PWA shells.
   root.querySelectorAll<HTMLFormElement>(".goalForm").forEach((form) => {
@@ -168,7 +261,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
       const target = Number(data.get("target"));
       const monthlyContribution = Number(data.get("monthlyContribution"));
       if (!name || !label) {
-        showError("Name and label are required.");
+        showError("Name and short name are required.");
         return;
       }
       if (![current, target, monthlyContribution].every((value) => Number.isFinite(value) && value >= 0)) {
@@ -189,14 +282,8 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
       const next = { ...state, goals };
       // Each contributing goal has a goal-contribution rule the Advisor reads.
       next.financialRules = syncGoalContributionRules(next);
-      setState(next, "Updated goal");
-      const saved = form.querySelector<HTMLElement>(".goal-form-error");
-      if (saved) {
-        saved.textContent = "Saved";
-        saved.hidden = false;
-        saved.classList.add("is-ok");
-      }
-      rerender(root, next, setState, "goals", navigate);
+      openGoalIndex = null;
+      repaint(next, "Updated goal");
     };
     form.querySelector<HTMLButtonElement>(".save-goal")?.addEventListener("click", saveGoal);
     form.addEventListener("submit", (event) => {
@@ -212,23 +299,23 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
       if (!confirm("Delete this goal?")) return;
       const goals = state.goals.filter((_, i) => i !== index);
       // Re-pick the featured goal through the canonical model so completion
-      // here matches what the Goals cards show.
+      // here matches what the Goals rows show.
       const overviewGoalId = state.overviewGoalId === state.goals[index]?.id
         ? getGoalsSnapshot({ ...state, goals, overviewGoalId: "" }).featuredGoalId
         : state.overviewGoalId;
       const next = { ...state, goals, overviewGoalId };
       next.financialRules = syncGoalContributionRules(next);
-      setState(next);
-      doNavigate("goals");
+      openGoalIndex = null;
+      repaint(next);
     });
   });
 
-  // Add new goal
-  root.querySelector<HTMLElement>("#addGoalBtn")?.addEventListener("click", () => {
+  // Add a goal: it opens ready to be named, instead of waiting to be found.
+  root.querySelectorAll<HTMLButtonElement>(".add-goal").forEach((button) => button.addEventListener("click", () => {
     const goals = [...state.goals, {
       id: createId("goal"),
-      name: "NEW GOAL",
-      label: "New Goal",
+      name: "New goal",
+      label: "New goal",
       current: 0,
       target: 0,
       monthlyContribution: 0,
@@ -236,7 +323,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
     }];
     const next = { ...state, goals };
     next.financialRules = syncGoalContributionRules(next);
-    setState(next);
-    doNavigate("goals");
-  });
+    openGoalIndex = goals.length - 1;
+    repaint(next, undefined, `.goalForm[data-index="${goals.length - 1}"] input[name="label"]`);
+  }));
 }

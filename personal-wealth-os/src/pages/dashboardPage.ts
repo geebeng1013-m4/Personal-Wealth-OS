@@ -50,11 +50,6 @@ export function dashboardTemplate(state: WealthState): string {
   // sources; the Dashboard only renders them.
   const leakSummary = detectMoneyLeaks(state);
 
-  // UI interaction state: the goal picker's options list.
-  const overviewGoalOptions = state.goals
-    .map((goal) => `<option value="${escapeHtml(goal.id)}"${goal.id === nextGoal?.id ? " selected" : ""}>${escapeHtml(goal.name)}</option>`)
-    .join("");
-
   const statusTone = (s: string): string => s === "healthy" || s === "positive" ? "positive" : s === "watch" ? "warning" : "negative";
 
   // One card anatomy everywhere (PLAN.md T-1): label row -> one headline
@@ -140,9 +135,7 @@ export function dashboardTemplate(state: WealthState): string {
 
       <!-- 4 — NEXT GOAL -->
       <section class="wu-card wu-dash__tile" aria-labelledby="ovGoalLabel">
-        <div class="wu-tc__top"><span class="wu-label" id="ovGoalLabel">Next goal</span>${state.goals.length > 0
-          ? `<label class="wu-dash__pick"><span class="visually-hidden">Featured goal</span><select class="wu-field" id="overviewGoalSelect" aria-label="Choose the goal shown on the Dashboard">${overviewGoalOptions}</select></label>`
-          : ""}</div>
+        <div class="wu-tc__top"><span class="wu-label" id="ovGoalLabel">Next goal</span></div>
         ${nextGoal ? `
           <p class="wu-money"><span class="wu-money__cur">MYR</span><span>${amount(nextGoalCurrent)}</span></p>
           <p class="wu-dash__note">${escapeHtml(nextGoal.name)} · of ${amount(nextGoal.targetAmount)}${nextGoal.estimatedMonthsToTarget !== null ? ` · ~${nextGoal.estimatedMonthsToTarget} mo left` : ""}</p>
@@ -333,12 +326,4 @@ export function bindDashboard(
     }).catch(() => { /* the banner just stays hidden */ });
   }
 
-  root.querySelector<HTMLSelectElement>("#overviewGoalSelect")?.addEventListener("change", (event) => {
-    const overviewGoalId = (event.currentTarget as HTMLSelectElement).value;
-    if (!state.goals.some((goal) => goal.id === overviewGoalId)) return;
-    const next = { ...state, overviewGoalId };
-    setState(next, "Changed featured Overview goal");
-    if (navigate) navigate("dashboard");
-    else rerender(root, next, setState, "dashboard");
-  });
 }
