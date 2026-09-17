@@ -9,8 +9,19 @@
 
 - **阶段**：V1 完成（2026-09-09）。核心正确性的洞都补上了。之后：**产品打磨** —— 手机比例这轮
   已收尾（M-1..M-6，见下）。App / 订阅方向因预算暂停（见下），先把产品本身做好。
-- **`main`**：`c5cb80f`。PR #34（Dashboard 具体化 headline + TVM What-if）待 merge，见下。
+- **`main`**：`4645b13`（2026-09-17，PR #56 按收入分配已合并并部署到 wealthup.cc）。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
+
+## 按收入分配（I 系列，已合并并上线）
+
+Bucket 从「写死的月额」改成「按真实收入分配的瀑布」，freelancer / 收入不固定的人也能用。详见 `PLAN.md` I 系列。
+- **完成（2026-09-17）**：PR #56 合并（`4645b13`），Vercel 自动部署，线上 bundle 已确认。
+  - Budget 页：本月真实收入逐层分配 + 编辑规则（取代 bucket 卡片）+ 最差 / 普通 / 最好月份
+  - Ledger：记收入时实时显示「这笔钱去哪」
+  - 修了预备金被算进可用现金的 bug
+- **你已用真实账户核对过**。建议做一次：在 Goals 把 Emergency Fund 关联到 **Moomoo MMF**，现金就不会被少算。
+- **`wu-live`** 目前还在 `feat/income-allocation`（已合并）。回去做 T-4：`git switch feat/t4-settings-tidy`
+  （T-4 分支还没有这个功能，合并 main 后才有）。
 
 ## 电脑版液态玻璃（DG 系列，DG-1..DG-7 全部已合并）
 
