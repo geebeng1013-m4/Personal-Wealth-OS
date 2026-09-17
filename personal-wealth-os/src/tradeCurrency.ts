@@ -78,6 +78,21 @@ function isPositive(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
+/** The fields tradeAmounts reads: enough of a trade to say what it cost in its own currency. */
+export type TradeAmountFields = Pick<Trade, "amountUsd" | "priceUsd"> & Partial<Pick<Trade, "currency" | "amount" | "price">>;
+
+/**
+ * A trade's currency, order value and price in that currency, by the same rule
+ * normalizeTradeMarket stores: no currency means dollars, and a dollar trade
+ * always reads its dollar fields. Works on a trade that was never normalized.
+ */
+export function tradeAmounts(trade: TradeAmountFields): { currency: string; amount: number; price: number } {
+  const currency = isCurrencyCode(trade.currency) ? trade.currency : "USD";
+  const amount = currency === "USD" || !isAmount(trade.amount) ? trade.amountUsd : trade.amount;
+  const price = currency === "USD" || !isAmount(trade.price) ? trade.priceUsd : trade.price;
+  return { currency, amount, price };
+}
+
 /**
  * Fill in a trade's market, currency, amounts and fee currency.
  *
@@ -90,11 +105,8 @@ function isPositive(value: unknown): value is number {
  * Idempotent: normalizing twice gives the same trade.
  */
 export function normalizeTradeMarket(trade: Trade): Trade {
-  const currency = isCurrencyCode(trade.currency) ? trade.currency : "USD";
   const market = isMarket(trade.market) ? trade.market : marketOfTicker(trade.ticker ?? "");
-
-  const amount = currency === "USD" || !isAmount(trade.amount) ? trade.amountUsd : trade.amount;
-  const price = currency === "USD" || !isAmount(trade.price) ? trade.priceUsd : trade.price;
+  const { currency, amount, price } = tradeAmounts(trade);
 
   const feeInTradeCurrency = currency !== "MYR"
     && trade.feeCurrency === currency
