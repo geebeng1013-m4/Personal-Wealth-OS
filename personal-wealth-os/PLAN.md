@@ -796,11 +796,21 @@ Preview（另一个会话做的，项目代码没有改动）：
 - **已定**：1. 图保留鼠标移上去（手机点图）看某一年的数字；2. 保留「Growth share」；3. 金额不显示两位小数。
 - 不改计算（`investmentGrowth.ts`）。
 
-### T-7 — Market  `[ ]`  ← **Current Task**，等你回答问题
+### T-7 — Market  `[x]`（2026-09-17，T-7a PR #68、T-7b PR #69 已合并；整个 T 系列完成）
 - demo 里图表是空的，需要真实行情数据才能判断。
 - **现在（2026-09-17 读代码）**：`marketPage.ts` 1,115 行。顶部一张「Context before action」原则卡 → 代码按钮（VOO / QQQM / 自定义）+ 新增代码表单一直展开 → 7 个分页（Long-term view 图 / Your position / Risk / Income / Composition / Compare / Context）。7 个分页的数据在打开页面时就全部加载，分页只是显示或隐藏，所以改排版不影响取数据。Risk、Income、Your position 里的数字卡带 emoji。
 - **Preview（全站手机 + 电脑 v2）**：代码用分段选择（新增收进「＋」）→ 4 个数字（价格 / 距离高点 / 你的持仓 / 占比 vs 目标）→ 价格图整行（时间范围在卡片右上角）→ Holdings / Risk / Income 入口；原则一句移到图下面小字。
 - **Preview 没有画到的**：Composition、Compare、Context（历史跌幅）、Your position 的交易明细——计划里保留，不删。
+- **T-7a 做了**：代码分段选择（＋ 收起新增）、电脑 4 个数字、价格图整行（时间范围在右上角）、手机持仓卡。
+- **T-7b 做了**：7 个分页换成「More about VOO」一张列表，每行点开就地展开，所有研究内容保留；手机图表卡拉开间距。
+
+### T-8a — 卡片行距修复  `[ ]`  ← **Current Task**
+- **问题**：`.wu-card` 的 `display:block` 跟 `.wu-stack` 同优先级、写在后面，所以同时带两个 class 的卡片行距全是 0（12 页，电脑 + 手机）。
+- **做法**：一处 CSS 让 `.wu-card.wu-stack` 恢复 flex 列；TVM / Investment Growth 的切换按钮跟输入框同高 36px。
+
+### T-8b — iPad 排版  `[ ]`
+- **问题**：只有一个 720px 断点。iPad 拿到电脑版但侧边栏占 ~300px，内容区只剩 420–800px，仍然 4 格一行、左右并排 → 数字超出、字重叠（1180/1024/820/768 都查过）。
+- **做法（已定）**：排版看内容区宽度（container query）：够宽才 4 格，窄就 2×2；并排卡不够宽就上下叠。iPad 竖屏（约 900px 以下）收起侧边栏，用底部导航。
 
 ---
 
