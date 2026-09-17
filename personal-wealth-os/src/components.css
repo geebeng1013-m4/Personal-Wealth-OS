@@ -2630,6 +2630,20 @@
   .wu-step__bar i.is-reached {
     background: var(--negative);
   }
+  /* "See the ladder" lands here: a brief accent ring says which card it meant */
+  .wu-advisor-ladder.is-flash {
+    animation: wu-advisor-flash 1.6s var(--ease-standard);
+  }
+  @keyframes wu-advisor-flash {
+    0%, 60% { box-shadow: 0 0 0 3px var(--accent); }
+    100% { box-shadow: 0 0 0 3px transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wu-advisor-ladder.is-flash {
+      animation: none;
+      box-shadow: 0 0 0 3px var(--accent);
+    }
+  }
   .wu-advisor-foot {
     margin-top: var(--space-4);
     max-width: 72ch;

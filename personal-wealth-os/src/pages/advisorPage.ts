@@ -47,6 +47,11 @@ function severityDot(severity: AdvisorRecommendation["severity"]): string {
 
 function destinationButton(recommendation: AdvisorRecommendation, primary: boolean): string {
   if (!recommendation.destination) return "";
+  // Advice that points at this page (the opportunity reserve) would send the
+  // reader nowhere; here it takes them to the part of the page it means.
+  if (recommendation.destination === "advisor") {
+    return `<button class="wu-btn ${primary ? "wu-btn--primary" : "wu-btn--secondary"} wu-btn--sm advisor-see-ladder" type="button">See the ladder ↓</button>`;
+  }
   // The recommendation already names where the work happens. Surfacing it
   // means the page tells the user what to do AND how to get there.
   return `<button class="wu-btn ${primary ? "wu-btn--primary" : "wu-btn--secondary"} wu-btn--sm dashboard-nav" type="button" data-page="${escapeHtml(recommendation.destination)}">Go to ${escapeHtml(recommendation.destination.replace(/-/g, " "))}</button>`;
@@ -180,6 +185,17 @@ export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Set
     const id = button.dataset.adviceId ?? null;
     openAdviceId = openAdviceId === id ? null : id;
     repaint();
+  }));
+  root.querySelectorAll<HTMLButtonElement>(".advisor-see-ladder").forEach((button) => button.addEventListener("click", () => {
+    const ladder = root.querySelector<HTMLElement>(".wu-advisor-ladder");
+    if (!ladder) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    ladder.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+    ladder.classList.remove("is-flash");
+    // Restart the highlight even on a second press.
+    void ladder.offsetWidth;
+    ladder.classList.add("is-flash");
+    window.setTimeout(() => ladder.classList.remove("is-flash"), 1800);
   }));
   root.querySelectorAll<HTMLButtonElement>(".dip-row").forEach((button) => button.addEventListener("click", () => {
     const index = Number(button.dataset.tranche);
