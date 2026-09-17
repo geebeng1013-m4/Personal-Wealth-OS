@@ -2,10 +2,10 @@
  * Budget page — where this month's money went, and the rules that sent it.
  *
  * One editable list, not two. Each layer of the allocation plan states its
- * rule, what it received this month, and opens an inline editor for the rule
- * itself. The monthly bucket cards this page used to carry were a second way
- * to say the same thing, and the two could disagree the moment either was
- * edited; the plan is now the only place a monthly figure is set.
+ * rule, what it received this month, and opens an editor for the rule itself.
+ * The monthly bucket cards this page used to carry were a second way to say the
+ * same thing, and the two could disagree the moment either was edited; the plan
+ * is now the only place a monthly figure is set.
  *
  * `state.buckets` keeps the one-time entries (the Opportunity reserve, which is
  * deployed by its own drawdown rules and never flows through the waterfall) and
@@ -13,87 +13,57 @@
  * reading buckets — the Assistant's context, most of all — sees what the user
  * sees.
  *
- * Every figure comes from getBudgetSnapshot, the canonical model.
+ * Every figure comes from getBudgetSnapshot, the canonical model. The layout
+ * lives in components/allocationPanel.ts (T-6a).
  */
 
 import type { AllocationStep, AllocationStepKind, WealthState } from "../models";
 import { bucketsFromPlan, createId } from "../state";
-import { money } from "../rules";
-import { escapeHtml } from "../html";
 import { normalizePercentSteps } from "../allocation";
-import { leakInsightStrip } from "../components/leakInsightStrip";
 import { pageHeader } from "../components/pageHeader";
-import { allocationPanel } from "../components/allocationPanel";
+import { budgetContent, type BudgetView } from "../components/allocationPanel";
 import { getBudgetSnapshot } from "../budgetSummary";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
+
+/** Which layer, bucket or picker is open — kept across re-renders. */
+const view: BudgetView = { openLayer: null, openBucket: null, overflowOpen: false };
 
 function isStepKind(value: string): value is AllocationStepKind {
   return value === "fill" || value === "pct" || value === "gross";
 }
 
 export function bucketsTemplate(state: WealthState): string {
-  // One snapshot for the whole page: the waterfall and the one-time cards must
+  // One snapshot for the whole page: the layers and the one-time rows must
   // never be built from two different reads of the same state.
   const budget = getBudgetSnapshot(state);
-  const plan = state.allocation;
-
-  // One-time buckets sit outside the waterfall, so they keep the card editor.
-  const oneTimeCards = budget.buckets
-    .filter((bucket) => bucket.cadence === "one-time")
-    .map((bucket) => {
-      const index = bucket.index;
-      return `<article class="wu-card">
-      <div class="wu-stack">
-        <div class="wu-row wu-row--between">
-          <span class="wu-label">${escapeHtml(bucket.name)}</span>
-          <button class="wu-btn wu-btn--ghost wu-btn--sm edit-bucket" data-index="${index}" type="button">Edit</button>
-        </div>
-        <div class="wu-stack wu-stack--sm">
-          <h3 class="t-heading">${escapeHtml(bucket.label)}</h3>
-          <span class="wu-metric__value t-num">${money(bucket.amount)}</span>
-          <span class="wu-label--plain t-caption">One-time &middot; ${escapeHtml(bucket.note)}</span>
-        </div>
-        <div class="bucket-edit-form is-hidden" id="bucketEdit${index}">
-          <form class="wu-stack bucketForm" data-index="${index}">
-            <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="name" type="text" value="${escapeHtml(bucket.name)}"></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Label</span><input class="wu-field" name="label" type="text" value="${escapeHtml(bucket.label)}"></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Amount MYR</span><input class="wu-field" name="amount" type="number" min="0" step="1" value="${bucket.amount}"></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Note</span><textarea class="wu-field" name="note" rows="2">${escapeHtml(bucket.note)}</textarea></label>
-            <div class="wu-row">
-              <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button>
-              <button class="wu-btn wu-btn--secondary wu-btn--sm cancel-bucket-edit" data-index="${index}" type="button">Cancel</button>
-              <button class="wu-btn wu-btn--danger wu-btn--sm delete-bucket" data-index="${index}" type="button">Delete</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </article>`;
-    }).join("");
-
-  const oneTimeSection = oneTimeCards
-    ? `<div class="wu-stack wu-stack--sm" style="margin-top:var(--space-5)">
-        <span class="wu-label">Set aside, not routed</span>
-        <span class="wu-label--plain t-caption">Deployed by its own rules when the market falls, so it never flows through the layers above.</span>
-      </div>
-      <div class="wu-grid wu-grid--3">${oneTimeCards}</div>`
-    : "";
-
   return `
-    <div class="wu">
+    <div class="wu wu-budget-page">
       ${pageHeader({
         eyebrow: "Capital Routing",
         title: "Budget",
         sub: "Where this month's money went, and the rules that sent it.",
+        actions: `<button class="wu-btn wu-btn--secondary wu-btn--sm add-layer" type="button">+ Add layer</button>`,
       })}
-      ${leakInsightStrip(state, ["budget"], "Budget signal")}
-      ${allocationPanel(budget, plan)}
-      ${oneTimeSection}
+      <div class="wu-dash">
+        ${budgetContent(budget, state.allocation, view)}
+      </div>
     </div>
   `;
 }
 
 export function bindBuckets(root: HTMLElement, state: WealthState, setState: Setter, navigate: Navigate | undefined, rerender: RenderApp): void {
-  const doNavigate = navigate ?? ((page: string) => rerender(root, state, setState, page, navigate));
+  /** Re-render in place, keeping the reader where they were; save first when there is a change. */
+  const repaint = (next?: WealthState): void => {
+    const scrollPosition = { x: window.scrollX, y: window.scrollY, documentY: document.scrollingElement?.scrollTop ?? 0 };
+    if (next) setState(next);
+    rerender(root, next ?? state, setState, "buckets", navigate);
+    const restore = () => {
+      window.scrollTo(scrollPosition.x, scrollPosition.y);
+      document.scrollingElement?.scrollTo(scrollPosition.x, scrollPosition.documentY);
+    };
+    restore();
+    requestAnimationFrame(restore);
+  };
 
   /**
    * Write a new plan. The monthly buckets are rewritten from it in the same
@@ -107,25 +77,58 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
         ? overflowStepId
         : steps[steps.length - 1]?.id,
     };
-    setState({ ...state, allocation, buckets: bucketsFromPlan(allocation, state.buckets) });
-    doNavigate("buckets");
+    repaint({ ...state, allocation, buckets: bucketsFromPlan(allocation, state.buckets) });
   };
+
+  // --- Opening and closing rows --------------------------------------------
+  root.querySelectorAll<HTMLButtonElement>(".layer-row").forEach((button) => button.addEventListener("click", () => {
+    const index = Number(button.dataset.index);
+    view.openLayer = view.openLayer === index ? null : index;
+    view.openBucket = null;
+    view.overflowOpen = false;
+    repaint();
+  }));
+  root.querySelectorAll<HTMLButtonElement>(".bucket-row").forEach((button) => button.addEventListener("click", () => {
+    const index = Number(button.dataset.index);
+    view.openBucket = view.openBucket === index ? null : index;
+    view.openLayer = null;
+    view.overflowOpen = false;
+    repaint();
+  }));
+  root.querySelectorAll<HTMLButtonElement>(".overflow-row").forEach((button) => button.addEventListener("click", () => {
+    view.overflowOpen = !view.overflowOpen;
+    view.openLayer = null;
+    view.openBucket = null;
+    repaint();
+  }));
+  root.querySelectorAll<HTMLButtonElement>(".budget-close").forEach((button) => button.addEventListener("click", () => {
+    view.openLayer = null;
+    view.openBucket = null;
+    repaint();
+  }));
 
   // --- Layers ---------------------------------------------------------------
 
-  root.querySelectorAll<HTMLButtonElement>(".edit-layer").forEach((button) => {
-    button.addEventListener("click", () => {
-      root.querySelector<HTMLElement>("#layerEdit" + button.dataset.index)?.classList.toggle("is-hidden");
-    });
-  });
-
-  root.querySelectorAll<HTMLButtonElement>(".cancel-layer-edit").forEach((button) => {
-    button.addEventListener("click", () => {
-      root.querySelector<HTMLElement>("#layerEdit" + button.dataset.index)?.classList.add("is-hidden");
-    });
-  });
-
+  // The rule is picked from three options; the value field beneath it means
+  // ringgit for one and per cent for the others, so it renames itself as the
+  // rule changes rather than after saving.
   root.querySelectorAll<HTMLFormElement>(".layerForm").forEach((form) => {
+    const kindInput = form.querySelector<HTMLInputElement>("input[name=kind]");
+    const label = form.querySelector<HTMLElement>(".js-value-label");
+    const value = form.querySelector<HTMLInputElement>("input[name=value]");
+    form.querySelectorAll<HTMLButtonElement>(".layer-kind").forEach((button) => button.addEventListener("click", () => {
+      const kind = button.dataset.kind ?? "fill";
+      if (kindInput) kindInput.value = kind;
+      form.querySelectorAll<HTMLButtonElement>(".layer-kind").forEach((other) => {
+        const active = other === button;
+        other.classList.toggle("is-active", active);
+        other.setAttribute("aria-pressed", String(active));
+      });
+      const isFill = kind === "fill";
+      if (label) label.textContent = isFill ? "Amount MYR" : "Share %";
+      if (value) value.step = isFill ? "1" : "0.1";
+    }));
+
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const index = Number(form.dataset.index);
@@ -143,20 +146,8 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
         ...(note ? { note } : {}),
       };
       if (!note) delete steps[index].note;
+      view.openLayer = null;
       savePlan(steps);
-    });
-  });
-
-  // The field below the rule means ringgit for one kind and per cent for the
-  // others, so it renames itself as the rule changes rather than after saving.
-  root.querySelectorAll<HTMLFormElement>(".layerForm").forEach((form) => {
-    const kind = form.querySelector<HTMLSelectElement>("select[name=kind]");
-    const label = form.querySelector<HTMLElement>(".js-value-label");
-    const value = form.querySelector<HTMLInputElement>("input[name=value]");
-    kind?.addEventListener("change", () => {
-      const isFill = kind.value === "fill";
-      if (label) label.textContent = isFill ? "Amount MYR" : "Share %";
-      if (value) value.step = isFill ? "1" : "0.1";
     });
   });
 
@@ -167,6 +158,8 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
       const steps = [...state.allocation.steps];
       if (target < 0 || target >= steps.length) return;
       [steps[index], steps[target]] = [steps[target], steps[index]];
+      // The editor follows the layer it was editing.
+      view.openLayer = target;
       savePlan(steps);
     });
   });
@@ -177,13 +170,17 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
       const step = state.allocation.steps[index];
       if (!step) return;
       if (!confirm(`Delete the ${step.name} layer? Money that reached it will flow to the layers below.`)) return;
+      view.openLayer = null;
       savePlan(state.allocation.steps.filter((_, i) => i !== index));
     });
   });
 
-  root.querySelector<HTMLElement>("#addLayerBtn")?.addEventListener("click", () => {
+  root.querySelectorAll<HTMLButtonElement>(".add-layer").forEach((button) => button.addEventListener("click", () => {
     // A new layer starts claiming nothing, so adding one cannot quietly change
-    // where this month's money already went.
+    // where this month's money already went. It opens ready to be named.
+    view.openLayer = state.allocation.steps.length;
+    view.openBucket = null;
+    view.overflowOpen = false;
     savePlan([...state.allocation.steps, {
       id: createId("layer"),
       name: "New layer",
@@ -191,29 +188,18 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
       value: 0,
       note: "",
     }]);
-  });
+  }));
 
-  root.querySelector<HTMLSelectElement>("#overflowSelect")?.addEventListener("change", (event) => {
-    savePlan([...state.allocation.steps], (event.target as HTMLSelectElement).value);
-  });
+  root.querySelectorAll<HTMLSelectElement>(".overflow-select").forEach((select) => select.addEventListener("change", () => {
+    view.overflowOpen = false;
+    savePlan([...state.allocation.steps], select.value);
+  }));
 
   root.querySelector<HTMLElement>("#normalizeLayersBtn")?.addEventListener("click", () => {
     savePlan(normalizePercentSteps(state.allocation).steps);
   });
 
   // --- One-time buckets -----------------------------------------------------
-
-  root.querySelectorAll<HTMLButtonElement>(".edit-bucket").forEach((button) => {
-    button.addEventListener("click", () => {
-      root.querySelector<HTMLElement>("#bucketEdit" + button.dataset.index)?.classList.toggle("is-hidden");
-    });
-  });
-
-  root.querySelectorAll<HTMLButtonElement>(".cancel-bucket-edit").forEach((button) => {
-    button.addEventListener("click", () => {
-      root.querySelector<HTMLElement>("#bucketEdit" + button.dataset.index)?.classList.add("is-hidden");
-    });
-  });
 
   root.querySelectorAll<HTMLFormElement>(".bucketForm").forEach((form) => {
     form.addEventListener("submit", (event) => {
@@ -229,17 +215,18 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
         amount: Number(data.get("amount")) || 0,
         note: String(data.get("note") ?? buckets[index].note),
       };
-      setState({ ...state, buckets });
-      doNavigate("buckets");
+      view.openBucket = null;
+      repaint({ ...state, buckets });
     });
   });
 
   root.querySelectorAll<HTMLButtonElement>(".delete-bucket").forEach((button) => {
     button.addEventListener("click", () => {
       const index = Number(button.dataset.index);
-      if (!confirm("Delete this bucket?")) return;
-      setState({ ...state, buckets: state.buckets.filter((_, i) => i !== index) });
-      doNavigate("buckets");
+      const bucket = state.buckets[index];
+      if (!bucket || !confirm(`Delete the ${bucket.label || bucket.name} bucket?`)) return;
+      view.openBucket = null;
+      repaint({ ...state, buckets: state.buckets.filter((_, i) => i !== index) });
     });
   });
 }
