@@ -758,12 +758,18 @@ Preview（另一个会话做的，项目代码没有改动）：
   - 不改计算；Mark as done、Go to、Mark deployed / Undo、跌幅检查都保留。
   - **结果（demo 数据）**：手机 2,524px → 1,090px，电脑 1,501px → 881px，卡片 17 → 3。
   - **你看过后改的**：指向 Advisor 本页的建议（Opportunity reserve）不再显示「Go to advisor」，改成「See the ladder」，点了滚到 ladder 卡并亮一圈；箭头电脑 →、手机 ↓。
-- **T-5c Review** `[ ]` ← **Current Task**，等你回答问题再说「执行 T-5c」
+- **T-5c Review** `[x]`（2026-09-17，PR #62 已合并）
   - 手机：本月一张卡（收入 · 支出 · DCA 三栏，chip 显示 Reviewed / Not reviewed，「Complete review」按钮点开表单）→ 分数小柱状图（最近 9 个月，平均分 chip）→ 历史短行（月份 · 支出 · 备注开头 / 分数），最近 5 条 + See all，点一行看完整备注和删除。
   - 电脑：标题右边「Complete review」→ 4 个数字（本月收入、本月支出、DCA、平均分 + 小柱状图）→ 历史表整行（月份、收入、支出、DCA、分数、备注）。
   - 拿掉顶部检查卡；表单照旧预填（切换月份会重新带入数字），不改计算。
   - **发现的问题**：分数算出来是 0–100，页面也写「/100」，但 demo 的历史分数是 9、10（0–10 的写法），所以 demo 显示成「9/100」。
-- **T-5d Rules** `[ ]`：做完 T-5c 再照 Preview 做。
+  - **结果（demo 数据）**：手机 2,447px → 756px，电脑 1,843px → 723px，常驻输入框 6 → 0。
+  - **已定并完成**：分数显示 x/10（算法仍是 0–100，显示和预填除以 10；以前存的大于 10 的分数当作满分 100）；同一个月再保存会先确认再取代，不再重复；表单在原地展开，保存后收起。
+- **T-5d Rules** `[ ]` ← **Current Task**，等你回答问题再说「执行 T-5d」
+  - 手机：分段选择「Your rules / How WealthUp works」→ Your plan 清单（规则名 · 一句说明 · 关键数字 ›，点开在下面看全文 + Edit / Hide）→ 笔记卡（每条笔记一张）→「+ Add note」。
+  - 电脑：标题右边「+ Add note」→ 分段选择 → 规则清单 | 笔记，两张一样高。
+  - 拿掉顶部检查卡、每条规则的 emoji 和 Edit / × 按钮（收进展开里）；一直展开的笔记表单收起来。How WealthUp works 不改。
+  - **发现的问题**：Bear Market Deployment 的文字写死「MYR 80 / 120 / 200」，跟真实台阶（demo 300 / 450 / 750）不一样；DCA Mandate 和 Opportunity Reserve 只写 VOO / QQQM，T-4 之后会漏掉 VXUS 等；隐藏（×）的规则没有办法再显示回来。
 
 ### T-6 — Goals / Budget / TVM  `[ ]`
 - 小改：去掉标签和标题重复（「JAPAN TRIP」+「Japan Trip 2027」），统一数字写法；顺便把 Dashboard 的 featured goal 选择器移到 Goals。
