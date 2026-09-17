@@ -17,7 +17,8 @@
 计划书定稿（2026-09-18）：https://claude.ai/artifact/QUVcjJRdTy7YszkoeKQDM1 。决定见 `PLAN.md` D 系列。
 - **PR #75 已合并（2026-09-18，`91fedea`）**：多市场上线 wealthup.cc，线上确认有新代码和实时汇率。`wu-live` 已更新到这个 main。
 - **D-1 完成（2026-09-18）**：股息记录的数据结构（Schema v24），还没有数字改变。分支 `feat/dividends`，PR 待开。
-- **当前**：D-2 回报计算，等你说开始。
+- **D-2 完成（2026-09-18）**：股息算进回报（按付款日汇率，缺汇率就不猜）。分支 `feat/dividends`，PR 待开。
+- **当前**：D-3 派息历史和建议，等你说开始。
 
 ## 多市场 Portfolio（MM 系列，进行中）
 
