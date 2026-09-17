@@ -1103,12 +1103,88 @@
   .mask-financial-amounts .wu-metric__value,
   .mask-financial-amounts .wu-metric__note,
   .mask-financial-amounts .t-num,
+  .mask-financial-amounts .wu-quick-amount,
   .mask-financial-amounts .t-num-lg,
   .mask-financial-amounts .t-num-xl,
   .mask-financial-amounts .wu-list__row > dd,
   .mask-financial-amounts .wu-note {
     filter: blur(7px);
     user-select: none;
+  }
+
+  /* ---- quick overview (/quick): the home-screen glance ------------------- */
+  .wu-quick {
+    --row-h: 52px;
+    --row-value-w: 72px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    max-width: 420px;
+    margin: 0 auto;
+  }
+  .wu-quick__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding-bottom: var(--space-2);
+  }
+  .wu-quick__logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    object-fit: cover;
+  }
+  .wu-quick__name {
+    font: var(--weight-semibold) var(--text-heading) / 1.2 var(--font-sans);
+    color: var(--text);
+  }
+  .wu-card.wu-quick__card {
+    padding-block: var(--space-2);
+  }
+  .wu-card.wu-quick__card.wu-stack {
+    padding-top: var(--space-4);
+  }
+  .wu-facts.wu-quick__facts li > span:first-child {
+    font: var(--weight-medium) var(--text-body) / 1.3 var(--font-sans);
+    color: var(--text);
+  }
+  .wu-facts.wu-quick__facts li > span:last-child {
+    font: var(--weight-semibold) var(--text-body) / 1.3 var(--font-sans);
+    color: var(--text);
+  }
+  .wu-facts.wu-quick__facts li > span.t-positive {
+    color: var(--positive);
+  }
+  .wu-quick-goals {
+    display: grid;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .wu-quick-goal {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    padding-block: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+  }
+  .wu-quick-goal:first-child {
+    border-top: 0;
+  }
+  .wu-quick-goal__name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font: var(--weight-medium) var(--text-body) / 1.3 var(--font-sans);
+    color: var(--text);
+  }
+  .wu-quick-goal__pct {
+    font: var(--weight-semibold) var(--text-body) / 1.3 var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  .wu-quick-goal > .wu-bar {
+    grid-column: 1 / -1;
   }
 
   /* ---- empty state ------------------------------------------------------- */

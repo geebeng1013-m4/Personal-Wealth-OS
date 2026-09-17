@@ -274,28 +274,46 @@ export function quickViewTemplate(state: WealthState): string {
   const investedMyr = portfolio.totalInvestedMyr;
   // Progress uses the canonical currentAmount, so Quick View, the Goals page
   // and the Dashboard can never disagree about how funded a goal is.
-  const targetRows = getGoalsSnapshot(state).ordered.map((g) => {
+  const amount = (value: number): string => money(value, "").trim();
+  // One row per goal: name and percentage, the progress bar underneath.
+  const goalRows = getGoalsSnapshot(state).ordered.map((g) => {
     const pct = Math.round(g.progress * 100);
-    return `<div class="wu-list__row"><span>${escapeHtml(g.label)}</span><strong class="t-num${pct >= 80 ? " wu-metric__value--positive" : ""}">${pct}%</strong></div>`;
+    return `<li class="wu-quick-goal">
+          <span class="wu-quick-goal__name">${escapeHtml(g.label)}</span>
+          <span class="wu-quick-goal__pct wu-quick-amount${pct >= 80 ? " t-positive" : ""}">${pct}%</span>
+          <span class="wu-bar" role="progressbar" aria-valuenow="${Math.min(pct, 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(g.label)} progress"><span class="wu-bar__fill" style="width:${Math.min(pct, 100)}%"></span></span>
+        </li>`;
   }).join("");
 
   return `
-    <div class="wu wu-stack" style="max-width:400px;margin:0 auto">
-      <div style="text-align:center">
-        <img class="brand-logo brand-logo-dialog" src="/brand/wealthup-logo.png" alt="WEALTHUP Personal Wealth OS">
-        <p class="t-caption t-faint">Quick Overview</p>
-      </div>
+    <div class="wu wu-quick">
+      <header class="wu-quick__head">
+        <img class="wu-quick__logo" src="/brand/wealthup-logo.png" alt="">
+        <div>
+          <p class="wu-quick__name">WealthUp</p>
+          <p class="wu-dash__note">Quick overview</p>
+        </div>
+      </header>
 
-      <div class="wu-grid wu-grid--2">
-        <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">Invested</span><span class="wu-metric__value t-num wu-metric__value--positive">${money(investedMyr)}</span></div></div>
-        <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">Emergency</span><span class="wu-metric__value t-num${emergency >= 0.8 ? " wu-metric__value--positive" : ""}">${percent(emergency)}</span></div></div>
-        <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">Planned Surplus</span><span class="wu-metric__value t-num">${money(surplus)}</span></div></div>
-        <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">DCA / Month</span><span class="wu-metric__value t-num">${money(state.dca.monthly)}</span></div></div>
-      </div>
+      <section class="wu-card wu-stack wu-stack--sm" aria-label="Invested">
+        <span class="wu-label">Invested</span>
+        <p class="wu-money"><span class="wu-money__cur">MYR</span><span class="wu-quick-amount">${amount(investedMyr)}</span></p>
+      </section>
 
-      ${state.goals.length > 0 ? `<div class="wu-card wu-card--inset wu-card--pad-sm"><span class="wu-label">Goals</span><div class="wu-list">${targetRows}</div></div>` : ""}
+      <section class="wu-card wu-quick__card" aria-label="This month">
+        <ul class="wu-facts wu-facts--plain wu-quick__facts">
+          <li><span>Emergency fund</span><span class="wu-quick-amount${emergency >= 0.8 ? " t-positive" : ""}">${percent(emergency)}</span></li>
+          <li><span>Planned surplus</span><span class="wu-quick-amount">${money(surplus)}</span></li>
+          <li><span>DCA per month</span><span class="wu-quick-amount">${money(state.dca.monthly)}</span></li>
+        </ul>
+      </section>
 
-      <button class="wu-btn wu-btn--primary wu-btn--block" id="openFullApp" type="button">Open Full App</button>
+      ${state.goals.length > 0 ? `<section class="wu-card wu-stack wu-stack--sm wu-quick__card" aria-labelledby="quickGoalsLabel">
+        <span class="wu-label" id="quickGoalsLabel">Goals</span>
+        <ul class="wu-quick-goals">${goalRows}</ul>
+      </section>` : ""}
+
+      <button class="wu-btn wu-btn--primary wu-btn--block" id="openFullApp" type="button">Open full app</button>
     </div>
   `;
 }
