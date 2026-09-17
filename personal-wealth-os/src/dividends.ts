@@ -17,12 +17,14 @@
  * can never disagree. A "dismissed" record is the user saying "not this one":
  * it keeps a suggested payout from being offered again, and carries no money.
  *
- * Suggesting records from dividend history, and counting them in returns, are
- * separate steps (D-2, D-3). This module is only the shape and its validation.
+ * This module holds the shape, its validation, and the sum of what was
+ * received (dividendIncome), converted to ringgit at each payout's own rate.
+ * Suggesting payouts from dividend history is a separate step (D-3).
  *
- * Pure: imports only the domain types. No fetching, no persistence, no UI.
+ * Pure: no fetching, no persistence, no UI.
  */
-import type { Dividend, DividendStatus } from "./models";
+import type { CurrencyExchange, Dividend, DividendStatus, Ticker } from "./models";
+import { nearestConversionRate } from "./currencyExchange";
 
 /** Max records kept, so the list cannot grow without bound. */
 export const MAX_DIVIDENDS = 2000;
@@ -93,11 +95,105 @@ export function validateDividend(candidate: unknown): Dividend | null {
     ...(isPositive(record.perShare) ? { perShare: record.perShare } : {}),
     gross,
     withholdingTax,
+    ...(isPositive(record.rateToMyr) ? { rateToMyr: record.rateToMyr } : {}),
     status,
     ...(typeof record.notes === "string" && record.notes.trim()
       ? { notes: record.notes.trim().slice(0, 200) }
       : {}),
   };
+}
+
+/**
+ * MYR per unit of a payout's currency on its pay date.
+ *
+ * Ringgit is 1. Otherwise the rate captured on the record, then the user's
+ * recorded conversion into that currency nearest the pay date — the same
+ * evidence trades fall back on. Today's live rate is deliberately not used:
+ * it belongs to a different day, and income is worth what it was worth when
+ * it arrived. Null when none of these exists.
+ */
+export function dividendRateToMyr(dividend: Dividend, exchanges: CurrencyExchange[]): number | null {
+  if (dividend.currency === "MYR") return 1;
+  if (isPositive(dividend.rateToMyr)) return dividend.rateToMyr;
+  return nearestConversionRate(dividend.payDate, dividend.currency, exchanges);
+}
+
+/** One holding's dividends, in its payout currency and in ringgit. */
+export interface TickerDividends {
+  ticker: Ticker;
+  currency: string;
+  count: number;
+  grossLocal: number;
+  withheldLocal: number;
+  netLocal: number;
+  /** Only payouts with a known rate. See DividendIncome.withoutRate. */
+  netMyr: number;
+  withheldMyr: number;
+}
+
+/** Every confirmed payout, added up. */
+export interface DividendIncome {
+  /** Confirmed payouts counted. */
+  count: number;
+  /** Totals in ringgit, over the payouts with a known rate. */
+  grossMyr: number;
+  withheldMyr: number;
+  netMyr: number;
+  /** Net received with a pay date in the twelve months up to `now`. */
+  netMyrLast12Months: number;
+  withheldMyrLast12Months: number;
+  /** Confirmed payouts left out of the ringgit totals for want of a rate. */
+  withoutRate: number;
+  byTicker: Map<Ticker, TickerDividends>;
+}
+
+/**
+ * Add up the dividends actually received.
+ *
+ * Only confirmed payouts count; a dismissed suggestion is not income. A payout
+ * with no rate to ringgit is left out of the ringgit totals and counted in
+ * `withoutRate` rather than converted at a guessed number.
+ */
+export function dividendIncome(dividends: Dividend[], exchanges: CurrencyExchange[], now: Date): DividendIncome {
+  const since = new Date(now.getTime());
+  since.setFullYear(since.getFullYear() - 1);
+  const sinceDate = since.toISOString().slice(0, 10);
+  const today = now.toISOString().slice(0, 10);
+
+  const income: DividendIncome = {
+    count: 0, grossMyr: 0, withheldMyr: 0, netMyr: 0,
+    netMyrLast12Months: 0, withheldMyrLast12Months: 0, withoutRate: 0, byTicker: new Map(),
+  };
+  for (const dividend of dividends) {
+    if (dividend.status !== "confirmed") continue;
+    income.count += 1;
+    const net = netDividend(dividend);
+    const perTicker = income.byTicker.get(dividend.ticker) ?? {
+      ticker: dividend.ticker, currency: dividend.currency, count: 0,
+      grossLocal: 0, withheldLocal: 0, netLocal: 0, netMyr: 0, withheldMyr: 0,
+    };
+    perTicker.count += 1;
+    perTicker.grossLocal += dividend.gross;
+    perTicker.withheldLocal += dividend.withholdingTax;
+    perTicker.netLocal += net;
+    income.byTicker.set(dividend.ticker, perTicker);
+
+    const rate = dividendRateToMyr(dividend, exchanges);
+    if (rate === null) {
+      income.withoutRate += 1;
+      continue;
+    }
+    income.grossMyr += dividend.gross * rate;
+    income.withheldMyr += dividend.withholdingTax * rate;
+    income.netMyr += net * rate;
+    perTicker.netMyr += net * rate;
+    perTicker.withheldMyr += dividend.withholdingTax * rate;
+    if (dividend.payDate > sinceDate && dividend.payDate <= today) {
+      income.netMyrLast12Months += net * rate;
+      income.withheldMyrLast12Months += dividend.withholdingTax * rate;
+    }
+  }
+  return income;
 }
 
 /**

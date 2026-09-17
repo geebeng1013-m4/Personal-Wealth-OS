@@ -403,7 +403,7 @@ export function resolveExchangeCoverage(
  * an estimate from the user's own statement, which beats the rate that happened
  * to be live when a CSV was imported months later.
  */
-function nearestConversionRate(date: string, currency: string, exchanges: CurrencyExchange[]): number | null {
+export function nearestConversionRate(date: string, currency: string, exchanges: CurrencyExchange[]): number | null {
   const when = Date.parse(date.slice(0, 10));
   if (Number.isNaN(when)) return null;
   let best: number | null = null;

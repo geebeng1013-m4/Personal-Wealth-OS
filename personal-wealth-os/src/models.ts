@@ -204,6 +204,11 @@ export interface Dividend {
   gross: number;
   /** Tax taken at source, in `currency`. 0 where none is withheld. */
   withholdingTax: number;
+  /**
+   * MYR per unit of `currency` on the pay date, when known — captured when the
+   * payout is confirmed. Without it the nearest recorded conversion is used.
+   */
+  rateToMyr?: number;
   status: DividendStatus;
   notes?: string;
 }

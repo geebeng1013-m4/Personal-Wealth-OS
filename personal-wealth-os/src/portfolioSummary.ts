@@ -20,6 +20,7 @@ import { calculatePositionCostBasis, portfolioSummary, type PositionCostBasis } 
 import { tradesWithExchangeCost } from "./currencyExchange";
 import { getPrice, isUsableRate, type PriceMap, type UsdToMyr } from "./marketPrices";
 import { MARKETS, marketOfTicker, normalizeTradeMarket } from "./tradeCurrency";
+import { dividendIncome } from "./dividends";
 
 export interface PortfolioHolding {
   ticker: Ticker;
@@ -44,6 +45,10 @@ export interface PortfolioHolding {
   unrealizedPnlPercentLocal: number | null;
   /** MYR per unit of `currency` used for marketValueMyr, or null when none was known. */
   rateToMyr: number | null;
+  /** Net dividends received on this holding, in ringgit (payouts with a known rate). */
+  dividendsNetMyr: number;
+  /** Tax withheld from them, in ringgit. */
+  dividendsWithheldMyr: number;
   /** Units currently held. Sells reduce this; it never goes negative. */
   units: number;
   investedMyr: number;
@@ -206,6 +211,26 @@ export interface PortfolioSnapshot {
   usdToMyrUsed: number | null;
   /** Held holdings grouped by currency, largest ringgit cost first. */
   byCurrency: CurrencySubtotal[];
+
+  // --- Dividends (D-2). Confirmed payouts only, converted at their pay-date rate. ---
+  /** Every confirmed payout, whether or not the holding is still held. */
+  dividendCount: number;
+  dividendsGrossMyr: number;
+  /** US withholding and any other tax taken before the money arrived. */
+  dividendsWithheldMyr: number;
+  dividendsNetMyr: number;
+  dividendsNetMyrLast12Months: number;
+  dividendsWithheldMyrLast12Months: number;
+  /** Confirmed payouts left out of the ringgit figures for want of a rate. */
+  dividendsWithoutRate: number;
+  /**
+   * unrealizedPnlMyr plus the net dividends of the same priced holdings — what
+   * the shares have made you, counting what they paid out. Null whenever
+   * unrealizedPnlMyr is. Realised gains stay out, as they do beside it.
+   */
+  unrealizedPnlMyrWithDividends: number | null;
+  /** The same over the priced holdings' ringgit cost. */
+  unrealizedPnlPercentMyrWithDividends: number | null;
 }
 
 /** Live market inputs. Everything is optional; anything missing means unknown. */
@@ -244,6 +269,7 @@ export function getPortfolioSnapshot(
   // every position's cost basis a second time.
   const costBases = new Map<string, PositionCostBasis>();
   const summary = portfolioSummary(state, costBases);
+  const dividends = dividendIncome(state.dividends ?? [], state.currencyExchanges ?? [], _now);
   // portfolioSummary() restates ringgit costs from the recorded conversions;
   // the fallback below must read the same trades or one holding could be priced
   // against a cost basis the rest of the snapshot disagrees with.
@@ -305,6 +331,8 @@ export function getPortfolioSnapshot(
       unrealizedPnlLocal,
       unrealizedPnlPercentLocal,
       rateToMyr: rate,
+      dividendsNetMyr: dividends.byTicker.get(position.ticker)?.netMyr ?? 0,
+      dividendsWithheldMyr: dividends.byTicker.get(position.ticker)?.withheldMyr ?? 0,
       units: position.units,
       investedMyr: position.investedMyr,
       investedUsd: position.investedUsd,
@@ -371,6 +399,10 @@ export function getPortfolioSnapshot(
   const unrealizedPnlMyrExFees = totalInvestmentValueMyr !== null
     ? totalInvestmentValueMyr - pricedInvestedExFeesMyr
     : null;
+  // Dividends of the same holdings the unrealised figure covers, so the two
+  // add up over one set of shares.
+  const pricedDividendsMyr = priced.reduce((sum, holding) => sum + holding.dividendsNetMyr, 0);
+  const pnlWithDividends = unrealizedPnlMyr !== null ? unrealizedPnlMyr + pricedDividendsMyr : null;
   const quoteTimes = priced
     .map((holding) => getPrice(market.prices, holding.ticker)?.quotedAt ?? 0)
     .filter((time) => time > 0);
@@ -447,6 +479,17 @@ export function getPortfolioSnapshot(
     valuedAt: quoteTimes.length > 0 ? Math.max(...quoteTimes) : null,
     usdToMyrUsed: hasValuation ? usdToMyr : null,
     byCurrency: currencySubtotals(weighted),
+    dividendCount: dividends.count,
+    dividendsGrossMyr: dividends.grossMyr,
+    dividendsWithheldMyr: dividends.withheldMyr,
+    dividendsNetMyr: dividends.netMyr,
+    dividendsNetMyrLast12Months: dividends.netMyrLast12Months,
+    dividendsWithheldMyrLast12Months: dividends.withheldMyrLast12Months,
+    dividendsWithoutRate: dividends.withoutRate,
+    unrealizedPnlMyrWithDividends: pnlWithDividends,
+    unrealizedPnlPercentMyrWithDividends: pnlWithDividends !== null && pricedInvestedMyr > 0
+      ? pnlWithDividends / pricedInvestedMyr
+      : null,
   };
 }
 
