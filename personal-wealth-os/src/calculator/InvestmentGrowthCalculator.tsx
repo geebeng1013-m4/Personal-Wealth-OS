@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarRange, CircleDollarSign, Percent, Repeat2, TrendingUp, WalletCards } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps } from "recharts";
 import {
   calculateInvestmentGrowth,
@@ -10,11 +9,25 @@ import {
   type ContributionFrequency,
 } from "./investmentGrowth";
 
-const currency = new Intl.NumberFormat("en-MY", {
-  style: "currency",
-  currency: "MYR",
-  maximumFractionDigits: 0,
-});
+/*
+ * T-6d: the calculator speaks the app's own layout — figure tiles, a result
+ * card, list-row inputs and a chart card — instead of its own Tailwind look.
+ * Desktop: four figures, then Inputs beside Growth. Phone: the result, the
+ * chart, then the inputs. The arithmetic is unchanged (investmentGrowth.ts).
+ */
+
+const DEFAULTS = {
+  initialDeposit: 10_000,
+  years: 20,
+  annualReturnPercent: 7,
+  compoundingFrequency: "monthly" as CompoundingFrequency,
+  contributionAmount: 500,
+  contributionFrequency: "monthly" as ContributionFrequency,
+};
+
+/** Whole ringgit, no currency prefix: the page sets "MYR" small beside it. */
+const whole = new Intl.NumberFormat("en-MY", { maximumFractionDigits: 0 });
+const amount = (value: number): string => whole.format(value);
 
 function compactMoney(value: number): string {
   return new Intl.NumberFormat("en-MY", {
@@ -43,36 +56,36 @@ function GrowthTooltip({ active, label, payload }: TooltipContentProps) {
       <div className="calc-chart-tooltip-title">{formatInvestmentDuration(label)}</div>
       <div className="calc-chart-tooltip-row">
         <span className="calc-chart-key calc-chart-key-principal" />
-        <span>Principal contributed</span>
-        <strong className="calc-font-mono calc-tabular-nums">{currency.format(principal)}</strong>
+        <span>You put in</span>
+        <strong>MYR {amount(principal)}</strong>
       </div>
       <div className="calc-chart-tooltip-row">
         <span className="calc-chart-key calc-chart-key-interest" />
-        <span>Interest earned</span>
-        <strong className="calc-font-mono calc-tabular-nums">{currency.format(interest)}</strong>
+        <span>Interest</span>
+        <strong>MYR {amount(interest)}</strong>
       </div>
       <div className="calc-chart-tooltip-total">
-        <span>Total balance</span>
-        <strong className="calc-font-mono calc-tabular-nums">{currency.format(principal + interest)}</strong>
+        <span>Balance</span>
+        <strong>MYR {amount(principal + interest)}</strong>
       </div>
     </div>
   );
 }
 
-interface NumberFieldProps {
+interface NumberRowProps {
   id: string;
   label: string;
   value: number;
   min: number;
   max: number;
   step: number;
-  icon: React.ReactNode;
-  suffix?: string;
+  unit: string;
   normalize: (value: number) => number;
   onChange: (value: number) => void;
 }
 
-function NumberField({ id, label, value, min, max, step, icon, suffix, normalize, onChange }: NumberFieldProps) {
+/** One input row: label on the left, the number typed straight in on the right. */
+function NumberRow({ id, label, value, min, max, step, unit, normalize, onChange }: NumberRowProps) {
   const [draftValue, setDraftValue] = useState(String(value));
   const isEditing = useRef(false);
 
@@ -81,13 +94,12 @@ function NumberField({ id, label, value, min, max, step, icon, suffix, normalize
   }, [value]);
 
   return (
-    <label htmlFor={id} className="calc-block">
-      <span className="calc-label">{label}</span>
-      <span className="calc-relative calc-block">
-        <span className="calc-pointer-events-none calc-absolute calc-left-3 calc-top-1/2 calc-flex -calc-translate-y-1/2 calc-items-center" style={{ color: "var(--text-faint)" }}>{icon}</span>
+    <li className="wu-tvm-row wu-tvm-row--plain">
+      <label className="wu-tvm-row__label" htmlFor={id}>{label}</label>
+      <span className="wu-tvm-row__input">
         <input
           id={id}
-          className="calc-field calc-pl-10 calc-pr-24 calc-font-mono calc-tabular-nums"
+          className="wu-field"
           type="number"
           inputMode="decimal"
           value={draftValue}
@@ -109,40 +121,51 @@ function NumberField({ id, label, value, min, max, step, icon, suffix, normalize
             onChange(normalized);
           }}
         />
-        {suffix ? <span className="calc-pointer-events-none calc-absolute calc-right-8 calc-top-1/2 -calc-translate-y-1/2 calc-text-xs calc-font-semibold" style={{ color: "var(--text-faint)" }}>{suffix}</span> : null}
+        <span className="wu-tvm-row__unit" aria-hidden="true">{unit}</span>
       </span>
-    </label>
+    </li>
   );
 }
 
-function SelectField<T extends string>({ id, label, value, icon, options, onChange }: {
-  id: string;
+/** Monthly / Annually as a two-way choice. */
+function ChoiceRow<T extends string>({ label, value, options, onChange }: {
   label: string;
   value: T;
-  icon: React.ReactNode;
   options: Array<{ value: T; label: string }>;
   onChange: (value: T) => void;
 }) {
   return (
-    <label htmlFor={id} className="calc-block">
-      <span className="calc-label">{label}</span>
-      <span className="calc-relative calc-block">
-        <span className="calc-pointer-events-none calc-absolute calc-left-3 calc-top-1/2 calc-z-10 -calc-translate-y-1/2" style={{ color: "var(--text-faint)" }}>{icon}</span>
-        <select id={id} className="calc-field calc-select-field calc-pl-10" value={value} onChange={(event) => onChange(event.currentTarget.value as T)}>
-          {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-      </span>
-    </label>
+    <li className="wu-tvm-row wu-tvm-row--option">
+      <span className="wu-tvm-row__label">{label}</span>
+      <div className="wu-segmented wu-tvm-choice" role="group" aria-label={label}>
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className={`wu-segmented__option${option.value === value ? " is-active" : ""}`}
+            aria-pressed={option.value === value}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </li>
   );
 }
 
+const FREQUENCIES: Array<{ value: "monthly" | "annually"; label: string }> = [
+  { value: "monthly", label: "Monthly" },
+  { value: "annually", label: "Annually" },
+];
+
 export function InvestmentGrowthCalculator() {
-  const [initialDeposit, setInitialDeposit] = useState(10_000);
-  const [years, setYears] = useState(20);
-  const [annualReturnPercent, setAnnualReturnPercent] = useState(7);
-  const [compoundingFrequency, setCompoundingFrequency] = useState<CompoundingFrequency>("monthly");
-  const [contributionAmount, setContributionAmount] = useState(500);
-  const [contributionFrequency, setContributionFrequency] = useState<ContributionFrequency>("monthly");
+  const [initialDeposit, setInitialDeposit] = useState(DEFAULTS.initialDeposit);
+  const [years, setYears] = useState(DEFAULTS.years);
+  const [annualReturnPercent, setAnnualReturnPercent] = useState(DEFAULTS.annualReturnPercent);
+  const [compoundingFrequency, setCompoundingFrequency] = useState<CompoundingFrequency>(DEFAULTS.compoundingFrequency);
+  const [contributionAmount, setContributionAmount] = useState(DEFAULTS.contributionAmount);
+  const [contributionFrequency, setContributionFrequency] = useState<ContributionFrequency>(DEFAULTS.contributionFrequency);
 
   const result = useMemo(() => calculateInvestmentGrowth({
     initialDeposit,
@@ -153,76 +176,117 @@ export function InvestmentGrowthCalculator() {
     contributionFrequency,
   }), [initialDeposit, years, annualReturnPercent, compoundingFrequency, contributionAmount, contributionFrequency]);
 
-  const yearTicks = useMemo(() => Array.from({ length: years + 1 }, (_, year) => year * 12), [years]);
+  const reset = (): void => {
+    setInitialDeposit(DEFAULTS.initialDeposit);
+    setYears(DEFAULTS.years);
+    setAnnualReturnPercent(DEFAULTS.annualReturnPercent);
+    setCompoundingFrequency(DEFAULTS.compoundingFrequency);
+    setContributionAmount(DEFAULTS.contributionAmount);
+    setContributionFrequency(DEFAULTS.contributionFrequency);
+  };
+
+  // The page header's Reset (desktop) sits outside this component; wire it here.
+  useEffect(() => {
+    const button = document.querySelector<HTMLButtonElement>("#growthReset");
+    button?.addEventListener("click", reset);
+    return () => button?.removeEventListener("click", reset);
+  });
+
+  const yearTicks = useMemo(() => {
+    const every = years <= 10 ? 2 : years <= 30 ? 5 : 10;
+    const ticks: number[] = [];
+    for (let year = 0; year <= years; year += every) ticks.push(year * 12);
+    return ticks;
+  }, [years]);
+
+  const growthShare = result.totalBalance > 0 ? Math.round((result.totalInterest / result.totalBalance) * 100) : 0;
+  const cadence = contributionFrequency === "monthly" ? "a month" : "a year";
+  const hasSplit = result.totalPrincipal > 0 || result.totalInterest > 0;
+  const split = hasSplit ? (
+    <div className="wu-split wu-tvm-split" aria-hidden="true">
+      <span style={{ flex: Math.max(result.totalPrincipal, 0.001), background: "var(--highlight)" }} />
+      <span style={{ flex: Math.max(result.totalInterest, 0.001), background: "var(--accent)" }} />
+    </div>
+  ) : null;
 
   return (
-    <div className="calc-grid calc-gap-4 lg:calc-grid-cols-[minmax(280px,0.36fr)_minmax(0,0.64fr)]">
-      <section className="calc-card calc-self-start" aria-labelledby="calculatorInputsTitle">
-        <div className="calc-mb-6">
-          <p className="calc-mb-2 calc-text-xs calc-font-semibold calc-uppercase calc-tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Growth assumptions</p>
-          <h3 id="calculatorInputsTitle" className="calc-m-0 calc-text-lg calc-font-semibold">Investment inputs</h3>
-          <p className="calc-mt-2 calc-text-sm calc-leading-6" style={{ color: "var(--text-muted)" }}>Model regular contributions and compound growth in MYR. Estimates are planning aids, not guaranteed returns.</p>
+    <div className="wu wu-growth">
+      <div className="wu-dash">
+        {/* ROW 1 (desktop) — four figures */}
+        <div className="wu-dash__full wu-dash__tiles wu-growth-tiles">
+          <section className="wu-card wu-dash__tile" aria-labelledby="growthValueLabel">
+            <div className="wu-tc__top"><span className="wu-label" id="growthValueLabel">Projected value</span></div>
+            <p className="wu-money wu-money--md"><span className="wu-money__cur">MYR</span><span>{amount(result.totalBalance)}</span></p>
+            <p className="wu-dash__note">In {years} {years === 1 ? "year" : "years"} at {annualReturnPercent}% a year</p>
+          </section>
+          <section className="wu-card wu-dash__tile" aria-labelledby="growthInLabel">
+            <div className="wu-tc__top"><span className="wu-label" id="growthInLabel">You put in</span></div>
+            <p className="wu-money wu-money--md"><span className="wu-money__cur">MYR</span><span>{amount(result.totalPrincipal)}</span></p>
+            <p className="wu-dash__note">{amount(initialDeposit)} now + {amount(contributionAmount)} {cadence}</p>
+          </section>
+          <section className="wu-card wu-dash__tile" aria-labelledby="growthInterestLabel">
+            <div className="wu-tc__top"><span className="wu-label" id="growthInterestLabel">Interest</span></div>
+            <p className="wu-money wu-money--md t-positive"><span className="wu-money__cur">MYR</span><span>+{amount(result.totalInterest)}</span></p>
+            <p className="wu-dash__note">Growth on top of what you put in</p>
+          </section>
+          <section className="wu-card wu-dash__tile" aria-labelledby="growthShareLabel">
+            <div className="wu-tc__top"><span className="wu-label" id="growthShareLabel">Growth share</span></div>
+            <p className="wu-money wu-money--md"><span>{growthShare}%</span></p>
+            <p className="wu-dash__note">Of the final balance is interest</p>
+            {split}
+          </section>
         </div>
 
-        <div className="calc-grid calc-gap-5">
-          <NumberField id="initialDeposit" label="Initial deposit" value={initialDeposit} min={0} max={1_000_000_000_000} step={5} icon={<CircleDollarSign size={17} />} suffix="MYR" normalize={normalizeMoney} onChange={setInitialDeposit} />
-          <NumberField id="investmentYears" label="Investment period" value={years} min={1} max={60} step={1} icon={<CalendarRange size={17} />} suffix="YEARS" normalize={normalizeYears} onChange={setYears} />
-          <NumberField id="annualReturn" label="Annual return" value={annualReturnPercent} min={0} max={100} step={0.1} icon={<Percent size={17} />} suffix="%" normalize={normalizeReturnPercent} onChange={setAnnualReturnPercent} />
-          <SelectField id="compounding" label="Compounding" value={compoundingFrequency} icon={<Repeat2 size={17} />} options={[{ value: "monthly", label: "Monthly" }, { value: "annually", label: "Annually" }]} onChange={setCompoundingFrequency} />
-          <NumberField id="contributionAmount" label="Contribution amount" value={contributionAmount} min={0} max={1_000_000_000_000} step={5} icon={<WalletCards size={17} />} suffix="MYR" normalize={normalizeMoney} onChange={setContributionAmount} />
-          <SelectField id="contributionFrequency" label="Contribution frequency" value={contributionFrequency} icon={<TrendingUp size={17} />} options={[{ value: "monthly", label: "Monthly" }, { value: "annually", label: "Annually" }]} onChange={setContributionFrequency} />
-        </div>
-      </section>
-
-      <section className="calc-card calc-min-w-0" aria-labelledby="growthProjectionTitle">
-        <div className="calc-flex calc-flex-col calc-gap-4 sm:calc-flex-row sm:calc-items-end sm:calc-justify-between">
-          <div>
-            <p className="calc-mb-2 calc-text-xs calc-font-semibold calc-uppercase calc-tracking-[0.18em]" style={{ color: "var(--text-faint)" }}>Projected value</p>
-            <h3 id="growthProjectionTitle" className="calc-m-0 calc-font-mono calc-text-3xl calc-font-semibold calc-tracking-tight calc-tabular-nums sm:calc-text-4xl">{currency.format(result.totalBalance)}</h3>
-            <p className="calc-mt-2 calc-text-sm" style={{ color: "var(--text-muted)" }}>Estimated balance after {years} {years === 1 ? "year" : "years"}</p>
+        {/* phone — the result leads */}
+        <section className="wu-card wu-dash__full wu-stack wu-stack--sm wu-growth-result" aria-labelledby="growthResultLabel">
+          <div className="wu-tc__top"><span className="wu-label" id="growthResultLabel">Projected value</span><span className="wu-chip">+{amount(result.totalInterest)} interest</span></div>
+          <p className="wu-money"><span className="wu-money__cur">MYR</span><span>{amount(result.totalBalance)}</span></p>
+          {split}
+          <div className="wu-legend">
+            <span><i style={{ background: "var(--highlight)" }} />You put in <b>{amount(result.totalPrincipal)}</b></span>
+            <span><i style={{ background: "var(--accent)" }} />Interest <b>{amount(result.totalInterest)}</b></span>
           </div>
-          <div className="calc-grid calc-grid-cols-2 calc-gap-3">
-            <div className="calc-rounded-xl calc-border calc-p-3" style={{ borderColor: "var(--highlight-soft)", background: "var(--highlight-soft)" }}>
-              <span className="calc-block calc-text-xs" style={{ color: "var(--highlight)" }}>Principal</span>
-              <strong className="calc-mt-1 calc-block calc-font-mono calc-text-base calc-font-semibold calc-tabular-nums">{currency.format(result.totalPrincipal)}</strong>
-            </div>
-            <div className="calc-rounded-xl calc-border calc-p-3" style={{ borderColor: "var(--accent-soft)", background: "var(--accent-soft)" }}>
-              <span className="calc-block calc-text-xs" style={{ color: "var(--accent)" }}>Interest</span>
-              <strong className="calc-mt-1 calc-block calc-font-mono calc-text-base calc-font-semibold calc-tabular-nums">{currency.format(result.totalInterest)}</strong>
-            </div>
-          </div>
-        </div>
+          <p className="wu-dash__note">After {years} {years === 1 ? "year" : "years"} at {annualReturnPercent}% a year, {compoundingFrequency} compounding.</p>
+        </section>
 
-        <div className="calc-chart-panel calc-mt-7">
-          <div className="calc-chart-header">
-            <div>
-              <span className="calc-chart-eyebrow">Growth composition</span>
-              <strong className="calc-chart-heading">Principal &amp; compound return</strong>
-            </div>
-            <div className="calc-chart-legend" aria-label="Chart legend">
-              <span><i className="calc-chart-legend-mark calc-chart-legend-principal" />Principal contributed</span>
-              <span><i className="calc-chart-legend-mark calc-chart-legend-interest" />Interest earned</span>
-            </div>
-          </div>
+        {/* ROW 2 — inputs | growth */}
+        <section className="wu-card wu-dash__half wu-stack wu-stack--sm wu-growth-inputs" aria-labelledby="growthInputsLabel">
+          <div className="wu-tc__top"><span className="wu-label" id="growthInputsLabel">Inputs</span><button type="button" className="wu-btn wu-btn--ghost wu-btn--sm wu-growth-reset-phone" onClick={reset}>Reset</button></div>
+          <ul className="wu-tvm-rows">
+            <NumberRow id="initialDeposit" label="Initial deposit" value={initialDeposit} min={0} max={1_000_000_000_000} step={5} unit="MYR" normalize={normalizeMoney} onChange={setInitialDeposit} />
+            <NumberRow id="contributionAmount" label="Contribution" value={contributionAmount} min={0} max={1_000_000_000_000} step={5} unit="MYR" normalize={normalizeMoney} onChange={setContributionAmount} />
+            <ChoiceRow label="Contribute" value={contributionFrequency} options={FREQUENCIES} onChange={setContributionFrequency} />
+            <NumberRow id="annualReturn" label="Annual return" value={annualReturnPercent} min={0} max={100} step={0.1} unit="%" normalize={normalizeReturnPercent} onChange={setAnnualReturnPercent} />
+            <NumberRow id="investmentYears" label="Years" value={years} min={1} max={60} step={1} unit="yrs" normalize={normalizeYears} onChange={setYears} />
+            <ChoiceRow label="Compounding" value={compoundingFrequency} options={FREQUENCIES} onChange={setCompoundingFrequency} />
+          </ul>
+        </section>
 
-          <div className="calc-chart-canvas" role="img" aria-label="Projected principal and interest growth by year">
+        <section className="wu-card wu-dash__half wu-stack wu-stack--sm wu-growth-chart" aria-labelledby="growthChartLabel">
+          <div className="wu-tc__top"><span className="wu-label" id="growthChartLabel">Growth</span><span className="wu-chip wu-chip--muted">{years} {years === 1 ? "year" : "years"}</span></div>
+          <div className="wu-growth-canvas" role="img" aria-label="Projected principal and interest growth by year">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={result.points} margin={{ top: 12, right: 10, left: 4, bottom: 2 }}>
-              <defs>
-                <linearGradient id="principalFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--highlight)" stopOpacity={0.5} /><stop offset="55%" stopColor="var(--highlight)" stopOpacity={0.18} /><stop offset="100%" stopColor="var(--highlight)" stopOpacity={0} /></linearGradient>
-                <linearGradient id="interestFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--accent)" stopOpacity={0.44} /><stop offset="55%" stopColor="var(--accent)" stopOpacity={0.16} /><stop offset="100%" stopColor="var(--accent)" stopOpacity={0} /></linearGradient>
-              </defs>
-              <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 6" vertical={false} />
-              <XAxis dataKey="month" type="number" domain={[0, years * 12]} ticks={yearTicks} stroke="var(--text-faint)" tickLine={false} axisLine={false} tickFormatter={(value: number) => value === 0 ? "0" : `${value / 12}Y`} minTickGap={30} />
-              <YAxis stroke="var(--text-faint)" tickLine={false} axisLine={false} tickFormatter={compactMoney} width={52} />
-              <Tooltip content={GrowthTooltip} cursor={{ stroke: "var(--chart-cursor)", strokeWidth: 1, strokeDasharray: "4 4" }} />
-              <Area type="monotone" dataKey="principal" name="principal" stackId="growth" stroke="var(--highlight)" fill="url(#principalFill)" strokeWidth={2} activeDot={{ r: 5, strokeWidth: 2, fill: "var(--surface-bg)" }} />
-              <Area type="monotone" dataKey="interest" name="interest" stackId="growth" stroke="var(--accent)" fill="url(#interestFill)" strokeWidth={2} activeDot={{ r: 5, strokeWidth: 2, fill: "var(--surface-bg)" }} />
+              <AreaChart data={result.points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="principalFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--highlight)" stopOpacity={0.42} /><stop offset="100%" stopColor="var(--highlight)" stopOpacity={0.08} /></linearGradient>
+                  <linearGradient id="interestFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--accent)" stopOpacity={0.4} /><stop offset="100%" stopColor="var(--accent)" stopOpacity={0.08} /></linearGradient>
+                </defs>
+                <CartesianGrid stroke="var(--border-subtle)" vertical={false} />
+                <XAxis dataKey="month" type="number" domain={[0, years * 12]} ticks={yearTicks} stroke="var(--text-faint)" tickLine={false} axisLine={false} tickFormatter={(value: number) => value === 0 ? "0" : `${value / 12}Y`} fontSize={11} />
+                <YAxis stroke="var(--text-faint)" tickLine={false} axisLine={false} tickFormatter={compactMoney} width={44} fontSize={11} />
+                <Tooltip content={GrowthTooltip} cursor={{ stroke: "var(--border-strong)", strokeWidth: 1, strokeDasharray: "4 4" }} />
+                <Area type="monotone" dataKey="principal" name="principal" stackId="growth" stroke="var(--highlight)" fill="url(#principalFill)" strokeWidth={2} activeDot={{ r: 4, strokeWidth: 2, fill: "var(--surface-bg)" }} />
+                <Area type="monotone" dataKey="interest" name="interest" stackId="growth" stroke="var(--accent)" fill="url(#interestFill)" strokeWidth={2} activeDot={{ r: 4, strokeWidth: 2, fill: "var(--surface-bg)" }} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </div>
-      </section>
+          <div className="wu-legend">
+            <span><i style={{ background: "var(--highlight)" }} />You put in</span>
+            <span><i style={{ background: "var(--accent)" }} />Interest</span>
+          </div>
+          <p className="wu-dash__note wu-dash__actions">Estimates from your own assumptions — planning aids, not guaranteed returns.</p>
+        </section>
+      </div>
     </div>
   );
 }

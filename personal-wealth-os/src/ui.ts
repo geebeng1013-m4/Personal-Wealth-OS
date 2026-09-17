@@ -373,7 +373,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
     buckets: bucketsTemplate(state),
     goals: goalsTemplate(state),
     tvm: tvmCalculatorTemplate(state),
-    calculator: `<div class="wu">${pageHeader({ title: "Investment Growth", sub: "Contribution projections" })}</div><div id="investmentGrowthCalculator"></div>`,
+    calculator: `<div class="wu wu-growth-page">${pageHeader({ title: "Investment Growth", sub: "What regular investing could grow to.", actions: '<button class="wu-btn wu-btn--secondary wu-btn--sm" id="growthReset" type="button">Reset</button>' })}</div><div id="investmentGrowthCalculator"></div>`,
     advisor: advisorPageTemplate(state),
     rules: rulesTemplate(state),
     review: reviewTemplate(state),
