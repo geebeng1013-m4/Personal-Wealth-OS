@@ -7,10 +7,9 @@
  * into the field names: amountUsd, priceUsd, feeMyr, and conversions that could
  * only ever be ringgit ↔ dollar. A Maybank buy at RM 9.80 had nowhere to go but
  * "USD 9.80", which the portfolio then multiplied by the exchange rate. This
- * module adds the general shape — which market, which currency, the amounts in
- * that currency, and which currency the fee was paid in — without yet changing
- * a single calculation. Nothing reads these fields for arithmetic until the
- * currency pools are split per currency.
+ * module holds the general shape — which market, which currency, the amounts in
+ * that currency, and which currency the fee was paid in. The conversion pools
+ * (currencyExchange.ts) read it to cost each trade from its own currency.
  *
  * WHY THE OLD FIELDS STAY, AND WIN
  *
@@ -119,7 +118,7 @@ export interface ExchangeSides {
  * and ringgit amounts and its direction — the fields every build understands.
  */
 export function exchangeSides(
-  exchange: Pick<CurrencyExchange, "direction" | "myrAmount" | "usdAmount">,
+  exchange: { direction?: string; myrAmount: number; usdAmount: number },
 ): ExchangeSides {
   return exchange.direction === "usd-to-myr"
     ? { fromCurrency: "USD", fromAmount: exchange.usdAmount, toCurrency: "MYR", toAmount: exchange.myrAmount }
@@ -127,18 +126,48 @@ export function exchangeSides(
 }
 
 /**
- * Read the ringgit and dollar amounts out of a conversion recorded only in
- * general form, when it is a ringgit ↔ dollar one. Returns null for any other
- * pair or anything malformed.
+ * A conversion's sides, however it was stored.
+ *
+ * The ringgit and dollar amounts win when both are real money, for the reason
+ * at the top of this module; otherwise the general fields are read. Null when
+ * neither form describes a conversion between two different currencies.
  */
-export function myrUsdFromSides(record: Record<string, unknown>): Pick<CurrencyExchange, "direction" | "myrAmount" | "usdAmount"> | null {
-  const { fromCurrency, toCurrency, fromAmount, toAmount } = record;
-  if (!isPositive(fromAmount) || !isPositive(toAmount)) return null;
-  if (fromCurrency === "MYR" && toCurrency === "USD") {
-    return { direction: "myr-to-usd", myrAmount: fromAmount, usdAmount: toAmount };
+export function sidesOf(record: Partial<Record<keyof CurrencyExchange, unknown>>): ExchangeSides | null {
+  if (isPositive(record.myrAmount) && isPositive(record.usdAmount)) {
+    return exchangeSides({
+      direction: typeof record.direction === "string" ? record.direction : undefined,
+      myrAmount: record.myrAmount,
+      usdAmount: record.usdAmount,
+    });
   }
-  if (fromCurrency === "USD" && toCurrency === "MYR") {
-    return { direction: "usd-to-myr", myrAmount: toAmount, usdAmount: fromAmount };
+  const { fromCurrency, toCurrency, fromAmount, toAmount } = record;
+  if (!isCurrencyCode(fromCurrency) || !isCurrencyCode(toCurrency) || fromCurrency === toCurrency) return null;
+  if (!isPositive(fromAmount) || !isPositive(toAmount)) return null;
+  return { fromCurrency, fromAmount, toCurrency, toAmount };
+}
+
+/** A conversion with ringgit on one side, seen from the foreign currency's pool. */
+export interface RinggitLeg {
+  /** The non-ringgit side's currency. */
+  currency: string;
+  /** Amount of `currency` that moved. */
+  foreignAmount: number;
+  /** Ringgit that moved. */
+  myrAmount: number;
+  /** True when ringgit became `currency`; false when it went back to ringgit. */
+  intoForeign: boolean;
+}
+
+/**
+ * Read a conversion as ringgit ↔ one foreign currency. Null for a conversion
+ * between two foreign currencies, which V1 does not pool.
+ */
+export function ringgitLeg(sides: ExchangeSides): RinggitLeg | null {
+  if (sides.fromCurrency === "MYR" && sides.toCurrency !== "MYR") {
+    return { currency: sides.toCurrency, foreignAmount: sides.toAmount, myrAmount: sides.fromAmount, intoForeign: true };
+  }
+  if (sides.toCurrency === "MYR" && sides.fromCurrency !== "MYR") {
+    return { currency: sides.fromCurrency, foreignAmount: sides.fromAmount, myrAmount: sides.toAmount, intoForeign: false };
   }
   return null;
 }

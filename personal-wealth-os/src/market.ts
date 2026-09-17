@@ -28,12 +28,16 @@ const FX_CACHE_TTL = 3600_000; // 1 hour
  */
 let derivedUsdToMyr: number | null = null;
 
-/** A conversion the user actually made — the strongest evidence available. */
+/**
+ * A conversion the user actually made — the strongest evidence available.
+ * Only ringgit ↔ dollar conversions carry both amounts; any other pair has
+ * neither and says nothing about the dollar.
+ */
 export interface FxEvidence {
   date: string;
-  direction: string;
-  myrAmount: number;
-  usdAmount: number;
+  direction?: string;
+  myrAmount?: number;
+  usdAmount?: number;
 }
 
 /**
@@ -48,7 +52,9 @@ function rateFromRecords(
   exchanges?: FxEvidence[],
 ): number | null {
   const conversions = (exchanges ?? [])
-    .filter((item) => item.usdAmount > 0 && item.myrAmount > 0)
+    .flatMap((item) => (item.usdAmount ?? 0) > 0 && (item.myrAmount ?? 0) > 0
+      ? [{ date: item.date, myrAmount: item.myrAmount as number, usdAmount: item.usdAmount as number }]
+      : [])
     .sort((a, b) => b.date.localeCompare(a.date));
   const newest = conversions[0];
   if (newest) return newest.myrAmount / newest.usdAmount;

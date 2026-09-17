@@ -33,6 +33,7 @@ import {
   type PortfolioSnapshot,
 } from "../portfolioSummary";
 import { exchangeRateOf, resolveExchangeCoverage } from "../currencyExchange";
+import { ringgitLeg, sidesOf } from "../tradeCurrency";
 import { exchangesFromText, mergeExchanges } from "../exchangeImport";
 import { rebalanceContributions, tradeExchangeRate } from "../financialHealth";
 import { recordsFromCsv } from "../csvImport";
@@ -184,14 +185,16 @@ function conversionCoverageNote(state: WealthState): string {
 function currencyConversionsPanel(state: WealthState): string {
   const records = [...(state.currencyExchanges ?? [])].reverse();
   const rows = records.map((record) => {
-    const into = record.direction === "myr-to-usd";
+    const sides = sidesOf(record);
+    const leg = sides ? ringgitLeg(sides) : null;
+    if (!sides || !leg) return "";
     return '<tr>'
       + '<td>' + escapeHtml(record.date) + '</td>'
-      + '<td>' + (into ? "MYR → USD" : "USD → MYR") + '</td>'
+      + '<td>' + escapeHtml(`${sides.fromCurrency} → ${sides.toCurrency}`) + '</td>'
       // Statement amounts, so both columns keep two decimals: money() drops a
       // trailing .00 and made a MYR column of exact figures look rounded.
-      + '<td>MYR ' + record.myrAmount.toFixed(2) + '</td>'
-      + '<td>USD ' + record.usdAmount.toFixed(2) + '</td>'
+      + '<td>MYR ' + leg.myrAmount.toFixed(2) + '</td>'
+      + '<td>' + escapeHtml(leg.currency) + ' ' + leg.foreignAmount.toFixed(2) + '</td>'
       + '<td>' + exchangeRateOf(record).toFixed(4) + '</td>'
       + '<td><button class="wu-btn wu-btn--ghost wu-btn--icon delete-exchange" data-id="' + escapeHtml(record.id) + '" type="button" aria-label="Delete conversion on ' + escapeHtml(record.date) + '">✕</button></td>'
       + '</tr>';
@@ -217,7 +220,7 @@ function currencyConversionsPanel(state: WealthState): string {
           <summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-subheading">Recorded conversions</strong><span class="t-caption t-faint">${records.length}</span></span></summary>
           <div class="wu-table-wrap">
             <table class="wu-table">
-              <thead><tr><th>Date</th><th>Direction</th><th>MYR</th><th>USD</th><th>Rate</th><th></th></tr></thead>
+              <thead><tr><th>Date</th><th>Direction</th><th>MYR</th><th>Foreign</th><th>Rate</th><th></th></tr></thead>
               <tbody>${rows}</tbody>
             </table>
           </div>
@@ -697,8 +700,8 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
     status.textContent = "";
 
     const intoUsd = parsed.filter((record) => record.direction === "myr-to-usd");
-    const myr = intoUsd.reduce((sum, record) => sum + record.myrAmount, 0);
-    const usd = intoUsd.reduce((sum, record) => sum + record.usdAmount, 0);
+    const myr = intoUsd.reduce((sum, record) => sum + (record.myrAmount ?? 0), 0);
+    const usd = intoUsd.reduce((sum, record) => sum + (record.usdAmount ?? 0), 0);
     const existing = state.currencyExchanges ?? [];
     const merged = mergeExchanges(existing, parsed);
     const added = merged.length - existing.length;
@@ -726,8 +729,11 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
       if (!id) return;
       const record = (state.currencyExchanges ?? []).find((item) => item.id === id);
       if (!record) return;
+      const sides = sidesOf(record);
+      const leg = sides ? ringgitLeg(sides) : null;
+      if (!leg) return;
       const confirmed = confirm(
-        `Delete the ${record.date} conversion of ${money(record.myrAmount)} and USD ${record.usdAmount.toFixed(2)}?\n\n` +
+        `Delete the ${record.date} conversion of ${money(leg.myrAmount)} and ${leg.currency} ${leg.foreignAmount.toFixed(2)}?\n\n` +
         "The ringgit cost of any holding it funded will fall back to the rate stamped on those trades at import.",
       );
       if (!confirmed) return;

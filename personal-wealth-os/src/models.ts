@@ -151,23 +151,29 @@ export type ExchangeDirection = "myr-to-usd" | "usd-to-myr";
 /**
  * One currency conversion, as it appears on the broker statement.
  *
- * This is the only place a real MYR/USD rate enters the system. A share order
- * is priced purely in dollars, so without these records the ringgit cost of a
- * holding can only be guessed at. Both amounts are stored and the rate is
- * derived from them, so the rate can never drift out of agreement with the
- * money — and it comes out inclusive of the spread actually paid.
+ * This is the only place a real exchange rate enters the system. A share order
+ * is priced purely in its own currency, so without these records the ringgit
+ * cost of a holding can only be guessed at. Both amounts are stored and the
+ * rate is derived from them, so the rate can never drift out of agreement with
+ * the money — and it comes out inclusive of the spread actually paid.
+ *
+ * Two forms. A ringgit ↔ dollar conversion carries direction, myrAmount and
+ * usdAmount, which every build reads, plus the general from/to fields derived
+ * from them. Any other pair (ringgit ↔ HKD, SGD…) carries the general fields
+ * alone. Read it through sidesOf() in tradeCurrency.ts rather than either form.
  */
 export interface CurrencyExchange {
   id: string;
   date: string;
-  direction: ExchangeDirection;
-  /** Ringgit side of the conversion. Always positive. */
-  myrAmount: number;
-  /** Dollar side of the conversion. Always positive. */
-  usdAmount: number;
+  /** Ringgit ↔ dollar conversions only. */
+  direction?: ExchangeDirection;
+  /** Ringgit side of a ringgit ↔ dollar conversion. Always positive. */
+  myrAmount?: number;
+  /** Dollar side of a ringgit ↔ dollar conversion. Always positive. */
+  usdAmount?: number;
   notes?: string;
 
-  // --- General form (v23), derived from the fields above on every load. ---
+  // --- General form (v23). Always present once validated. ---
   fromCurrency?: string;
   fromAmount?: number;
   toCurrency?: string;
