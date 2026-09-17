@@ -52,7 +52,7 @@ Bucket 从「写死的月额」改成「按真实收入分配的瀑布」，free
 - **T-4 完成（2026-09-17）**：Settings 改成分组列表，点一行在下面编辑；DCA targets 每只 ETF 一个输入框、可「+ Add ETF」并同步到 Portfolio 下拉；修掉保存会删 VXUS、Stage 被改成 Student 两个 bug；手机 3,505px → 1,424px。PR #59 已合并。
 - **Budget 整齐版 Preview**：https://claude.ai/artifact/44nSoHD6iLzbSzkiCFq9LY ，你说可以，放进 T-6。
 - **T-5a 完成（2026-09-17）**：Money Leaks 电脑 4 个数字 + 清单 | 详情；手机一张总数卡 + 清单，第一项默认展开、内容精简、More detail 看证据；只有 1–2 项时清单底部说明。手机 1,983px → 810px。PR #60 已合并。
-- **当前**：T-5b Advisor，计划已写进 PLAN.md，等你回答问题再说「执行 T-5b」。
+- **当前**：T-5b Advisor，3 个问题已定，等你说「执行 T-5b」。
 
 ## 侧栏滚动条（S-1，已合并）
 

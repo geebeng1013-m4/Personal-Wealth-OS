@@ -750,7 +750,8 @@ Preview（另一个会话做的，项目代码没有改动）：
   - 电脑：4 个数字（Each month / Each year / Findings / High priority）→ 清单 | 详情两张一样高 → 页底估算说明。
   - **结果（demo 数据）**：手机 1,983px → 810px（第一项默认展开），电脑 1,201px → 887px，徽章 7 → 0。
   - **你看过后加的**：手机默认展开影响最大的那一项，展开内容精简（金额、一句说明、主要按钮、Mark as done；证据、Why it matters、Next move、Ask Advisor 收进 More detail）；两个版本每行都有「›」，标签写 tap / click to open；只有 1–2 项时清单底部一行「Only N finding(s) right now — nothing else detected.」。
-- **T-5b Advisor** `[ ]` ← **Current Task**，等你回答问题再说「执行 T-5b」
+- **T-5b Advisor** `[ ]` ← **Current Task**，等「执行 T-5b」
+  - **已定（2026-09-17）**：1. 清单右边的数字用每条建议的第一个证据值，没有证据就只放「›」，不新算；2. 点一级台阶在下面展开 Mark deployed / Undo；3. 免责声明文字不改，移到页底，侧栏那行照旧。
   - 手机：Priority 一张（标题 + 一行原因 + Go to … + Mark as done）→ Guidance 清单（状态点 · 标题 · 一句说明 · 关键数字 ›，点开在下面看完整说明和按钮）→ Dip-buy ladder（三级台阶：跌幅 · 离触发的条 · 金额 · 状态）→ 页底免责声明。
   - 电脑：Priority | Dip-buy ladder 两张一样高 → Guidance 清单整行 → 页底免责声明。
   - 拿掉顶部检查卡、6 条彩色竖条、储备的 VOO / QQQM 两张小卡（改成 ladder 卡里一行，列出所有代码）。
