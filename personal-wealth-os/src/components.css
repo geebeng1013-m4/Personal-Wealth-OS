@@ -3496,6 +3496,41 @@
     }
   }
 
+  /* ---- investment growth (T-6d) ------------------------------------------ */
+  /* Desktop: four figures, then Inputs beside Growth. Phone: the result, the
+     chart, then the inputs. Input rows reuse the TVM row pattern. */
+  .wu-growth-canvas {
+    height: 300px;
+    min-width: 0;
+  }
+  .wu-growth .wu-dash > * {
+    min-width: 0;
+  }
+  .wu-growth-result .wu-split {
+    margin-top: var(--space-2);
+  }
+  @media (max-width: 720px) {
+    .wu-growth-tiles,
+    .wu-growth-page .wu-page-header__actions {
+      display: none;
+    }
+    .wu-growth-chart {
+      order: 1;
+    }
+    .wu-growth-inputs {
+      order: 2;
+    }
+    .wu-growth-canvas {
+      height: 220px;
+    }
+  }
+  @media (min-width: 721px) {
+    .wu-growth-result,
+    .wu-growth-reset-phone {
+      display: none;
+    }
+  }
+
   /* ---- badge --------------------------------------------------------- */
   .wu-badge {
     display: inline-flex;
