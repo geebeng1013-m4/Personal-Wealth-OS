@@ -74,7 +74,6 @@ export const demoState: WealthState = {
   // for data that predates v22: one "fill" layer per monthly bucket, in order.
   allocation: {
     incomeType: "fixed",
-    baseIncome: 0,
     steps: [
       { id: "survival", name: "Survival", kind: "fill", value: 1200, note: "Transport, food, and essential living costs." },
       { id: "safety", name: "Safety", kind: "fill", value: 0, note: "Emergency fund is complete. Surplus redirected to Growth." },

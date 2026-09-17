@@ -26,7 +26,6 @@ function freelancer(transactions: LedgerTransaction[] = [], withOverflow = true)
     ledgerTransactions: transactions,
     allocation: {
       incomeType: "variable",
-      baseIncome: 0,
       steps: [
         { id: "survival", name: "Survival", kind: "fill", value: 1500 },
         { id: "growth", name: "Growth", kind: "pct", value: 60 },
@@ -109,7 +108,7 @@ test("income routing: money no layer takes is reported, not hidden", () => {
   const gappy: WealthState = {
     ...migrateState({ deviceId: "gappy" }),
     allocation: {
-      incomeType: "fixed", baseIncome: 0,
+      incomeType: "fixed",
       steps: [{ id: "survival", name: "Survival", kind: "fill", value: 1000 }],
     },
   };
@@ -123,6 +122,6 @@ test("income routing: nothing to say without an amount, a date or a plan", () =>
   assert.equal(split(state, 0), null);
   assert.equal(split(state, Number.NaN), null);
   assert.equal(previewIncomeRouting(state, { amount: 100, date: "", sponsored: false }), null);
-  const planless = migrateState({ deviceId: "planless", buckets: [], allocation: { incomeType: "fixed", baseIncome: 0, steps: [] } });
+  const planless = migrateState({ deviceId: "planless", buckets: [], allocation: { incomeType: "fixed", steps: [] } });
   assert.equal(previewIncomeRouting(planless, { amount: 100, date: "2026-09-10", sponsored: false }), null);
 });

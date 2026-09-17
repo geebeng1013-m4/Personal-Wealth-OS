@@ -89,8 +89,6 @@ export interface AllocationPlan {
    * the wording the pages use; it never changes how the engine allocates.
    */
   incomeType: "fixed" | "variable";
-  /** The part of the month that is the same every time. 0 = none. */
-  baseIncome: number;
   steps: AllocationStep[];
   /** Layer that receives whatever survives the last step. */
   overflowStepId?: string;

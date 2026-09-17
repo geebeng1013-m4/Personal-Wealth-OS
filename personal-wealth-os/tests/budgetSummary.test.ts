@@ -442,7 +442,7 @@ test("budget/H: the plan routes the income the ledger actually recorded", () => 
       { id: "i1", amount: 1000, type: "income", categoryId: "income-salary", accountId: "acc-bank", date: iso(2026, 7, 3) },
     ] as LedgerTransaction[],
     allocation: {
-      incomeType: "variable", baseIncome: 0,
+      incomeType: "variable",
       steps: [
         { id: "survival", name: "Survival", kind: "fill", value: 1500 },
         { id: "growth", name: "Growth", kind: "pct", value: 100 },
@@ -466,7 +466,7 @@ test("budget/H: planned and actual are the same plan over different months", () 
       { id: "i1", amount: 1000, type: "income", categoryId: "income-salary", accountId: "acc-bank", date: iso(2026, 7, 3) },
     ] as LedgerTransaction[],
     allocation: {
-      incomeType: "variable", baseIncome: 0,
+      incomeType: "variable",
       steps: [
         { id: "survival", name: "Survival", kind: "fill", value: 1500 },
         { id: "growth", name: "Growth", kind: "pct", value: 100 },
@@ -493,7 +493,7 @@ test("budget/H: sponsored money is not income the plan may invest", () => {
       { id: "i2", amount: 400, type: "income", categoryId: "income-allowance", accountId: "acc-bank", date: iso(2026, 7, 4), fundingSource: "sponsored" },
     ] as LedgerTransaction[],
     allocation: {
-      incomeType: "variable", baseIncome: 0,
+      incomeType: "variable",
       steps: [
         { id: "survival", name: "Survival", kind: "fill", value: 1500 },
         { id: "growth", name: "Growth", kind: "pct", value: 100 },
@@ -515,7 +515,7 @@ test("budget/H: spendable cash is bank and wallet money, never holdings", () => 
       { id: "acc-invest", name: "Moomoo", type: "investment", openingBalance: 9000 },
     ] as LedgerAccount[],
     allocation: {
-      incomeType: "variable", baseIncome: 0,
+      incomeType: "variable",
       steps: [{ id: "survival", name: "Survival", kind: "fill", value: 1125 }],
       overflowStepId: "survival",
     },
@@ -535,7 +535,7 @@ test("budget/H: spendable cash is bank and wallet money, never holdings", () => 
  */
 
 const oneLayer = {
-  incomeType: "variable" as const, baseIncome: 0,
+  incomeType: "variable" as const,
   steps: [{ id: "survival", name: "Survival", kind: "fill" as const, value: 1000 }],
   overflowStepId: "survival",
 };
@@ -622,7 +622,7 @@ test("budget/H: a migrated state routes its own buckets and warns about nothing"
 test("budget/H: a mis-configured plan is reported, not silently corrected", () => {
   const state = plannedState({
     allocation: {
-      incomeType: "variable", baseIncome: 0,
+      incomeType: "variable",
       steps: [
         { id: "growth", name: "Growth", kind: "pct", value: 60 },
         { id: "freedom", name: "Freedom", kind: "pct", value: 30 },
@@ -667,7 +667,6 @@ test("budget/H: the allocation facts are pure and change nothing", () => {
 
 const variablePlan = {
   incomeType: "variable" as const,
-  baseIncome: 0,
   steps: [
     { id: "survival", name: "Survival", kind: "fill" as const, value: 1500 },
     { id: "growth", name: "Growth", kind: "pct" as const, value: 100 },

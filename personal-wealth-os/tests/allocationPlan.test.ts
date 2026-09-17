@@ -26,7 +26,6 @@ test("allocation plan: the default state's plan mirrors its own buckets", () => 
   assert.deepEqual(steps.map((step) => step.value), monthly(state).map((bucket) => bucket.amount));
   assert.ok(steps.every((step) => step.kind === "fill"), "existing data means fixed amounts");
   assert.equal(state.allocation.incomeType, "fixed");
-  assert.equal(state.allocation.baseIncome, 0);
 });
 
 test("allocation plan: the one-time Opportunity reserve stays out of the waterfall", () => {
@@ -100,7 +99,7 @@ test("allocation plan: a stored plan is kept, never rebuilt from the buckets", (
     buckets: [{ id: "living", name: "Living", label: "Living", amount: 1450, cadence: "monthly", note: "" }],
     allocation: {
       incomeType: "variable",
-      baseIncome: 800,
+      ...({ baseIncome: 800 } as object), // an old document still carrying the field
       steps: [
         { id: "living", name: "Living", kind: "fill", value: 1500 },
         { id: "growth", name: "Growth", kind: "pct", value: 60 },
@@ -110,7 +109,9 @@ test("allocation plan: a stored plan is kept, never rebuilt from the buckets", (
     },
   });
   assert.equal(stored.allocation.incomeType, "variable");
-  assert.equal(stored.allocation.baseIncome, 800);
+  // The fixed part of a month lives in cashflow.allowance; a plan never
+  // carries a second copy of it, even when an old document still has one.
+  assert.equal("baseIncome" in stored.allocation, false);
   assert.equal(stored.allocation.steps.length, 3);
   assert.equal(stored.allocation.steps[0].value, 1500, "the plan wins over the bucket amount");
 });
@@ -122,7 +123,6 @@ test("allocation plan: malformed layers are dropped and a dead overflow is repai
     buckets: [{ id: "living", name: "Living", label: "Living", amount: 900, cadence: "monthly", note: "" }],
     allocation: {
       incomeType: "variable",
-      baseIncome: -50,
       steps: [
         null,
         { id: "living", name: "Living", kind: "fill", value: 900 },
@@ -134,7 +134,6 @@ test("allocation plan: malformed layers are dropped and a dead overflow is repai
     } as never,
   });
   assert.deepEqual(migrated.allocation.steps.map((step) => step.id), ["living", "growth"]);
-  assert.equal(migrated.allocation.baseIncome, 0, "a negative base is no base");
   assert.equal(migrated.allocation.overflowStepId, "growth", "falls back to the last layer");
   assert.deepEqual(validatePlan(migrated.allocation), []);
 });

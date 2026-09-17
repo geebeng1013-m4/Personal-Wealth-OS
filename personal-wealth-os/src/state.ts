@@ -89,7 +89,6 @@ export function allocationPlanFromBuckets(
   const overflow = steps.find((step) => step.id === "growth") ?? steps[steps.length - 1];
   return {
     incomeType,
-    baseIncome: 0,
     steps,
     ...(overflow ? { overflowStepId: overflow.id } : {}),
   };
@@ -130,9 +129,6 @@ export function bucketsFromPlan(plan: AllocationPlan, existing: Bucket[]): Bucke
 function normalizeAllocationPlan(input: unknown, buckets: Bucket[]): AllocationPlan {
   const stored = input && typeof input === "object" ? input as Partial<AllocationPlan> : undefined;
   const incomeType: AllocationPlan["incomeType"] = stored?.incomeType === "variable" ? "variable" : "fixed";
-  const baseIncome = Number.isFinite(stored?.baseIncome) && Number(stored?.baseIncome) > 0
-    ? Number(stored?.baseIncome)
-    : 0;
 
   const steps: AllocationStep[] = Array.isArray(stored?.steps)
     ? stored!.steps
@@ -155,7 +151,10 @@ function normalizeAllocationPlan(input: unknown, buckets: Bucket[]): AllocationP
   const overflowStepId = steps.some((step) => step.id === stored?.overflowStepId)
     ? stored!.overflowStepId
     : steps[steps.length - 1].id;
-  return { incomeType, baseIncome, steps, overflowStepId };
+  // Only the fields the plan still has are carried over, so a document written
+  // while it briefly held a `baseIncome` loses it here rather than keeping a
+  // figure nothing reads. The fixed part of the month is cashflow.allowance.
+  return { incomeType, steps, overflowStepId };
 }
 
 export const defaultState: WealthState = {

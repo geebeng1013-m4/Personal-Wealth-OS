@@ -214,7 +214,7 @@ export function getBudgetSnapshot(
   // The plan routes the month the user planned for and the month they actually
   // had. Sponsored money is already excluded upstream (personalIncome), so a
   // parent's dinner money never reads as income the plan may invest.
-  const plan: AllocationPlan = state.allocation ?? { incomeType: "fixed", baseIncome: 0, steps: [] };
+  const plan: AllocationPlan = state.allocation ?? { incomeType: "fixed", steps: [] };
   const cash = spendableCashOf(state, ledger);
   const allocation: BudgetAllocationSnapshot = {
     planned: allocateMonth(plan, plannedIncome),
