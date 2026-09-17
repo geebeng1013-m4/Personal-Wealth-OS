@@ -1,9 +1,10 @@
 /**
  * Advisor page — rules-based guidance and the dip-buy deployment ladder.
  *
- * The guidance cards are read straight from AdvisorSnapshot: same
- * recommendations, same canonical order, each carrying its own execution
- * state. The UI ranks nothing and re-words nothing.
+ * The guidance is read straight from AdvisorSnapshot: same recommendations,
+ * same canonical order, each carrying its own execution state. The UI ranks
+ * nothing and re-words nothing. The first recommendation is the priority and
+ * leads the page; the rest are one list whose rows open their full wording.
  *
  * The dip-buy ladder is a record, not a calculator: it lists the reserve's
  * drawdown tranches and marks each against how far VOO and QQQM are below
@@ -13,6 +14,10 @@
  * Used total. Everything persists in state.opportunity. The check is passive
  * — the Dashboard surfaces a reached, undeployed tranche the next time it
  * loads; nothing runs while the app is closed.
+ *
+ * T-5b layout: desktop is Priority beside the ladder, then the guidance list
+ * across the page. A phone reads Priority, guidance, ladder. The disclaimer
+ * keeps its wording and sits at the foot.
  */
 
 import type { WealthState, OpportunityTranche } from "../models";
@@ -23,118 +28,168 @@ import { escapeHtml } from "../html";
 import { getAdvisorSnapshot } from "../advisor";
 import { isRecommendationCompleted, markRecommendationDone } from "../actionRecords";
 import { assetDrawdownBelow } from "../drawdowns";
-import { leakInsightStrip } from "../components/leakInsightStrip";
 import { pageHeader } from "../components/pageHeader";
-import { disclaimerStrip } from "../components/disclaimer";
+import { DISCLAIMER_TEXT } from "../components/disclaimer";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
-function advisorPriorityActionControl(state: WealthState): string {
-  const priority = getAdvisorSnapshot(state).priority;
-  if (!priority) return "";
+/** The guidance row whose full wording is open, and the ladder step whose controls are. */
+let openAdviceId: string | null = null;
+let openTranche: number | null = null;
+
+/** A figure without its currency prefix. */
+function amountOf(value: number): string {
+  return money(value, "").trim();
+}
+
+function severityDot(severity: AdvisorRecommendation["severity"]): string {
+  return severity === "action" ? "is-alert" : severity === "watch" ? "is-watch" : "";
+}
+
+function destinationButton(recommendation: AdvisorRecommendation, primary: boolean): string {
+  if (!recommendation.destination) return "";
+  // The recommendation already names where the work happens. Surfacing it
+  // means the page tells the user what to do AND how to get there.
+  return `<button class="wu-btn ${primary ? "wu-btn--primary" : "wu-btn--secondary"} wu-btn--sm dashboard-nav" type="button" data-page="${escapeHtml(recommendation.destination)}">Go to ${escapeHtml(recommendation.destination.replace(/-/g, " "))}</button>`;
+}
+
+function markDoneControl(state: WealthState, recommendation: AdvisorRecommendation): string {
+  return isRecommendationCompleted(state, recommendation.id)
+    ? `<span class="wu-chip">Completed</span>`
+    : `<button class="wu-btn wu-btn--ghost wu-btn--sm advisor-mark-done" type="button" data-recommendation-id="${escapeHtml(recommendation.id)}" data-action-label="${escapeHtml(recommendation.action)}">Mark as done</button>`;
+}
+
+function priorityCard(state: WealthState, priority: AdvisorRecommendation | null): string {
+  if (!priority) {
+    return `<section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-advisor-priority" aria-labelledby="advPriorityLabel">
+      <div class="wu-tc__top"><span class="wu-label" id="advPriorityLabel">Priority</span><span class="wu-chip">All clear</span></div>
+      <p class="wu-dash__note">Nothing needs action right now. Keep recording so the guidance stays current.</p>
+    </section>`;
+  }
   const done = isRecommendationCompleted(state, priority.id);
-  return `
-    <div class="wu-card wu-card--inset wu-card--pad-sm${done ? " wu-card--positive" : ""} advisor-action-record">
-      <div class="wu-row wu-row--between">
-        <div class="wu-stack wu-stack--sm">
-          <span class="wu-label">Priority action</span>
-          <strong class="t-subheading">${escapeHtml(priority.action)}</strong>
-        </div>
-        ${done
-          ? '<span class="wu-badge wu-badge--positive"><span aria-hidden="true">✓</span> Completed</span>'
-          : `<button class="wu-btn wu-btn--primary wu-btn--sm advisor-mark-done" type="button" data-recommendation-id="${escapeHtml(priority.id)}" data-action-label="${escapeHtml(priority.action)}">Mark as done</button>`}
-      </div>
-    </div>`;
+  const chip = done
+    ? `<span class="wu-chip">Completed</span>`
+    : priority.severity === "action"
+      ? `<span class="wu-chip wu-chip--warning">Needs action</span>`
+      : priority.severity === "watch"
+        ? `<span class="wu-chip wu-chip--warning">Watch</span>`
+        : `<span class="wu-chip">On track</span>`;
+  return `<section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-advisor-priority" aria-labelledby="advPriorityLabel">
+      <div class="wu-tc__top"><span class="wu-label" id="advPriorityLabel">Priority</span>${chip}</div>
+      <h3 class="wu-advisor-heading">${escapeHtml(priority.action)}</h3>
+      <p class="wu-dash__note">${escapeHtml(priority.fact)}</p>
+      <div class="wu-row wu-row--tight wu-dash__actions">${destinationButton(priority, true)}${done ? "" : markDoneControl(state, priority)}</div>
+    </section>`;
 }
 
-function advisorRecommendationCard(state: WealthState, recommendation: AdvisorRecommendation): string {
+function guidanceRow(state: WealthState, recommendation: AdvisorRecommendation): string {
   const done = isRecommendationCompleted(state, recommendation.id);
-  const tone = recommendation.severity === "action" ? " wu-card--negative" : recommendation.severity === "watch" ? " wu-card--warning" : " wu-card--positive";
-  // Same body composition advisorMessages() has always produced.
-  const body = `${recommendation.fact} ${recommendation.action}`.trim();
-  return `<div class="wu-card wu-card--pad-sm${tone}${done ? " is-done" : ""} advice" data-recommendation-id="${escapeHtml(recommendation.id)}">
-      <div class="wu-stack wu-stack--sm">
-        <strong class="t-subheading">${escapeHtml(recommendation.title)}</strong>
-        <span class="t-body-sm t-muted">${escapeHtml(body)}</span>
-        <div class="wu-row wu-row--tight advice-action">${done
-          ? '<span class="wu-badge wu-badge--positive"><span aria-hidden="true">✓</span> Action completed</span>'
-          : `<button class="wu-btn wu-btn--ghost wu-btn--sm advisor-mark-done" type="button" data-recommendation-id="${escapeHtml(recommendation.id)}" data-action-label="${escapeHtml(recommendation.action)}">Mark as done</button>`}
-          ${recommendation.destination
-            // The recommendation already names where the work happens. Surfacing
-            // it means the card tells the user what to do AND how to get there.
-            ? `<button class="wu-btn wu-btn--ghost wu-btn--sm dashboard-nav" type="button" data-page="${escapeHtml(recommendation.destination)}">Go to ${escapeHtml(recommendation.destination.replace(/-/g, " "))} →</button>`
-            : ""}</div>
-      </div>
-    </div>`;
+  const open = openAdviceId === recommendation.id;
+  const value = recommendation.evidence[0]?.value ?? "";
+  return `<li class="wu-advice${open ? " is-open" : ""}${done ? " is-done" : ""}" data-recommendation-id="${escapeHtml(recommendation.id)}">
+      <button class="wu-advice__row advice-row" type="button" data-advice-id="${escapeHtml(recommendation.id)}" aria-expanded="${open}">
+        <i class="wu-advice__dot ${severityDot(recommendation.severity)}" aria-hidden="true"></i>
+        <span class="wu-advice__title">${escapeHtml(recommendation.title)}<small>${escapeHtml(recommendation.fact)}</small></span>
+        <span class="wu-advice__value">${escapeHtml(value)}${done ? `<small class="t-positive">Done</small>` : ""}</span>
+        <span class="wu-advice__chev" aria-hidden="true">›</span>
+      </button>
+      ${open ? `<div class="wu-advice__detail wu-stack wu-stack--sm">
+        <p class="wu-advice__text"><span class="wu-label">What we see</span>${escapeHtml(recommendation.fact)}</p>
+        <p class="wu-advice__text"><span class="wu-label">Next step</span>${escapeHtml(recommendation.action)}</p>
+        <div class="wu-row wu-row--tight">${destinationButton(recommendation, false)}${markDoneControl(state, recommendation)}</div>
+      </div>` : ""}
+    </li>`;
 }
 
-function dipTrancheCard(tranche: OpportunityTranche, index: number): string {
+function trancheRow(tranche: OpportunityTranche, index: number): string {
+  const open = openTranche === index;
   const half = tranche.amount / 2;
-  return `<div class="wu-card wu-card--inset wu-card--pad-sm${tranche.deployed ? " wu-card--positive" : ""}">
-    <div class="wu-row wu-row--between" style="align-items:flex-start">
-      <div class="wu-stack wu-stack--sm">
-        <strong class="t-subheading">−${tranche.drawdown}% · deploy ${money(tranche.amount)}</strong>
-        <span class="t-caption t-faint">VOO ${money(half)} / QQQM ${money(half)}</span>
-      </div>
-      <div class="wu-stack wu-stack--sm" style="align-items:flex-end;flex:none">
-        <span class="t-caption dip-status${tranche.deployed ? " wu-metric__value--positive" : ""}" data-tranche="${index}">${tranche.deployed ? "✓ Deployed" : "—"}</span>
-        ${tranche.deployed
+  return `<li class="wu-step${open ? " is-open" : ""}${tranche.deployed ? " is-deployed" : ""}">
+      <button class="wu-step__row dip-row" type="button" data-tranche="${index}" aria-expanded="${open}">
+        <b class="wu-step__drop">−${tranche.drawdown}%</b>
+        <span class="wu-step__bar" aria-hidden="true"><i class="dip-bar" data-tranche="${index}" style="width:${tranche.deployed ? 100 : 0}%"></i></span>
+        <span class="wu-step__amount">${amountOf(tranche.amount)}<small class="dip-status${tranche.deployed ? " t-positive" : ""}" data-tranche="${index}">${tranche.deployed ? "Deployed" : "—"}</small></span>
+        <span class="wu-step__chev" aria-hidden="true">›</span>
+      </button>
+      ${open ? `<div class="wu-step__detail wu-stack wu-stack--sm">
+        <p class="wu-dash__note">Deploy ${money(tranche.amount)} when VOO or QQQM is ${tranche.drawdown}% below its high · VOO ${money(half)} / QQQM ${money(half)}. Marking it deployed moves the amount into the reserve's Used total — you decide when you actually buy.</p>
+        <div class="wu-row wu-row--tight">${tranche.deployed
           ? `<button class="wu-btn wu-btn--ghost wu-btn--sm dip-undo" data-tranche="${index}" type="button">Undo</button>`
-          : `<button class="wu-btn wu-btn--secondary wu-btn--sm dip-deploy" data-tranche="${index}" type="button">Mark deployed</button>`}
-      </div>
-    </div>
-  </div>`;
+          : `<button class="wu-btn wu-btn--secondary wu-btn--sm dip-deploy" data-tranche="${index}" type="button">Mark deployed</button>`}</div>
+      </div>` : ""}
+    </li>`;
+}
+
+function ladderCard(state: WealthState): string {
+  const { opportunity } = state;
+  const deployed = opportunity.tranches.filter((tranche) => tranche.deployed).length;
+  const split = Object.entries(opportunity.allocation)
+    .filter(([, amount]) => amount > 0)
+    .map(([ticker, amount]) => `${escapeHtml(ticker)} ${amountOf(amount)}`)
+    .join(" · ");
+  return `<section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-advisor-ladder" aria-labelledby="advLadderLabel">
+      <div class="wu-tc__top"><span class="wu-label" id="advLadderLabel">Dip-buy ladder</span><span class="wu-chip wu-chip--muted">${deployed} / ${opportunity.tranches.length} deployed</span></div>
+      <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(opportunity.total - opportunity.used)}</span><span class="wu-money__of">left of ${amountOf(opportunity.total)}</span></p>
+      ${opportunity.tranches.length
+        ? `<ul class="wu-steps">${opportunity.tranches.map((tranche, index) => trancheRow(tranche, index)).join("")}</ul>`
+        : `<p class="wu-empty">No drawdown steps set.</p>`}
+      <p class="wu-dash__note wu-dash__actions" id="dipDrawdown">Checking VOO and QQQM against their all-time highs…</p>
+      ${split ? `<p class="wu-dash__note">Reserve split: ${split}</p>` : ""}
+    </section>`;
 }
 
 export function advisorPageTemplate(state: WealthState): string {
-  return `<div class="wu">
+  const snapshot = getAdvisorSnapshot(state);
+  const priority = snapshot.priority;
+  const others = snapshot.recommendations.filter((recommendation) => recommendation.id !== priority?.id);
+  return `<div class="wu wu-advisor-page">
     ${pageHeader({
       eyebrow: "Guidance & Scenarios",
       title: "Advisor",
       sub: "What to do next — from the rules you set, not predictions.",
     })}
-    ${disclaimerStrip()}
-    ${leakInsightStrip(state, ["debt", "goal", "budget", "fee", "subscription", "duplicate"], "Priority guidance")}
-    <div class="wu-grid wu-grid--2">
-      <article class="wu-card advisor-panel">
-        <div class="wu-card__header">
-          <div class="wu-stack wu-stack--sm"><span class="wu-label">Advisor Engine</span><h3 class="wu-card__title t-heading">Financial Planning Guidance</h3></div>
-          <span class="wu-badge wu-badge--neutral">Rules-based</span>
-        </div>
-        <div class="wu-stack">
-          ${advisorPriorityActionControl(state)}
-          <!-- Rendered straight from AdvisorSnapshot.recommendations: the same
-               cards as before, in the same canonical order, now each carrying its
-               own execution state. The UI does not rank or re-word anything. -->
-          <div class="wu-stack wu-stack--sm advice-list">${getAdvisorSnapshot(state).recommendations
-            .map((recommendation) => advisorRecommendationCard(state, recommendation)).join("")}</div>
-        </div>
-      </article>
-      <article class="wu-card">
-        <div class="wu-card__header">
-          <div class="wu-stack wu-stack--sm"><span class="wu-label">Bear Market Plan</span><h3 class="wu-card__title t-heading">Dip-Buy Ladder</h3></div>
-          <span class="wu-badge wu-badge--neutral">${state.opportunity.tranches.filter((t) => t.deployed).length}/${state.opportunity.tranches.length} deployed</span>
-        </div>
-        <div class="wu-stack wu-stack--lg">
-          <div class="wu-grid wu-grid--3">
-            <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">🎯 Reserve remaining</span><span class="wu-metric__value t-num wu-metric__value--positive">${money(state.opportunity.total - state.opportunity.used)}</span><span class="wu-metric__note t-caption">of ${money(state.opportunity.total)} · ${money(state.opportunity.used)} deployed</span></div></div>
-            <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">📊 VOO allocation</span><span class="wu-metric__value t-num">${money(state.opportunity.allocation.VOO)}</span></div></div>
-            <div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">📊 QQQM allocation</span><span class="wu-metric__value t-num">${money(state.opportunity.allocation.QQQM)}</span></div></div>
-          </div>
-          <div id="dipDrawdown" class="wu-card wu-card--inset wu-card--pad-sm t-body-sm t-muted">Checking VOO and QQQM against their all-time highs…</div>
-          <div class="wu-stack wu-stack--sm">
-            ${state.opportunity.tranches.map((tranche, index) => dipTrancheCard(tranche, index)).join("")}
-          </div>
-          <p class="t-caption t-faint">Marking a tranche deployed moves its amount into the reserve's Used total. The status against VOO's live level is a prompt, not a rule — you decide when you actually buy.</p>
-        </div>
-      </article>
+    <div class="wu-dash">
+      ${priorityCard(state, priority)}
+      ${ladderCard(state)}
+      <!-- Rendered straight from AdvisorSnapshot.recommendations, in canonical
+           order, after the priority that leads the page. -->
+      <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-advisor-guidance" aria-labelledby="advGuidanceLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="advGuidanceLabel">Guidance</span><span class="wu-chip wu-chip--muted">Rules-based</span></div>
+        ${others.length
+          ? `<ul class="wu-advice-list">${others.map((recommendation) => guidanceRow(state, recommendation)).join("")}</ul>`
+          : `<p class="wu-empty">No other guidance right now.</p>`}
+      </section>
     </div>
+    <p class="wu-dash__note wu-advisor-foot" role="note">${DISCLAIMER_TEXT}</p>
   </div>`;
 }
 
 export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Setter, navigate: Navigate | undefined, rerender: RenderApp): void {
-  // Mark any recommendation as done — the priority callout and every card in
-  // the list. Persists an ActionRecord only: the recommendation itself is
-  // untouched, keeps its ranking, and stays on the page.
+  /** Re-render in place, keeping the reader where they were. */
+  const repaint = (next: WealthState = state): void => {
+    const scrollPosition = { x: window.scrollX, y: window.scrollY, documentY: document.scrollingElement?.scrollTop ?? 0 };
+    rerender(root, next, setState, "advisor", navigate);
+    const restore = () => {
+      window.scrollTo(scrollPosition.x, scrollPosition.y);
+      document.scrollingElement?.scrollTo(scrollPosition.x, scrollPosition.documentY);
+    };
+    restore();
+    requestAnimationFrame(restore);
+  };
+
+  root.querySelectorAll<HTMLButtonElement>(".advice-row").forEach((button) => button.addEventListener("click", () => {
+    const id = button.dataset.adviceId ?? null;
+    openAdviceId = openAdviceId === id ? null : id;
+    repaint();
+  }));
+  root.querySelectorAll<HTMLButtonElement>(".dip-row").forEach((button) => button.addEventListener("click", () => {
+    const index = Number(button.dataset.tranche);
+    openTranche = openTranche === index ? null : index;
+    repaint();
+  }));
+
+  // Mark any recommendation as done — the priority and every row in the list.
+  // Persists an ActionRecord only: the recommendation itself is untouched,
+  // keeps its ranking, and stays on the page.
   const recommendations = getAdvisorSnapshot(state).recommendations;
   root.querySelectorAll<HTMLButtonElement>(".advisor-mark-done").forEach((button) => {
     button.addEventListener("click", (event) => {
@@ -154,7 +209,7 @@ export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Set
         }),
       };
       setState(next, "Mark advisor action done");
-      rerender(root, next, setState, "advisor", navigate);
+      repaint(next);
     });
   });
 
@@ -174,7 +229,7 @@ export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Set
       },
     };
     setState(next, deployed ? "Marked dip-buy tranche deployed" : "Undid dip-buy tranche");
-    rerender(root, next, setState, "advisor", navigate);
+    repaint(next);
   };
   root.querySelectorAll<HTMLButtonElement>(".dip-deploy").forEach((button) =>
     button.addEventListener("click", () => setTrancheDeployed(Number(button.dataset.tranche), true)));
@@ -189,7 +244,7 @@ export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Set
   const drawdownBox = root.querySelector<HTMLElement>("#dipDrawdown");
   void Promise.all([assetDrawdownBelow("VOO"), assetDrawdownBelow("QQQM")]).then(([voo, qqqm]) => {
     if (voo === null && qqqm === null) {
-      if (drawdownBox) drawdownBox.textContent = "Price history unavailable — mark tranches by hand.";
+      if (drawdownBox) drawdownBox.textContent = "Price history unavailable — mark steps by hand.";
       return;
     }
     const worst = Math.max(voo ?? 0, qqqm ?? 0);
@@ -197,7 +252,7 @@ export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Set
       value === null ? `${label} —` : `${label} <strong>−${value.toFixed(1)}%</strong>`;
     if (drawdownBox) {
       drawdownBox.innerHTML = worst < 0.1
-        ? "VOO and QQQM are <strong>at or near their all-time highs</strong> — no tranche is in range."
+        ? "VOO and QQQM are <strong>at or near their all-time highs</strong> — no step is in range."
         : `${part("VOO", voo)} · ${part("QQQM", qqqm)} below their highs.`;
     }
     root.querySelectorAll<HTMLElement>(".dip-status").forEach((cell) => {
@@ -205,12 +260,19 @@ export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Set
       if (!tranche || tranche.deployed) return;
       if (worst >= tranche.drawdown) {
         cell.textContent = "Reached — deploy now";
-        cell.classList.add("wu-metric__value--negative");
+        cell.classList.add("t-negative");
       } else {
-        cell.textContent = `${(tranche.drawdown - worst).toFixed(1)}% more to −${tranche.drawdown}%`;
+        cell.textContent = `${(tranche.drawdown - worst).toFixed(1)}% away`;
       }
     });
+    // How far the market has come toward each step, as a bar.
+    root.querySelectorAll<HTMLElement>(".dip-bar").forEach((bar) => {
+      const tranche = state.opportunity.tranches[Number(bar.dataset.tranche)];
+      if (!tranche || tranche.deployed || tranche.drawdown <= 0) return;
+      bar.style.width = `${Math.min(100, (worst / tranche.drawdown) * 100)}%`;
+      if (worst >= tranche.drawdown) bar.classList.add("is-reached");
+    });
   }).catch(() => {
-    if (drawdownBox) drawdownBox.textContent = "Could not load price history — mark tranches by hand.";
+    if (drawdownBox) drawdownBox.textContent = "Could not load price history — mark steps by hand.";
   });
 }
