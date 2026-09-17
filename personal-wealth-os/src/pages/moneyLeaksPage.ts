@@ -6,6 +6,10 @@
  * AdvisorSnapshot.leakRecommendations; this file never writes advice of its own
  * or re-derives one from a finding. Marking an action done records execution
  * state only: the finding stays listed until the next scan no longer sees it.
+ *
+ * T-5a layout: desktop is four figures, then the list beside the selected
+ * finding. A phone gets one summary card and a list whose rows open their
+ * evidence underneath.
  */
 
 import type { AdvisorRecommendation, WealthState } from "../models";
@@ -27,28 +31,38 @@ const leakCategoryLabels: Record<MoneyLeak["category"], string> = {
   debt: "Debt cost",
 };
 
-/** Badge tone for a severity: high reads as a problem, low as neutral. */
-function severityBadge(severity: MoneyLeak["severity"]): string {
-  const tone = severity === "high" ? "negative" : severity === "medium" ? "warning" : "neutral";
-  return `<span class="wu-badge wu-badge--${tone}">${severity} priority</span>`;
+/** Severity as a word, coloured the way the rest of the tidy pages colour status. */
+function severityText(severity: MoneyLeak["severity"]): { label: string; tone: string; chip: string } {
+  if (severity === "high") return { label: "High", tone: "t-negative", chip: "wu-chip wu-chip--negative" };
+  if (severity === "medium") return { label: "Medium", tone: "wu-leak-medium", chip: "wu-chip wu-chip--warning" };
+  return { label: "Low", tone: "t-faint", chip: "wu-chip wu-chip--muted" };
+}
+
+/** A figure without its currency prefix, for the tidy money layout. */
+function amountOf(value: number): string {
+  return money(value, "").trim();
 }
 
 /**
- * The finding whose evidence panel is open, kept across a re-render.
+ * The finding whose evidence is showing, kept across a re-render.
  *
  * A "Review finding" button anywhere in the app writes this before navigating
  * here, so the setter is exported; the page itself keeps it in sync with what
- * is actually selected.
+ * is actually selected. On a desktop the selected finding always fills the
+ * detail card beside the list; on a phone its evidence opens under the row only
+ * once someone asked for it — a tap, or a "Review finding" link from elsewhere.
  */
 let selectedMoneyLeakId = "";
+let leakDetailOpen = false;
 
 export function setSelectedMoneyLeakId(id: string): void {
   selectedMoneyLeakId = id;
+  leakDetailOpen = true;
 }
 
-function leakImpactLabel(leak: MoneyLeak): string {
-  return leak.impactBasis === "one-time" ? "observed once" : "per month";
-}
+/** Rows the list shows before "See all". */
+const LEAK_LIMIT = 5;
+let leakListExpanded = false;
 
 /**
  * The canonical Advisor recommendation for one Money Leak finding.
@@ -71,59 +85,40 @@ function leakAdvice(
  * finding itself is untouched: the leak may well still be there, so this must
  * never be presented as the problem being solved.
  */
-function leakActionBlock(state: WealthState, recommendation: AdvisorRecommendation | undefined): string {
-  if (!recommendation) return "";
-  const done = isRecommendationCompleted(state, recommendation.id);
-  if (done) {
-    return `<div class="wu-stack wu-stack--sm">
-      <span class="wu-badge wu-badge--positive">&#10003; Action completed</span>
-      <span class="t-caption t-faint">Recorded on your side. The finding stays listed until the next scan no longer detects it.</span>
-    </div>`;
-  }
-  return `<div class="wu-row"><button class="wu-btn wu-btn--primary wu-btn--sm leak-mark-done"
+function leakDoneButton(state: WealthState, recommendation: AdvisorRecommendation | undefined): string {
+  if (!recommendation || isRecommendationCompleted(state, recommendation.id)) return "";
+  return `<button class="wu-btn wu-btn--ghost wu-btn--sm leak-mark-done"
     data-recommendation-id="${escapeHtml(recommendation.id)}"
-    data-action-label="${escapeHtml(recommendation.action)}">Mark as done</button></div>`;
+    data-action-label="${escapeHtml(recommendation.action)}" type="button">Mark as done</button>`;
+}
+
+function leakDoneNote(state: WealthState, recommendation: AdvisorRecommendation | undefined): string {
+  if (!recommendation || !isRecommendationCompleted(state, recommendation.id)) return "";
+  return `<p class="wu-dash__note"><span class="wu-chip">Action completed</span> Recorded on your side. The finding stays listed until the next scan no longer detects it.</p>`;
 }
 
 /**
- * The evidence panel for one finding. Shared by the first paint and by
- * bindMoneyLeaks' renderDetail(), so the two can never drift apart.
+ * The evidence for one finding: impact, what was observed, the evidence rows,
+ * the Advisor's reason and next move, and the actions. The desktop detail card
+ * and the open row on a phone both render it from here, so they never drift.
  */
 export function leakDetailContent(state: WealthState, leak: MoneyLeak, advice: AdvisorRecommendation | undefined): string {
-  return `<div class="leak-detail-content wu-stack" data-leak-detail="${escapeHtml(leak.id)}">
-    <div class="wu-row wu-row--between">
-      <div class="wu-stack wu-stack--sm">
-        <span class="wu-label">${leakCategoryLabels[leak.category]}</span>
-        <h2 class="t-heading">${escapeHtml(leak.title)}</h2>
-      </div>
-      ${severityBadge(leak.severity)}
-    </div>
-    <div class="wu-metric">
-      <span class="wu-metric__value t-num">${money(leak.annualImpact)}</span>
-      <span class="wu-metric__note t-caption">${leak.impactBasis === "one-time" ? "observed one-time impact" : "estimated annual impact"}</span>
-    </div>
-    <div class="wu-stack wu-stack--sm">
-      <span class="wu-label">What was observed</span>
-      <p class="t-body-sm t-muted">${escapeHtml(leak.summary)}</p>
-    </div>
-    <ul class="wu-list">${leak.evidence.map((item) => `<li class="wu-list__row"><span>${escapeHtml(item.label)}</span><strong>${escapeHtml(item.value)}</strong></li>`).join("")}</ul>
-    ${advice ? `<div class="wu-stack wu-stack--sm">
-      <span class="wu-label">Why it matters</span>
-      <p class="t-body-sm t-muted">${escapeHtml(advice.impact)}</p>
-    </div>
-    <div class="wu-stack wu-stack--sm">
-      <span class="wu-label">Recommended next move</span>
-      <p class="t-body-sm">${escapeHtml(advice.action)}</p>
-    </div>`
-    : `<div class="wu-stack wu-stack--sm">
-      <span class="wu-label">Recommended next move</span>
-      <p class="wu-empty">No recommendation applies to this finding yet. The observation above is the full picture.</p>
-    </div>`}
-    ${leakActionBlock(state, advice)}
-    <div class="wu-row">
-      <button class="wu-btn wu-btn--primary wu-btn--sm leak-primary-action" data-action="${leak.primaryAction}">${escapeHtml(leak.actionLabel)}</button>
+  const severity = severityText(leak.severity);
+  return `<div class="leak-detail-content wu-stack wu-stack--sm" data-leak-detail="${escapeHtml(leak.id)}">
+    <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(leak.annualImpact)}</span><span class="wu-money__of">${leak.impactBasis === "one-time" ? "observed once" : "a year"}</span></p>
+    <p class="wu-dash__note">${escapeHtml(leak.summary)}</p>
+    ${leak.evidence.length ? `<ul class="wu-facts wu-facts--plain wu-leak-evidence">${leak.evidence.map((item) => `<li><span>${escapeHtml(item.label)}</span><span>${escapeHtml(item.value)}</span></li>`).join("")}</ul>` : ""}
+    ${advice
+      ? `<p class="wu-leak-advice"><span class="wu-label">Why it matters</span>${escapeHtml(advice.impact)}</p>
+    <p class="wu-leak-advice"><span class="wu-label">Next move</span>${escapeHtml(advice.action)}</p>`
+      : `<p class="wu-leak-advice"><span class="wu-label">Next move</span>No recommendation applies to this finding yet. The observation above is the full picture.</p>`}
+    ${leakDoneNote(state, advice)}
+    <div class="wu-row wu-row--tight wu-leak-actions">
+      <button class="wu-btn wu-btn--primary wu-btn--sm leak-primary-action" data-action="${leak.primaryAction}" type="button">${escapeHtml(leak.actionLabel)}</button>
       <button class="wu-btn wu-btn--secondary wu-btn--sm leak-advisor-action" type="button">Ask Advisor</button>
+      ${leakDoneButton(state, advice)}
     </div>
+    <span class="visually-hidden">${severity.label} priority · ${leakCategoryLabels[leak.category]} · ${Math.round(leak.confidence * 100)}% confidence</span>
   </div>`;
 }
 
@@ -133,24 +128,33 @@ export function moneyLeaksTemplate(state: WealthState): string {
   const leakRecommendations = getAdvisorSnapshot(state).leakRecommendations;
   const selected = summary.leaks.find((leak) => leak.id === selectedMoneyLeakId) ?? summary.topLeak;
   if (selected) selectedMoneyLeakId = selected.id;
-  const leakRows = summary.leaks.length > 0
-    ? summary.leaks.map((leak) => `
-      <button class="wu-pick leak-row${leak.id === selected?.id ? " is-selected" : ""}" data-leak-id="${escapeHtml(leak.id)}" aria-pressed="${leak.id === selected?.id ? "true" : "false"}">
-        <div class="wu-row wu-row--between">
-          <strong class="t-subheading">${escapeHtml(leak.title)}</strong>
-          <span class="t-num t-muted">${money(leak.monthlyImpact)}<span class="t-caption t-faint"> ${leakImpactLabel(leak)}</span></span>
-        </div>
-        <p class="t-body-sm t-muted">${escapeHtml(leak.summary)}</p>
-        <div class="wu-row wu-row--tight">
-          ${severityBadge(leak.severity)}
-          <span class="t-caption t-faint">${leakCategoryLabels[leak.category]} &middot; ${Math.round(leak.confidence * 100)}% confidence &middot; ${leak.impactBasis === "one-time" ? "Not annualised" : `${money(leak.annualImpact)} annual`}</span>
-        </div>
-      </button>`).join("")
-    : `<p class="wu-empty">No material leaks detected. Keep recurring payments and transaction details current so the scan can stay useful.</p>`;
-  const selectedAdvice = selected ? leakAdvice(leakRecommendations, selected.id) : undefined;
-  const detail = selected
-    ? leakDetailContent(state, selected, selectedAdvice)
-    : `<p class="wu-empty">No money leaks detected. Your recent spending is within the current leak-detection rules.</p>`;
+  // A selected finding past the fold keeps the whole list showing, so it stays visible.
+  const selectedIndex = selected ? summary.leaks.indexOf(selected) : -1;
+  const showAll = leakListExpanded || selectedIndex >= LEAK_LIMIT;
+  const shown = showAll ? summary.leaks : summary.leaks.slice(0, LEAK_LIMIT);
+  const oneTime = summary.leaks.some((leak) => leak.impactBasis === "one-time");
+
+  const leakRows = shown.map((leak) => {
+    const isSelected = leak.id === selected?.id;
+    const open = isSelected && leakDetailOpen;
+    const severity = severityText(leak.severity);
+    const basis = leak.impactBasis === "one-time" ? "observed once" : `${amountOf(leak.monthlyImpact)} / mo`;
+    return `<li class="wu-leak${isSelected ? " is-selected" : ""}${open ? " is-open" : ""}">
+        <button class="wu-leak__row leak-row" type="button" data-leak-id="${escapeHtml(leak.id)}" aria-pressed="${isSelected}" aria-expanded="${open}">
+          <span class="wu-leak__title">${escapeHtml(leak.title)}<small>${leakCategoryLabels[leak.category]} · ${basis}</small></span>
+          <span class="wu-leak__value">${amountOf(leak.annualImpact)}<small class="${severity.tone}">${severity.label}</small></span>
+          <span class="wu-leak__chev" aria-hidden="true">›</span>
+        </button>
+        ${open ? `<div class="wu-leak__inline">${leakDetailContent(state, leak, leakAdvice(leakRecommendations, leak.id))}</div>` : ""}
+      </li>`;
+  }).join("");
+
+  const highChip = summary.highCount > 0
+    ? `<span class="wu-chip wu-chip--negative">${summary.highCount} high</span>`
+    : `<span class="wu-chip wu-chip--muted">None high</span>`;
+  const findingsText = `${summary.leaks.length} ${summary.leaks.length === 1 ? "finding" : "findings"}`;
+  const selectedSeverity = selected ? severityText(selected.severity) : null;
+
   return `
     <div class="wu money-leaks-page">
       ${pageHeader({
@@ -159,36 +163,77 @@ export function moneyLeaksTemplate(state: WealthState): string {
         sub: "Where small recurring costs are quietly draining your cash flow.",
         actions: `<button class="wu-btn wu-btn--secondary wu-btn--sm dashboard-nav" data-page="ledger" type="button">Open transactions</button><button class="wu-btn wu-btn--primary wu-btn--sm dashboard-nav" data-page="buckets" type="button">Review budget</button>`,
       })}
-      <div class="wu-stack wu-stack--lg">
-        <div class="wu-grid wu-grid--wide">
-          <div class="wu-card"><div class="wu-metric"><span class="wu-metric__label wu-label">Potential monthly drag</span><span class="wu-metric__value t-num">${money(summary.monthlyImpact)}</span></div></div>
-          <div class="wu-card"><div class="wu-metric"><span class="wu-metric__label wu-label">Potential annual impact</span><span class="wu-metric__value t-num">${money(summary.annualImpact)}</span></div></div>
-          <div class="wu-card"><div class="wu-metric"><span class="wu-metric__label wu-label">Findings</span><span class="wu-metric__value t-num">${summary.leaks.length}</span></div></div>
-          <div class="wu-card"><div class="wu-metric"><span class="wu-metric__label wu-label">High priority</span><span class="wu-metric__value t-num">${summary.highCount}</span></div></div>
-        </div>
-        <div class="money-leaks-workspace wu-grid wu-grid--2 wu-grid--top">
-          <section class="wu-card" aria-label="Detected money leaks">
-            <div class="wu-card__header"><h3 class="wu-card__title t-heading">Detected issues</h3><span class="wu-badge wu-badge--neutral">by annual impact</span></div>
-            <div class="wu-stack">${leakRows}</div>
+      <div class="wu-dash">
+        <!-- ROW 1 (desktop) — four figures, all the same size -->
+        <div class="wu-dash__full wu-dash__tiles wu-leak-tiles">
+          <section class="wu-card wu-dash__tile" aria-labelledby="leakMonthLabel">
+            <div class="wu-tc__top"><span class="wu-label" id="leakMonthLabel">Each month</span></div>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(summary.monthlyImpact)}</span></p>
+            <p class="wu-dash__note">Potential monthly drag</p>
           </section>
-          <aside class="wu-card leak-detail-panel" aria-live="polite">${detail}</aside>
+          <section class="wu-card wu-dash__tile" aria-labelledby="leakYearLabel">
+            <div class="wu-tc__top"><span class="wu-label" id="leakYearLabel">Each year</span></div>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(summary.annualImpact)}</span></p>
+            <p class="wu-dash__note">${oneTime ? "Includes one-time findings" : "If nothing changes"}</p>
+          </section>
+          <section class="wu-card wu-dash__tile" aria-labelledby="leakFindingsLabel">
+            <div class="wu-tc__top"><span class="wu-label" id="leakFindingsLabel">Findings</span></div>
+            <p class="wu-money wu-money--md"><span>${summary.leaks.length}</span></p>
+            <p class="wu-dash__note">Across ${summary.categoryCount} ${summary.categoryCount === 1 ? "category" : "categories"}</p>
+          </section>
+          <section class="wu-card wu-dash__tile" aria-labelledby="leakHighLabel">
+            <div class="wu-tc__top"><span class="wu-label" id="leakHighLabel">High priority</span>${summary.highCount > 0 ? `<span class="wu-chip wu-chip--negative">High</span>` : ""}</div>
+            <p class="wu-money wu-money--md${summary.highCount > 0 ? " t-negative" : ""}"><span>${summary.highCount}</span></p>
+            <p class="wu-dash__note">${summary.highCount > 0 ? "Look at these first" : "Nothing urgent"}</p>
+          </section>
         </div>
-        <p class="t-caption t-faint">Estimates are planning aids based on available records. Confirm merchant charges, account statements, and goal assumptions before changing or disputing payments.</p>
+
+        <!-- phone — one summary card carries the same figures -->
+        <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-leak-summary" aria-labelledby="leakSummaryLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="leakSummaryLabel">Leaking each month</span>${highChip}</div>
+          <p class="wu-money"><span class="wu-money__cur">MYR</span><span>${amountOf(summary.monthlyImpact)}</span><span class="wu-money__of">/ mo</span></p>
+          <p class="wu-dash__note">About ${money(summary.annualImpact)} a year across ${findingsText}.</p>
+          <div class="wu-row wu-row--tight">
+            <button class="wu-btn wu-btn--secondary wu-btn--sm dashboard-nav" data-page="buckets" type="button">Review budget</button>
+            <button class="wu-btn wu-btn--ghost wu-btn--sm dashboard-nav" data-page="ledger" type="button">Open transactions</button>
+          </div>
+        </section>
+
+        <!-- ROW 2 — the findings | the selected one -->
+        <section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-leak-list-card" aria-labelledby="leakListLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="leakListLabel">By yearly impact</span></div>
+          ${summary.leaks.length > 0
+            ? `<ul class="wu-leak-list">${leakRows}</ul>`
+            : `<p class="wu-empty">No material leaks detected. Keep recurring payments and transaction details current so the scan can stay useful.</p>`}
+          ${summary.leaks.length > LEAK_LIMIT && selectedIndex < LEAK_LIMIT
+            ? `<button class="wu-btn wu-btn--ghost wu-btn--sm wu-self-end wu-leak-see-all" id="leakSeeAll" type="button">${leakListExpanded ? "Show less" : `See all ${summary.leaks.length}`}</button>`
+            : ""}
+        </section>
+        <aside class="wu-card wu-dash__half wu-stack wu-stack--sm leak-detail-panel" aria-live="polite" aria-labelledby="leakDetailLabel">
+          ${selected && selectedSeverity
+            ? `<div class="wu-tc__top"><span class="wu-label" id="leakDetailLabel">${escapeHtml(leakCategoryLabels[selected.category])}</span><span class="${selectedSeverity.chip}">${selectedSeverity.label}</span></div>
+          <h3 class="wu-leak__heading">${escapeHtml(selected.title)}</h3>
+          ${leakDetailContent(state, selected, leakAdvice(leakRecommendations, selected.id))}`
+            : `<div class="wu-tc__top"><span class="wu-label" id="leakDetailLabel">Details</span></div><p class="wu-empty">No money leaks detected. Your recent spending is within the current leak-detection rules.</p>`}
+        </aside>
       </div>
+      <p class="wu-dash__note wu-leak-foot">Estimates are planning aids based on your records. Confirm merchant charges, account statements and goal assumptions before changing or disputing payments.</p>
     </div>`;
 }
 
 export function bindMoneyLeaks(root: HTMLElement, state: WealthState, setState: Setter, navigate: Navigate | undefined, rerender: RenderApp): void {
   const summary = detectMoneyLeaks(state);
-  // One canonical recommendation list for the whole page, in Advisor order.
-  const leakRecommendations = getAdvisorSnapshot(state).leakRecommendations;
-  const initialLeak = summary.leaks.find((leak) => leak.id === selectedMoneyLeakId) ?? summary.topLeak;
-  const renderDetail = (leak: MoneyLeak): void => {
-    const panel = root.querySelector<HTMLElement>(".leak-detail-panel");
-    if (!panel) return;
-    panel.innerHTML = leakDetailContent(state, leak, leakAdvice(leakRecommendations, leak.id));
-    bindDetailActions(panel, leak);
-    bindMarkDone(panel);
+
+  /** Re-render in place, keeping the reader where they were. */
+  const repaint = (): void => {
+    const scrollPosition = { x: window.scrollX, y: window.scrollY, documentY: document.scrollingElement?.scrollTop ?? 0 };
+    rerender(root, state, setState, "money-leaks", navigate);
+    const restore = () => {
+      window.scrollTo(scrollPosition.x, scrollPosition.y);
+      document.scrollingElement?.scrollTo(scrollPosition.x, scrollPosition.documentY);
+    };
+    restore();
+    requestAnimationFrame(restore);
   };
 
   /**
@@ -196,53 +241,49 @@ export function bindMoneyLeaks(root: HTMLElement, state: WealthState, setState: 
    * state only — the finding, its impact and its severity are untouched, and
    * the leak stays on the list.
    */
-  const bindMarkDone = (scope: ParentNode): void => {
-    scope.querySelector<HTMLButtonElement>(".leak-mark-done")?.addEventListener("click", (event) => {
-      const button = event.currentTarget as HTMLButtonElement;
-      const recommendationId = button.dataset.recommendationId ?? "";
-      const action = button.dataset.actionLabel ?? "";
-      if (!recommendationId) return;
-      const next: WealthState = {
-        ...state,
-        actionRecords: markRecommendationDone(state.actionRecords, {
-          id: `action-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          recommendationId,
-          action,
-        }),
-      };
-      setState(next, "Marked a money-leak action as done");
-      if (navigate) navigate("money-leaks");
-      else rerender(root, next, setState, "money-leaks");
-    });
+  root.querySelectorAll<HTMLButtonElement>(".leak-mark-done").forEach((button) => button.addEventListener("click", () => {
+    const recommendationId = button.dataset.recommendationId ?? "";
+    const action = button.dataset.actionLabel ?? "";
+    if (!recommendationId) return;
+    const next: WealthState = {
+      ...state,
+      actionRecords: markRecommendationDone(state.actionRecords, {
+        id: `action-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        recommendationId,
+        action,
+      }),
+    };
+    setState(next, "Marked a money-leak action as done");
+    if (navigate) navigate("money-leaks");
+    else rerender(root, next, setState, "money-leaks");
+  }));
+
+  const pageByAction: Record<MoneyLeak["primaryAction"], string> = {
+    "review-recurring": "settings",
+    "review-ledger": "ledger",
+    "review-budget": "buckets",
+    "review-goal": "goals",
+    "review-debt": "settings",
   };
-  const bindDetailActions = (scope: ParentNode, leak: MoneyLeak): void => {
-    scope.querySelector<HTMLButtonElement>(".leak-primary-action")?.addEventListener("click", () => {
-      const pageByAction: Record<MoneyLeak["primaryAction"], string> = {
-        "review-recurring": "settings",
-        "review-ledger": "ledger",
-        "review-budget": "buckets",
-        "review-goal": "goals",
-        "review-debt": "settings",
-      };
-      navigate?.(pageByAction[leak.primaryAction]);
-    });
-    scope.querySelector<HTMLButtonElement>(".leak-advisor-action")?.addEventListener("click", () => navigate?.("advisor"));
-  };
+  root.querySelectorAll<HTMLButtonElement>(".leak-primary-action").forEach((button) => button.addEventListener("click", () => {
+    const leakId = button.closest<HTMLElement>("[data-leak-detail]")?.dataset.leakDetail;
+    const leak = summary.leaks.find((item) => item.id === leakId);
+    if (leak) navigate?.(pageByAction[leak.primaryAction]);
+  }));
+  root.querySelectorAll<HTMLButtonElement>(".leak-advisor-action").forEach((button) => button.addEventListener("click", () => navigate?.("advisor")));
+
+  // A tap picks the finding (the desktop card follows it) and opens or closes
+  // its evidence under the row on a phone.
   root.querySelectorAll<HTMLButtonElement>(".leak-row").forEach((row) => row.addEventListener("click", () => {
     const leak = summary.leaks.find((item) => item.id === row.dataset.leakId);
     if (!leak) return;
-    // Remember the pick so a later re-render (e.g. after marking an action
-    // done) keeps this finding open rather than snapping back to the top leak.
+    const wasOpen = selectedMoneyLeakId === leak.id && leakDetailOpen;
     selectedMoneyLeakId = leak.id;
-    root.querySelectorAll<HTMLButtonElement>(".leak-row").forEach((item) => {
-      const selected = item === row;
-      item.classList.toggle("is-selected", selected);
-      item.setAttribute("aria-pressed", String(selected));
-    });
-    renderDetail(leak);
+    leakDetailOpen = !wasOpen;
+    repaint();
   }));
-  // The first detail panel comes from the template rather than renderDetail(),
-  // so its controls need binding here too.
-  if (initialLeak) bindDetailActions(root, initialLeak);
-  bindMarkDone(root);
+  root.querySelector<HTMLButtonElement>("#leakSeeAll")?.addEventListener("click", () => {
+    leakListExpanded = !leakListExpanded;
+    repaint();
+  });
 }

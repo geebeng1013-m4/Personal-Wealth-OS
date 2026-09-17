@@ -2271,6 +2271,136 @@
     }
   }
 
+  /* ---- money leaks (T-5a) ----------------------------------------------- */
+  /* Desktop: four figure tiles, then the list beside the selected finding.
+     Phone: one summary card, and each row opens its evidence underneath. */
+  .wu-leak-list {
+    display: grid;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .wu-leak + .wu-leak {
+    border-top: 1px solid var(--border-subtle);
+  }
+  .wu-leak__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(var(--row-value-w), auto) 10px;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: var(--row-h);
+    padding: var(--space-1) 0;
+    border: 0;
+    background: none;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+  }
+  .wu-leak__row:hover .wu-leak__title {
+    color: var(--accent);
+  }
+  .wu-leak__row:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+    border-radius: var(--radius-sm);
+  }
+  .wu-leak__title {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    font: var(--weight-medium) var(--text-body) / 1.3 var(--font-sans);
+  }
+  .wu-leak__title small,
+  .wu-leak__value small {
+    font-size: var(--text-body-sm);
+    font-weight: var(--weight-regular);
+    color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .wu-leak__value {
+    display: grid;
+    gap: 2px;
+    text-align: right;
+    font: var(--weight-semibold) var(--text-body) / 1.3 var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .wu-leak__value small.t-negative {
+    color: var(--negative);
+  }
+  .wu-leak__value small.wu-leak-medium {
+    color: var(--warning);
+  }
+  .wu-leak__chev {
+    color: var(--text-faint);
+    transition: transform var(--dur-fast) var(--ease-standard);
+  }
+  .wu-leak.is-open .wu-leak__chev {
+    transform: rotate(90deg);
+  }
+  .wu-leak__inline {
+    padding: var(--space-1) 0 var(--space-4);
+  }
+  .wu-leak__heading {
+    font: var(--weight-semibold) var(--text-subheading) / 1.3 var(--font-sans);
+    font-size: 1.125rem;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .wu-leak-advice {
+    display: grid;
+    gap: 2px;
+    font-size: var(--text-body-sm);
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+  .wu-leak-evidence li {
+    min-height: 40px;
+    font-size: var(--text-body-sm);
+  }
+  .wu-leak-actions {
+    flex-wrap: wrap;
+    padding-top: var(--space-1);
+  }
+  .wu-dash .wu-leak-list-card > .wu-leak-see-all {
+    margin-top: auto;
+  }
+  .wu-leak-foot {
+    margin-top: var(--space-4);
+  }
+  @media (max-width: 720px) {
+    .wu-leak-tiles,
+    .leak-detail-panel,
+    .money-leaks-page .wu-page-header__actions {
+      display: none;
+    }
+  }
+  @media (min-width: 721px) {
+    .wu-leak-summary,
+    .wu-leak__inline,
+    .wu-leak__chev {
+      display: none;
+    }
+    .wu-leak__row {
+      grid-template-columns: minmax(0, 1fr) minmax(var(--row-value-w), auto);
+    }
+    /* the finding shown on the right is marked in the list */
+    .wu-leak.is-selected .wu-leak__row {
+      margin-inline: calc(var(--space-3) * -1);
+      padding-inline: var(--space-3);
+      width: calc(100% + var(--space-3) * 2);
+      border-radius: var(--radius-md);
+      background: var(--surface-hover);
+    }
+    .wu-leak.is-selected + .wu-leak,
+    .wu-leak:has(+ .wu-leak.is-selected) + .wu-leak.is-selected {
+      border-top-color: transparent;
+    }
+  }
+
   /* ---- badge --------------------------------------------------------- */
   .wu-badge {
     display: inline-flex;
