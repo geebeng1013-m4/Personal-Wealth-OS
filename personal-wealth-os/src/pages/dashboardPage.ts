@@ -15,6 +15,7 @@ import { escapeHtml } from "../html";
 import { buildOverviewModel } from "../overview";
 import type { PortfolioSnapshot } from "../portfolioSummary";
 import { assetDrawdownBelow } from "../drawdowns";
+import { getPrice } from "../marketPrices";
 import { pageHeader } from "../components/pageHeader";
 import { detectMoneyLeaks } from "../advisor";
 import { getAdvisorSnapshot } from "../advisor";
@@ -281,15 +282,21 @@ export function bindDashboard(
     }
     if (noteEl) noteEl.textContent = dashboardValuationNote(portfolio);
   };
-  refreshLivePrices(state, patchDashboardValuation);
+  // The dip-buy watch below reads the same live quote, so it is re-checked
+  // whenever the valuation is.
+  const onDashboardPrices = (): void => {
+    patchDashboardValuation();
+    paintDipWatch();
+  };
+  refreshLivePrices(state, onDashboardPrices);
   // Keep asking while this Dashboard stays on screen, so a tab left open
   // does not freeze on the price it happened to load first.
-  const dashboardPriceTimer = setInterval(() => refreshLivePrices(state, patchDashboardValuation), PRICE_POLL_INTERVAL_MS);
+  const dashboardPriceTimer = setInterval(() => refreshLivePrices(state, onDashboardPrices), PRICE_POLL_INTERVAL_MS);
   // Browsers throttle timers in background tabs, so coming back to a tab
   // that has been hidden for hours would otherwise show a very old price
   // until the next tick. Ask again the moment it becomes visible.
   const onDashboardVisible = (): void => {
-    if (document.visibilityState === "visible") refreshLivePrices(state, patchDashboardValuation);
+    if (document.visibilityState === "visible") refreshLivePrices(state, onDashboardPrices);
   };
   document.addEventListener("visibilitychange", onDashboardVisible);
   priceRefreshCleanup.set(root, () => {
@@ -301,14 +308,21 @@ export function bindDashboard(
   // when the Dashboard loads, check how far VOO / QQQM are below their highs
   // and, if an undeployed tranche is now in range, surface it here. Nothing
   // runs while the app is closed.
-  const pending = state.opportunity.tranches.filter((tranche) => !tranche.deployed);
-  const dipAlert = root.querySelector<HTMLElement>("#dipAlert");
-  if (dipAlert && pending.length > 0) {
-    void Promise.all([assetDrawdownBelow("VOO"), assetDrawdownBelow("QQQM")]).then(([voo, qqqm]) => {
+  // Re-run on every price refresh, measured against the live quote.
+  function paintDipWatch(): void {
+    const pending = state.opportunity.tranches.filter((tranche) => !tranche.deployed);
+    const dipAlert = root.querySelector<HTMLElement>("#dipAlert");
+    if (!dipAlert || pending.length === 0) return;
+    const live = (symbol: string): number | null => getPrice(livePriceInputs().prices, symbol)?.priceUsd ?? null;
+    void Promise.all([assetDrawdownBelow("VOO", live("VOO")), assetDrawdownBelow("QQQM", live("QQQM"))]).then(([voo, qqqm]) => {
       if (voo === null && qqqm === null) return;
       const worst = Math.max(voo ?? 0, qqqm ?? 0);
       const reached = pending.filter((tranche) => worst >= tranche.drawdown);
-      if (reached.length === 0) return;
+      // A market that has recovered since the last check takes the banner down.
+      if (reached.length === 0) {
+        dipAlert.hidden = true;
+        return;
+      }
       const amount = reached.reduce((sum, tranche) => sum + tranche.amount, 0);
       const steps = reached.map((tranche) => `−${tranche.drawdown}%`).join(", ");
       const part = (label: string, value: number | null): string => value === null ? "" : `${label} −${value.toFixed(1)}%`;
@@ -323,7 +337,8 @@ export function bindDashboard(
         <button class="wu-btn wu-btn--secondary wu-btn--sm dashboard-nav" data-page="advisor" type="button">Open Advisor →</button>
       </div>`;
       dipAlert.hidden = false;
-    }).catch(() => { /* the banner just stays hidden */ });
+    }).catch(() => { /* the banner just stays as it was */ });
   }
+  paintDipWatch();
 
 }
