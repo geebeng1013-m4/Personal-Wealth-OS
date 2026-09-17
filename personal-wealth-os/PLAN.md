@@ -16,6 +16,44 @@
 
 ---
 
+## 多市场 Portfolio（MM 系列）  （2026-09-17 定）
+
+Portfolio 原本只能记美股（USD 写死在字段名里），马股、港股、新加坡股记不进去。
+计划书 + 界面 Preview：https://claude.ai/artifact/3VdKmxL65HUdJkwGquyiNQ
+
+**已定的决定**
+- V1 市场：美股 · 马股（`.KL`）· 港股（`.HK`）· 新加坡股（`.SI`）· 伦敦 ETF（`.L`）。A 股、日股、台股、澳股、韩股放 FUTURE IDEAS。
+- 市场和货币分开存（VWRA.L 是 USD，VWRL.L 是 GBP）；货币用三位国际代码，不写死。
+- 手续费选 B：金额 + 它的货币（交易货币或 MYR），照对账单填，不自动算；一笔交易一条手续费。
+- 只记股数；马股界面显示「= N 手」。
+- **兼容旧版（Task 1 时发现）**：正式网站的旧版读换汇记录只认 MYR/USD 旧字段、其他丢掉。
+  所以旧字段保留，美金交易和 MYR↔USD 换汇以旧字段为准，新字段每次读取重新算。
+
+### MM-1 — 数据模型加市场和货币 + 迁移  `[x]`（2026-09-17，分支 `feat/multi-market-t1`，PR 待开）
+- 新 `src/tradeCurrency.ts`：市场表、后缀认市场、`normalizeTradeMarket`、换汇 from/to。
+- Trade 加 market / currency / amount / price / fee / feeCurrency；CurrencyExchange 加 from/to。Schema v23。
+- 计算一行没改。验证：新旧两版代码算同一份 demo 数据，Portfolio snapshot 逐字节相同；1069 测试全过。
+- 你决定不用真实数据验证，改用 demo（5201 端口，跑这个分支）。
+- 跟计划书的差别：非 MYR/USD 的换汇记录挪到 MM-2 才接收。
+
+### MM-2 — 换汇池按货币分开  `[ ]`
+每种货币一个加权平均池；MYR 交易汇率 = 1；手续费按它的货币换成 MYR；接收非 MYR/USD 换汇记录。
+
+### MM-3 — 报价和汇率  `[ ]`
+市场后缀、用报价回传的货币、GBp → GBP、各币种对 MYR 汇率、报价分批（一次最多 12 只）。
+
+### MM-4 — 持仓计算多币种  `[ ]`
+每个持仓本币 + MYR 两层；总数用 MYR；按货币小计。
+
+### MM-5 — Portfolio 持仓表  `[ ]`
+### MM-6 — 新增／编辑交易表单（选市场、手续费货币切换）  `[ ]`
+### MM-7 — 按市场／按货币分布（放 Portfolio，不放 Dashboard）  `[ ]`
+### MM-8 — CSV 导入认出非美股（先拿真实导出确认格式）  `[ ]`
+
+**FUTURE IDEAS**：更多市场；手续费自动估算（要你确认）；一笔多条不同货币手续费；股息和预扣税；IPO 申购；港股双柜台。
+
+---
+
 ## 手机比例打磨（M 系列）
 
 目标：手机页面「看起来不乱、用起来直接知道 use for 什么」。约束：全部改动在

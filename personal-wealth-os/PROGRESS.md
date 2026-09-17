@@ -12,6 +12,15 @@
 - **`main`**：`0beedc7`（2026-09-17，PR #71 iPad 排版已合并；整齐版 T 系列 + T-8 全部完成）。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 
+## 多市场 Portfolio（MM 系列，进行中）
+
+让 Portfolio 记得进马股、港股、新加坡股、伦敦 ETF。决定和任务清单见 `PLAN.md` MM 系列；
+Preview：https://claude.ai/artifact/3VdKmxL65HUdJkwGquyiNQ
+- **MM-1 完成（2026-09-17）**：交易和换汇记录加上市场和货币，Schema v23，旧字段保留（正式网站旧版才不会丢换汇记录）。
+  没有改任何计算；新旧代码算同一份 demo 数据结果逐字节相同。分支 `feat/multi-market-t1`，PR 待开。
+  Demo 预览：http://127.0.0.1:5201 （跑这个分支，不碰 5174 / 5199）。
+- **当前**：MM-2 换汇池按货币分开。
+
 ## 按收入分配（I 系列，已合并并上线）
 
 Bucket 从「写死的月额」改成「按真实收入分配的瀑布」，freelancer / 收入不固定的人也能用。详见 `PLAN.md` I 系列。
