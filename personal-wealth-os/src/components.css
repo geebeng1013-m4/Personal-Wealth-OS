@@ -1045,6 +1045,36 @@
     gap: var(--space-2);
   }
 
+  /* Share bars — a name, a bar, a percentage — in one or two columns. */
+  .wu-exposure {
+    display: grid;
+    gap: var(--space-4);
+  }
+  @media (min-width: 901px) {
+    .wu-exposure {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-6);
+    }
+  }
+  .wu-exposure__list {
+    display: grid;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .wu-exposure__list li {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr) 3.5rem;
+    align-items: center;
+    gap: var(--space-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .wu-exposure__list li > span:last-child {
+    text-align: right;
+    color: var(--text-muted);
+  }
+
   /* A group heading inside a table body — e.g. the holdings in one currency. */
   .wu-table tr.wu-table__group td {
     background: var(--surface-raised);
@@ -2073,8 +2103,8 @@
     .wu-portfolio-summary {
       display: none;
     }
-    /* Desktop reading order: form, figures, holdings, then next contribution
-       beside recent activity. The phone keeps the source order, which puts the
+    /* Desktop reading order: form, figures, holdings, where the money is, then
+       next contribution beside recent activity. The phone keeps the source order, which puts the
        next contribution before the holdings. */
     .wu-dash > .wu-portfolio-entry {
       order: -3;
@@ -2082,7 +2112,8 @@
     .wu-dash > #pfTiles {
       order: -2;
     }
-    .wu-dash > #pfHoldings {
+    .wu-dash > #pfHoldings,
+    .wu-dash > #pfExposure {
       order: -1;
     }
   }

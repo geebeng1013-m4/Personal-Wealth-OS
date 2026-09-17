@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "./testHarness";
-import { getPortfolioSnapshot, type ValuationInputs } from "../src/portfolioSummary";
+import { getPortfolioExposure, getPortfolioSnapshot, type ValuationInputs } from "../src/portfolioSummary";
 import { priceMapFrom } from "../src/marketPrices";
 import { calculatePositionCostBasis } from "../src/rules";
 import { cloneDefaultState } from "../src/state";
@@ -183,4 +183,49 @@ test("portfolio: a US-only portfolio has a single dollar group", () => {
   const snapshot = getPortfolioSnapshot(portfolio(TRADES.slice(0, 2)), new Date(), MARKET);
   assert.equal(snapshot.byCurrency.length, 1);
   assert.equal(snapshot.byCurrency[0].currency, "USD");
+});
+
+// --- MM-7: where the money is ------------------------------------------------------
+
+test("exposure: the portfolio splits by market and, separately, by currency", () => {
+  const exposure = getPortfolioExposure(getPortfolioSnapshot(portfolio(), new Date(), MARKET));
+  assert.equal(exposure.basis, "market");
+  const us = (0.4599 * 690 + 0.4685 * 295) * 4.03;
+  const london = 720 * 4.03;
+  const hk = 12500 * 0.518;
+  const my = 3036;
+  const sg = 435 * 3.12;
+  const total = us + london + hk + my + sg;
+  close(exposure.totalMyr, total);
+
+  const market = new Map(exposure.markets.map((slice) => [slice.key, slice.share]));
+  close(market.get("US"), us / total);
+  close(market.get("LSE"), london / total);
+  close(market.get("HK"), hk / total);
+  close(market.get("MY"), my / total);
+  close(market.get("SG"), sg / total);
+
+  const currency = new Map(exposure.currencies.map((slice) => [slice.key, slice.share]));
+  // The London ETF is priced in dollars, so it is dollar exposure.
+  close(currency.get("USD"), (us + london) / total);
+  close(currency.get("MYR"), my / total);
+  assert.equal(exposure.currencies.length, 4);
+  assert.equal(exposure.markets.length, 5);
+  close(exposure.markets.reduce((sum, slice) => sum + slice.share, 0), 1);
+  assert.equal(exposure.markets[0].key, "HK", "largest first");
+});
+
+test("exposure: without every ringgit value it splits by cost, as the allocation does", () => {
+  const exposure = getPortfolioExposure(getPortfolioSnapshot(portfolio(), new Date(), { ...MARKET, ratesToMyr: new Map() }));
+  assert.equal(exposure.basis, "cost");
+  const invested = 1141.25 * 4.03 + 12050 * 0.518 + 2940 + 420 * 3.12;
+  close(exposure.totalMyr, invested);
+  close(new Map(exposure.currencies.map((slice) => [slice.key, slice.share])).get("MYR"), 2940 / invested);
+});
+
+test("exposure: a US-only portfolio is one market and one currency", () => {
+  const exposure = getPortfolioExposure(getPortfolioSnapshot(portfolio(TRADES.slice(0, 2)), new Date(), MARKET));
+  assert.deepEqual(exposure.markets.map((slice) => slice.key), ["US"]);
+  assert.deepEqual(exposure.currencies.map((slice) => slice.key), ["USD"]);
+  close(exposure.markets[0].share, 1);
 });

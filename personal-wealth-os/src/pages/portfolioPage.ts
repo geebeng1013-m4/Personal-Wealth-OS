@@ -28,8 +28,10 @@ import {
 } from "./valuationFormat";
 import { nextContributionLead } from "../nextContribution";
 import {
+  getPortfolioExposure,
   getPortfolioSnapshot,
   type CurrencySubtotal,
+  type ExposureSlice,
   type PortfolioHolding,
   type PortfolioSnapshot,
 } from "../portfolioSummary";
@@ -528,6 +530,36 @@ function holdingsBody(portfolio: PortfolioSnapshot): string {
         </div>`;
 }
 
+/**
+ * Whether the page shows the market / currency split. A portfolio in one
+ * market and one currency has nothing to split — a lone "100%" bar only adds
+ * a card — so the card appears once there is more than one of either.
+ */
+function showsExposure(portfolio: PortfolioSnapshot): boolean {
+  const exposure = getPortfolioExposure(portfolio);
+  return exposure.markets.length > 1 || exposure.currencies.length > 1;
+}
+
+/** Row 2b — where the money sits, by market and by currency. Moves with the price. */
+function exposureBody(portfolio: PortfolioSnapshot): string {
+  const exposure = getPortfolioExposure(portfolio);
+  const bars = <K extends string>(slices: ExposureSlice<K>[], name: (key: K) => string): string =>
+    `<ul class="wu-exposure__list">${slices.map((slice) => {
+      const share = Math.min(Math.max(slice.share, 0), 1);
+      return `<li><span>${escapeHtml(name(slice.key))}</span><span class="wu-weight" role="img" aria-label="${escapeHtml(name(slice.key))} ${percent(share, 1)}"><span style="width:${share * 100}%"></span></span><span>${percent(share, 1)}</span></li>`;
+    }).join("")}</ul>`;
+  const ringgit = exposure.currencies.find((slice) => slice.key === "MYR");
+  const foreignShare = 1 - (ringgit?.share ?? 0);
+  const riskNote = exposure.totalMyr > 0
+    ? `${percent(foreignShare, 0)} moves with exchange rates${ringgit ? `; ${percent(ringgit.share, 0)} is in ringgit` : ""}.`
+    : "";
+  return `<div class="wu-tc__top"><span class="wu-label" id="pfExposureLabel">Where your money is</span><span class="wu-chip">${exposure.basis === "market" ? "By market value" : "By cost"}</span></div>
+        <div class="wu-exposure">
+          <div class="wu-stack wu-stack--sm"><span class="t-subheading">By market</span>${bars(exposure.markets, (key) => marketLabel(key as Market))}</div>
+          <div class="wu-stack wu-stack--sm"><span class="t-subheading">By currency</span>${bars(exposure.currencies, (key) => key)}${riskNote ? `<p class="wu-dash__note">${escapeHtml(riskNote)}</p>` : ""}</div>
+        </div>`;
+}
+
 /** Row 3, left — where this month's contribution goes. Drift-driven, so it moves with the price. */
 function nextContributionBody(state: WealthState, portfolio: PortfolioSnapshot): string {
   const plan = rebalanceContributions(state, portfolio);
@@ -607,6 +639,9 @@ export function portfolioTemplate(state: WealthState): string {
 
       <!-- ROW 2 — every holding, one line each -->
       <section class="wu-card wu-dash__full wu-stack wu-stack--sm" id="pfHoldings" aria-labelledby="pfHoldingsLabel">${holdingsBody(portfolio)}</section>
+
+      <!-- ROW 2b — by market and by currency, only when there is more than one -->
+      <section class="wu-card wu-dash__full wu-stack wu-stack--sm" id="pfExposure" aria-labelledby="pfExposureLabel"${showsExposure(portfolio) ? "" : " hidden"}>${exposureBody(portfolio)}</section>
 
       <!-- phone only: the page actions sit under the holdings, as in the preview -->
       <div class="wu-dash__full wu-portfolio-actions">${addButton.replace("wu-btn--sm", "wu-btn--sm wu-portfolio-actions__main")}${importButton}</div>
@@ -702,6 +737,7 @@ export function patchPortfolioValuation(root: HTMLElement, state: WealthState): 
   };
   set("pfTiles", portfolioTilesBody(portfolio, state.trades.length));
   set("pfHoldings", holdingsBody(portfolio));
+  set("pfExposure", exposureBody(portfolio));
   set("pfNextContribution", nextContributionBody(state, portfolio));
   set("pfPositionRows", positionRowsHtml(portfolio));
 }

@@ -481,6 +481,66 @@ function currencySubtotals(holdings: PortfolioHolding[]): CurrencySubtotal[] {
   }).sort((a, b) => b.investedMyr - a.investedMyr);
 }
 
+/** One slice of the portfolio: a market or a currency, in ringgit and as a share. */
+export interface ExposureSlice<K extends string> {
+  key: K;
+  tickers: Ticker[];
+  myr: number;
+  /** myr over the whole portfolio, 0..1. */
+  share: number;
+}
+
+/** Where the money sits: by the market a listing trades on, and by the currency it is priced in. */
+export interface PortfolioExposure {
+  /**
+   * The same basis the allocation uses: "market" once every held holding is
+   * worth a known ringgit amount, "cost" otherwise. Mixing the two would give
+   * shares of a portfolio that does not exist.
+   */
+  basis: "market" | "cost";
+  totalMyr: number;
+  /** Largest first. */
+  markets: ExposureSlice<Market>[];
+  /** Largest first. The ringgit slice is the part with no currency risk. */
+  currencies: ExposureSlice<string>[];
+}
+
+/**
+ * Split the held portfolio by market and by currency.
+ *
+ * They are different questions. A London ETF priced in dollars is London by
+ * market and dollars by currency: the currency split is the one that says how
+ * much a move in the ringgit changes the portfolio's value.
+ */
+export function getPortfolioExposure(snapshot: PortfolioSnapshot): PortfolioExposure {
+  const held = snapshot.holdings.filter((holding) => holding.units > 0);
+  const basis = snapshot.allocationBasis;
+  const amount = (holding: PortfolioHolding): number =>
+    basis === "market" ? holding.marketValueMyr ?? 0 : holding.investedMyr;
+  const totalMyr = held.reduce((sum, holding) => sum + amount(holding), 0);
+
+  const slices = <K extends string>(keyOf: (holding: PortfolioHolding) => K): ExposureSlice<K>[] => {
+    const groups = new Map<K, ExposureSlice<K>>();
+    for (const holding of held) {
+      const key = keyOf(holding);
+      const slice = groups.get(key) ?? { key, tickers: [], myr: 0, share: 0 };
+      slice.tickers.push(holding.ticker);
+      slice.myr += amount(holding);
+      groups.set(key, slice);
+    }
+    return [...groups.values()]
+      .map((slice) => ({ ...slice, share: totalMyr > 0 ? slice.myr / totalMyr : 0 }))
+      .sort((a, b) => b.myr - a.myr);
+  };
+
+  return {
+    basis,
+    totalMyr,
+    markets: slices((holding) => holding.market),
+    currencies: slices((holding) => holding.currency),
+  };
+}
+
 /** One holding by ticker, or undefined. */
 export function getHolding(snapshot: PortfolioSnapshot, ticker: Ticker): PortfolioHolding | undefined {
   return snapshot.holdings.find((holding) => holding.ticker === ticker);
