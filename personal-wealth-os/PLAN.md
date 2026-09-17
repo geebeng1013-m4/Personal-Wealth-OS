@@ -788,7 +788,7 @@ Preview（另一个会话做的，项目代码没有改动）：
   - **T-6b Goals** `[x]`（2026-09-17，PR #65 已合并；手机 1,507px → 805px，电脑 982px → 767px；财务目标点句子才编辑；+ Add goal 自动展开；Dashboard 下拉框拿掉，改在 Goals 点「Show on Dashboard」）：照全站 Preview——手机总进度卡（已存 / 目标总额、完成几个、每月存多少）+ 每个目标一行（名称 · 每月 · 进度条 · % · 金额），完成的排最后；电脑 4 个数字 + 目标表整行；「+ Add goal」收起；去掉重复的大写标签；财务目标句保留 Lato；拿掉顶部检查卡；Dashboard 的 featured goal 选择器移到 Goals。
   - **T-6c TVM** `[x]`（2026-09-17，PR #66 已合并；你看过后把「Solve」改回 PV / PMT / FV / Rate / Periods；Reset 移到标题并清空三个工具）。已定（2026-09-17）：每行右边保留小的「Solve」，点哪行解哪个；第一个分页叫「TVM」，另外两个「Inflation」「What if I spend this?」。计划：照 Preview——三个工具用分段选择器切换，一次一个；结果放大数字卡（电脑加本金 vs 利息比例条）；输入整理成清单；不改计算。
 
-### T-6d — Investment Growth  `[ ]`  ← **Current Task**，等「执行 T-6d」
+### T-6d — Investment Growth  `[x]`（2026-09-17，PR #67 已合并；手机 1,449px → 999px；默认结果跟改前一样 300,851）
 - 现在是单独的 React 组件（`src/calculator/InvestmentGrowthCalculator.tsx`，用自己的 Tailwind 样式），跟其他页面的卡片、字体、颜色不是同一套。
 - **Preview（2026-09-17）**：https://claude.ai/artifact/BpEiPFT9QCztsiqF2ARwSw
   - 手机：结果卡（预计金额 + interest chip + 本金 vs 利息比例条）→ 增长图卡 → 输入清单（直接打字，Monthly / Annually 分段选择）→ 页底估算说明。
@@ -796,8 +796,11 @@ Preview（另一个会话做的，项目代码没有改动）：
 - **已定**：1. 图保留鼠标移上去（手机点图）看某一年的数字；2. 保留「Growth share」；3. 金额不显示两位小数。
 - 不改计算（`investmentGrowth.ts`）。
 
-### T-7 — Market  `[ ]`（最后做）
+### T-7 — Market  `[ ]`  ← **Current Task**，等你回答问题
 - demo 里图表是空的，需要真实行情数据才能判断。
+- **现在（2026-09-17 读代码）**：`marketPage.ts` 1,115 行。顶部一张「Context before action」原则卡 → 代码按钮（VOO / QQQM / 自定义）+ 新增代码表单一直展开 → 7 个分页（Long-term view 图 / Your position / Risk / Income / Composition / Compare / Context）。7 个分页的数据在打开页面时就全部加载，分页只是显示或隐藏，所以改排版不影响取数据。Risk、Income、Your position 里的数字卡带 emoji。
+- **Preview（全站手机 + 电脑 v2）**：代码用分段选择（新增收进「＋」）→ 4 个数字（价格 / 距离高点 / 你的持仓 / 占比 vs 目标）→ 价格图整行（时间范围在卡片右上角）→ Holdings / Risk / Income 入口；原则一句移到图下面小字。
+- **Preview 没有画到的**：Composition、Compare、Context（历史跌幅）、Your position 的交易明细——计划里保留，不删。
 
 ---
 
