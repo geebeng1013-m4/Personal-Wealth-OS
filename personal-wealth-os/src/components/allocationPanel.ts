@@ -1,21 +1,45 @@
 /**
- * "This month" — the income the Ledger recorded, routed through the plan, and
- * the editor for the rules that route it.
+ * The Budget page's content — this month's income routed through the plan, the
+ * editor for the rules that route it, the months the user actually had, and the
+ * money set aside outside the layers.
  *
  * The Budget page has always shown what each bucket is *meant* to get. This
  * shows where the money that actually arrived went, layer by layer, so a thin
- * month reads as a thin month instead of as an unchanged plan. Each row is also
- * where its rule is edited: one list, one set of figures, nothing to reconcile.
+ * month reads as a thin month instead of as an unchanged plan. Each layer row
+ * is also where its rule is edited: one list, one set of figures, nothing to
+ * reconcile.
+ *
+ * T-6a layout (see the Budget preview): desktop is four figures, the layers as
+ * one table, then the months beside the plan's other rules. A phone reads this
+ * month's card, the layers as a grouped list, the months, and what is set
+ * aside. Rows open their editor in place.
  *
  * Presentation only. Every figure comes from the canonical budget snapshot; no
- * arithmetic happens here beyond turning a ratio into a bar width.
+ * arithmetic happens here beyond turning ratios into bar widths and adding up
+ * figures the snapshot already holds.
  */
 
-import type { BudgetSnapshot, OutlookMonth } from "../budgetSummary";
+import type { BudgetBucketSnapshot, BudgetSnapshot, OutlookMonth } from "../budgetSummary";
 import type { AllocationRow, PlanWarning } from "../allocation";
 import type { AllocationPlan } from "../models";
 import { money } from "../rules";
 import { escapeHtml } from "../html";
+
+/** Which row is open, carried by the page across re-renders. */
+export interface BudgetView {
+  openLayer: number | null;
+  openBucket: number | null;
+  overflowOpen: boolean;
+}
+
+/** One colour per layer, in plan order, shared by the split bar and the rows. */
+const LAYER_COLORS = ["var(--accent)", "var(--slate, #6f86a6)", "var(--highlight)", "var(--plum, #a38cc4)", "var(--negative)"];
+const layerColor = (index: number): string => LAYER_COLORS[index % LAYER_COLORS.length];
+
+/** A figure without its currency prefix. */
+function amountOf(value: number): string {
+  return money(value, "").trim();
+}
 
 /** "2026-08" → "August 2026", falling back to the raw key. */
 function monthLabel(monthKey: string): string {
@@ -24,9 +48,16 @@ function monthLabel(monthKey: string): string {
   return new Date(year, month - 1, 1).toLocaleDateString("en-MY", { month: "long", year: "numeric" });
 }
 
+/** "2026-08" → "Aug 2026". */
+function shortMonth(monthKey: string): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  if (!year || !month) return monthKey;
+  return new Date(year, month - 1, 1).toLocaleDateString("en-MY", { month: "short", year: "numeric" });
+}
+
 function ruleText(row: AllocationRow): string {
-  if (row.stepKind === "fill") return `Fill to ${money(row.value)}`;
-  if (row.stepKind === "gross") return `${row.value}% of everything that comes in`;
+  if (row.stepKind === "fill") return `Fill to ${amountOf(row.value)}`;
+  if (row.stepKind === "gross") return `${row.value}% of all income`;
   return `${row.value}% of what is left`;
 }
 
@@ -70,38 +101,119 @@ function cashSentence(budget: BudgetSnapshot): string {
   return `${base}, about ${cashMonths.toFixed(1)} months of living costs.${assumptionNote(budget)}`;
 }
 
-/** "2026-08" → "Aug 2026". */
-function shortMonth(monthKey: string): string {
-  const [year, month] = monthKey.split("-").map(Number);
-  if (!year || !month) return monthKey;
-  return new Date(year, month - 1, 1).toLocaleDateString("en-MY", { month: "short", year: "numeric" });
-}
-
 /** What the plan did with one recorded month, in a sentence. */
 function outcomeText(month: OutlookMonth): string {
   const { result } = month;
   if (result.shortfall > 0.005) {
-    return `${result.rows[0]?.name ?? "The first layer"} short ${money(result.shortfall)} — nothing below it funded`;
+    return `${result.rows[0]?.name ?? "The first layer"} short ${amountOf(result.shortfall)} — nothing below it funded`;
   }
   const caught = result.rows.find((row) => row.overflow > 0.005);
-  if (caught) return `every layer filled, ${money(caught.overflow)} extra into ${caught.name}`;
-  if (result.unassigned > 0.005) return `every layer filled, ${money(result.unassigned)} left unassigned`;
-  return "every layer filled";
+  if (caught) return `Every layer filled · +${amountOf(caught.overflow)} to ${caught.name}`;
+  if (result.unassigned > 0.005) return `Every layer filled · ${amountOf(result.unassigned)} left unassigned`;
+  return "Every layer filled";
 }
 
-function outlookRow(label: string, month: OutlookMonth, tone: "bad" | "plain"): string {
-  return `<div class="wu-list__row">
-    <div class="wu-stack wu-stack--sm" style="flex:1;min-width:0">
-      <div class="wu-row wu-row--between">
-        <span class="wu-row wu-row--tight" style="min-width:0">
-          <strong class="t-body">${label}</strong>
-          <span class="wu-label--plain t-caption">${shortMonth(month.monthKey)}</span>
-        </span>
-        <span class="wu-metric__value t-num${tone === "bad" ? " wu-metric__value--negative" : ""}">${money(month.income)}</span>
+/** A layer's state as a word or two, and its tone. */
+function layerStatus(row: AllocationRow): { text: string; tone: string } {
+  if (row.overflow > 0.005) return { text: `+${amountOf(row.overflow)} extra`, tone: "t-positive" };
+  // A layer set to zero asked for nothing and got nothing. Saying "not
+  // reached" would blame the month for a choice the user made.
+  if (row.want < 0.005) return { text: "Not set", tone: "t-faint" };
+  if (row.got < 0.005) return { text: "Not reached", tone: "t-faint" };
+  if (row.got >= row.want - 0.005) return { text: "Filled", tone: "t-positive" };
+  return { text: `${amountOf(row.got)} of ${amountOf(row.want)}`, tone: "wu-budget-part" };
+}
+
+/** The rule editor under an open layer row. */
+function layerEditor(row: AllocationRow, index: number, total: number): string {
+  const kindButton = (kind: string, label: string) =>
+    `<button type="button" class="wu-segmented__option layer-kind${row.stepKind === kind ? " is-active" : ""}" data-kind="${kind}" aria-pressed="${row.stepKind === kind}">${label}</button>`;
+  return `<form class="wu-stack wu-stack--sm layerForm wu-budget-editor" data-index="${index}">
+      <input type="hidden" name="kind" value="${row.stepKind}">
+      <div class="wu-segmented wu-budget-kinds" role="group" aria-label="Rule">
+        ${kindButton("fill", "Fixed amount")}${kindButton("pct", "% of what's left")}${kindButton("gross", "% of all income")}
       </div>
-      <span class="wu-label--plain t-caption">${escapeHtml(outcomeText(month))}</span>
-    </div>
-  </div>`;
+      <div class="wu-grid wu-grid--2">
+        <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="name" type="text" value="${escapeHtml(row.name)}"></label>
+        <label class="wu-field-row"><span class="wu-field-row__label js-value-label">${row.stepKind === "fill" ? "Amount MYR" : "Share %"}</span><input class="wu-field" name="value" type="number" min="0" step="${row.stepKind === "fill" ? "1" : "0.1"}" value="${row.value}"></label>
+        <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">What it is for</span><input class="wu-field" name="note" type="text" value="${escapeHtml(row.note ?? "")}" placeholder="What this money is allowed to do"></label>
+      </div>
+      <div class="wu-row wu-row--tight wu-budget-editor__actions">
+        <button class="wu-btn wu-btn--ghost wu-btn--icon move-layer" data-index="${index}" data-dir="up" type="button" aria-label="Move up"${index === 0 ? " disabled" : ""}>↑</button>
+        <button class="wu-btn wu-btn--ghost wu-btn--icon move-layer" data-index="${index}" data-dir="down" type="button" aria-label="Move down"${index === total - 1 ? " disabled" : ""}>↓</button>
+        <button class="wu-btn wu-btn--ghost wu-btn--sm wu-budget-danger delete-layer" data-index="${index}" type="button">Delete</button>
+        <span class="wu-budget-editor__grow"></span>
+        <button class="wu-btn wu-btn--ghost wu-btn--sm budget-close" type="button">Cancel</button>
+        <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button>
+      </div>
+    </form>`;
+}
+
+function layerRow(row: AllocationRow, index: number, total: number, view: BudgetView): string {
+  const open = view.openLayer === index;
+  const status = layerStatus(row);
+  const filled = row.want > 0 ? Math.min(100, (Math.min(row.got, row.want) / row.want) * 100) : 0;
+  return `<li class="wu-budget-layer${open ? " is-open" : ""}">
+      <button class="wu-budget-row layer-row" type="button" data-index="${index}" aria-expanded="${open}">
+        <i class="wu-budget-row__dot" style="background:${layerColor(index)}" aria-hidden="true"></i>
+        <span class="wu-budget-row__title">${escapeHtml(row.name)}<small>${escapeHtml(ruleText(row))}</small></span>
+        <span class="wu-budget-row__fill" aria-hidden="true"><span class="wu-bar"><span class="wu-bar__fill${status.tone === "wu-budget-part" ? " is-part" : ""}" style="width:${filled}%"></span></span><small>${row.want > 0 ? `${Math.round(filled)}% filled` : "No amount set"}${row.note ? ` · ${escapeHtml(row.note)}` : ""}</small></span>
+        <span class="wu-budget-row__got">${amountOf(row.got)}<small class="${status.tone}">${escapeHtml(status.text)}</small></span>
+        <span class="wu-budget-row__status ${status.tone}">${escapeHtml(status.text)}</span>
+        <span class="wu-budget-row__chev" aria-hidden="true">›</span>
+      </button>
+      ${open ? layerEditor(row, index, total) : ""}
+    </li>`;
+}
+
+/** "Leftover goes to" — a row that opens a picker of the layers. */
+function overflowRow(budget: BudgetSnapshot, plan: AllocationPlan, view: BudgetView, extraClass = ""): string {
+  const rows = budget.allocation.actual.rows;
+  const target = rows.find((row) => row.stepId === plan.overflowStepId);
+  const options = rows
+    .map((row) => `<option value="${escapeHtml(row.stepId)}"${plan.overflowStepId === row.stepId ? " selected" : ""}>${escapeHtml(row.name)}</option>`)
+    .join("");
+  return `<li class="wu-budget-layer${extraClass ? ` ${extraClass}` : ""}${view.overflowOpen ? " is-open" : ""}">
+      <button class="wu-budget-row wu-budget-row--plain overflow-row" type="button" aria-expanded="${view.overflowOpen}">
+        <span class="wu-budget-row__title">Leftover goes to<small>Money left after every layer fills</small></span>
+        <span class="wu-budget-row__got wu-budget-row__muted">${escapeHtml(target?.name ?? "Nothing")}</span>
+        <span class="wu-budget-row__chev" aria-hidden="true">›</span>
+      </button>
+      ${view.overflowOpen ? `<div class="wu-budget-editor"><label class="wu-field-row"><span class="wu-field-row__label">Money left at the end goes to</span><select class="wu-field overflow-select">${options}</select></label></div>` : ""}
+    </li>`;
+}
+
+/** A one-time bucket (the Opportunity reserve): outside the layers, its own editor. */
+function bucketRow(bucket: BudgetBucketSnapshot, view: BudgetView): string {
+  const open = view.openBucket === bucket.index;
+  return `<li class="wu-budget-layer${open ? " is-open" : ""}">
+      <button class="wu-budget-row wu-budget-row--plain bucket-row" type="button" data-index="${bucket.index}" aria-expanded="${open}">
+        <span class="wu-budget-row__title">${escapeHtml(bucket.label || bucket.name)}<small>${escapeHtml(bucket.note || "Used only when the market falls")}</small></span>
+        <span class="wu-budget-row__got">${amountOf(bucket.amount)}</span>
+        <span class="wu-budget-row__chev" aria-hidden="true">›</span>
+      </button>
+      ${open ? `<form class="wu-stack wu-stack--sm bucketForm wu-budget-editor" data-index="${bucket.index}">
+        <div class="wu-grid wu-grid--2">
+          <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="name" type="text" value="${escapeHtml(bucket.name)}"></label>
+          <label class="wu-field-row"><span class="wu-field-row__label">Label</span><input class="wu-field" name="label" type="text" value="${escapeHtml(bucket.label)}"></label>
+          <label class="wu-field-row"><span class="wu-field-row__label">Amount MYR</span><input class="wu-field" name="amount" type="number" min="0" step="1" value="${bucket.amount}"></label>
+          <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Note</span><textarea class="wu-field" name="note" rows="2">${escapeHtml(bucket.note)}</textarea></label>
+        </div>
+        <div class="wu-row wu-row--tight wu-budget-editor__actions">
+          <button class="wu-btn wu-btn--ghost wu-btn--sm wu-budget-danger delete-bucket" data-index="${bucket.index}" type="button">Delete</button>
+          <span class="wu-budget-editor__grow"></span>
+          <button class="wu-btn wu-btn--ghost wu-btn--sm budget-close" type="button">Cancel</button>
+          <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button>
+        </div>
+      </form>` : ""}
+    </li>`;
+}
+
+function monthRow(label: string, month: OutlookMonth, bad: boolean): string {
+  return `<li class="wu-budget-layer"><div class="wu-budget-row wu-budget-row--plain wu-budget-row--static">
+      <span class="wu-budget-row__title">${label} · ${escapeHtml(shortMonth(month.monthKey))}<small>${escapeHtml(outcomeText(month))}</small></span>
+      <span class="wu-budget-row__got${bad ? " t-negative" : ""}">${amountOf(month.income)}</span>
+    </div></li>`;
 }
 
 /**
@@ -111,182 +223,136 @@ function outlookRow(label: string, month: OutlookMonth, tone: "bad" | "plain"): 
  * swings — it is the month they never have. The worst one decides whether the
  * plan holds.
  */
-function outlookCard(budget: BudgetSnapshot): string {
+function monthsCard(budget: BudgetSnapshot): string {
   const { outlook, spendableCash } = budget.allocation;
-
   if (!outlook) {
-    return `<article class="wu-card wu-card--bare">
-      <div class="wu-stack wu-stack--sm">
-        <span class="wu-label">Your worst month</span>
-        <p class="wu-label--plain t-caption">Record income for two or more months and this will show what your leanest month does to the plan — the month that decides whether it holds.</p>
-      </div>
-    </article>`;
+    return `<section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-budget-months" aria-labelledby="budMonthsLabel">
+      <div class="wu-tc__top"><span class="wu-label" id="budMonthsLabel">Your months</span></div>
+      <p class="wu-dash__note">Record income for two or more months and this will show what your leanest month does to the plan — the month that decides whether it holds.</p>
+    </section>`;
   }
-
   const short = outlook.worst.result.shortfall > 0.005;
   const cover = short
     ? `${money(spendableCash)} outside your emergency fund covers ${outlook.worstMonthsCovered} ${outlook.worstMonthsCovered === 1 ? "month" : "months"} that lean.${assumptionNote(budget)}`
-    : `Even your leanest month covered living costs.`;
-
-  return `<article class="wu-card" style="margin-top:var(--space-4)">
-    <div class="wu-stack">
-      <div class="wu-row wu-row--between">
-        <span class="wu-label">The months you actually had</span>
-        <span class="wu-chip wu-chip--muted">${outlook.history.length} recorded &middot; ${Math.round(outlook.spread * 100)}% swing</span>
-      </div>
-      <div class="wu-list">
-        ${outlookRow("Leanest", outlook.worst, short ? "bad" : "plain")}
-        ${/* With only two months on record the middle one IS the leanest or the
-             best, and printing it again says the same thing twice. */
-          outlook.median.monthKey !== outlook.worst.monthKey && outlook.median.monthKey !== outlook.best.monthKey
-            ? outlookRow("Typical", outlook.median, "plain")
-            : ""}
-        ${outlook.best.monthKey !== outlook.worst.monthKey ? outlookRow("Best", outlook.best, "plain") : ""}
-      </div>
-      <p class="wu-note t-caption">${escapeHtml(cover)}</p>
-    </div>
-  </article>`;
+    : "Even your leanest month covered living costs.";
+  // With only two months on record the middle one IS the leanest or the best,
+  // and printing it again says the same thing twice.
+  const typical = outlook.median.monthKey !== outlook.worst.monthKey && outlook.median.monthKey !== outlook.best.monthKey;
+  return `<section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-budget-months" aria-labelledby="budMonthsLabel">
+      <div class="wu-tc__top"><span class="wu-label" id="budMonthsLabel">Your months</span><span class="wu-chip wu-chip--muted">${Math.round(outlook.spread * 100)}% swing</span></div>
+      <ul class="wu-budget-list">
+        ${monthRow("Leanest", outlook.worst, short)}
+        ${typical ? monthRow("Typical", outlook.median, false) : ""}
+        ${outlook.best.monthKey !== outlook.worst.monthKey ? monthRow("Best", outlook.best, false) : ""}
+      </ul>
+      <p class="wu-dash__note wu-dash__actions">${outlook.history.length} months recorded. ${escapeHtml(cover)}</p>
+    </section>`;
 }
 
-/** The inline rule editor, hidden until its row's Edit button is pressed. */
-function layerForm(row: AllocationRow, index: number, total: number): string {
-  const kindOption = (value: string, label: string) =>
-    `<option value="${value}"${row.stepKind === value ? " selected" : ""}>${label}</option>`;
-
-  return `<div class="layer-edit-form is-hidden" id="layerEdit${index}">
-    <form class="wu-stack layerForm" data-index="${index}">
-      <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="name" type="text" value="${escapeHtml(row.name)}"></label>
-      <label class="wu-field-row"><span class="wu-field-row__label">Rule</span><select class="wu-field" name="kind">
-        ${kindOption("fill", "Fill to a fixed amount")}
-        ${kindOption("pct", "A share of what is left")}
-        ${kindOption("gross", "A share of everything that comes in")}
-      </select></label>
-      <label class="wu-field-row"><span class="wu-field-row__label js-value-label">${row.stepKind === "fill" ? "Amount MYR" : "Share %"}</span><input class="wu-field" name="value" type="number" min="0" step="${row.stepKind === "fill" ? "1" : "0.1"}" value="${row.value}"></label>
-      <label class="wu-field-row"><span class="wu-field-row__label">What it is for</span><input class="wu-field" name="note" type="text" value="${escapeHtml(row.note ?? "")}" placeholder="What this money is allowed to do"></label>
-      <div class="wu-row">
-        <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button>
-        <button class="wu-btn wu-btn--secondary wu-btn--sm cancel-layer-edit" data-index="${index}" type="button">Cancel</button>
-        <button class="wu-btn wu-btn--ghost wu-btn--sm move-layer" data-index="${index}" data-dir="up" type="button"${index === 0 ? " disabled" : ""}>Move up</button>
-        <button class="wu-btn wu-btn--ghost wu-btn--sm move-layer" data-index="${index}" data-dir="down" type="button"${index === total - 1 ? " disabled" : ""}>Move down</button>
-        <button class="wu-btn wu-btn--danger wu-btn--sm delete-layer" data-index="${index}" type="button">Delete</button>
-      </div>
-    </form>
-  </div>`;
-}
-
-function layerRow(row: AllocationRow, index: number, total: number): string {
-  const filled = row.want > 0 && row.got >= row.want - 0.005;
-  const empty = row.got < 0.005;
-  const width = row.want > 0 ? Math.min(100, (row.got / row.want) * 100) : 0;
-
-  // A layer set to zero asked for nothing and got nothing. Saying "not
-  // reached" would blame the month for a choice the user made.
-  const unset = row.want < 0.005 && row.overflow < 0.005;
-
-  const badge = row.overflow > 0.005
-    ? `<span class="wu-badge wu-badge--positive">+${money(row.overflow)} left over</span>`
-    : unset
-      ? `<span class="wu-badge wu-badge--neutral">Nothing set</span>`
-      : empty
-        ? `<span class="wu-badge wu-badge--neutral">Not reached</span>`
-        : filled
-          ? `<span class="wu-badge wu-badge--positive">Filled</span>`
-          : `<span class="wu-badge wu-badge--warning">Part way</span>`;
-
-  return `<div class="wu-list__row">
-    <div class="wu-stack wu-stack--sm" style="flex:1;min-width:0">
-      <div class="wu-row wu-row--between">
-        <span class="wu-row wu-row--tight" style="min-width:0">
-          <span class="wu-label--plain t-caption">${index + 1}</span>
-          <strong class="t-body">${escapeHtml(row.name)}</strong>
-          ${badge}
-        </span>
-        <span class="wu-row wu-row--tight">
-          <span class="wu-metric__value t-num">${money(row.got)}</span>
-          <button class="wu-btn wu-btn--ghost wu-btn--sm edit-layer" data-index="${index}" type="button">Edit</button>
-        </span>
-      </div>
-      <div class="wu-bar"><span class="wu-bar__fill${empty ? " wu-bar__fill--faint" : ""}" style="width:${width}%"></span></div>
-      <span class="wu-label--plain t-caption">${escapeHtml(ruleText(row))}${row.note ? ` &middot; ${escapeHtml(row.note)}` : ""}</span>
-      ${layerForm(row, index, total)}
-    </div>
-  </div>`;
-}
-
-export function allocationPanel(budget: BudgetSnapshot, plan: AllocationPlan): string {
+export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view: BudgetView): string {
   const { allocation } = budget;
   const month = monthLabel(budget.monthKey);
   const rows = allocation.actual.rows;
-
-  const addLayer = `<button class="wu-add" id="addLayerBtn" type="button">` +
-    `<span class="wu-add__plus" aria-hidden="true">+</span><span>Add a layer</span></button>`;
-
-  if (rows.length === 0) {
-    return `<article class="wu-card">
-      <div class="wu-stack">
-        <span class="wu-label">This month &middot; ${escapeHtml(month)}</span>
-        <p class="wu-empty">No layers yet. Add one and it becomes the first place your income flows into.</p>
-        ${addLayer}
-      </div>
-    </article>`;
-  }
-
+  const oneTime = budget.buckets.filter((bucket) => bucket.cadence === "one-time");
+  const setAside = oneTime.reduce((sum, bucket) => sum + bucket.amount, 0);
   const nothingIn = allocation.actual.income < 0.005;
-  const lede = nothingIn
+  const short = allocation.actual.shortfall > 0.005 && !nothingIn;
+
+  const statusChip = nothingIn
+    ? `<span class="wu-chip wu-chip--muted">No income yet</span>`
+    : short
+      ? `<span class="wu-chip wu-chip--negative">Short ${amountOf(allocation.actual.shortfall)}</span>`
+      : `<span class="wu-chip">On plan</span>`;
+  const split = rows.some((row) => row.got > 0.005)
+    ? `<div class="wu-split" aria-hidden="true">${rows.map((row, index) => row.got > 0.005 ? `<span style="flex:${row.got};background:${layerColor(index)}"></span>` : "").join("")}${allocation.planned.income > allocation.actual.income ? `<span style="flex:${allocation.planned.income - allocation.actual.income};background:transparent"></span>` : ""}</div>`
+    : `<div class="wu-split" aria-hidden="true"></div>`;
+  const planLine = nothingIn
     ? "No income recorded yet this month. Record one in the Ledger and it will flow through these layers."
-    : "Recorded in the Ledger, routed top to bottom. A layer only gets what the layers above it left.";
+    : `Plan ${amountOf(allocation.planned.income)} a month · routed top to bottom`;
 
-  const shortfall = allocation.actual.shortfall > 0.005 && !nothingIn
-    ? `<aside class="wu-card wu-card--warning wu-card--pad-sm">
-        <div class="wu-stack wu-stack--sm">
-          <strong class="t-subheading">${escapeHtml(rows[0].name)} is ${money(allocation.actual.shortfall)} short</strong>
-          <p class="t-caption t-muted">${escapeHtml(cashSentence(budget))} Nothing below this layer is funded this month.</p>
-        </div>
-      </aside>`
+  const caught = rows.find((row) => row.overflow > 0.005);
+  const outlook = allocation.outlook;
+
+  const shortfallBlock = short
+    ? `<div class="wu-budget-alert" role="status"><b>${escapeHtml(rows[0].name)} is ${amountOf(allocation.actual.shortfall)} short</b><span>${escapeHtml(cashSentence(budget))} Nothing below this layer is funded this month.</span></div>`
     : "";
-
-  const leftOver = allocation.actual.unassigned > 0.005
-    ? `<p class="wu-note t-caption">${money(allocation.actual.unassigned)} reached the end with no layer set to catch it.</p>`
-    : "";
-
-  const warnings = allocation.warnings
-    .map(warningText)
-    .filter((text) => text.length > 0)
-    .map((text) => `<p class="wu-note t-caption">${escapeHtml(text)}</p>`)
-    .join("");
-
+  const notes = [
+    allocation.actual.unassigned > 0.005 ? `${money(allocation.actual.unassigned)} reached the end with no layer set to catch it.` : "",
+    ...allocation.warnings.map(warningText),
+  ].filter(Boolean);
   const needsNormalizing = allocation.warnings.some((warning) => warning.code === "percent-total-not-100");
-  const normalize = needsNormalizing
-    ? `<button class="wu-btn wu-btn--secondary wu-btn--sm" id="normalizeLayersBtn" type="button">Make them add to 100%</button>`
-    : "";
+  const percentWarning = allocation.warnings.find((warning) => warning.code === "percent-total-not-100");
+  const hasPercent = rows.some((row) => row.stepKind !== "fill");
 
-  const overflowOptions = rows
-    .map((row) => `<option value="${escapeHtml(row.stepId)}"${plan.overflowStepId === row.stepId ? " selected" : ""}>${escapeHtml(row.name)}</option>`)
-    .join("");
+  const layers = rows.length === 0
+    ? `<p class="wu-empty">No layers yet. Add one and it becomes the first place your income flows into.</p>`
+    : `<div class="wu-budget-row wu-budget-row--head" aria-hidden="true"><span></span><span>Layer</span><span>Filled</span><span>Got</span><span>Status</span><span></span></div>
+      <ul class="wu-budget-list">
+        ${rows.map((row, index) => layerRow(row, index, rows.length, view)).join("")}
+        ${overflowRow(budget, plan, view, "wu-budget-phone-only")}
+      </ul>`;
 
-  return `<article class="wu-card">
-    <div class="wu-stack">
-      <div class="wu-row wu-row--between">
-        <span class="wu-label">This month &middot; ${escapeHtml(month)}</span>
-        <span class="wu-chip wu-chip--muted">Plan: ${money(allocation.planned.income)} a month</span>
-      </div>
-      <div class="wu-stack wu-stack--sm">
-        <span class="wu-metric__value wu-metric--hero t-num">${money(allocation.actual.income)}</span>
-        <span class="wu-label--plain t-caption">${escapeHtml(lede)}</span>
-      </div>
-      ${shortfall}
-      <div class="wu-list">${rows.map((row, index) => layerRow(row, index, rows.length)).join("")}</div>
-      ${leftOver}
-      ${warnings}
-      <div class="wu-row wu-row--between" style="flex-wrap:wrap;gap:var(--space-3)">
-        <label class="wu-field-row" style="flex:1;min-width:220px">
-          <span class="wu-field-row__label">Money left at the end goes to</span>
-          <select class="wu-field" id="overflowSelect">${overflowOptions}</select>
-        </label>
-        ${normalize}
-      </div>
-      ${addLayer}
+  return `
+    <!-- ROW 1 (desktop) — four figures -->
+    <div class="wu-dash__full wu-dash__tiles wu-budget-tiles">
+      <section class="wu-card wu-dash__tile" aria-labelledby="budMonthLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="budMonthLabel">This month</span>${statusChip}</div>
+        <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(allocation.actual.income)}</span></p>
+        <p class="wu-dash__note">Plan ${amountOf(allocation.planned.income)} a month</p>
+        ${split}
+      </section>
+      <section class="wu-card wu-dash__tile" aria-labelledby="budExtraLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="budExtraLabel">Extra caught</span></div>
+        <p class="wu-money wu-money--md${caught ? " t-positive" : ""}"><span class="wu-money__cur">MYR</span><span>${caught ? `+${amountOf(caught.overflow)}` : "0"}</span></p>
+        <p class="wu-dash__note">${caught ? `Went to ${escapeHtml(caught.name)} after every layer filled` : "Nothing left over after the layers"}</p>
+      </section>
+      <section class="wu-card wu-dash__tile" aria-labelledby="budSwingLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="budSwingLabel">Swing</span>${outlook ? `<span class="wu-chip wu-chip--muted">${outlook.history.length} months</span>` : ""}</div>
+        <p class="wu-money wu-money--md"><span>${outlook ? `${Math.round(outlook.spread * 100)}%` : "--"}</span></p>
+        <p class="wu-dash__note">${outlook ? `Leanest ${amountOf(outlook.worst.income)} · best ${amountOf(outlook.best.income)}` : "Needs two recorded months"}</p>
+      </section>
+      <section class="wu-card wu-dash__tile" aria-labelledby="budAsideLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="budAsideLabel">Set aside</span></div>
+        <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(setAside)}</span></p>
+        <p class="wu-dash__note">${oneTime.length ? `${escapeHtml(oneTime.map((bucket) => bucket.label || bucket.name).join(", "))}, outside the layers` : "Nothing set aside"}</p>
+      </section>
     </div>
-  </article>
-  ${outlookCard(budget)}`;
+
+    <!-- phone — this month in one card -->
+    <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-budget-month" aria-labelledby="budPhoneMonthLabel">
+      <div class="wu-tc__top"><span class="wu-label" id="budPhoneMonthLabel">This month · ${escapeHtml(month)}</span>${statusChip}</div>
+      <p class="wu-money"><span class="wu-money__cur">MYR</span><span>${amountOf(allocation.actual.income)}</span></p>
+      ${split}
+      <p class="wu-dash__note">${escapeHtml(planLine)}</p>
+    </section>
+
+    <!-- LAYERS — a table on a desktop, a grouped list on a phone -->
+    <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-budget-layers" aria-labelledby="budLayersLabel">
+      <div class="wu-tc__top"><span class="wu-label" id="budLayersLabel">Layers · filled top to bottom</span>${nothingIn ? "" : short ? `<span class="wu-chip wu-chip--negative">${escapeHtml(rows[0]?.name ?? "")} ${amountOf(allocation.actual.shortfall)} short</span>` : `<span class="wu-chip">All filled</span>`}</div>
+      ${shortfallBlock}
+      ${layers}
+      ${notes.map((text) => `<p class="wu-dash__note wu-budget-note">${escapeHtml(text)}</p>`).join("")}
+      ${needsNormalizing ? `<div><button class="wu-btn wu-btn--secondary wu-btn--sm" id="normalizeLayersBtn" type="button">Make them add to 100%</button></div>` : ""}
+      <button class="wu-budget-add add-layer" type="button">+ Add a layer</button>
+    </section>
+
+    <!-- ROW 3 — the months you had | the plan's other rules -->
+    ${monthsCard(budget)}
+    <section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-budget-rules" aria-labelledby="budRulesLabel">
+      <div class="wu-tc__top"><span class="wu-label" id="budRulesLabel">Plan rules</span></div>
+      <ul class="wu-budget-list">
+        ${rows.length ? overflowRow(budget, plan, view) : ""}
+        <li class="wu-budget-layer"><div class="wu-budget-row wu-budget-row--plain wu-budget-row--static">
+          <span class="wu-budget-row__title">Percent layers add up to<small>${hasPercent ? "Shares of what is left and of all income" : "Every layer is a fixed amount"}</small></span>
+          <span class="wu-budget-row__got wu-budget-row__muted${percentWarning ? " wu-budget-part" : ""}">${hasPercent ? (percentWarning ? `${percentWarning.value}%` : "100%") : "No % layers"}</span>
+        </div></li>
+        ${oneTime.map((bucket) => bucketRow(bucket, view)).join("")}
+      </ul>
+    </section>
+
+    <!-- phone — money set aside outside the layers -->
+    ${oneTime.length ? `<section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-budget-aside" aria-labelledby="budPhoneAsideLabel">
+      <div class="wu-tc__top"><span class="wu-label" id="budPhoneAsideLabel">Set aside</span></div>
+      <ul class="wu-budget-list">${oneTime.map((bucket) => bucketRow(bucket, view)).join("")}</ul>
+    </section>` : ""}`;
 }
