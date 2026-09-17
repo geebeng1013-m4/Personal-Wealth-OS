@@ -7,6 +7,7 @@ import type { WealthState } from "./models";
 import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint } from "./state";
 import { renderApp } from "./ui";
 import { onAuth, signInWithGoogle, handleRedirectResult, logOut, subscribeToFirestore, type CloudSnapshot } from "./firebase";
+import { setAssistantOwner } from "./components/assistant/assistantStore";
 import { fetchUsdToMyr, pruneMarketCache } from "./market";
 import type { User } from "firebase/auth";
 import { isDemoMode } from "./demo";
@@ -283,6 +284,9 @@ async function handleAuth(user: User | null): Promise<void> {
     // Unsubscribe from previous cloud sync if any
     if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
 
+    // The assistant's history is this account's, and nobody else's.
+    setAssistantOwner(user.uid);
+
     const userStorageKey = `personal-wealth-os-state-${user.uid}`;
     const hasLocalData = localStorage.getItem(userStorageKey) !== null;
 
@@ -336,6 +340,7 @@ async function handleAuth(user: User | null): Promise<void> {
     currentUser = null;
     // Clear in-memory state to prevent leaking to next user
     state = emptyState();
+    setAssistantOwner(null);
     if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
     renderLogin();
   }
@@ -353,6 +358,7 @@ if (isDemoMode()) {
   } as unknown as User;
 
   currentUser = demoUser;
+  setAssistantOwner(demoUser.uid, { adoptUnowned: false });
 
   // Keep edits made in the preview deployment across rerenders and refreshes.
   // The demo user is isolated from real accounts by its dedicated uid.
