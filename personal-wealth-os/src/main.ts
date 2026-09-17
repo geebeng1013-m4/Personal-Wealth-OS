@@ -6,8 +6,9 @@ import "./legacy-tail.css";
 import type { WealthState } from "./models";
 import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint } from "./state";
 import { renderApp } from "./ui";
-import { onAuth, signInWithGoogle, handleRedirectResult, logOut, subscribeToFirestore, type CloudSnapshot } from "./firebase";
+import { onAuth, signInWithGoogle, handleRedirectResult, logOut, subscribeToFirestore, loadAssistantHistory, saveAssistantHistory, type CloudSnapshot } from "./firebase";
 import { setAssistantOwner } from "./components/assistant/assistantStore";
+import { flushAssistantSync, startAssistantSync, stopAssistantSync } from "./components/assistant/assistantSync";
 import { fetchUsdToMyr, pruneMarketCache } from "./market";
 import type { User } from "firebase/auth";
 import { isDemoMode } from "./demo";
@@ -180,6 +181,8 @@ function navigate(page: string): void {
 
 async function handleLogout(): Promise<void> {
   if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
+  // A change made in the last moment before signing out still reaches the cloud.
+  await flushAssistantSync();
   await logOut();
 }
 
@@ -284,8 +287,10 @@ async function handleAuth(user: User | null): Promise<void> {
     // Unsubscribe from previous cloud sync if any
     if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
 
-    // The assistant's history is this account's, and nobody else's.
+    // The assistant's history is this account's, and nobody else's — here and
+    // on the account's other devices.
     setAssistantOwner(user.uid);
+    void startAssistantSync(user.uid, { load: loadAssistantHistory, save: saveAssistantHistory });
 
     const userStorageKey = `personal-wealth-os-state-${user.uid}`;
     const hasLocalData = localStorage.getItem(userStorageKey) !== null;
@@ -340,6 +345,7 @@ async function handleAuth(user: User | null): Promise<void> {
     currentUser = null;
     // Clear in-memory state to prevent leaking to next user
     state = emptyState();
+    stopAssistantSync();
     setAssistantOwner(null);
     if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
     renderLogin();

@@ -135,6 +135,25 @@ export async function loadFromFirestore(uid: string): Promise<WealthState | null
   return snap.data() as WealthState;
 }
 
+/**
+ * The assistant's history, beside the wealth document rather than inside it: a
+ * conversation is not a financial fact, and keeping it out of WealthState
+ * leaves the schema, migrations and snapshots untouched. The existing rule on
+ * users/{uid}/** already limits it to its owner.
+ */
+function assistantHistoryRef(uid: string) {
+  return doc(db, "users", uid, "assistant", "history");
+}
+
+export async function loadAssistantHistory(uid: string): Promise<unknown> {
+  const snap = await getDoc(assistantHistoryRef(uid));
+  return snap.exists() ? snap.data() : null;
+}
+
+export function saveAssistantHistory(uid: string, history: object): Promise<void> {
+  return setDoc(assistantHistoryRef(uid), { ...history, _syncedAt: Date.now() });
+}
+
 export function saveToFirestore(uid: string, state: WealthState): Promise<void> {
   return setDoc(userDocRef(uid), { ...state, _syncedAt: Date.now() }, { merge: true });
 }

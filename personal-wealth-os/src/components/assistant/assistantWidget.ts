@@ -29,6 +29,7 @@ import type { Navigate } from "../../pages/pageTypes";
 import { applyLedgerDraft } from "../../pages/ledgerPage";
 import { knownPlatforms, queueTradePrefill } from "../../pages/portfolioPage";
 import { askAssistant } from "./assistantClient";
+import { syncAssistantHistoryNow } from "./assistantSync";
 import { buildAssistantContext } from "./assistantContext";
 import { describeDraft, draftPage, parseAssistantAction } from "./assistantActions";
 import {
@@ -50,6 +51,7 @@ import {
   recordEntries,
   setAssistantMode,
   setPanelOpen,
+  onAssistantHistoryMerged,
   setShareFigures,
   shareFigures,
   updateRecord,
@@ -304,6 +306,22 @@ export function assistantTemplate(): string {
   </div>`;
 }
 
+/**
+ * History from another device arrived. The panel is rebuilt as usual — the
+ * draft being typed survives in composerText — and if the user was typing,
+ * the caret goes back to the end of it so the rebuild does not interrupt them.
+ */
+function refreshAfterMerge(): void {
+  if (!isPanelOpen()) return;
+  const typing = document.activeElement?.id === "assistantInput";
+  refresh();
+  if (!typing) return;
+  const input = ctx?.root.querySelector<HTMLTextAreaElement>("#assistantInput");
+  if (!input) return;
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
 function refresh(): void {
   const host = ctx?.root.querySelector<HTMLElement>("#assistant");
   if (!host) return;
@@ -455,7 +473,11 @@ function bind(): void {
   root.querySelector<HTMLButtonElement>("#assistantFab")?.addEventListener("click", () => {
     setPanelOpen(!isPanelOpen());
     refresh();
-    if (isPanelOpen()) root.querySelector<HTMLTextAreaElement>("#assistantInput")?.focus();
+    if (isPanelOpen()) {
+      root.querySelector<HTMLTextAreaElement>("#assistantInput")?.focus();
+      // Pick up what the account's other devices added since sign-in.
+      void syncAssistantHistoryNow();
+    }
   });
 
   root.querySelectorAll<HTMLButtonElement>("[data-assistant-mode]").forEach((button) => {
@@ -562,6 +584,7 @@ export function mountAssistant(root: HTMLElement, state: WealthState, navigate: 
 
   if (!escapeBound) {
     escapeBound = true;
+    onAssistantHistoryMerged(refreshAfterMerge);
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && isPanelOpen()) {
         setPanelOpen(false);
