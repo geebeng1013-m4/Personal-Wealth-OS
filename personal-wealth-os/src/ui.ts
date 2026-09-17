@@ -351,7 +351,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
       rayColor1: "#c79b57",
       rayColor2: "#57a78f",
       // Phones get brighter light (DG-6): the source is tucked under the brand bar.
-      intensity: window.matchMedia("(max-width: 720px)").matches ? 4 : 2.6,
+      intensity: window.matchMedia("(max-width: 900px)").matches ? 4 : 2.6,
       spread: 2,
       origin: "top-right",
       tilt: 0,
@@ -532,7 +532,7 @@ function bindSidebar(root: HTMLElement): void {
     sidebar.classList.add("open");
     overlay.classList.add("visible");
     toggle.setAttribute("aria-expanded", "true");
-    if (window.matchMedia("(max-width: 720px)").matches) {
+    if (window.matchMedia("(max-width: 900px)").matches) {
       document.body.classList.add("sidebar-menu-open");
     }
   };

@@ -186,7 +186,7 @@
       grid-template-columns: repeat(2, 1fr);
     }
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-grid--2,
     .wu-grid--3 {
       grid-template-columns: 1fr;
@@ -407,7 +407,7 @@
   .wu-page-back {
     display: none;
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-page-header__bar--back {
       justify-content: flex-start;
       align-items: center;
@@ -1523,7 +1523,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-4);
   }
-  @media (min-width: 721px) {
+  @media (min-width: 901px) {
     .wu-dash__tiles {
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
@@ -1751,7 +1751,7 @@
     line-height: 1.45;
     color: var(--text-muted);
   }
-  @media (min-width: 721px) {
+  @media (min-width: 901px) {
     .wu-dash {
       grid-template-columns: repeat(12, minmax(0, 1fr));
       align-items: stretch;
@@ -1777,6 +1777,41 @@
     }
     .wu-dash > .wu-dash__full {
       grid-column: 1 / -1;
+    }
+  }
+  /* A tablet in landscape or a small laptop: the sidebar leaves the page only
+     650–960px, too narrow for four figures in a row or two cards side by side.
+     The page's own width decides, not the window's. */
+  #pageMount {
+    container-type: inline-size;
+  }
+  /* a tablet held upright gets the phone layout, but has room for the figure
+     tiles two across */
+  @media (max-width: 900px) {
+    @container (min-width: 600px) {
+      .wu-dash {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .wu-dash > :not(.wu-dash__tile) {
+        grid-column: 1 / -1;
+      }
+    }
+  }
+  @media (min-width: 901px) {
+    @container (max-width: 959px) {
+      .wu-dash > .wu-dash__tile {
+        grid-column: span 6;
+      }
+      .wu-dash__tiles {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    @container (max-width: 759px) {
+      .wu-dash > .wu-dash__half,
+      .wu-dash > .wu-dash__wide,
+      .wu-dash > .wu-dash__narrow {
+        grid-column: 1 / -1;
+      }
     }
     /* the links stop being a card and become one quiet row under the grid */
     .wu-dash__more {
@@ -1929,7 +1964,7 @@
   .wu-portfolio-actions__main {
     flex: 1;
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-portfolio-page .wu-page-header__actions {
       display: none;
     }
@@ -1939,12 +1974,12 @@
   .wu-portfolio-summary {
     grid-column: 1 / -1;
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-portfolio-tile {
       display: none;
     }
   }
-  @media (min-width: 721px) {
+  @media (min-width: 901px) {
     .wu-portfolio-actions,
     .wu-portfolio-summary {
       display: none;
@@ -2056,7 +2091,7 @@
     background: var(--text);
     opacity: 0.6;
   }
-  @media (min-width: 721px) {
+  @media (min-width: 901px) {
     .wu-hold {
       grid-template-columns: 36px minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 0.9fr);
       grid-template-areas: "tick name weight value";
@@ -2215,7 +2250,7 @@
   .wu-set__danger-phone {
     display: none;
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-set.wu-card {
       padding: 0;
       border: 0;
@@ -2254,7 +2289,7 @@
       order: 4;
     }
   }
-  @media (min-width: 721px) {
+  @media (min-width: 901px) {
     .wu-set__item--phone {
       display: none;
     }
@@ -2372,7 +2407,7 @@
   .wu-leak-more > div {
     padding-top: var(--space-2);
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-leak-hint--desk {
       display: none;
     }
@@ -2415,14 +2450,14 @@
   .wu-leak-foot {
     margin-top: var(--space-4);
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-leak-tiles,
     .leak-detail-panel,
     .money-leaks-page .wu-page-header__actions {
       display: none;
     }
   }
-  @media (min-width: 721px) {
+  @media (min-width: 901px) {
     .wu-leak-summary,
     .wu-leak__inline,
     .wu-leak-hint--phone {
@@ -2624,7 +2659,7 @@
   .wu-advisor-arrow::after {
     content: "→";
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-advisor-arrow::after {
       content: "↓";
     }
@@ -2648,7 +2683,7 @@
     max-width: 72ch;
     color: var(--text-faint);
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-advisor-ladder {
       order: 1;
     }
@@ -2799,13 +2834,13 @@
     justify-self: end;
     margin-left: auto;
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-review-tiles,
     .wu-review-page .wu-page-header__actions {
       display: none;
     }
   }
-  @media (min-width: 721px) {
+  @media (min-width: 901px) {
     .wu-review-month,
     .wu-review-score {
       display: none;
@@ -2959,7 +2994,7 @@
   .wu-dash__col.wu-rules-notes > section:last-of-type {
     flex: 1;
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-rules-page .wu-page-header__actions {
       display: none;
     }
@@ -3155,7 +3190,7 @@
     box-shadow: 0 0 0 3px var(--focus);
     border-radius: var(--radius-sm);
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-budget-tiles,
     .wu-budget-rules,
     .wu-budget-page .wu-page-header__actions {
@@ -3165,7 +3200,7 @@
       grid-column: 1 / -1;
     }
   }
-  @media (min-width: 721px) {
+  @media (min-width: 901px) {
     .wu-budget-month,
     .wu-budget-aside,
     .wu-budget-phone-only,
@@ -3340,13 +3375,13 @@
   .wu-goal-danger {
     color: var(--negative);
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-goals-tiles,
     .wu-goals-page .wu-page-header__actions {
       display: none;
     }
   }
-  @media (min-width: 721px) {
+  @media (min-width: 901px) {
     .wu-goals-summary,
     .wu-goals-add-phone {
       display: none;
@@ -3496,7 +3531,7 @@
   .wu-tvm-page .wu-dash > * {
     min-width: 0;
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-tvm-page .wu-dash > .wu-tvm-result {
       order: -1;
     }
@@ -3521,7 +3556,7 @@
   .wu-growth-result .wu-split {
     margin-top: var(--space-2);
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-growth-tiles,
     .wu-growth-page .wu-page-header__actions {
       display: none;
@@ -3536,7 +3571,7 @@
       height: 220px;
     }
   }
-  @media (min-width: 721px) {
+  @media (min-width: 901px) {
     .wu-growth-result,
     .wu-growth-reset-phone {
       display: none;
@@ -3764,7 +3799,7 @@
   /* Placed after the base rules above so it wins the source-order tie: on a
      phone one horizontally-scrolling line reads cleaner than a ragged
      two-line wrap. */
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .market-tabs,
     .market-intervals,
     .etf-holdings-tabs {
@@ -3835,7 +3870,7 @@
   .wu-market-phone {
     display: none;
   }
-  @media (max-width: 720px) {
+  @media (max-width: 900px) {
     .wu-market-tiles {
       display: none;
     }
@@ -3885,7 +3920,7 @@
       display: grid;
     }
   }
-  @media (min-width: 721px) {
+  @media (min-width: 901px) {
     /* the chart card's label row carries the periods on a desktop */
     .wu-market-chart {
       position: relative;

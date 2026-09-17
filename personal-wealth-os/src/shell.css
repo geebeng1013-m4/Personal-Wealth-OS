@@ -473,7 +473,7 @@
    glow in the rays' colours, so there is always something to blur. The
    title bar floats alongside, aligned to the same inset. Desktop only — the
    phone drawer and tab bar are unchanged. */
-@media (min-width: 721px) {
+@media (min-width: 901px) {
   :root {
     --sidebar-inset: 12px;
     --sidebar-width: 256px;
@@ -543,7 +543,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   body.sidebar-menu-open {
     overflow: hidden;
   }

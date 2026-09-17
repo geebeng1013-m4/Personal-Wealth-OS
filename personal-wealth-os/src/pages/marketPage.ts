@@ -577,7 +577,7 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     // On a phone the page's own interval buttons and quote header already cover
     // what the widget's top toolbar and date-range strip do — drop them so the
     // short chart is chart, not chrome.
-    const isPhone = window.matchMedia("(max-width: 720px)").matches;
+    const isPhone = window.matchMedia("(max-width: 900px)").matches;
     const rangeMap: Record<string, string> = { "D": "1D", "W": "1W", "M": "1M", "5": "YTD", "12M": "12M", "60M": "60M" };
     const intervalMap: Record<string, string> = { "D": "D", "W": "W", "M": "M", "5": "D", "12M": "W", "60M": "M" };
 
