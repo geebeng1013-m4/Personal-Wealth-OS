@@ -750,13 +750,20 @@ Preview（另一个会话做的，项目代码没有改动）：
   - 电脑：4 个数字（Each month / Each year / Findings / High priority）→ 清单 | 详情两张一样高 → 页底估算说明。
   - **结果（demo 数据）**：手机 1,983px → 810px（第一项默认展开），电脑 1,201px → 887px，徽章 7 → 0。
   - **你看过后加的**：手机默认展开影响最大的那一项，展开内容精简（金额、一句说明、主要按钮、Mark as done；证据、Why it matters、Next move、Ask Advisor 收进 More detail）；两个版本每行都有「›」，标签写 tap / click to open；只有 1–2 项时清单底部一行「Only N finding(s) right now — nothing else detected.」。
-- **T-5b Advisor** `[ ]` ← **Current Task**，等「执行 T-5b」
+- **T-5b Advisor** `[x]`（2026-09-17，PR #61 已合并）
   - **已定（2026-09-17）**：1. 清单右边的数字用每条建议的第一个证据值，没有证据就只放「›」，不新算；2. 点一级台阶在下面展开 Mark deployed / Undo；3. 免责声明文字不改，移到页底，侧栏那行照旧。
   - 手机：Priority 一张（标题 + 一行原因 + Go to … + Mark as done）→ Guidance 清单（状态点 · 标题 · 一句说明 · 关键数字 ›，点开在下面看完整说明和按钮）→ Dip-buy ladder（三级台阶：跌幅 · 离触发的条 · 金额 · 状态）→ 页底免责声明。
   - 电脑：Priority | Dip-buy ladder 两张一样高 → Guidance 清单整行 → 页底免责声明。
   - 拿掉顶部检查卡、6 条彩色竖条、储备的 VOO / QQQM 两张小卡（改成 ladder 卡里一行，列出所有代码）。
   - 不改计算；Mark as done、Go to、Mark deployed / Undo、跌幅检查都保留。
-- **T-5c Review** `[ ]`、**T-5d Rules** `[ ]`：做完上一页再照 Preview 做。
+  - **结果（demo 数据）**：手机 2,524px → 1,090px，电脑 1,501px → 881px，卡片 17 → 3。
+  - **你看过后改的**：指向 Advisor 本页的建议（Opportunity reserve）不再显示「Go to advisor」，改成「See the ladder」，点了滚到 ladder 卡并亮一圈；箭头电脑 →、手机 ↓。
+- **T-5c Review** `[ ]` ← **Current Task**，等你回答问题再说「执行 T-5c」
+  - 手机：本月一张卡（收入 · 支出 · DCA 三栏，chip 显示 Reviewed / Not reviewed，「Complete review」按钮点开表单）→ 分数小柱状图（最近 9 个月，平均分 chip）→ 历史短行（月份 · 支出 · 备注开头 / 分数），最近 5 条 + See all，点一行看完整备注和删除。
+  - 电脑：标题右边「Complete review」→ 4 个数字（本月收入、本月支出、DCA、平均分 + 小柱状图）→ 历史表整行（月份、收入、支出、DCA、分数、备注）。
+  - 拿掉顶部检查卡；表单照旧预填（切换月份会重新带入数字），不改计算。
+  - **发现的问题**：分数算出来是 0–100，页面也写「/100」，但 demo 的历史分数是 9、10（0–10 的写法），所以 demo 显示成「9/100」。
+- **T-5d Rules** `[ ]`：做完 T-5c 再照 Preview 做。
 
 ### T-6 — Goals / Budget / TVM  `[ ]`
 - 小改：去掉标签和标题重复（「JAPAN TRIP」+「Japan Trip 2027」），统一数字写法；顺便把 Dashboard 的 featured goal 选择器移到 Goals。
