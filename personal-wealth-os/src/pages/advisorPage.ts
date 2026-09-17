@@ -50,7 +50,7 @@ function destinationButton(recommendation: AdvisorRecommendation, primary: boole
   // Advice that points at this page (the opportunity reserve) would send the
   // reader nowhere; here it takes them to the part of the page it means.
   if (recommendation.destination === "advisor") {
-    return `<button class="wu-btn ${primary ? "wu-btn--primary" : "wu-btn--secondary"} wu-btn--sm advisor-see-ladder" type="button">See the ladder ↓</button>`;
+    return `<button class="wu-btn ${primary ? "wu-btn--primary" : "wu-btn--secondary"} wu-btn--sm advisor-see-ladder" type="button">See the ladder <span class="wu-advisor-arrow" aria-hidden="true"></span></button>`;
   }
   // The recommendation already names where the work happens. Surfacing it
   // means the page tells the user what to do AND how to get there.

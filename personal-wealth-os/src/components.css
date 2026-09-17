@@ -2630,6 +2630,16 @@
   .wu-step__bar i.is-reached {
     background: var(--negative);
   }
+  /* "See the ladder" points where the ladder is: to the right on a desktop,
+     further down on a phone */
+  .wu-advisor-arrow::after {
+    content: "→";
+  }
+  @media (max-width: 720px) {
+    .wu-advisor-arrow::after {
+      content: "↓";
+    }
+  }
   /* "See the ladder" lands here: a brief accent ring says which card it meant */
   .wu-advisor-ladder.is-flash {
     animation: wu-advisor-flash 1.6s var(--ease-standard);
