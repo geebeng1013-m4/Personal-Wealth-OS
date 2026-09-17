@@ -50,9 +50,12 @@ export interface QuotePayload {
   error?: string;
 }
 
-/** Yahoo tickers: letters, digits and the few punctuation marks real symbols use. */
-function isValidSymbol(value: string): boolean {
-  return /^[A-Za-z0-9.^:-]{1,20}$/.test(value);
+/**
+ * Yahoo tickers: letters, digits and the few punctuation marks real symbols
+ * use. "=" is for exchange rates ("HKDMYR=X"), which the app now prices live.
+ */
+export function isValidSymbol(value: string): boolean {
+  return /^[A-Za-z0-9.^:=-]{1,20}$/.test(value);
 }
 
 /**

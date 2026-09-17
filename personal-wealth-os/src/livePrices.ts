@@ -114,7 +114,13 @@ export function refreshLivePrices(state: WealthState, onUpdated: () => void): vo
     livePrices = prices;
     pricedSymbols = key;
     pricesFetchedAt = Date.now();
-    liveUsdToMyr = typeof rate === "number" && Number.isFinite(rate) && rate > 0 ? rate : null;
+    // The live dollar rate when there is one, so dollar holdings convert at the
+    // same moment's rate as every other currency. Otherwise the dollar's own
+    // path: the daily API, then the user's records.
+    const liveUsd = rates.get("USD");
+    liveUsdToMyr = liveUsd !== undefined
+      ? liveUsd
+      : typeof rate === "number" && Number.isFinite(rate) && rate > 0 ? rate : null;
     liveRatesToMyr = rates;
     onUpdated();
   }).catch(() => { priceFetchInFlight = false; });

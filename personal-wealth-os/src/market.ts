@@ -342,39 +342,60 @@ function ratesFromRecords(exchanges: Partial<CurrencyExchange>[]): Map<string, n
   return new Map([...newest].map(([currency, { rate }]) => [currency, rate]));
 }
 
+/** Yahoo's symbol for the live rate of one unit of `currency` in ringgit. */
+export function fxSymbol(currency: string): string {
+  return `${currency}MYR=X`;
+}
+
 /**
- * Current MYR per unit for each currency asked for.
+ * Current MYR per unit for each currency asked for, MYR itself as 1.
  *
- * The API first, then the user's newest conversion into that currency. Unlike
- * the dollar there is no constant to fall back to: a currency with neither
- * stays absent, and every consumer reads that as "ringgit value unknown".
+ * Live first: Yahoo quotes exchange rates the same way it quotes shares, a few
+ * minutes behind the market, so the rate refreshes as often as the prices it
+ * converts. A share price from a minute ago converted at this morning's rate
+ * left the ringgit value out of step with the broker's own screen.
  *
- * The dollar is not answered here. It keeps its own path (fetchUsdToMyr), with
- * trade-stamped rates as further evidence, so adding markets cannot move a
- * single existing dollar figure. MYR is always 1.
+ * Then, for anything Yahoo did not answer, the daily FX API, then the user's
+ * newest conversion into that currency. A currency with none of these stays
+ * absent, and every consumer reads that as "ringgit value unknown" — there is
+ * no constant to fall back to.
+ *
+ * The dollar is priced live here too, but only live: when Yahoo has no answer
+ * it is left out, and the caller keeps the dollar's own path (fetchUsdToMyr),
+ * which has trade-stamped rates as further evidence.
  */
 export async function fetchRatesToMyr(
   currencies: string[],
   exchanges: Partial<CurrencyExchange>[] = [],
 ): Promise<RatesToMyr> {
-  const wanted = [...new Set(currencies)].filter((currency) => /^[A-Z]{3}$/.test(currency) && currency !== "USD");
+  const wanted = [...new Set(currencies)].filter((currency) => /^[A-Z]{3}$/.test(currency));
   const rates = new Map<string, number>();
   if (wanted.includes("MYR")) rates.set("MYR", 1);
   const foreign = wanted.filter((currency) => currency !== "MYR");
   if (foreign.length === 0) return rates;
+
+  const live = await fetchLivePrices(foreign.map(fxSymbol)).catch((): PriceMap => new Map());
+  for (const currency of foreign) {
+    const quote = live.get(fxSymbol(currency));
+    // Only a rate quoted in ringgit is a ringgit rate.
+    if (quote && quote.currency === "MYR") rates.set(currency, quote.priceUsd);
+  }
+
+  const missing = foreign.filter((currency) => currency !== "USD" && !rates.has(currency));
+  if (missing.length === 0) return rates;
 
   if (cachedRatesToMyr === null || Date.now() - cachedRatesTimestamp >= FX_CACHE_TTL) {
     try {
       const res = await fetch("https://open.er-api.com/v6/latest/MYR", { signal: AbortSignal.timeout(5000) });
       if (res.ok) {
         const json = await res.json() as { rates?: Record<string, unknown> };
-        const live = new Map<string, number>();
+        const daily = new Map<string, number>();
         for (const [currency, perMyr] of Object.entries(json.rates ?? {})) {
           // The API states foreign units per ringgit; invert to ringgit per unit.
-          if (typeof perMyr === "number" && Number.isFinite(perMyr) && perMyr > 0) live.set(currency, 1 / perMyr);
+          if (typeof perMyr === "number" && Number.isFinite(perMyr) && perMyr > 0) daily.set(currency, 1 / perMyr);
         }
-        if (live.size > 0) {
-          cachedRatesToMyr = live;
+        if (daily.size > 0) {
+          cachedRatesToMyr = daily;
           cachedRatesTimestamp = Date.now();
         }
       }
@@ -382,7 +403,7 @@ export async function fetchRatesToMyr(
   }
 
   const recorded = ratesFromRecords(exchanges);
-  for (const currency of foreign) {
+  for (const currency of missing) {
     const rate = cachedRatesToMyr?.get(currency) ?? recorded.get(currency);
     if (rate !== undefined) rates.set(currency, rate);
   }
