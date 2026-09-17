@@ -10,6 +10,10 @@ import {
   clearHistory,
   findRecordDraft,
   isFromThisVisit,
+  assistantOwner,
+  beginSending,
+  isSending,
+  setAssistantOwner,
   recordEntries,
   setAssistantMode,
   assistantMode,
@@ -191,7 +195,7 @@ test("assistant store: right after a reload nothing old is sendable", () => {
 
 test("assistant store: messages stored before visits existed count as earlier", () => {
   __resetAssistantStore();
-  localStorage.setItem("wealthup-assistant-ask", JSON.stringify([
+  localStorage.setItem("wealthup-assistant-ask:test-user", JSON.stringify([
     { id: "old-1", role: "user", content: "legacy question", at: 1 },
   ]));
   __reloadAssistantStore();
@@ -241,4 +245,91 @@ test("assistant store: the chosen mode is remembered", () => {
   setAssistantMode("fill");
   __reloadAssistantStore();
   assert.equal(assistantMode(), "fill");
+});
+
+// --- history belongs to the signed-in account (AH-1) ------------------------
+
+function clearAssistantKeys(): void {
+  for (const key of ["wealthup-assistant-ask", "wealthup-assistant-records"]) {
+    localStorage.removeItem(key);
+    for (const uid of ["alice", "bob", "demo-user", "test-user"]) localStorage.removeItem(`${key}:${uid}`);
+  }
+}
+
+test("assistant store: the next account on the same browser does not see the last one's history", () => {
+  clearAssistantKeys();
+  __resetAssistantStore("alice");
+  appendAskMessage({ role: "user", content: "alice asks about her savings" });
+  beginRecord("alice spent 12 on lunch");
+
+  setAssistantOwner(null);
+  assert.equal(askMessages().length, 0, "signed out: nothing on screen");
+  assert.equal(recordEntries().length, 0);
+
+  setAssistantOwner("bob");
+  assert.equal(askMessages().length, 0, "bob starts empty");
+  assert.equal(recordEntries().length, 0);
+  appendAskMessage({ role: "user", content: "bob's own question" });
+
+  setAssistantOwner("alice");
+  assert.deepEqual(askMessages().map((m) => m.content), ["alice asks about her savings"], "alice gets hers back, not bob's");
+  assert.deepEqual(recordEntries().map((r) => r.said), ["alice spent 12 on lunch"]);
+});
+
+test("assistant store: nothing is kept while nobody is signed in", () => {
+  clearAssistantKeys();
+  __resetAssistantStore("alice");
+  setAssistantOwner(null);
+  appendAskMessage({ role: "user", content: "typed while signed out" });
+  setAssistantOwner("alice");
+  assert.equal(askMessages().length, 0);
+});
+
+test("assistant store: history from before accounts is handed to the first account, once", () => {
+  clearAssistantKeys();
+  __resetAssistantStore("alice");
+  setAssistantOwner(null);
+  localStorage.setItem("wealthup-assistant-ask", JSON.stringify([{ id: "m1", role: "user", content: "old question", at: 1 }]));
+  localStorage.setItem("wealthup-assistant-records", JSON.stringify([{ id: "r1", at: 1, said: "old record", status: "filled" }]));
+
+  setAssistantOwner("bob");
+  assert.deepEqual(askMessages().map((m) => m.content), ["old question"], "the person using this browser keeps it");
+  assert.deepEqual(recordEntries().map((r) => r.said), ["old record"]);
+  assert.equal(localStorage.getItem("wealthup-assistant-ask"), null, "the unowned copy is gone");
+  assert.equal(localStorage.getItem("wealthup-assistant-records"), null);
+
+  setAssistantOwner("alice");
+  assert.equal(askMessages().length, 0, "a later account cannot pick it up");
+});
+
+test("assistant store: an account's own history wins over an unowned copy", () => {
+  clearAssistantKeys();
+  localStorage.setItem("wealthup-assistant-ask:alice", JSON.stringify([{ id: "a1", role: "user", content: "alice's", at: 2 }]));
+  localStorage.setItem("wealthup-assistant-ask", JSON.stringify([{ id: "m1", role: "user", content: "unowned", at: 1 }]));
+  __resetAssistantStore("test-user");
+  setAssistantOwner("alice");
+  assert.deepEqual(askMessages().map((m) => m.content), ["alice's"]);
+  assert.equal(localStorage.getItem("wealthup-assistant-ask"), null);
+});
+
+test("assistant store: the demo account never adopts a real person's history", () => {
+  clearAssistantKeys();
+  __resetAssistantStore("test-user");
+  setAssistantOwner(null);
+  localStorage.setItem("wealthup-assistant-ask", JSON.stringify([{ id: "m1", role: "user", content: "real question", at: 1 }]));
+  setAssistantOwner("demo-user", { adoptUnowned: false });
+  assert.equal(askMessages().length, 0);
+  assert.notEqual(localStorage.getItem("wealthup-assistant-ask"), null, "left for the real account");
+  assert.equal(assistantOwner(), "demo-user");
+});
+
+test("assistant store: switching account drops sharing, the open panel and a request in flight", () => {
+  clearAssistantKeys();
+  __resetAssistantStore("alice");
+  setShareFigures(true);
+  const controller = beginSending();
+  setAssistantOwner("bob");
+  assert.equal(shareFigures(), false);
+  assert.equal(isSending(), false);
+  assert.equal(controller.signal.aborted, true, "alice's answer never lands in bob's history");
 });

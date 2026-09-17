@@ -18,6 +18,12 @@
  * Everything is mirrored to localStorage. Every access is guarded: private
  * windows and blocked site data make the accessor itself throw, and an
  * assistant that cannot open is a worse outcome than one that forgets.
+ *
+ * The two histories belong to the signed-in account, not to the browser: they
+ * are stored under that account's uid and swapped out when the account
+ * changes (see setAssistantOwner). Kept under one browser-wide key, the next
+ * person to sign in on the same browser read the last one's questions and
+ * records. Preferences stay per browser — they say nothing about anyone.
  */
 
 import { createId } from "../../state";
@@ -32,6 +38,12 @@ import type {
 const ASK_KEY = "wealthup-assistant-ask";
 const RECORDS_KEY = "wealthup-assistant-records";
 const PREFS_KEY = "wealthup-assistant-prefs";
+/**
+ * Where an account's history is kept. The bare keys, with no uid, are what
+ * builds before AH-1 wrote for whoever was signed in.
+ */
+function askKey(uid: string): string { return `${ASK_KEY}:${uid}`; }
+function recordsKey(uid: string): string { return `${RECORDS_KEY}:${uid}`; }
 /** Pre-split storage, where both modes shared one transcript. */
 const LEGACY_MESSAGES_KEY = "wealthup-assistant-messages";
 
@@ -81,7 +93,8 @@ function readPrefs(): AssistantPrefs {
 }
 
 function readAsk(): AssistantMessage[] {
-  const parsed = read<unknown>(ASK_KEY, []);
+  if (!owner) return [];
+  const parsed = read<unknown>(askKey(owner), []);
   if (!Array.isArray(parsed)) return [];
   return parsed
     .filter((entry): entry is AssistantMessage =>
@@ -104,7 +117,8 @@ const STATUSES: readonly RecordStatus[] = [
 ];
 
 function readRecords(): RecordEntry[] {
-  const parsed = read<unknown>(RECORDS_KEY, []);
+  if (!owner) return [];
+  const parsed = read<unknown>(recordsKey(owner), []);
   if (!Array.isArray(parsed)) return [];
   return parsed
     .filter((entry): entry is RecordEntry =>
@@ -129,14 +143,16 @@ function readRecords(): RecordEntry[] {
 }
 
 function writeAsk(): void {
-  write(ASK_KEY, askLog.slice(-MAX_ASK_MESSAGES).map(({ id, role, content, at, visit, failed }) => ({
+  if (!owner) return;
+  write(askKey(owner), askLog.slice(-MAX_ASK_MESSAGES).map(({ id, role, content, at, visit, failed }) => ({
     id, role, content, at, ...(visit ? { visit } : {}), ...(failed ? { failed } : {}),
   })));
 }
 
 function writeRecords(): void {
+  if (!owner) return;
   // `draft` is stripped: see RecordStatus in assistantTypes.
-  write(RECORDS_KEY, recordLog.slice(-MAX_RECORD_ENTRIES).map(({ draft: _draft, ...rest }) => rest));
+  write(recordsKey(owner), recordLog.slice(-MAX_RECORD_ENTRIES).map(({ draft: _draft, ...rest }) => rest));
 }
 
 /** One-time move off the pre-split single transcript. */
@@ -146,9 +162,28 @@ function dropLegacyStorage(): void {
   } catch { /* nothing to clean up */ }
 }
 
+/**
+ * History kept under the bare keys, from before it was stored per account, is
+ * handed to the first account that signs in on this browser — the person using
+ * it — and the bare keys are removed, so no later account can pick it up.
+ * An account that already has its own history keeps it untouched.
+ */
+function adoptUnownedHistory(uid: string): void {
+  try {
+    for (const [bare, own] of [[ASK_KEY, askKey(uid)], [RECORDS_KEY, recordsKey(uid)]]) {
+      const unowned = localStorage.getItem(bare);
+      if (unowned === null) continue;
+      if (localStorage.getItem(own) === null) localStorage.setItem(own, unowned);
+      localStorage.removeItem(bare);
+    }
+  } catch { /* storage blocked: nothing to hand over */ }
+}
+
+/** The signed-in account whose history is loaded. Nobody until auth says so. */
+let owner: string | null = null;
 let prefs: AssistantPrefs = readPrefs();
-let askLog: AssistantMessage[] = readAsk();
-let recordLog: RecordEntry[] = readRecords();
+let askLog: AssistantMessage[] = [];
+let recordLog: RecordEntry[] = [];
 dropLegacyStorage();
 
 /**
@@ -221,6 +256,31 @@ export function isCurrent(controller: AbortController): boolean {
   return inFlight === controller;
 }
 
+/**
+ * Load the history of the account now signed in, or clear it on sign-out.
+ *
+ * Everything that belonged to the previous account goes: its transcript and log
+ * from memory, a request still in flight, the open panel and figure sharing.
+ * `adoptUnowned` is false for the demo account, which must never pick up the
+ * history of a real person who used this browser.
+ */
+export function setAssistantOwner(uid: string | null, options: { adoptUnowned?: boolean } = {}): void {
+  if (uid === owner) return;
+  inFlight?.abort();
+  inFlight = null;
+  sending = false;
+  panelOpen = false;
+  sharingFigures = false;
+  visitId = createId("visit");
+  owner = uid;
+  if (uid && options.adoptUnowned !== false) adoptUnownedHistory(uid);
+  askLog = readAsk();
+  recordLog = readRecords();
+}
+
+/** The account whose history is loaded, or null when nobody is signed in. */
+export function assistantOwner(): string | null { return owner; }
+
 // --- Ask: a conversation ---------------------------------------------------
 
 /** Every stored Ask message, for display. */
@@ -292,8 +352,9 @@ export function clearHistory(mode: AssistantMode): void {
   }
 }
 
-/** Test seam: back to a first-run assistant. */
-export function __resetAssistantStore(): void {
+/** Test seam: back to a first-run assistant, signed in as `uid`. */
+export function __resetAssistantStore(uid = "test-user"): void {
+  owner = uid;
   visitId = createId("visit");
   prefs = { ...defaultPrefs };
   sharingFigures = false;
