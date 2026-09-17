@@ -55,7 +55,7 @@ Bucket 从「写死的月额」改成「按真实收入分配的瀑布」，free
 - **T-5b 完成（2026-09-17）**：Advisor 电脑 Priority | Dip-buy ladder + Guidance 整行；手机 Priority → Guidance → Ladder；建议和台阶点一行在下面展开；指向本页的建议改成「See the ladder」。手机 2,524px → 1,090px。PR #61 已合并。
 - **T-5c 完成（2026-09-17）**：Monthly Review 电脑 4 个数字 + 历史表；手机本月卡 + 分数柱状图 + 历史短行；表单点开才出现；分数显示 x/10；同一个月保存会取代不重复。手机 2,447px → 756px。PR #62 已合并。
 - **T-5d 完成（2026-09-17）**：Rules 一张规则清单（点开看全文、Edit、Hide，隐藏的可以恢复）+ 笔记卡；规则说明照真实数据（真实台阶金额、所有代码）；手机 1,903px → 895px。PR #63 已合并。**T-5 全部完成。**
-- **当前**：T-6 Goals / Budget / TVM，计划已写进 PLAN.md，等你回答问题。
+- **当前**：T-6 拆成 T-6a Budget → T-6b Goals → T-6c TVM，3 个问题已定，等你说「执行 T-6a」。
 
 ## 侧栏滚动条（S-1，已合并）
 
