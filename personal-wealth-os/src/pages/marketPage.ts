@@ -30,6 +30,7 @@ import {
 } from "../market";
 import { getHolding, getPortfolioSnapshot } from "../portfolioSummary";
 import { livePriceInputs, refreshLivePrices, priceRefreshCleanup, PRICE_POLL_INTERVAL_MS } from "../livePrices";
+import { getPrice } from "../marketPrices";
 import type { Ticker } from "../models";
 import type { Setter } from "./pageTypes";
 
@@ -487,12 +488,19 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     setAll("weightNote", target > 0 ? status + " · " + (drift >= 0 ? "+" : "−") + percent(Math.abs(drift), 1) : "No target set");
   }
 
-  /** How far below its all-time high the symbol trades, and where the next dip-buy step sits. */
-  function updateDrop(symbol: string): void {
-    setAll("drop", UNKNOWN);
-    setAll("dropNote", "Checking price history…");
-    setAll("dropChip", "");
-    void assetDrawdownBelow(symbol).then((below) => {
+  /**
+   * How far below its all-time high the symbol trades, and where the next
+   * dip-buy step sits. `quiet` repaints in place on a price refresh instead of
+   * blanking the figure while it recalculates.
+   */
+  function updateDrop(symbol: string, quiet = false): void {
+    if (!quiet) {
+      setAll("drop", UNKNOWN);
+      setAll("dropNote", "Checking price history…");
+      setAll("dropChip", "");
+    }
+    const live = getPrice(livePriceInputs().prices, symbol)?.priceUsd ?? null;
+    void assetDrawdownBelow(symbol, live).then((below) => {
       if (symbol !== currentSymbol) return;
       if (below === null) {
         setAll("dropNote", "Price history unavailable");
@@ -1208,7 +1216,13 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
   // Quotes arrive asynchronously, and go stale after PRICE_STALE_AFTER_MS if
   // this page stays open. Until a price lands the panel shows "--"; each
   // (re)fetch repaints it with the current quote behind it.
-  refreshLivePrices(state, () => updatePnL(currentSymbol));
-  const marketPriceTimer = setInterval(() => refreshLivePrices(state, () => updatePnL(currentSymbol)), PRICE_POLL_INTERVAL_MS);
+  // The drop from the high is measured against the same live quote, so it is
+  // repainted with it.
+  const onPrices = (): void => {
+    updatePnL(currentSymbol);
+    updateDrop(currentSymbol, true);
+  };
+  refreshLivePrices(state, onPrices);
+  const marketPriceTimer = setInterval(() => refreshLivePrices(state, onPrices), PRICE_POLL_INTERVAL_MS);
   priceRefreshCleanup.set(root, () => clearInterval(marketPriceTimer));
 }

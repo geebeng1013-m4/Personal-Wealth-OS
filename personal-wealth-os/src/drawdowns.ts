@@ -229,19 +229,44 @@ export function buildAssetHistory(
 // --- One-call helper for pages that only need the current drawdown ---------
 
 /**
+ * Percentage points a price sits below the highest close (2.1 = 2.1% below).
+ * A price above that close is a new high, so 0. null without two real prices.
+ */
+export function drawdownBelow(highestClose: number, price: number): number | null {
+  if (!(highestClose > 0) || !(price > 0)) return null;
+  return Math.max(0, (1 - price / Math.max(highestClose, price)) * 100);
+}
+
+/**
+ * How far a live quote may stray from the last close and still be read as the
+ * same instrument in the same unit. London quotes some listings in pence while
+ * the live quote is restated in pounds; a 100x gap is a unit, not a crash.
+ */
+const LIVE_PRICE_SANITY = { min: 0.5, max: 2 };
+
+/**
  * How far an asset is below its all-time high right now, as a positive number
  * of percentage points (2.1 = 2.1% below the peak). null on a failed fetch or
- * too little history. Same series the Context panel reads; used by the
- * Advisor dip-buy ladder and the Dashboard's dip-buy watch.
+ * too little history. Used by Market, the Advisor dip-buy ladder and the
+ * Dashboard's dip-buy watch.
+ *
+ * The high is the highest daily close in ten years of history, which moves
+ * rarely and is cached for an hour. "Now" is the live quote when the caller
+ * has one — the same price the rest of the page shows, refreshed every half
+ * minute — and the history's last close otherwise. Measuring now against the
+ * cached series alone left the figure up to an hour behind the market, and
+ * frozen for as long as the page stayed open.
  */
-export async function assetDrawdownBelow(symbol: string): Promise<number | null> {
+export async function assetDrawdownBelow(symbol: string, livePrice?: number | null): Promise<number | null> {
   try {
     const prices = await fetchHistoricalPrices(symbol, "10y");
-    const history = buildAssetHistory(
-      prices.map((point) => ({ time: Date.parse(point.date), close: point.close })),
-      { threshold: 0.1 },
-    );
-    return history ? -history.currentDrawdown * 100 : null;
+    const closes = prices.map((point) => point.close).filter((close) => Number.isFinite(close) && close > 0);
+    if (closes.length < 2) return null;
+    const high = Math.max(...closes);
+    const lastClose = closes[closes.length - 1];
+    const ratio = typeof livePrice === "number" && livePrice > 0 ? livePrice / lastClose : 0;
+    const usable = ratio >= LIVE_PRICE_SANITY.min && ratio <= LIVE_PRICE_SANITY.max;
+    return drawdownBelow(high, usable ? livePrice as number : lastClose);
   } catch {
     return null;
   }

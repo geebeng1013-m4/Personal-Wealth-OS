@@ -28,6 +28,8 @@ import { escapeHtml } from "../html";
 import { getAdvisorSnapshot } from "../advisor";
 import { isRecommendationCompleted, markRecommendationDone } from "../actionRecords";
 import { assetDrawdownBelow } from "../drawdowns";
+import { getPrice } from "../marketPrices";
+import { livePriceInputs, refreshLivePrices } from "../livePrices";
 import { pageHeader } from "../components/pageHeader";
 import { DISCLAIMER_TEXT } from "../components/disclaimer";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
@@ -257,38 +259,46 @@ export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Set
   // or QQQM is down by its step — the reserve buys both, so a genuine drop in
   // the growth half counts. It is a prompt beside each row, never an automatic
   // trigger; a failed fetch just leaves the rows at "—".
+  //
+  // Measured against the live quote when one is loaded; painted now from what
+  // is known, and again once this page's price request lands.
   const drawdownBox = root.querySelector<HTMLElement>("#dipDrawdown");
-  void Promise.all([assetDrawdownBelow("VOO"), assetDrawdownBelow("QQQM")]).then(([voo, qqqm]) => {
-    if (voo === null && qqqm === null) {
-      if (drawdownBox) drawdownBox.textContent = "Price history unavailable — mark steps by hand.";
-      return;
-    }
-    const worst = Math.max(voo ?? 0, qqqm ?? 0);
-    const part = (label: string, value: number | null): string =>
-      value === null ? `${label} —` : `${label} <strong>−${value.toFixed(1)}%</strong>`;
-    if (drawdownBox) {
-      drawdownBox.innerHTML = worst < 0.1
-        ? "VOO and QQQM are <strong>at or near their all-time highs</strong> — no step is in range."
-        : `${part("VOO", voo)} · ${part("QQQM", qqqm)} below their highs.`;
-    }
-    root.querySelectorAll<HTMLElement>(".dip-status").forEach((cell) => {
-      const tranche = state.opportunity.tranches[Number(cell.dataset.tranche)];
-      if (!tranche || tranche.deployed) return;
-      if (worst >= tranche.drawdown) {
-        cell.textContent = "Reached — deploy now";
-        cell.classList.add("t-negative");
-      } else {
-        cell.textContent = `${(tranche.drawdown - worst).toFixed(1)}% away`;
+  const paintLadder = (): void => {
+    const live = (symbol: string): number | null => getPrice(livePriceInputs().prices, symbol)?.priceUsd ?? null;
+    void Promise.all([assetDrawdownBelow("VOO", live("VOO")), assetDrawdownBelow("QQQM", live("QQQM"))]).then(([voo, qqqm]) => {
+      if (voo === null && qqqm === null) {
+        if (drawdownBox) drawdownBox.textContent = "Price history unavailable — mark steps by hand.";
+        return;
       }
+      const worst = Math.max(voo ?? 0, qqqm ?? 0);
+      const part = (label: string, value: number | null): string =>
+        value === null ? `${label} —` : `${label} <strong>−${value.toFixed(1)}%</strong>`;
+      if (drawdownBox) {
+        drawdownBox.innerHTML = worst < 0.1
+          ? "VOO and QQQM are <strong>at or near their all-time highs</strong> — no step is in range."
+          : `${part("VOO", voo)} · ${part("QQQM", qqqm)} below their highs.`;
+      }
+      root.querySelectorAll<HTMLElement>(".dip-status").forEach((cell) => {
+        const tranche = state.opportunity.tranches[Number(cell.dataset.tranche)];
+        if (!tranche || tranche.deployed) return;
+        if (worst >= tranche.drawdown) {
+          cell.textContent = "Reached — deploy now";
+          cell.classList.add("t-negative");
+        } else {
+          cell.textContent = `${(tranche.drawdown - worst).toFixed(1)}% away`;
+        }
+      });
+      // How far the market has come toward each step, as a bar.
+      root.querySelectorAll<HTMLElement>(".dip-bar").forEach((bar) => {
+        const tranche = state.opportunity.tranches[Number(bar.dataset.tranche)];
+        if (!tranche || tranche.deployed || tranche.drawdown <= 0) return;
+        bar.style.width = `${Math.min(100, (worst / tranche.drawdown) * 100)}%`;
+        if (worst >= tranche.drawdown) bar.classList.add("is-reached");
+      });
+    }).catch(() => {
+      if (drawdownBox) drawdownBox.textContent = "Could not load price history — mark steps by hand.";
     });
-    // How far the market has come toward each step, as a bar.
-    root.querySelectorAll<HTMLElement>(".dip-bar").forEach((bar) => {
-      const tranche = state.opportunity.tranches[Number(bar.dataset.tranche)];
-      if (!tranche || tranche.deployed || tranche.drawdown <= 0) return;
-      bar.style.width = `${Math.min(100, (worst / tranche.drawdown) * 100)}%`;
-      if (worst >= tranche.drawdown) bar.classList.add("is-reached");
-    });
-  }).catch(() => {
-    if (drawdownBox) drawdownBox.textContent = "Could not load price history — mark steps by hand.";
-  });
+  };
+  paintLadder();
+  refreshLivePrices(state, paintLadder);
 }
