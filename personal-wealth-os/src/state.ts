@@ -3,6 +3,7 @@ import { getDefaultFinancialRules, normalizeFinancialRules, repairPlaceholderRul
 import { normalizeActionRecords } from "./actionRecords";
 import { normalizeCurrencyExchanges } from "./currencyExchange";
 import { normalizeTradeMarket } from "./tradeCurrency";
+import { normalizeDividends } from "./dividends";
 import {
   saveToFirestore,
   loadFromFirestore,
@@ -10,7 +11,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 23;
+export const CURRENT_VERSION = 24;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -254,6 +255,7 @@ export const defaultState: WealthState = {
   financialRules: [],
   actionRecords: [],
   currencyExchanges: [],
+  dividends: [],
   financialGoal: "",
 };
 
@@ -365,6 +367,7 @@ export function emptyState(): WealthState {
     financialRules: [],
     actionRecords: [],
     currencyExchanges: [],
+    dividends: [],
     financialGoal: "",
   };
   // A brand-new user has no planning values yet, so these seed rules are
@@ -644,6 +647,10 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   // state without them keeps whatever ringgit figures its trades already
   // carry. Purely additive: absent means an empty list, never a guessed rate.
   merged.currencyExchanges = normalizeCurrencyExchanges(candidate.currencyExchanges);
+
+  // v24: dividends. Purely additive — older data has none and starts empty; a
+  // stored list is normalized, never replaced.
+  merged.dividends = normalizeDividends(candidate.dividends);
 
   // v21: the user's financial goal sentence. Purely additive — older data has
   // none and starts empty; a stored value is tidied, never discarded.

@@ -114,6 +114,7 @@ export const demoState: WealthState = {
     { id: "demo-fx004", date: "2026-01-12", direction: "myr-to-usd", myrAmount: 800, usdAmount: 179.69, notes: "Ringgit weak — smaller lot" },
     { id: "demo-fx005", date: "2026-04-06", direction: "myr-to-usd", myrAmount: 600, usdAmount: 136.64 },
   ],
+  dividends: [],
   trades: [
     // Early exploratory buys
     { id: "demo-t001", date: "2025-07-15", platform: "moomoo", ticker: "VOO", type: "Manual Buy", amountMyr: 500, amountUsd: 113.12, priceUsd: 535.20, feeMyr: 1.99 },

@@ -180,6 +180,39 @@ export interface CurrencyExchange {
   toAmount?: number;
 }
 
+/** "dismissed": a suggested payout the user said was not theirs; it carries no money. */
+export type DividendStatus = "confirmed" | "dismissed";
+
+/**
+ * One dividend payout on one holding, as the broker statement shows it.
+ * Net is derived (gross − withholdingTax), never stored. See dividends.ts.
+ */
+export interface Dividend {
+  id: string;
+  ticker: Ticker;
+  /** Ex-dividend date: shares held before it earn the payout. */
+  exDate: string;
+  /** When the cash arrived; the rate to ringgit is taken on this day. */
+  payDate: string;
+  /** ISO 4217 code the payout was made in. */
+  currency: string;
+  /** Units held before the ex-date, when known. */
+  units?: number;
+  /** Gross dividend per unit, when known. */
+  perShare?: number;
+  /** Gross payout in `currency`, before tax. */
+  gross: number;
+  /** Tax taken at source, in `currency`. 0 where none is withheld. */
+  withholdingTax: number;
+  /**
+   * MYR per unit of `currency` on the pay date, when known — captured when the
+   * payout is confirmed. Without it the nearest recorded conversion is used.
+   */
+  rateToMyr?: number;
+  status: DividendStatus;
+  notes?: string;
+}
+
 export interface Liability {
   id: string;
   name: string;
@@ -389,6 +422,8 @@ export interface WealthState {
   trades: Trade[];
   /** MYR→USD conversions that funded the trades. The only source of real FX. */
   currencyExchanges: CurrencyExchange[];
+  /** Dividends received, and suggested payouts the user dismissed. (v24) */
+  dividends: Dividend[];
   reviews: Review[];
   customTickers: string[];
   ledgerCategories: LedgerCategory[];

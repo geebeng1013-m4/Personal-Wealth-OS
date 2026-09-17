@@ -13,7 +13,7 @@
  * confirm: a misparse here rewrites the ringgit cost basis behind every holding.
  */
 
-import type { Market, TradeType, WealthState } from "../models";
+import type { Dividend, Market, TradeType, WealthState } from "../models";
 import { createId } from "../state";
 import { money, percent, tradeUnits } from "../rules";
 import { escapeHtml } from "../html";
@@ -41,7 +41,13 @@ import { currenciesFor, tradeFromEntry } from "../tradeEntry";
 import { exchangesFromText, mergeExchanges } from "../exchangeImport";
 import { rebalanceContributions, tradeExchangeRate } from "../financialHealth";
 import { recordsFromCsv } from "../csvImport";
-import { fetchRatesToMyr, getUsdToMyr } from "../market";
+import { fetchRatesToMyr, getUsdToMyr, loadDividendSuggestions } from "../market";
+import {
+  dismissedFromSuggestion,
+  dividendFromSuggestion,
+  type DividendSuggestion,
+} from "../dividendSuggestions";
+import { dividendRateToMyr, netDividend } from "../dividends";
 import type { TradeDraft } from "../components/assistant/assistantTypes";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
@@ -214,7 +220,7 @@ function conversionCoverageNote(state: WealthState): string {
   if (records.length === 0) {
     return "No conversions recorded. Ringgit costs currently use the rate that was live when each trade was imported, which is not a rate you paid — the dollar figures are unaffected.";
   }
-  const coverage = resolveExchangeCoverage(state.trades, records);
+  const coverage = resolveExchangeCoverage(state.trades, records, state.dividends ?? []);
   const average = coverage.averageRecordedRate;
   const rate = average === null ? "" : ` Average ${rateText(average)}.`;
   const leftover = coverage.unspentUsd > 0.01
@@ -291,6 +297,16 @@ function currencyConversionsPanel(state: WealthState): string {
  * state here, so a re-render (a save, a delete, a price tick) does not snap it
  * shut under the user.
  */
+/**
+ * Suggested payouts, once the feeds have answered. Held here, not in
+ * WealthState: a suggestion is a question, not a fact the user owns. Cleared
+ * when a record is written so the list is rebuilt without the one just acted on.
+ */
+let dividendSuggestions: DividendSuggestion[] = [];
+let dividendsRequested = false;
+/** The suggestion whose figures are open for editing, if any. */
+let editingSuggestionId: string | null = null;
+
 let tradeFormOpen = false;
 let historyOpen = false;
 let conversionsOpen = false;
@@ -560,6 +576,88 @@ function exposureBody(portfolio: PortfolioSnapshot): string {
         </div>`;
 }
 
+/** An amount in its own currency, as a statement writes it. */
+function payout(currency: string, value: number): string {
+  return `${currency} ${value.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** The dividends card: what was received, and what the feeds say is still unrecorded. */
+function dividendsBody(state: WealthState, portfolio: PortfolioSnapshot): string {
+  const received = [...(state.dividends ?? [])]
+    .filter((dividend) => dividend.status === "confirmed")
+    .sort((a, b) => b.exDate.localeCompare(a.exDate));
+  const suggestions = dividendSuggestions;
+
+  const head = `<div class="wu-tc__top"><span class="wu-label" id="pfDividendsLabel">Dividends</span>${
+    suggestions.length > 0
+      ? `<span class="wu-chip wu-chip--warning">${suggestions.length} to confirm</span>`
+      : received.length > 0 ? `<span class="wu-chip">${received.length} recorded</span>` : ""
+  }</div>`;
+
+  if (received.length === 0 && suggestions.length === 0) {
+    return `${head}<p class="wu-empty">${dividendsRequested
+      ? "No payouts found for your holdings yet. They appear here as each ex-dividend date passes."
+      : "Checking your holdings' payout history…"}</p>`;
+  }
+
+  const stats = received.length === 0 ? "" : `
+        <div class="wu-dividend-stats">
+          <div class="wu-stack wu-stack--sm"><span class="wu-label">Received (12 months)</span>${moneyFigure(portfolio.dividendsNetMyrLast12Months)}<p class="wu-dash__note">${received.length} ${received.length === 1 ? "payout" : "payouts"} recorded${portfolio.dividendsWithoutRate > 0 ? ` · ${portfolio.dividendsWithoutRate} without a rate to ringgit` : ""}</p></div>
+          <div class="wu-stack wu-stack--sm"><span class="wu-label">Tax withheld (12 months)</span>${moneyFigure(portfolio.dividendsWithheldMyrLast12Months)}<p class="wu-dash__note">Taken before the money arrived</p></div>
+          <div class="wu-stack wu-stack--sm"><span class="wu-label">Unrealised with dividends</span>${moneyFigure(portfolio.unrealizedPnlMyrWithDividends, true, portfolio.unrealizedPnlMyrWithDividends == null ? "" : portfolio.unrealizedPnlMyrWithDividends >= 0 ? "t-positive" : "t-negative")}<p class="wu-dash__note">${portfolio.unrealizedPnlPercentMyrWithDividends == null
+            ? "Needs a live price"
+            : `${percent(portfolio.unrealizedPnlPercentMyrWithDividends, 1)} with · ${portfolio.unrealizedPnlPercentMyr == null ? UNKNOWN : percent(portfolio.unrealizedPnlPercentMyr, 1)} without`}</p></div>
+        </div>`;
+
+  const editRow = (suggestion: DividendSuggestion): string => `
+          <div class="wu-grid wu-grid--2 wu-dividend-edit">
+            <label class="wu-field-row"><span class="wu-field-row__label">Pay date</span><input class="wu-field" type="date" id="divPayDate" value="${escapeHtml(suggestion.payDate)}"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Gross ${escapeHtml(suggestion.currency)}</span><input class="wu-field" type="number" step="0.0001" min="0" id="divGross" value="${suggestion.gross.toFixed(4)}"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Tax withheld ${escapeHtml(suggestion.currency)}</span><input class="wu-field" type="number" step="0.0001" min="0" id="divTax" value="${suggestion.withholdingTax.toFixed(4)}"></label>
+            <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm div-save" data-id="${escapeHtml(suggestion.id)}" type="button">Save</button><button class="wu-btn wu-btn--ghost wu-btn--sm div-cancel" type="button">Cancel</button></div>
+          </div>`;
+
+  const suggestionList = suggestions.length === 0 ? "" : `
+        <div class="wu-stack wu-stack--sm">
+          <span class="t-subheading">To confirm</span>
+          <p class="wu-dash__note">Worked out from each fund's payout history and the units you held before the ex-date. Check them against your statement.</p>
+          <ul class="wu-ledger-list">${suggestions.map((suggestion) => `<li class="wu-ledger-row wu-ledger-row--plain wu-dividend">
+            <span class="wu-ledger-row__title">${escapeHtml(suggestion.ticker)}<small>${escapeHtml(joinNotes(
+              `ex ${shortDate(suggestion.exDate)}`,
+              `${suggestion.units.toFixed(4)} × ${payout(suggestion.currency, suggestion.perShare)}`,
+              suggestion.taxRate > 0 ? `tax ${percent(suggestion.taxRate, 0)}` : "no tax withheld",
+            ))}</small>${suggestion.caution ? `<small class="wu-dividend__caution">${escapeHtml(suggestion.caution)}</small>` : ""}</span>
+            <span class="wu-ledger-row__amount">${escapeHtml(payout(suggestion.currency, netDividend({ gross: suggestion.gross, withholdingTax: suggestion.withholdingTax })))}<small>${escapeHtml(suggestion.rateToMyr === undefined ? "no rate on file" : `≈ ${payout("MYR", netDividend({ gross: suggestion.gross, withholdingTax: suggestion.withholdingTax }) * suggestion.rateToMyr)}`)}</small></span>
+            <span class="wu-row wu-row--tight wu-dividend__actions">
+              <button class="wu-btn wu-btn--primary wu-btn--sm div-confirm" data-id="${escapeHtml(suggestion.id)}" type="button">Confirm</button>
+              <button class="wu-btn wu-btn--ghost wu-btn--sm div-edit" data-id="${escapeHtml(suggestion.id)}" type="button">Edit</button>
+              <button class="wu-btn wu-btn--ghost wu-btn--sm div-ignore" data-id="${escapeHtml(suggestion.id)}" type="button">Ignore</button>
+            </span>
+            ${editingSuggestionId === suggestion.id ? editRow(suggestion) : ""}
+          </li>`).join("")}</ul>
+        </div>`;
+
+  const receivedList = received.length === 0 ? "" : `
+        <details class="wu-details"${suggestions.length === 0 ? " open" : ""}>
+          <summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-subheading">Received</strong><span class="t-caption t-faint">${received.length}</span></span></summary>
+          <ul class="wu-ledger-list">${received.map((dividend) => {
+            const rate = dividendRateToMyr(dividend, state.currencyExchanges ?? []);
+            const net = netDividend(dividend);
+            return `<li class="wu-ledger-row wu-ledger-row--plain">
+            <span class="wu-ledger-row__title">${escapeHtml(dividend.ticker)}<small>${escapeHtml(joinNotes(
+              `ex ${shortDate(dividend.exDate)}`,
+              dividend.withholdingTax > 0 ? `tax ${payout(dividend.currency, dividend.withholdingTax)}` : "no tax withheld",
+              rate === null ? "no rate to ringgit" : "",
+            ))}</small></span>
+            <span class="wu-ledger-row__amount">${escapeHtml(payout(dividend.currency, net))}<small>${escapeHtml(rate === null ? UNKNOWN : `≈ ${payout("MYR", net * rate)}`)}</small></span>
+            <button class="wu-btn wu-btn--ghost wu-btn--icon div-delete" data-id="${escapeHtml(dividend.id)}" type="button" aria-label="Remove this dividend">✕</button>
+          </li>`;
+          }).join("")}</ul>
+        </details>`;
+
+  return `${head}${stats}${suggestionList}${receivedList}`;
+}
+
 /** Row 3, left — where this month's contribution goes. Drift-driven, so it moves with the price. */
 function nextContributionBody(state: WealthState, portfolio: PortfolioSnapshot): string {
   const plan = rebalanceContributions(state, portfolio);
@@ -590,11 +688,11 @@ export function portfolioTemplate(state: WealthState): string {
   const portfolio = getPortfolioSnapshot(state, new Date(), livePriceInputs());
   // Ringgit amounts as the portfolio costs them: a Hong Kong trade's MYR figure
   // comes from its HKD conversions, a Malaysian trade's is its own amount.
-  const sortedTrades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? [])
+  const sortedTrades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? [], state.dividends ?? [])
     .sort((a, b) => b.date.localeCompare(a.date));
   const recentTrades = sortedTrades.slice(0, RECENT_LIMIT);
   const conversions = state.currencyExchanges ?? [];
-  const coverage = conversions.length ? resolveExchangeCoverage(state.trades, conversions) : null;
+  const coverage = conversions.length ? resolveExchangeCoverage(state.trades, conversions, state.dividends ?? []) : null;
   const coverageText = !coverage
     ? "Not recorded"
     : coverage.totalBuyUsd > 0 ? `${percent(Math.min(coverage.coverage, 1), 0)} covered` : `${conversions.length} recorded`;
@@ -642,6 +740,11 @@ export function portfolioTemplate(state: WealthState): string {
 
       <!-- ROW 2b — by market and by currency, only when there is more than one -->
       <section class="wu-card wu-dash__full wu-stack wu-stack--sm" id="pfExposure" aria-labelledby="pfExposureLabel"${showsExposure(portfolio) ? "" : " hidden"}>${exposureBody(portfolio)}</section>
+
+      <!-- ROW 2c — dividends received, and payouts waiting to be confirmed -->
+      <section class="wu-card wu-dash__full wu-stack wu-stack--sm" id="pfDividends" aria-labelledby="pfDividendsLabel"${
+        state.trades.length === 0 && (state.dividends ?? []).length === 0 ? " hidden" : ""
+      }>${dividendsBody(state, portfolio)}</section>
 
       <!-- phone only: the page actions sit under the holdings, as in the preview -->
       <div class="wu-dash__full wu-portfolio-actions">${addButton.replace("wu-btn--sm", "wu-btn--sm wu-portfolio-actions__main")}${importButton}</div>
@@ -738,6 +841,7 @@ export function patchPortfolioValuation(root: HTMLElement, state: WealthState): 
   set("pfTiles", portfolioTilesBody(portfolio, state.trades.length));
   set("pfHoldings", holdingsBody(portfolio));
   set("pfExposure", exposureBody(portfolio));
+  set("pfDividends", dividendsBody(state, portfolio));
   set("pfNextContribution", nextContributionBody(state, portfolio));
   set("pfPositionRows", positionRowsHtml(portfolio));
 }
@@ -776,6 +880,93 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
     applyTradePrefill(root, pendingTradePrefill);
     pendingTradePrefill = null;
   }
+
+  // Dividend suggestions: asked for once per page load, then painted in place.
+  // Failure is silent — the card simply says nothing is waiting.
+  const repaintDividends = (): void => {
+    const card = root.querySelector<HTMLElement>("#pfDividends");
+    if (card) card.innerHTML = dividendsBody(state, getPortfolioSnapshot(state, new Date(), livePriceInputs()));
+  };
+  if (!dividendsRequested) {
+    dividendsRequested = true;
+    void loadDividendSuggestions(state).then((list) => {
+      dividendSuggestions = list;
+      repaintDividends();
+    }).catch(() => repaintDividends());
+  }
+
+  const recordDividend = (dividend: Dividend, label: string): void => {
+    editingSuggestionId = null;
+    dividendSuggestions = dividendSuggestions.filter((suggestion) => suggestion.id !== dividend.id);
+    const next = {
+      ...state,
+      dividends: [...(state.dividends ?? []).filter((item) => item.id !== dividend.id), dividend],
+    };
+    setState(next, label);
+    rerender(root, next, setState, "portfolio", navigate);
+  };
+  const suggestionFor = (id: string | undefined): DividendSuggestion | undefined =>
+    dividendSuggestions.find((suggestion) => suggestion.id === id);
+
+  // One delegated handler on the card, because its contents are repainted
+  // whenever suggestions arrive or a price refreshes — buttons bound
+  // individually would lose their listeners on the first repaint.
+  root.querySelector<HTMLElement>("#pfDividends")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-id], button.div-cancel");
+    if (!button) return;
+    const id = button.dataset.id;
+
+    if (button.classList.contains("div-confirm")) {
+      const suggestion = suggestionFor(id);
+      if (suggestion) recordDividend(dividendFromSuggestion(suggestion), "Recorded a dividend");
+      return;
+    }
+    if (button.classList.contains("div-ignore")) {
+      const suggestion = suggestionFor(id);
+      if (suggestion) recordDividend(dismissedFromSuggestion(suggestion), "Ignored a suggested dividend");
+      return;
+    }
+    if (button.classList.contains("div-edit")) {
+      editingSuggestionId = id ?? null;
+      repaintDividends();
+      return;
+    }
+    if (button.classList.contains("div-cancel")) {
+      editingSuggestionId = null;
+      repaintDividends();
+      return;
+    }
+    if (button.classList.contains("div-save")) {
+      const suggestion = suggestionFor(id);
+      if (!suggestion) return;
+      const value = (fieldId: string): string => root.querySelector<HTMLInputElement>("#" + fieldId)?.value ?? "";
+      const gross = Number(value("divGross"));
+      const tax = Number(value("divTax"));
+      // The figures on the statement win, but tax above gross is not a statement.
+      if (!(gross > 0) || !(tax >= 0) || tax > gross) {
+        const field = root.querySelector<HTMLInputElement>("#divTax");
+        field?.setCustomValidity("Tax cannot be more than the gross payout.");
+        field?.reportValidity();
+        return;
+      }
+      recordDividend(dividendFromSuggestion(suggestion, {
+        payDate: value("divPayDate") || suggestion.payDate,
+        gross,
+        withholdingTax: tax,
+      }), "Recorded a dividend");
+      return;
+    }
+    if (button.classList.contains("div-delete")) {
+      const dividend = (state.dividends ?? []).find((item) => item.id === id);
+      if (!dividend) return;
+      if (!confirm(`Remove the ${dividend.ticker} dividend with ex-date ${dividend.exDate}?
+
+It will be suggested again if the feed still carries it.`)) return;
+      const next = { ...state, dividends: (state.dividends ?? []).filter((item) => item.id !== id) };
+      setState(next, "Removed a dividend");
+      rerender(root, next, setState, "portfolio", navigate);
+    }
+  });
 
   root.querySelector<HTMLFormElement>("#tradeForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();

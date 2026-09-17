@@ -161,7 +161,8 @@ async function fetchYahooHoldings(symbol: string): Promise<HoldingsPayload | nul
 }
 
 function isValidSymbol(value: string): boolean {
-  return new RegExp(`^[A-Za-z0-9.^:-]{1,${MAX_SYMBOL_LENGTH}}$`).test(value);
+  // "=" is for exchange rates ("USDMYR=X"), whose history dates a dividend.
+  return new RegExp(`^[A-Za-z0-9.^:=-]{1,${MAX_SYMBOL_LENGTH}}$`).test(value);
 }
 
 /**
@@ -237,11 +238,19 @@ export function isYahooChartBody(body: string): boolean {
   }
 }
 
-/** Only "history" is a plain GET passthrough; "fundamentals" has its own path. */
-function upstreamFor(kind: string, symbol: string, range: string): string | null {
+/**
+ * "history" and "dividends" are plain GET passthroughs; "fundamentals" and
+ * "holdings" have their own paths. Dividends ride on the same chart endpoint
+ * at a monthly interval, which keeps the payload small: only the events
+ * block is read.
+ */
+export function upstreamFor(kind: string, symbol: string, range: string): string | null {
   const ticker = encodeURIComponent(symbol);
   if (kind === "history") {
     return `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=${encodeURIComponent(range)}&interval=1d`;
+  }
+  if (kind === "dividends") {
+    return `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=${encodeURIComponent(range)}&interval=1mo&events=div`;
   }
   return null;
 }
@@ -284,7 +293,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
     response.status(400).json({ error: `Invalid symbol: ${symbol}` });
     return;
   }
-  if (kind === "history" && !RANGES.has(range)) {
+  if ((kind === "history" || kind === "dividends") && !RANGES.has(range)) {
     response.status(400).json({ error: `Unsupported range: ${range}` });
     return;
   }
@@ -325,7 +334,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
   const upstream = upstreamFor(kind, symbol, range);
   if (!upstream) {
-    response.status(400).json({ error: "kind must be 'fundamentals', 'holdings' or 'history'" });
+    response.status(400).json({ error: "kind must be 'fundamentals', 'holdings', 'history' or 'dividends'" });
     return;
   }
 

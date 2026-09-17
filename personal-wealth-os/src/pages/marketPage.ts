@@ -672,7 +672,7 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     // Trade list
     const tradeListEl = el("#pnl-trades-list");
     if (tradeListEl) {
-      const tradesForTicker = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? []).filter((t) => t.ticker === symbol);
+      const tradesForTicker = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? [], state.dividends ?? []).filter((t) => t.ticker === symbol);
       const rows = tradesForTicker.map((t) => {
         const isBuy = t.type !== "Sell";
         const units = tradeUnits(t).toFixed(4);

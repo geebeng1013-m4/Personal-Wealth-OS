@@ -7,7 +7,7 @@ import {
   tradesWithExchangeCost,
   validateCurrencyExchange,
 } from "../src/currencyExchange";
-import type { CurrencyExchange, Trade } from "../src/models";
+import type { CurrencyExchange, Dividend, Trade } from "../src/models";
 
 /**
  * MM-2: one pool per currency. A Hong Kong buy is costed only from ringgit
@@ -188,4 +188,73 @@ test("pools: a foreign-currency fee with no rate to carry it keeps its stored fe
 test("pools: a dollar portfolio with no conversions is returned as the same array", () => {
   const trades = [usBuy("t1", "2026-05-10", 100)];
   assert.equal(tradesWithExchangeCost(trades, []), trades);
+});
+
+// --- D-5: dividends are money in the same balance ------------------------------
+
+function dividend(overrides: Partial<Dividend> = {}): Dividend {
+  return {
+    id: "div-VOO-2026-06-26", ticker: "VOO", exDate: "2026-06-26", payDate: "2026-06-30",
+    currency: "USD", gross: 100, withholdingTax: 30, rateToMyr: 4.1, status: "confirmed",
+    ...overrides,
+  };
+}
+
+test("pools: a dividend funds a later buy, at the rate it arrived with", () => {
+  const [trade] = tradesWithExchangeCost(
+    [usBuy("t1", "2026-07-10", 70)],
+    [],
+    [dividend()],
+  );
+  // USD 70 net (100 − 30) entered the pool at 4.1 and paid for the whole order.
+  close(trade.amountMyr, 70 * 4.1);
+  close(trade.exchangeRate!, 4.1);
+});
+
+test("pools: dividend dollars count as covered, which is what unexplained dollars often are", () => {
+  const coverage = resolveExchangeCoverage([usBuy("t1", "2026-07-10", 70)], [], [dividend()]);
+  close(coverage.coverage, 1);
+  assert.equal(coverage.costs.get("t1")!.uncovered, 0);
+});
+
+test("pools: a dividend mixes with converted money at its own rate", () => {
+  const coverage = resolveExchangeCoverage(
+    [usBuy("t1", "2026-07-10", 100)],
+    [toUsd("x1", "2026-06-01", 420, 100)],
+    [dividend({ gross: 100, withholdingTax: 0, rateToMyr: 4.0 })],
+  );
+  // 100 at 4.20 and 100 at 4.00 in the balance: the order draws the average.
+  close(coverage.costs.get("t1")!.effectiveRate!, 4.1);
+});
+
+test("pools: a dividend with no rate is left out rather than cheapening the pool", () => {
+  const coverage = resolveExchangeCoverage(
+    [usBuy("t1", "2026-07-10", 70)],
+    [],
+    [dividend({ rateToMyr: undefined })],
+  );
+  assert.equal(coverage.costs.get("t1")!.uncovered, 70);
+  assert.equal(coverage.unspentUsd, 0);
+});
+
+test("pools: a dismissed suggestion and a ringgit payout put nothing in a pool", () => {
+  const dismissed = resolveExchangeCoverage([usBuy("t1", "2026-07-10", 70)], [], [dividend({ status: "dismissed" })]);
+  assert.equal(dismissed.costs.get("t1")!.uncovered, 70);
+  const ringgit = resolveExchangeCoverage([usBuy("t1", "2026-07-10", 70)], [], [dividend({ currency: "MYR", ticker: "1155.KL" })]);
+  assert.equal(ringgit.costs.get("t1")!.uncovered, 70);
+});
+
+test("pools: a dividend paid after the buy settles it, like a late conversion", () => {
+  const coverage = resolveExchangeCoverage([usBuy("t1", "2026-06-10", 70)], [], [dividend()]);
+  close(coverage.costs.get("t1")!.costMyr, 70 * 4.1);
+  assert.equal(coverage.costs.get("t1")!.uncovered, 0);
+});
+
+test("pools: with no dividends recorded nothing about the pool changes", () => {
+  const trades = [usBuy("t1", "2026-07-10", 100)];
+  const exchanges = [toUsd("x1", "2026-06-01", 410, 100)];
+  assert.deepEqual(
+    JSON.stringify([...resolveExchangeCoverage(trades, exchanges, []).costs]),
+    JSON.stringify([...resolveExchangeCoverage(trades, exchanges).costs]),
+  );
 });
