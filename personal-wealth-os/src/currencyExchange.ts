@@ -38,6 +38,7 @@
  * Pure: imports only the domain types. No fetching, no persistence, no UI.
  */
 import type { CurrencyExchange, ExchangeDirection, Trade } from "./models";
+import { exchangeSides, myrUsdFromSides } from "./tradeCurrency";
 
 /** Max records kept, so the list cannot grow without bound. */
 export const MAX_CURRENCY_EXCHANGES = 2000;
@@ -73,16 +74,28 @@ export function validateCurrencyExchange(candidate: unknown): CurrencyExchange |
 
   if (typeof record.id !== "string" || !record.id.trim()) return null;
   if (typeof record.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(record.date)) return null;
+
+  // The ringgit and dollar amounts win whenever they are there: they are what
+  // every build writes, and an older build edits nothing else. Only a record
+  // carrying the general form alone is read from it — and, until conversions
+  // are pooled per currency, only when it is ringgit ↔ dollar.
+  //
   // Both sides must be real money. A zero on either side carries no rate, and a
   // rate is the only reason this record exists.
-  if (!isPositive(record.myrAmount) || !isPositive(record.usdAmount)) return null;
+  const legacy = isPositive(record.myrAmount) && isPositive(record.usdAmount)
+    ? {
+      direction: isDirection(record.direction) ? record.direction : "myr-to-usd" as ExchangeDirection,
+      myrAmount: record.myrAmount,
+      usdAmount: record.usdAmount,
+    }
+    : myrUsdFromSides(record);
+  if (!legacy) return null;
 
   return {
     id: record.id.trim().slice(0, 120),
     date: record.date,
-    direction: isDirection(record.direction) ? record.direction : "myr-to-usd",
-    myrAmount: record.myrAmount,
-    usdAmount: record.usdAmount,
+    ...legacy,
+    ...exchangeSides(legacy),
     ...(typeof record.notes === "string" && record.notes.trim()
       ? { notes: record.notes.trim().slice(0, 200) }
       : {}),

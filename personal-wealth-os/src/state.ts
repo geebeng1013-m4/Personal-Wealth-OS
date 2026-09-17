@@ -2,6 +2,7 @@ import type { AllocationPlan, AllocationStep, Bucket, LedgerAccount, LedgerAccou
 import { getDefaultFinancialRules, normalizeFinancialRules, repairPlaceholderRules } from "./financialRules";
 import { normalizeActionRecords } from "./actionRecords";
 import { normalizeCurrencyExchanges } from "./currencyExchange";
+import { normalizeTradeMarket } from "./tradeCurrency";
 import {
   saveToFirestore,
   loadFromFirestore,
@@ -9,7 +10,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 22;
+export const CURRENT_VERSION = 23;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -567,13 +568,16 @@ export function migrateState(input: Partial<WealthState>): WealthState {
     const migratedDefault = hasLegacySeedPortfolio ? defaultTradesById.get(trade.id) : undefined;
     const source = migratedDefault ?? trade;
     const units = Number(source.units);
-    return {
+    // v23: market, currency and the amounts in that currency. Re-derived on
+    // every load rather than once, so a dollar trade edited by an older build
+    // cannot keep a stale copy. See tradeCurrency.ts.
+    return normalizeTradeMarket({
       ...source,
       ...(Number.isFinite(units) && units > 0 ? { units } : {}),
       exchangeRate: Number.isFinite(source.exchangeRate) && Number(source.exchangeRate) > 0
         ? Number(source.exchangeRate)
         : source.amountUsd > 0 && source.amountMyr > 0 ? source.amountMyr / source.amountUsd : 4.25,
-    };
+    });
   }) : [];
   if (hasLegacySeedPortfolio) {
     const existingTradeIds = new Set(merged.trades.map((trade) => trade.id));

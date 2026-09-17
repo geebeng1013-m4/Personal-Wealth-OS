@@ -1,5 +1,11 @@
 export type Currency = "MYR" | "USD";
 
+/**
+ * Where a listing trades. Separate from its currency: London lists the same
+ * kind of ETF in dollars and in sterling. See tradeCurrency.ts.
+ */
+export type Market = "US" | "MY" | "HK" | "SG" | "LSE";
+
 export type Ticker = string;
 
 export type TradeType = "DCA" | "Dip Buy" | "Manual Buy" | "Sell";
@@ -118,6 +124,25 @@ export interface Trade {
   feeMyr: number;
   exchangeRate?: number;
   notes?: string;
+
+  // --- Multi-market shape (v23). Filled in on load by normalizeTradeMarket. ---
+  //
+  // For a dollar trade these mirror amountUsd / priceUsd / feeMyr and are
+  // re-derived from them on every load, because an older build only edits the
+  // dollar fields. No calculation reads them yet.
+
+  /** Where the listing trades. */
+  market?: Market;
+  /** ISO 4217 code the trade was priced in. Absent means "USD". */
+  currency?: string;
+  /** Order value in `currency`. */
+  amount?: number;
+  /** Fill price per unit in `currency`. */
+  price?: number;
+  /** Fee as recorded, in `feeCurrency`. */
+  fee?: number;
+  /** Either the trade's own currency or "MYR". */
+  feeCurrency?: string;
 }
 
 /** Which way a conversion went. */
@@ -141,6 +166,12 @@ export interface CurrencyExchange {
   /** Dollar side of the conversion. Always positive. */
   usdAmount: number;
   notes?: string;
+
+  // --- General form (v23), derived from the fields above on every load. ---
+  fromCurrency?: string;
+  fromAmount?: number;
+  toCurrency?: string;
+  toAmount?: number;
 }
 
 export interface Liability {

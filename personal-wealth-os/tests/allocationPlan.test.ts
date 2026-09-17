@@ -16,7 +16,7 @@ const monthly = (state: WealthState) => state.buckets.filter((bucket) => bucket.
 const plannedTotal = (state: WealthState) => monthly(state).reduce((sum, bucket) => sum + bucket.amount, 0);
 
 test("allocation plan: v22 is the schema that carries it", () => {
-  assert.equal(CURRENT_VERSION, 22);
+  assert.ok(CURRENT_VERSION >= 22, "the plan shipped in v22 and must not be dropped");
 });
 
 test("allocation plan: the default state's plan mirrors its own buckets", () => {
