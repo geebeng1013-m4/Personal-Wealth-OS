@@ -93,7 +93,13 @@ Portfolio 原本只能记美股（USD 写死在字段名里），马股、港股
 - 验证：1121 测试全过（新增 13 个）；5201 实际填表送出港股交易，存进去的数字和持仓行都对；电脑和手机截图在 Preview。
 - 计划书原本写「新增／编辑」，但 App 现在没有编辑交易功能（只有删除），这次只改新增。编辑交易放 FUTURE IDEAS。
 - 没测到：助手（Ask）预填表单那条路在浏览器里没实际跑，只有类型检查。
-### MM-7 — 按市场／按货币分布（放 Portfolio，不放 Dashboard）  `[ ]`
+### MM-7 — 按市场／按货币分布（放 Portfolio，不放 Dashboard）  `[x]`（2026-09-17，同一分支，PR 待开）
+- Portfolio 新卡片「Where your money is」：左边按市场、右边按货币（电脑并排，手机上下）。
+- 按货币就是汇率风险：伦敦用美金计价的 ETF 算「London」市场、「USD」货币。底下一句「X% moves with exchange rates; Y% is in ringgit」。
+- 比例基准跟配置比例一样：全部有马币市值时按市值，否则全部按成本（右上角写明）。
+- 只有跨两个以上市场或货币才出现；只买美股的用户不会多一张卡（demo 确认隐藏）。
+- 电脑版排在持仓下面、Next contribution 和 Recent activity 上面。
+- 新函数 `getPortfolioExposure`（portfolioSummary.ts）。验证：1124 测试全过（新增 3 个）；5201 截图电脑 + 手机。
 ### MM-8 — CSV 导入认出非美股（先拿真实导出确认格式）  `[ ]`
 
 **FUTURE IDEAS**：编辑已记录的交易；新市场代码的目标比例（现在是 Target 0%，drift 很大）；更多市场；手续费自动估算（要你确认）；一笔多条不同货币手续费；股息和预扣税；IPO 申购；港股双柜台。
