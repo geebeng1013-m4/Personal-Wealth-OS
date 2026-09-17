@@ -3402,7 +3402,7 @@
     display: grid;
     /* the Solve column has a fixed width, so option rows with nothing in it
        keep their controls on the same edges as the number boxes */
-    grid-template-columns: minmax(96px, 0.9fr) minmax(0, 1.4fr) 64px;
+    grid-template-columns: minmax(96px, 0.9fr) minmax(0, 1.4fr) 76px;
     align-items: center;
     gap: var(--space-3);
     min-height: var(--row-h);
@@ -3447,11 +3447,15 @@
     font-size: var(--text-body-sm);
     pointer-events: none;
   }
+  /* PV / PMT / FV / Rate / Periods: one width, so the column reads as a set */
   .wu-tvm-solve {
-    color: var(--accent);
+    width: 100%;
+    justify-content: center;
+    padding-inline: var(--space-2);
   }
   .wu-tvm-solve.is-solved {
     background: var(--accent-soft);
+    color: var(--accent);
   }
   .wu-tvm-choice {
     display: flex;

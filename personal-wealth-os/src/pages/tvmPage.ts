@@ -8,7 +8,7 @@
  * T-6c layout: the three tools sit behind one segmented control, one showing at
  * a time. Each is its inputs beside its result on a desktop, the result on top
  * on a phone. The five TVM values are typed straight into their rows, and each
- * row keeps its own Solve.
+ * row keeps its own solve button (PV, PMT, FV, Rate, Periods).
  *
  * Inputs are session-only, held in module state and deliberately not persisted
  * to WealthState, localStorage or Firebase. The calculator explores
@@ -62,12 +62,12 @@ const tvmInflation = { futureAmount: "100000", inflationRatePercent: "3", years:
 let tvmWhatIfAmount = "";
 let tvmWhatIfMode: SpendMode = "once";
 
-const TVM_ROWS: Array<{ name: TvmFieldName; label: string; unit: string; step: string }> = [
-  { name: "presentValue", label: "Present value", unit: "MYR", step: "100" },
-  { name: "payment", label: "Payment", unit: "MYR", step: "50" },
-  { name: "futureValue", label: "Future value", unit: "MYR", step: "1000" },
-  { name: "annualRatePercent", label: "Annual rate", unit: "%", step: "0.1" },
-  { name: "periods", label: "Periods", unit: "n", step: "1" },
+const TVM_ROWS: Array<{ name: TvmFieldName; label: string; button: string; unit: string; step: string }> = [
+  { name: "presentValue", label: "Present value", button: "PV", unit: "MYR", step: "100" },
+  { name: "payment", label: "Payment", button: "PMT", unit: "MYR", step: "50" },
+  { name: "futureValue", label: "Future value", button: "FV", unit: "MYR", step: "1000" },
+  { name: "annualRatePercent", label: "Annual rate", button: "Rate", unit: "%", step: "0.1" },
+  { name: "periods", label: "Periods", button: "Periods", unit: "n", step: "1" },
 ];
 
 const TABS: Array<{ id: TvmTab; label: string }> = [
@@ -130,7 +130,7 @@ function errorList(errors: Array<{ message: string }>): string {
 function tvmResultTemplate(): string {
   if (!tvmSolved) {
     return `<div class="wu-tc__top"><span class="wu-label">Result</span></div>
-      <p class="wu-dash__note">Fill in any four values, then press Solve beside the one you want.</p>`;
+      <p class="wu-dash__note">Fill in any four values, then press the button beside the one you want to solve (PV, PMT, FV, Rate or Periods).</p>`;
   }
 
   const { variable, result } = tvmSolved;
@@ -177,8 +177,8 @@ function tvmToolTemplate(): string {
                      data-tvm-input="${row.name}" aria-describedby="tvmSignNote">
               <span class="wu-tvm-row__unit" aria-hidden="true">${escapeHtml(row.unit)}</span>
             </span>
-            <button class="wu-btn wu-btn--ghost wu-btn--sm wu-tvm-solve${tvmSolved?.variable === row.name ? " is-solved" : ""}" type="button"
-                    data-tvm-solve="${row.name}" aria-label="Solve for ${escapeHtml(row.label)}">Solve</button>
+            <button class="wu-btn wu-btn--secondary wu-btn--sm wu-tvm-solve${tvmSolved?.variable === row.name ? " is-solved" : ""}" type="button"
+                    data-tvm-solve="${row.name}" aria-label="Solve for ${escapeHtml(row.label)}">${escapeHtml(row.button)}</button>
           </li>`).join("")}
         <li class="wu-tvm-row wu-tvm-row--option">
           <label class="wu-tvm-row__label" for="tvmFrequency">Compounding</label>
@@ -196,7 +196,7 @@ function tvmToolTemplate(): string {
           ${choice("timing", [{ value: "end", label: "End" }, { value: "beginning", label: "Beginning" }], tvmTiming, "Payment timing")}
         </li>
       </ul>
-      <p class="wu-dash__note wu-dash__actions" id="tvmSignNote">Money you pay in is negative; money you get back is positive. Press Solve on the value you want — it is filled in for you.</p>
+      <p class="wu-dash__note wu-dash__actions" id="tvmSignNote">Money you pay in is negative; money you get back is positive. Press the button beside the value you want to solve — it is filled in for you.</p>
     </section>
     <section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-tvm-result" id="tvmOutput" aria-live="polite">
       ${tvmResultTemplate()}
