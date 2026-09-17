@@ -737,7 +737,7 @@ Preview（另一个会话做的，项目代码没有改动）：
   4. Dip-buy tranches 只显示当前值，不能编辑。
 - **提议（你已确认，已做）**：targets 列表 = 已有目标 ∪ 交易过的代码 ∪ 自定义代码，新代码默认 0%；编辑面板里可以「+ Add ETF」；在 Settings 加的代码也出现在 Portfolio 记账表单的下拉里；Opportunity reserve 的分配同样每只一个输入框（现在也只存 VOO/QQQM）；显示目标合计，不是 100% 时提示但不阻止保存。
 
-### T-5 — Advisor / Review / Money Leaks / Rules  `[ ]`  ← **Current Task**
+### T-5 — Advisor / Review / Money Leaks / Rules  `[x]`（2026-09-17，PR #60–#63 已合并）
 - 去掉重复的检查卡；建议和规则改成列表；免责声明移到页底；历史改成短行、点开看详情。
 - **照两个 Preview 的对应页面做**（全站手机 + 电脑 v2）。
 - **已定（2026-09-17）**：
@@ -765,19 +765,24 @@ Preview（另一个会话做的，项目代码没有改动）：
   - **发现的问题**：分数算出来是 0–100，页面也写「/100」，但 demo 的历史分数是 9、10（0–10 的写法），所以 demo 显示成「9/100」。
   - **结果（demo 数据）**：手机 2,447px → 756px，电脑 1,843px → 723px，常驻输入框 6 → 0。
   - **已定并完成**：分数显示 x/10（算法仍是 0–100，显示和预填除以 10；以前存的大于 10 的分数当作满分 100）；同一个月再保存会先确认再取代，不再重复；表单在原地展开，保存后收起。
-- **T-5d Rules** `[ ]` ← **Current Task**，等「执行 T-5d」
+- **T-5d Rules** `[x]`（2026-09-17，PR #63 已合并）
+  - **结果（demo 数据）**：手机 1,903px → 895px，电脑 1,339px → 640px，卡片 10 → 2。
   - **已定（2026-09-17）**：1. 规则说明照真实数据产生（真实台阶金额、所有代码），你改过文字的规则照旧显示你的版本；2. 清单底部加「N hidden · Show」，可以恢复隐藏的规则；3. 笔记有多行时每行显示成编号项目，一段话就照原样，内容不改。
   - 手机：分段选择「Your rules / How WealthUp works」→ Your plan 清单（规则名 · 一句说明 · 关键数字 ›，点开在下面看全文 + Edit / Hide）→ 笔记卡（每条笔记一张）→「+ Add note」。
   - 电脑：标题右边「+ Add note」→ 分段选择 → 规则清单 | 笔记，两张一样高。
   - 拿掉顶部检查卡、每条规则的 emoji 和 Edit / × 按钮（收进展开里）；一直展开的笔记表单收起来。How WealthUp works 不改。
   - **发现的问题**：Bear Market Deployment 的文字写死「MYR 80 / 120 / 200」，跟真实台阶（demo 300 / 450 / 750）不一样；DCA Mandate 和 Opportunity Reserve 只写 VOO / QQQM，T-4 之后会漏掉 VXUS 等；隐藏（×）的规则没有办法再显示回来。
 
-### T-6 — Goals / Budget / TVM  `[ ]`
+### T-6 — Goals / Budget / TVM  `[ ]`  ← **Current Task**（先做计划）
 - 小改：去掉标签和标题重复（「JAPAN TRIP」+「Japan Trip 2027」），统一数字写法；顺便把 Dashboard 的 featured goal 选择器移到 Goals。
 - **Budget 另有整齐版 Preview（2026-09-17，照新的按收入分配页面做）**：https://claude.ai/artifact/44nSoHD6iLzbSzkiCFq9LY
   - 手机：This month 卡（收入 + 状态 chip + 按层分色比例条）→ Layers 分组列表（「色块 · 名称 · 规则 / 拿到多少 · 状态 ›」，点整行展开编辑）→ Leftover goes to / + Add a layer → Your months → Set aside。
   - 电脑：4 个数字（This month / Extra caught / Swing / Set aside）→ 层表格整行 → Your months | Plan rules。
   - **你看过说「可以」**：采用我的建议——手机每层不放进度条（电脑表格保留）；规则选择改成三段选择。金额两位小数仍未决定。
+- **计划（2026-09-17，等你回答问题）**：
+  - **T-6a Budget**：照 Budget Preview 做（上面已定的两点）；拿掉顶部检查卡；层的编辑、上下移、删除、加一层、剩下的钱给谁、Opportunity 编辑都保留。
+  - **T-6b Goals**：照全站 Preview——手机总进度卡（已存 / 目标总额、完成几个、每月存多少）+ 每个目标一行（名称 · 每月 · 进度条 · % · 金额），完成的排最后；电脑 4 个数字 + 目标表整行；「+ Add goal」收起；去掉重复的大写标签；财务目标句保留 Lato；拿掉顶部检查卡；Dashboard 的 featured goal 选择器移到 Goals。
+  - **T-6c TVM**：照 Preview——三个工具用分段选择器切换，一次一个；结果放大数字卡（电脑加本金 vs 利息比例条）；输入整理成清单；不改计算。
 
 ### T-7 — Market  `[ ]`（最后做）
 - demo 里图表是空的，需要真实行情数据才能判断。
