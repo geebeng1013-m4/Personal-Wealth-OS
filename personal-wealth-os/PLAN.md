@@ -745,10 +745,17 @@ Preview（另一个会话做的，项目代码没有改动）：
   2. Money Leaks 手机上点一行，详情在那一行下面展开；电脑照 Preview 左清单右详情。
   3. Rules 点一行在下面展开编辑，原来的编辑和隐藏功能照旧。
 - **共同做法**：Advisor / Review / Rules 顶部的检查卡拿掉（只留 Dashboard Priority 和 Money Leaks 页）；免责声明、估算说明移到页底小字；不改计算；Advisor / Rules 的机会储备分配列出所有代码（T-4 之后不只 VOO / QQQM）。
-- **T-5a Money Leaks** `[ ]` ← 等「执行 T-5a」
+- **T-5a Money Leaks** `[x]`（2026-09-17，PR #60 已合并）
   - 手机：总数卡（每月流失 · 一年多少 · 几项，chip 显示高优先级数）→ 按影响排的清单（名称 · 类型 · 金额，状态用小字）→ 点一行下面展开详情（说明 + Inspect in Ledger / Mark as done）→ 页底估算说明。
   - 电脑：4 个数字（Each month / Each year / Findings / High priority）→ 清单 | 详情两张一样高 → 页底估算说明。
-- **T-5b Advisor** `[ ]`、**T-5c Review** `[ ]`、**T-5d Rules** `[ ]`：做完上一页再照 Preview 做。
+  - **结果（demo 数据）**：手机 1,983px → 810px（第一项默认展开），电脑 1,201px → 887px，徽章 7 → 0。
+  - **你看过后加的**：手机默认展开影响最大的那一项，展开内容精简（金额、一句说明、主要按钮、Mark as done；证据、Why it matters、Next move、Ask Advisor 收进 More detail）；两个版本每行都有「›」，标签写 tap / click to open；只有 1–2 项时清单底部一行「Only N finding(s) right now — nothing else detected.」。
+- **T-5b Advisor** `[ ]` ← **Current Task**，等你回答问题再说「执行 T-5b」
+  - 手机：Priority 一张（标题 + 一行原因 + Go to … + Mark as done）→ Guidance 清单（状态点 · 标题 · 一句说明 · 关键数字 ›，点开在下面看完整说明和按钮）→ Dip-buy ladder（三级台阶：跌幅 · 离触发的条 · 金额 · 状态）→ 页底免责声明。
+  - 电脑：Priority | Dip-buy ladder 两张一样高 → Guidance 清单整行 → 页底免责声明。
+  - 拿掉顶部检查卡、6 条彩色竖条、储备的 VOO / QQQM 两张小卡（改成 ladder 卡里一行，列出所有代码）。
+  - 不改计算；Mark as done、Go to、Mark deployed / Undo、跌幅检查都保留。
+- **T-5c Review** `[ ]`、**T-5d Rules** `[ ]`：做完上一页再照 Preview 做。
 
 ### T-6 — Goals / Budget / TVM  `[ ]`
 - 小改：去掉标签和标题重复（「JAPAN TRIP」+「Japan Trip 2027」），统一数字写法；顺便把 Dashboard 的 featured goal 选择器移到 Goals。
