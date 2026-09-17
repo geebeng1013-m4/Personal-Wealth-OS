@@ -215,8 +215,11 @@ export function marketTemplate(state: WealthState): string {
 
         <!-- ROW 2 — the long-term chart; on a phone the price leads the card -->
         <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-market-chart" aria-labelledby="mktChartLabel">
-          <div class="wu-tc__top"><span class="wu-label" id="mktChartLabel"><span data-market-symbol>VOO</span> · long-term view</span><span class="wu-market-phone" data-market="dropChip"></span></div>
-          <p class="wu-money wu-market-phone"><span class="wu-money__cur">USD</span><span data-market="price">--</span></p>
+          <div class="wu-tc__top"><span class="wu-label" id="mktChartLabel"><span data-market-symbol>VOO</span> · long-term view</span></div>
+          <div class="wu-market-price wu-market-phone">
+            <p class="wu-money"><span class="wu-money__cur">USD</span><span data-market="price">--</span></p>
+            <span data-market="dropChip"></span>
+          </div>
           <div class="wu-segmented market-intervals" role="group" aria-label="Chart period">
             <button class="wu-segmented__option interval-btn" data-interval="D" type="button">1D</button>
             <button class="wu-segmented__option interval-btn" data-interval="W" type="button">1W</button>
@@ -228,7 +231,8 @@ export function marketTemplate(state: WealthState): string {
           <div class="market-chart-card">
             <div id="tradingview_container" style="width:100%;"></div>
           </div>
-          <p class="wu-dash__note">Context before action — review your plan before changing allocation. Market data may be delayed.</p>
+          <p class="wu-dash__note wu-market-desk">Context before action — review your plan before changing allocation. Market data may be delayed.</p>
+          <p class="wu-dash__note wu-market-phone">Market data may be delayed.</p>
         </section>
 
         <!-- phone — your position in one card -->
@@ -244,6 +248,7 @@ export function marketTemplate(state: WealthState): string {
 
       <section class="wu-card wu-stack wu-stack--sm wu-market-more" aria-labelledby="mktMoreLabel">
         <div class="wu-tc__top"><span class="wu-label" id="mktMoreLabel">More about <span data-market-symbol>VOO</span> · tap to open</span></div>
+        <p class="wu-dash__note wu-market-phone">Context before action — review your plan before changing allocation.</p>
         <ul class="wu-market-sections">
           ${section("pnl", "Your position", "Cost, value, profit and every trade", `
             <div id="pnlPanel" style="display:none;">

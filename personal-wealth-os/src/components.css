@@ -3830,8 +3830,44 @@
     .wu-market-phone {
       display: revert;
     }
-    .wu-money.wu-market-phone {
+    .wu-market-desk {
+      display: none;
+    }
+    /* the phone chart card: a clear gap between label, price, periods, chart
+       and note, the price leading with its drop beside it */
+    .wu-market-chart.wu-stack {
       display: flex;
+      flex-direction: column;
+      --wu-stack-gap: var(--space-3);
+      gap: var(--space-3);
+    }
+    .wu-market-price.wu-market-phone {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-2) var(--space-3);
+    }
+    .wu-market-chart .market-intervals {
+      display: flex;
+      width: 100%;
+      align-self: stretch;
+      overflow: visible;
+    }
+    .wu-market-chart .market-intervals .wu-segmented__option {
+      flex: 1 1 0;
+      min-width: 0;
+      padding-inline: 0;
+    }
+    /* the widget draws its own hairline frame; tuck it under the card edge */
+    .wu-market-chart .market-chart-card {
+      overflow: hidden;
+      border-radius: var(--radius-md);
+    }
+    .wu-market-chart .market-chart-card iframe {
+      margin: -1px;
+      width: calc(100% + 2px) !important;
+      height: calc(100% + 2px) !important;
     }
     .wu-market-position.wu-market-phone {
       display: grid;
