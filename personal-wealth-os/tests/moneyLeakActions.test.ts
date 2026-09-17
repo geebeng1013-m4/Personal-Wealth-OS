@@ -220,8 +220,11 @@ test("leaks: findings stay derived and the schema version is untouched", () => {
     }),
   };
   const serialized = JSON.stringify(withRecord);
+  // Matched in key position: what must never be persisted is a *field* holding
+  // a leak verdict. An unrelated value that happens to read the same — the
+  // allocation plan's incomeType is "fixed" — is not this leak.
   for (const derived of ["moneyLeakFindings", "leakRecommendations", "monthlyImpact", "annualImpact", "dismissed", "resolved", "fixed"]) {
-    assert.equal(serialized.includes(`"${derived}"`), false, `${derived} was persisted`);
+    assert.equal(serialized.includes(`"${derived}":`), false, `${derived} was persisted`);
   }
   // The record itself survives a reload untouched.
   const reloaded = migrateState(JSON.parse(serialized));

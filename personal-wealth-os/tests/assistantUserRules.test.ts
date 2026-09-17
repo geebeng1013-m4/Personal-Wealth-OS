@@ -80,13 +80,16 @@ test("user rules: a bear-market reserve is described as the user's choice, not a
 
 // --- budget buckets --------------------------------------------------------
 
-test("user rules: buckets show amount, cadence and share of planned income", () => {
+test("user rules: the plan is described as rules, not as amounts nobody chose", () => {
   const text = buildUserRulesContext(stateWith(), NOW);
-  assert.match(text, /Budget buckets \(planned income MYR 3,000\/month\):/);
-  assert.match(text, /Survival: MYR 750\/month, 25% of planned income/);
-  assert.match(text, /Growth: MYR 600\/month, 20% of planned income/);
+  assert.match(text, /Allocation plan, money flows top to bottom \(planned income MYR 3,000\/month\):/);
+  assert.match(text, /Survival: fill to MYR 750 — MYR 750 in a planned month/);
+  // Growth is the layer the plan catches the surplus in, and says so rather
+  // than reporting MYR 2,250 as if the user had set that figure.
+  assert.match(text, /Growth: fill to MYR 600 — MYR 2,250 in a planned month, and catches what the other layers leave/);
+  assert.match(text, /Set aside outside the plan:/);
   assert.match(text, /Opportunity: MYR 400 one-time/);
-  assert.doesNotMatch(text, /Unused/, "an empty bucket is noise");
+  assert.doesNotMatch(text, /Unused/, "a layer that asks for nothing is noise");
 });
 
 // --- goals and principle 5's 3-year line ----------------------------------

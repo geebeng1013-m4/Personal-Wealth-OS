@@ -400,6 +400,7 @@ test("budget: the snapshot exposes exactly the expected fact keys", () => {
     "buckets",
     "isOverPlannedSpending",
     "monthKey",
+    "allocation",
     "plannedAllowance", "plannedDcaAmount", "plannedIncome",
     "plannedSpending", "plannedSurplus",
     "planCoversDca",
@@ -424,4 +425,327 @@ test("budget: every planned field is prefixed 'planned' and every recorded one '
   for (const key of [...planned, ...actual]) {
     assert.equal(typeof (snapshot as unknown as Record<string, unknown>)[key], "number");
   }
+});
+
+
+// --- H. the allocation plan, routed over plan and over reality --------------
+
+/**
+ * The waterfall reaches the Budget model here. Both figures come from the one
+ * plan, so a number on the page can always be traced to a rule the user set.
+ */
+
+test("budget/H: the plan routes the income the ledger actually recorded", () => {
+  const state = plannedState({
+    ledgerAccounts: accounts,
+    ledgerTransactions: [
+      { id: "i1", amount: 1000, type: "income", categoryId: "income-salary", accountId: "acc-bank", date: iso(2026, 7, 3) },
+    ] as LedgerTransaction[],
+    allocation: {
+      incomeType: "variable",
+      steps: [
+        { id: "survival", name: "Survival", kind: "fill", value: 1500 },
+        { id: "growth", name: "Growth", kind: "pct", value: 100 },
+      ],
+      overflowStepId: "growth",
+    },
+  });
+  const budget = getBudgetSnapshot(state, NOW);
+  const ledger = getLedgerSnapshot(state, NOW);
+
+  assert.equal(budget.allocation.actual.income, ledger.currentMonth.personalIncome);
+  assert.equal(budget.allocation.actual.rows[0].got, 1000, "a thin month fills what it can");
+  assert.equal(budget.allocation.actual.rows[1].got, 0, "and nothing is left to invest");
+  assert.equal(budget.allocation.actual.shortfall, 500);
+});
+
+test("budget/H: planned and actual are the same plan over different months", () => {
+  const state = plannedState({
+    ledgerAccounts: accounts,
+    ledgerTransactions: [
+      { id: "i1", amount: 1000, type: "income", categoryId: "income-salary", accountId: "acc-bank", date: iso(2026, 7, 3) },
+    ] as LedgerTransaction[],
+    allocation: {
+      incomeType: "variable",
+      steps: [
+        { id: "survival", name: "Survival", kind: "fill", value: 1500 },
+        { id: "growth", name: "Growth", kind: "pct", value: 100 },
+      ],
+      overflowStepId: "growth",
+    },
+  });
+  const budget = getBudgetSnapshot(state, NOW);
+  // plannedIncome is 2,200 here, so the planned month funds everything.
+  assert.equal(budget.allocation.planned.income, budget.plannedIncome);
+  assert.equal(budget.allocation.planned.shortfall, 0);
+  assert.equal(budget.allocation.planned.rows[1].got, 700);
+  // Reality did not, and the two are never merged into one figure.
+  assert.ok(budget.allocation.actual.shortfall > 0);
+});
+
+test("budget/H: sponsored money is not income the plan may invest", () => {
+  // A parent paying for dinner keeps the account balance honest, but it is not
+  // the user's money to route — personalIncome already excludes it.
+  const state = plannedState({
+    ledgerAccounts: accounts,
+    ledgerTransactions: [
+      { id: "i1", amount: 1600, type: "income", categoryId: "income-salary", accountId: "acc-bank", date: iso(2026, 7, 3) },
+      { id: "i2", amount: 400, type: "income", categoryId: "income-allowance", accountId: "acc-bank", date: iso(2026, 7, 4), fundingSource: "sponsored" },
+    ] as LedgerTransaction[],
+    allocation: {
+      incomeType: "variable",
+      steps: [
+        { id: "survival", name: "Survival", kind: "fill", value: 1500 },
+        { id: "growth", name: "Growth", kind: "pct", value: 100 },
+      ],
+      overflowStepId: "growth",
+    },
+  });
+  const budget = getBudgetSnapshot(state, NOW);
+  assert.equal(budget.allocation.actual.income, 1600, "the sponsored 400 is not routed");
+  assert.equal(budget.allocation.actual.rows[1].got, 100);
+});
+
+test("budget/H: spendable cash is bank and wallet money, never holdings", () => {
+  const state = plannedState({
+    emergency: { current: 0, target: 0, annualYield: 0, monthlyTopUp: 0 },
+    ledgerAccounts: [
+      { id: "acc-bank", name: "Bank", type: "bank", openingBalance: 2000 },
+      { id: "acc-wallet", name: "Wallet", type: "wallet", openingBalance: 250 },
+      { id: "acc-invest", name: "Moomoo", type: "investment", openingBalance: 9000 },
+    ] as LedgerAccount[],
+    allocation: {
+      incomeType: "variable",
+      steps: [{ id: "survival", name: "Survival", kind: "fill", value: 1125 }],
+      overflowStepId: "survival",
+    },
+  });
+  const budget = getBudgetSnapshot(state, NOW);
+  assert.equal(budget.allocation.spendableCash, 2250, "selling shares to eat is a different decision");
+  assert.equal(budget.allocation.emergencyBasis, "none");
+  assert.equal(budget.allocation.cashMonths, 2);
+});
+
+// --- the emergency fund is not money for lean months -----------------------
+
+/**
+ * The user decided the emergency fund is for emergencies, and a predictable
+ * lean month is not one. So the cash a shortfall may draw on must never
+ * include it — and where the fund sits decides how it is kept out.
+ */
+
+const oneLayer = {
+  incomeType: "variable" as const,
+  steps: [{ id: "survival", name: "Survival", kind: "fill" as const, value: 1000 }],
+  overflowStepId: "survival",
+};
+
+const emergencyGoal = (accountId?: string) => ({
+  id: "emergency", name: "Emergency Fund", label: "Emergency Fund",
+  current: 0, target: 6000, monthlyContribution: 0, note: "",
+  ...(accountId ? { accountId } : {}),
+});
+
+test("budget/H: an emergency fund nobody linked is assumed to be in the bank, and held back", () => {
+  const state = plannedState({
+    emergency: { current: 4000, target: 6000, annualYield: 0, monthlyTopUp: 0 },
+    goals: [emergencyGoal()],
+    ledgerAccounts: [{ id: "bank", name: "Bank", type: "bank", openingBalance: 6000 }] as LedgerAccount[],
+    allocation: oneLayer,
+  });
+  const allocation = getBudgetSnapshot(state, NOW).allocation;
+  assert.equal(allocation.spendableCash, 2000, "the 4,000 fund is not spending money");
+  assert.equal(allocation.emergencyBasis, "assumed-in-cash", "and the page must say it assumed");
+  assert.equal(allocation.emergencyHeldBack, 4000);
+  assert.equal(allocation.cashMonths, 2);
+});
+
+test("budget/H: an emergency fund linked to a bank account holds back exactly that account", () => {
+  const state = plannedState({
+    // The Settings figure has drifted from the account; the account is the truth.
+    emergency: { current: 4000, target: 6000, annualYield: 0, monthlyTopUp: 0 },
+    goals: [emergencyGoal("bank-ef")],
+    ledgerAccounts: [
+      { id: "bank-main", name: "Main", type: "bank", openingBalance: 3000 },
+      { id: "bank-ef", name: "Savings", type: "bank", openingBalance: 5000 },
+    ] as LedgerAccount[],
+    allocation: oneLayer,
+  });
+  const allocation = getBudgetSnapshot(state, NOW).allocation;
+  assert.equal(allocation.spendableCash, 3000);
+  assert.equal(allocation.emergencyBasis, "linked-account");
+  assert.equal(allocation.emergencyHeldBack, 5000);
+});
+
+test("budget/H: an emergency fund in a broker's money-market fund is not taken out twice", () => {
+  // The shape of a real account: the fund sits in an MMF at the broker, which
+  // is an investment account and so already outside cash. Subtracting it from
+  // the bank as well would leave the user nothing to spend that they have.
+  const state = plannedState({
+    emergency: { current: 4000, target: 6000, annualYield: 0, monthlyTopUp: 0 },
+    goals: [emergencyGoal("moomoo-mmf")],
+    ledgerAccounts: [
+      { id: "bank", name: "Bank", type: "bank", openingBalance: 2500 },
+      { id: "moomoo-mmf", name: "Moomoo MMF", type: "investment", openingBalance: 4352 },
+    ] as LedgerAccount[],
+    allocation: oneLayer,
+  });
+  const allocation = getBudgetSnapshot(state, NOW).allocation;
+  assert.equal(allocation.spendableCash, 2500, "the bank money is all spendable");
+  assert.equal(allocation.emergencyBasis, "linked-account");
+  assert.equal(allocation.emergencyHeldBack, 4352);
+});
+
+test("budget/H: spendable cash never goes below zero", () => {
+  const state = plannedState({
+    emergency: { current: 4000, target: 6000, annualYield: 0, monthlyTopUp: 0 },
+    goals: [emergencyGoal()],
+    ledgerAccounts: [{ id: "bank", name: "Bank", type: "bank", openingBalance: 1000 }] as LedgerAccount[],
+    allocation: oneLayer,
+  });
+  const allocation = getBudgetSnapshot(state, NOW).allocation;
+  assert.equal(allocation.spendableCash, 0);
+  assert.equal(allocation.cashMonths, 0);
+});
+
+test("budget/H: a migrated state routes its own buckets and warns about nothing", () => {
+  const state = cloneDefaultState();
+  const budget = getBudgetSnapshot(state, NOW);
+  assert.deepEqual(budget.allocation.warnings, []);
+  for (const b of budget.buckets.filter((entry) => entry.cadence === "monthly")) {
+    const row = budget.allocation.planned.rows.find((entry) => entry.stepId === b.id);
+    assert.ok(row, `${b.id} is missing from the waterfall`);
+    assert.equal(row.want, b.amount, `${b.id} asks for its own bucket amount`);
+  }
+});
+
+test("budget/H: a mis-configured plan is reported, not silently corrected", () => {
+  const state = plannedState({
+    allocation: {
+      incomeType: "variable",
+      steps: [
+        { id: "growth", name: "Growth", kind: "pct", value: 60 },
+        { id: "freedom", name: "Freedom", kind: "pct", value: 30 },
+      ],
+      overflowStepId: "growth",
+    },
+  });
+  const codes = getBudgetSnapshot(state, NOW).allocation.warnings.map((warning) => warning.code).sort();
+  assert.deepEqual(codes, ["essential-is-percent", "percent-total-not-100"]);
+  // Reported, not fixed: the plan still routes exactly as written — Growth
+  // asks for 60% of 2,200 and then also catches the 10% nobody claimed.
+  const growth = getBudgetSnapshot(state, NOW).allocation.planned.rows[0];
+  assert.equal(growth.want, 1320);
+  assert.equal(growth.got, 1540);
+  assert.equal(growth.overflow, 220);
+});
+
+test("budget/H: a state with no plan still builds, routing nothing", () => {
+  const budget = getBudgetSnapshot(emptyState(), NOW);
+  assert.deepEqual(budget.allocation.planned.rows, []);
+  assert.equal(budget.allocation.cashMonths, 0);
+  assert.deepEqual(budget.allocation.warnings.map((warning) => warning.code), ["no-steps"]);
+});
+
+test("budget/H: the allocation facts are pure and change nothing", () => {
+  const state = plannedState({ ledgerAccounts: accounts });
+  const before = JSON.stringify(state);
+  const once = getBudgetSnapshot(state, NOW).allocation;
+  const twice = getBudgetSnapshot(state, NOW).allocation;
+  assert.deepEqual(twice, once);
+  assert.equal(JSON.stringify(state), before, "building a snapshot mutated the state");
+});
+
+// --- I. the months the user actually had ------------------------------------
+
+/**
+ * An average month is the least useful thing to show someone whose income
+ * swings — it is the month they never have. What these pin is that the worst
+ * month is a month that really happened, and that missing data never poses as
+ * a bad month.
+ */
+
+const variablePlan = {
+  incomeType: "variable" as const,
+  steps: [
+    { id: "survival", name: "Survival", kind: "fill" as const, value: 1500 },
+    { id: "growth", name: "Growth", kind: "pct" as const, value: 100 },
+  ],
+  overflowStepId: "growth",
+};
+
+/** Income of `amount` recorded in the month `back` months before NOW. */
+function incomeIn(back: number, amount: number, id: string): LedgerTransaction {
+  const when = new Date(2026, 7 - back, 10, 12, 0, 0);
+  return { id, amount, type: "income", categoryId: "income-salary", accountId: "acc-bank", date: when.toISOString() };
+}
+
+function freelancer(...income: LedgerTransaction[]): WealthState {
+  return plannedState({ ledgerAccounts: accounts, allocation: variablePlan, ledgerTransactions: income });
+}
+
+test("budget/I: the leanest month is a month that really happened", () => {
+  const state = freelancer(
+    incomeIn(1, 2400, "m1"),
+    incomeIn(2, 800, "m2"),
+    incomeIn(3, 4500, "m3"),
+  );
+  const outlook = getBudgetSnapshot(state, NOW).allocation.outlook!;
+  assert.ok(outlook, "three recorded months is enough to speak");
+  assert.equal(outlook.worst.income, 800);
+  assert.equal(outlook.worst.monthKey, "2026-06", "two months before August is June");
+  assert.equal(outlook.median.income, 2400);
+  assert.equal(outlook.best.income, 4500);
+  // And the plan is measured against each, not against an average nobody had.
+  assert.equal(outlook.worst.result.shortfall, 700);
+  assert.equal(outlook.median.result.shortfall, 0);
+  assert.equal(outlook.best.result.rows[1].got, 3000);
+});
+
+test("budget/I: the current month is left out — it is still being lived", () => {
+  const state = freelancer(
+    incomeIn(0, 50, "this-month-so-far"),
+    incomeIn(1, 2400, "m1"),
+    incomeIn(2, 2300, "m2"),
+  );
+  const outlook = getBudgetSnapshot(state, NOW).allocation.outlook!;
+  assert.equal(outlook.history.length, 2, "a half-recorded month always looks like the worst one");
+  assert.equal(outlook.worst.income, 2300);
+});
+
+test("budget/I: a month before recording began is missing data, not a bad month", () => {
+  const state = freelancer(incomeIn(1, 2400, "m1"), incomeIn(2, 2000, "m2"));
+  const outlook = getBudgetSnapshot(state, NOW).allocation.outlook!;
+  assert.deepEqual(outlook.history.map((month) => month.income), [2000, 2400]);
+  assert.equal(outlook.worst.income, 2000, "the four empty months are not four worst months");
+});
+
+test("budget/I: one month of history says nothing, and says so", () => {
+  assert.equal(getBudgetSnapshot(freelancer(incomeIn(1, 2400, "m1")), NOW).allocation.outlook, null);
+  assert.equal(getBudgetSnapshot(freelancer(), NOW).allocation.outlook, null);
+});
+
+test("budget/I: cover is counted in worst months, and never from the emergency fund", () => {
+  // The bank holds 5,000 opening + 3,800 income = 8,800. The seeded 4,000
+  // emergency fund is not linked to an account, so it is held back from that:
+  // 4,800 to spend, against a worst month 700 short — six such months.
+  const state = freelancer(incomeIn(1, 800, "m1"), incomeIn(2, 3000, "m2"));
+  const allocation = getBudgetSnapshot(state, NOW).allocation;
+  assert.equal(allocation.outlook!.worst.result.shortfall, 700);
+  assert.equal(allocation.emergencyHeldBack, 4000);
+  assert.equal(allocation.spendableCash, 8800 - 4000);
+  assert.equal(allocation.outlook!.worstMonthsCovered, Math.floor(4800 / 700));
+});
+
+test("budget/I: a plan that holds in the leanest month reports no cover needed", () => {
+  const state = freelancer(incomeIn(1, 2000, "m1"), incomeIn(2, 3000, "m2"));
+  const outlook = getBudgetSnapshot(state, NOW).allocation.outlook!;
+  assert.equal(outlook.worst.result.shortfall, 0);
+  assert.equal(outlook.worstMonthsCovered, 0, "nothing to cover");
+});
+
+test("budget/I: the swing between the leanest and best month is reported as a fact", () => {
+  const state = freelancer(incomeIn(1, 1000, "m1"), incomeIn(2, 4000, "m2"));
+  const outlook = getBudgetSnapshot(state, NOW).allocation.outlook!;
+  assert.equal(outlook.spread, 0.75);
 });

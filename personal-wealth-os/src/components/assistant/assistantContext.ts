@@ -175,18 +175,34 @@ export function buildUserRulesContext(state: WealthState, now: Date): string {
 
   if (rules.length > 0) lines.push("The user's own rules (set in WealthUp):", ...rules.map((rule) => `  - ${rule}`));
 
-  // --- budget buckets ---
+  // --- allocation plan ---
+  // Described as the rules the user set, not as the amounts they happen to
+  // produce: a percentage layer has no fixed monthly figure, and reporting it
+  // as one would have the assistant advise on a number nobody chose.
   const income = budget.plannedIncome;
-  const buckets = budget.buckets
-    .filter((bucket) => bucket.amount > 0)
+  const layers = budget.allocation.planned.rows
+    // A layer that asks for nothing and gets nothing is noise to reason about.
+    .filter((row) => row.want > 0.005 || row.got > 0.005)
     .slice(0, MAX_BUCKETS)
-    .map((bucket) => {
-      const share = bucket.cadence === "monthly" && income > 0 ? `, ${Math.round((bucket.amount / income) * 100)}% of planned income` : "";
-      const cadence = bucket.cadence === "monthly" ? "/month" : " one-time";
-      return `  - ${bucket.name}: ${money(bucket.amount)}${cadence}${share}`;
+    .map((row) => {
+      const rule = row.stepKind === "fill"
+        ? `fill to ${money(row.value)}`
+        : row.stepKind === "gross"
+          ? `${row.value}% of all income`
+          : `${row.value}% of what the layers above leave`;
+      const catches = row.overflow > 0.005 ? ", and catches what the other layers leave" : "";
+      return `  - ${row.name}: ${rule} — ${money(row.got)} in a planned month${catches}`;
     });
-  if (buckets.length > 0) {
-    lines.push(`Budget buckets (planned income ${money(income)}/month):`, ...buckets);
+  if (layers.length > 0) {
+    lines.push(`Allocation plan, money flows top to bottom (planned income ${money(income)}/month):`, ...layers);
+  }
+
+  const oneTime = budget.buckets
+    .filter((bucket) => bucket.cadence === "one-time" && bucket.amount > 0)
+    .slice(0, MAX_BUCKETS)
+    .map((bucket) => `  - ${bucket.name}: ${money(bucket.amount)} one-time`);
+  if (oneTime.length > 0) {
+    lines.push("Set aside outside the plan:", ...oneTime);
   }
 
   // --- goals ---

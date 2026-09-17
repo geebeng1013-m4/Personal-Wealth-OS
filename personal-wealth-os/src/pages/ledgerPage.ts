@@ -19,6 +19,7 @@ import { createId } from "../state";
 import { money } from "../rules";
 import { escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
+import { incomeRoutingHint } from "../components/incomeRoutingHint";
 import {
   categoryTotals,
   filterLedgerTransactions,
@@ -249,6 +250,14 @@ export function ledgerTemplate(state: WealthState): string {
             : `<label class="wu-field-row"><span class="wu-field-row__label">Account</span><select class="wu-field" name="accountId" required>${accountOptions(selectedAccountId)}</select></label>
           <fieldset class="wu-fieldset"><legend class="wu-field-row__label">Category</legend><div class="wu-row wu-row--tight">${entryCategories.map((category, index) => `<label class="wu-chip"><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === editing?.categoryId || (!editing && (draftCategoryId ? category.id === draftCategoryId : index === 0)) ? " checked" : ""}><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)}</span></label>`).join("")}</div></fieldset>
           <label class="wu-switch"><input type="checkbox" name="fundingSource" value="sponsored"${entryFundingSource === "sponsored" ? " checked" : ""}><span class="wu-switch__track"></span><span class="wu-switch__label">Sponsored / earmarked money — not part of my budget</span></label>`}
+          ${entryType === "income"
+            ? `<div id="ledgerRoutingHint" aria-live="polite">${incomeRoutingHint(state, {
+              amount: Number(entryAmount),
+              date: entryDate,
+              sponsored: entryFundingSource === "sponsored",
+              ...(editing ? { excludeTransactionId: editing.id } : {}),
+            })}</div>`
+            : ""}
           <details class="wu-details"${editing ? " open" : ""}><summary class="wu-details__summary"><span class="t-subheading">Date &amp; note</span></summary><div class="wu-grid wu-grid--2"><label class="wu-field-row"><span class="wu-field-row__label">Date</span><input class="wu-field" name="date" type="date" required value="${entryDate}"></label><label class="wu-field-row"><span class="wu-field-row__label">Note</span><input class="wu-field" name="note" maxlength="500" value="${escapeHtml(entryNote)}" placeholder="Optional"></label></div></details>
           <p id="ledgerFormError" class="wu-field-row__error" role="alert">${transferUnavailable ? "Add at least two accounts before recording a transfer." : ""}</p>
           <button class="wu-btn wu-btn--primary wu-btn--block" type="submit"${transferUnavailable ? " disabled" : ""}>${editing ? "Save Changes" : "Save Transaction"}</button>
@@ -393,6 +402,27 @@ export function ledgerTemplate(state: WealthState): string {
 }
 
 export function bindLedger(root: HTMLElement, state: WealthState, setState: Setter, navigate: Navigate | undefined, rerender: RenderApp): void {
+  // Where the payment goes, recomputed as it is typed. Only the hint is
+  // redrawn, so the amount field keeps focus and the caret stays put.
+  const routingHint = root.querySelector<HTMLElement>("#ledgerRoutingHint");
+  const ledgerForm = root.querySelector<HTMLFormElement>("#ledgerForm");
+  if (routingHint && ledgerForm) {
+    const redrawHint = () => {
+      const field = (name: string) => ledgerForm.elements.namedItem(name) as HTMLInputElement | null;
+      routingHint.innerHTML = incomeRoutingHint(state, {
+        amount: Number(field("amount")?.value),
+        date: field("date")?.value ?? "",
+        sponsored: field("fundingSource")?.checked === true,
+        ...(ledgerEditingId ? { excludeTransactionId: ledgerEditingId } : {}),
+      });
+    };
+    ["amount", "date", "fundingSource"].forEach((name) => {
+      const element = ledgerForm.elements.namedItem(name) as HTMLInputElement | null;
+      element?.addEventListener("input", redrawHint);
+      element?.addEventListener("change", redrawHint);
+    });
+  }
+
   const refresh = (next = state, label?: string, preserveScroll = false) => {
     const anchorTop = preserveScroll
       ? root.querySelector<HTMLElement>(".ledger-filters")?.getBoundingClientRect().top

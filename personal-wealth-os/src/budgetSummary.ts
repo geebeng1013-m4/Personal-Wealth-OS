@@ -17,15 +17,17 @@
  *           getLedgerSnapshot(). Prefixed `actual*`.
  *
  * A planned figure must never be presented as a recorded one, or vice versa.
+ * `allocation` holds both, routed through the same plan and kept apart by name.
  *
  * ── Boundaries ────────────────────────────────────────────────────────────
  * Ledger facts are read from the canonical ledger snapshot rather than
  * re-scanning transactions. Spending *limits* stay in FinancialRules; this
  * module reports what was spent, and the Advisor compares the two.
  */
-import type { WealthState } from "./models";
-import { getLedgerSnapshot, type LedgerSnapshot } from "./ledgerSummary";
+import type { AllocationPlan, WealthState } from "./models";
+import { getLedgerSnapshot, recentMonthlyIncome, type LedgerSnapshot } from "./ledgerSummary";
 import { monthlyBasicExpense, monthlySurplus } from "./rules";
+import { allocateMonth, cashMonths, validatePlan, type AllocationResult, type PlanWarning } from "./allocation";
 
 export type BucketCadence = "monthly" | "one-time";
 
@@ -47,6 +49,79 @@ export interface BudgetBucketSnapshot {
   allocationBase: number;
   /** amount / allocationBase, capped at 1. Zero when the base is zero. */
   allocationRatio: number;
+}
+
+/**
+ * The allocation plan applied twice: to the month the user planned for, and to
+ * the money that actually arrived. Same waterfall, two inputs — which is the
+ * whole point, since a thin month routes differently from a normal one.
+ */
+/** How many complete months of recorded income the outlook looks back over. */
+export const OUTLOOK_MONTHS = 6;
+
+/** One recorded month, and what the current plan would do with that income. */
+export interface OutlookMonth {
+  /** "YYYY-MM" of the month this income was recorded in. */
+  monthKey: string;
+  income: number;
+  result: AllocationResult;
+}
+
+/**
+ * The plan measured against months the user actually had.
+ *
+ * An average month is the least useful thing to show someone whose income
+ * swings: it is the month they never have. What decides whether a plan holds is
+ * the worst one.
+ */
+export interface BudgetOutlook {
+  /** Complete months only, oldest first. The current month is still being lived. */
+  history: Array<{ monthKey: string; income: number }>;
+  worst: OutlookMonth;
+  median: OutlookMonth;
+  best: OutlookMonth;
+  /** How far apart the worst and best months are, as a fraction of the best. */
+  spread: number;
+  /** Whole worst months the spendable cash could cover the shortfall of. */
+  worstMonthsCovered: number;
+}
+
+export interface BudgetAllocationSnapshot {
+  /** The plan routed over plannedIncome — what a normal month looks like. */
+  planned: AllocationResult;
+  /** The plan routed over the income the ledger recorded this month. */
+  actual: AllocationResult;
+  /** Facts about a plan the user could have mis-configured. Wording is the UI's. */
+  warnings: PlanWarning[];
+  /**
+   * The money a lean month may be covered from: bank and wallet balances, less
+   * the emergency fund. Investment accounts are excluded because selling to eat
+   * is a different decision; the emergency fund is excluded because the user
+   * decided it is for emergencies, and a predictable lean month is not one.
+   * Counting it would tell them they are safer than they are.
+   */
+  spendableCash: number;
+  /**
+   * How the emergency fund was kept out of spendableCash, so the page can say
+   * so rather than let an assumption pass as a fact.
+   *
+   *   linked-account   the Emergency Fund goal is linked to a ledger account;
+   *                    that account is excluded exactly
+   *   assumed-in-cash  not linked, so the recorded fund is assumed to sit in
+   *                    bank or wallet and subtracted — the cautious reading
+   *   none             no emergency fund recorded
+   */
+  emergencyBasis: "linked-account" | "assumed-in-cash" | "none";
+  /** How much was held back as the emergency fund. */
+  emergencyHeldBack: number;
+  /** spendableCash measured in months of the plan's essential layer. */
+  cashMonths: number;
+  /**
+   * The plan against the months actually recorded. Null when fewer than two
+   * complete months carry income: a worst month invented from one data point
+   * would be a guess wearing a fact's clothes.
+   */
+  outlook: BudgetOutlook | null;
 }
 
 export interface BudgetSnapshot {
@@ -79,6 +154,9 @@ export interface BudgetSnapshot {
 
   // --- Buckets ---
   buckets: BudgetBucketSnapshot[];
+
+  // --- Allocation ---
+  allocation: BudgetAllocationSnapshot;
 }
 
 /**
@@ -133,6 +211,22 @@ export function getBudgetSnapshot(
 
   const actualSpending = ledger.currentMonth.personalExpenses;
 
+  // The plan routes the month the user planned for and the month they actually
+  // had. Sponsored money is already excluded upstream (personalIncome), so a
+  // parent's dinner money never reads as income the plan may invest.
+  const plan: AllocationPlan = state.allocation ?? { incomeType: "fixed", steps: [] };
+  const cash = spendableCashOf(state, ledger);
+  const allocation: BudgetAllocationSnapshot = {
+    planned: allocateMonth(plan, plannedIncome),
+    actual: allocateMonth(plan, ledger.currentMonth.personalIncome),
+    warnings: validatePlan(plan),
+    spendableCash: cash.spendableCash,
+    emergencyBasis: cash.emergencyBasis,
+    emergencyHeldBack: cash.emergencyHeldBack,
+    cashMonths: cashMonths(cash.spendableCash, plan),
+    outlook: buildOutlook(state, now, plan, cash.spendableCash),
+  };
+
   return {
     monthKey: ledger.currentMonth.key,
     plannedAllowance,
@@ -147,6 +241,88 @@ export function getBudgetSnapshot(
     spendingVariance: actualSpending - plannedSpending,
     isOverPlannedSpending: actualSpending > plannedSpending,
     buckets,
+    allocation,
+  };
+}
+
+/**
+ * Bank and wallet money the user may spend on a lean month.
+ *
+ * The emergency fund is found through the Emergency Fund goal. When that goal
+ * is linked to a ledger account, the fund is exactly that account: taken out
+ * of cash if it is a bank or wallet account, and left alone if it is anything
+ * else — a money-market fund at a broker is already outside cash and must not
+ * be taken out a second time. When it is not linked, the recorded amount is
+ * assumed to sit in cash and subtracted, because understating what can be
+ * spent is recoverable and overstating it is not.
+ */
+function spendableCashOf(
+  state: WealthState,
+  ledger: LedgerSnapshot,
+): Pick<BudgetAllocationSnapshot, "spendableCash" | "emergencyBasis" | "emergencyHeldBack"> {
+  const cash = ledger.accountTypeBalances.bank + ledger.accountTypeBalances.wallet;
+  const goal = (state.goals ?? []).find((entry) => entry.id === "emergency");
+  const linked = goal?.accountId
+    ? ledger.accountBalances.find((entry) => entry.account.id === goal.accountId)
+    : undefined;
+
+  if (linked) {
+    const inCash = linked.account.type === "bank" || linked.account.type === "wallet";
+    return {
+      spendableCash: Math.max(0, cash - (inCash ? Math.max(0, linked.balance) : 0)),
+      emergencyBasis: "linked-account",
+      emergencyHeldBack: Math.max(0, linked.balance),
+    };
+  }
+
+  const recorded = Math.max(0, state.emergency?.current ?? 0);
+  if (recorded > 0) {
+    return {
+      spendableCash: Math.max(0, cash - recorded),
+      emergencyBasis: "assumed-in-cash",
+      emergencyHeldBack: recorded,
+    };
+  }
+  return { spendableCash: Math.max(0, cash), emergencyBasis: "none", emergencyHeldBack: 0 };
+}
+
+/**
+ * Build the outlook from the months the ledger recorded.
+ *
+ * Months with no income at all are dropped rather than counted as the worst
+ * month: a month before the user started recording is missing data, not a bad
+ * month, and treating the two alike would frighten people with their own
+ * onboarding.
+ */
+function buildOutlook(
+  state: WealthState,
+  now: Date,
+  plan: AllocationPlan,
+  spendableCash: number,
+): BudgetOutlook | null {
+  const history = recentMonthlyIncome(state.ledgerTransactions, now, OUTLOOK_MONTHS)
+    .filter((month) => month.income > 0);
+  if (history.length < 2) return null;
+
+  const sorted = [...history].sort((a, b) => a.income - b.income);
+  const at = (month: { monthKey: string; income: number }): OutlookMonth => ({
+    monthKey: month.monthKey,
+    income: month.income,
+    result: allocateMonth(plan, month.income),
+  });
+
+  const worst = at(sorted[0]);
+  const best = at(sorted[sorted.length - 1]);
+  const median = at(sorted[Math.floor((sorted.length - 1) / 2)]);
+  const worstShortfall = worst.result.shortfall;
+
+  return {
+    history,
+    worst,
+    median,
+    best,
+    spread: best.income > 0 ? (best.income - worst.income) / best.income : 0,
+    worstMonthsCovered: worstShortfall > 0.005 ? Math.floor(spendableCash / worstShortfall) : 0,
   };
 }
 
