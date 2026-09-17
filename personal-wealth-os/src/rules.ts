@@ -1,12 +1,24 @@
 import type { PortfolioPosition, PortfolioSummary, Trade, WealthState } from "./models";
 import { tradesWithExchangeCost } from "./currencyExchange";
+import { tradeAmounts, type TradeAmountFields } from "./tradeCurrency";
 
 export interface PositionCostBasis {
   ticker: string;
   units: number;
+  /** The currency the position was bought in: its newest trade's. */
+  currency: string;
+  /** Cost of the units held, in `currency`. */
+  costBasisLocal: number;
+  /** costBasisLocal / units, in `currency`. */
+  averageCostLocal: number;
+  /** Realised P&L in `currency`. */
+  realizedPnlLocal: number;
+  /** The Local figures when the position is in dollars; 0 for any other currency. */
   costBasisUsd: number;
   costBasisMyr: number;
+  /** averageCostLocal for a dollar position; 0 otherwise. */
   averageCostUsd: number;
+  /** realizedPnlLocal for a dollar position; 0 otherwise. */
   realizedPnlUsd: number;
   realizedPnlMyr: number;
   /** Every fee ever paid on this ticker, including on units since sold. */
@@ -22,7 +34,8 @@ export interface PositionCostBasis {
   feeBasisMyr: number;
 }
 
-export type CostBasisTrade = Pick<Trade, "ticker" | "date" | "type" | "amountUsd" | "amountMyr" | "priceUsd" | "units" | "feeMyr">;
+export type CostBasisTrade = Pick<Trade, "ticker" | "date" | "type" | "amountUsd" | "amountMyr" | "priceUsd" | "units" | "feeMyr">
+  & Partial<Pick<Trade, "currency" | "amount" | "price">>;
 
 export function money(value: number, currency = "MYR"): string {
   return `${currency} ${Number(value || 0).toLocaleString("en-MY", { maximumFractionDigits: 2 })}`;
@@ -79,10 +92,12 @@ export function projectedAnnualEmergencyYield(state: WealthState): number {
   return state.emergency.current * state.emergency.annualYield;
 }
 
-export function tradeUnits(trade: Pick<Trade, "priceUsd" | "amountUsd" | "units">): number {
+/** Units a trade moved: as recorded, or its order value over its price, both in its own currency. */
+export function tradeUnits(trade: TradeAmountFields & Pick<Trade, "units">): number {
   if (Number.isFinite(trade.units) && Number(trade.units) > 0) return Number(trade.units);
-  if (trade.priceUsd <= 0 || trade.amountUsd <= 0) return 0;
-  return trade.amountUsd / trade.priceUsd;
+  const { amount, price } = tradeAmounts(trade);
+  if (price <= 0 || amount <= 0) return 0;
+  return amount / price;
 }
 
 export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: string): PositionCostBasis {
@@ -91,21 +106,26 @@ export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: str
     .filter(({ trade }) => trade.ticker === ticker)
     .sort((a, b) => a.trade.date.localeCompare(b.trade.date) || a.index - b.index);
   let units = 0;
-  let costBasisUsd = 0;
+  // In the position's own currency. A ticker trades in one currency, so every
+  // trade's price is in the same unit; the newest trade names it.
+  let costBasisLocal = 0;
   let costBasisMyr = 0;
-  let realizedPnlUsd = 0;
+  let realizedPnlLocal = 0;
   let realizedPnlMyr = 0;
   let feesMyr = 0;
   let feeBasisMyr = 0;
+  let currency = "USD";
 
   matchingTrades.forEach(({ trade }) => {
     const unitsTraded = tradeUnits(trade);
+    const { currency: tradeCurrency, price } = tradeAmounts(trade);
+    currency = tradeCurrency;
     feesMyr += trade.feeMyr;
     if (unitsTraded <= 0) return;
 
     if (trade.type !== "Sell") {
       units += unitsTraded;
-      costBasisUsd += unitsTraded * trade.priceUsd;
+      costBasisLocal += unitsTraded * price;
       costBasisMyr += trade.amountMyr + trade.feeMyr;
       feeBasisMyr += trade.feeMyr;
       return;
@@ -114,35 +134,41 @@ export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: str
     if (units <= 0) return;
     const unitsSold = Math.min(unitsTraded, units);
     const soldFraction = unitsSold / units;
-    const removedCostUsd = costBasisUsd * soldFraction;
+    const removedCostLocal = costBasisLocal * soldFraction;
     const removedCostMyr = costBasisMyr * soldFraction;
     const proceedsFraction = unitsSold / unitsTraded;
-    const proceedsUsd = unitsSold * trade.priceUsd;
+    const proceedsLocal = unitsSold * price;
     const proceedsMyr = Math.max(trade.amountMyr - trade.feeMyr, 0) * proceedsFraction;
 
-    realizedPnlUsd += proceedsUsd - removedCostUsd;
+    realizedPnlLocal += proceedsLocal - removedCostLocal;
     realizedPnlMyr += proceedsMyr - removedCostMyr;
     units -= unitsSold;
-    costBasisUsd -= removedCostUsd;
+    costBasisLocal -= removedCostLocal;
     costBasisMyr -= removedCostMyr;
     // Fees ride out with the cost they are part of, at the same fraction.
     feeBasisMyr -= feeBasisMyr * soldFraction;
 
     if (units < 1e-10) {
       units = 0;
-      costBasisUsd = 0;
+      costBasisLocal = 0;
       costBasisMyr = 0;
       feeBasisMyr = 0;
     }
   });
 
+  const averageCostLocal = units > 0 ? costBasisLocal / units : 0;
+  const isUsd = currency === "USD";
   return {
     ticker,
     units,
-    costBasisUsd,
+    currency,
+    costBasisLocal,
+    averageCostLocal,
+    realizedPnlLocal,
+    costBasisUsd: isUsd ? costBasisLocal : 0,
     costBasisMyr,
-    averageCostUsd: units > 0 ? costBasisUsd / units : 0,
-    realizedPnlUsd,
+    averageCostUsd: isUsd ? averageCostLocal : 0,
+    realizedPnlUsd: isUsd ? realizedPnlLocal : 0,
     realizedPnlMyr,
     feesMyr,
     feeBasisMyr,

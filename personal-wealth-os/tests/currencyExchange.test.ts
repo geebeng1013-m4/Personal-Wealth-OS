@@ -98,8 +98,8 @@ test("exchange: settlement pays the oldest unfunded buy first", () => {
   ];
   const exchanges = [exchange("x1", "2026-05-01", 430, 100)];
   const coverage = resolveExchangeCoverage(trades, exchanges);
-  assert.equal(coverage.costs.get("t1")!.uncoveredUsd, 0, "the older order is settled");
-  assert.equal(coverage.costs.get("t2")!.uncoveredUsd, 100, "the newer one is not");
+  assert.equal(coverage.costs.get("t1")!.uncovered, 0, "the older order is settled");
+  assert.equal(coverage.costs.get("t2")!.uncovered, 100, "the newer one is not");
   assert.ok(Math.abs(coverage.coverage - 0.5) < 1e-9);
 
   const restated = tradesWithExchangeCost(trades, exchanges);
@@ -117,7 +117,7 @@ test("exchange: unexplained dollars are priced off the nearest conversion, not t
   const exchanges = [exchange("x1", "2026-08-05", 41.20, 10)];
   const trades = [buy("t1", "2026-08-10", "QQQM", 100, 290)];
   const coverage = resolveExchangeCoverage(trades, exchanges);
-  assert.ok(Math.abs(coverage.costs.get("t1")!.uncoveredUsd - 90) < 1e-9);
+  assert.ok(Math.abs(coverage.costs.get("t1")!.uncovered - 90) < 1e-9);
 
   const [restated] = tradesWithExchangeCost(trades, exchanges);
   assert.ok(Math.abs(restated.amountMyr - 100 * 4.12) < 0.01, `${restated.amountMyr}`);

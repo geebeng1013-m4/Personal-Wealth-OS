@@ -1,5 +1,11 @@
 export type Currency = "MYR" | "USD";
 
+/**
+ * Where a listing trades. Separate from its currency: London lists the same
+ * kind of ETF in dollars and in sterling. See tradeCurrency.ts.
+ */
+export type Market = "US" | "MY" | "HK" | "SG" | "LSE";
+
 export type Ticker = string;
 
 export type TradeType = "DCA" | "Dip Buy" | "Manual Buy" | "Sell";
@@ -118,6 +124,25 @@ export interface Trade {
   feeMyr: number;
   exchangeRate?: number;
   notes?: string;
+
+  // --- Multi-market shape (v23). Filled in on load by normalizeTradeMarket. ---
+  //
+  // For a dollar trade these mirror amountUsd / priceUsd / feeMyr and are
+  // re-derived from them on every load, because an older build only edits the
+  // dollar fields. No calculation reads them yet.
+
+  /** Where the listing trades. */
+  market?: Market;
+  /** ISO 4217 code the trade was priced in. Absent means "USD". */
+  currency?: string;
+  /** Order value in `currency`. */
+  amount?: number;
+  /** Fill price per unit in `currency`. */
+  price?: number;
+  /** Fee as recorded, in `feeCurrency`. */
+  fee?: number;
+  /** Either the trade's own currency or "MYR". */
+  feeCurrency?: string;
 }
 
 /** Which way a conversion went. */
@@ -126,21 +151,33 @@ export type ExchangeDirection = "myr-to-usd" | "usd-to-myr";
 /**
  * One currency conversion, as it appears on the broker statement.
  *
- * This is the only place a real MYR/USD rate enters the system. A share order
- * is priced purely in dollars, so without these records the ringgit cost of a
- * holding can only be guessed at. Both amounts are stored and the rate is
- * derived from them, so the rate can never drift out of agreement with the
- * money — and it comes out inclusive of the spread actually paid.
+ * This is the only place a real exchange rate enters the system. A share order
+ * is priced purely in its own currency, so without these records the ringgit
+ * cost of a holding can only be guessed at. Both amounts are stored and the
+ * rate is derived from them, so the rate can never drift out of agreement with
+ * the money — and it comes out inclusive of the spread actually paid.
+ *
+ * Two forms. A ringgit ↔ dollar conversion carries direction, myrAmount and
+ * usdAmount, which every build reads, plus the general from/to fields derived
+ * from them. Any other pair (ringgit ↔ HKD, SGD…) carries the general fields
+ * alone. Read it through sidesOf() in tradeCurrency.ts rather than either form.
  */
 export interface CurrencyExchange {
   id: string;
   date: string;
-  direction: ExchangeDirection;
-  /** Ringgit side of the conversion. Always positive. */
-  myrAmount: number;
-  /** Dollar side of the conversion. Always positive. */
-  usdAmount: number;
+  /** Ringgit ↔ dollar conversions only. */
+  direction?: ExchangeDirection;
+  /** Ringgit side of a ringgit ↔ dollar conversion. Always positive. */
+  myrAmount?: number;
+  /** Dollar side of a ringgit ↔ dollar conversion. Always positive. */
+  usdAmount?: number;
   notes?: string;
+
+  // --- General form (v23). Always present once validated. ---
+  fromCurrency?: string;
+  fromAmount?: number;
+  toCurrency?: string;
+  toAmount?: number;
 }
 
 export interface Liability {

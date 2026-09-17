@@ -15,13 +15,35 @@
  *
  * Runtime read model: never persisted to WealthState.
  */
-import type { Ticker, WealthState } from "./models";
+import type { Market, Ticker, WealthState } from "./models";
 import { calculatePositionCostBasis, portfolioSummary, type PositionCostBasis } from "./rules";
 import { tradesWithExchangeCost } from "./currencyExchange";
 import { getPrice, isUsableRate, type PriceMap, type UsdToMyr } from "./marketPrices";
+import { MARKETS, marketOfTicker, normalizeTradeMarket } from "./tradeCurrency";
 
 export interface PortfolioHolding {
   ticker: Ticker;
+  /** Where the listing trades. */
+  market: Market;
+  /**
+   * The currency the holding was bought and is priced in. Every *Local field is
+   * in this currency; the *Usd fields carry the same figures only for a dollar
+   * holding and are 0 or null for any other, so they never mix currencies.
+   */
+  currency: string;
+  investedLocal: number;
+  averageCostLocal: number;
+  realizedPnlLocal: number;
+  /** Live price in `currency`, or null when unknown or quoted in another currency. */
+  priceLocal: number | null;
+  /** units x priceLocal. Null when the price is unknown. */
+  marketValueLocal: number | null;
+  /** marketValueLocal - investedLocal. Null when the price is unknown. */
+  unrealizedPnlLocal: number | null;
+  /** unrealizedPnlLocal / investedLocal. Null when unknown or nothing was invested. */
+  unrealizedPnlPercentLocal: number | null;
+  /** MYR per unit of `currency` used for marketValueMyr, or null when none was known. */
+  rateToMyr: number | null;
   /** Units currently held. Sells reduce this; it never goes negative. */
   units: number;
   investedMyr: number;
@@ -80,6 +102,26 @@ export interface PortfolioHolding {
 
 /** Whether a portfolio could be valued, and how completely. */
 export type ValuationStatus = "complete" | "partial" | "unavailable";
+
+/**
+ * The holdings in one currency, added up in that currency and in ringgit.
+ * Like the portfolio totals, values cover the priced holdings only.
+ */
+export interface CurrencySubtotal {
+  currency: string;
+  /** Held tickers in this currency. */
+  tickers: Ticker[];
+  investedLocal: number;
+  investedMyr: number;
+  /** Null when no holding in this currency could be priced. */
+  marketValueLocal: number | null;
+  /** Null when unpriced, or when no rate to ringgit was known. */
+  marketValueMyr: number | null;
+  /** Null whenever marketValueMyr is. Measured against the priced holdings' cost. */
+  unrealizedPnlMyr: number | null;
+  rateToMyr: number | null;
+  valuationStatus: ValuationStatus;
+}
 
 export interface PortfolioSnapshot {
   holdings: PortfolioHolding[];
@@ -162,6 +204,8 @@ export interface PortfolioSnapshot {
   valuedAt: number | null;
   /** FX rate used for the MYR figures, or null when none was available. */
   usdToMyrUsed: number | null;
+  /** Held holdings grouped by currency, largest ringgit cost first. */
+  byCurrency: CurrencySubtotal[];
 }
 
 /** Live market inputs. Everything is optional; anything missing means unknown. */
@@ -170,6 +214,11 @@ export interface ValuationInputs {
   prices?: PriceMap;
   /** USD→MYR rate. Null/absent means MYR valuation stays unknown. */
   usdToMyr?: UsdToMyr;
+  /**
+   * MYR per unit for every other currency a holding or quote is in, MYR itself
+   * as 1. Absent currency = unknown rate. The dollar is read from usdToMyr.
+   */
+  ratesToMyr?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -203,26 +252,59 @@ export function getPortfolioSnapshot(
   // FX is only applied when a real rate was supplied. No rate means the MYR
   // valuation stays unknown rather than being converted at an invented number.
   const usdToMyr = isUsableRate(market.usdToMyr) ? market.usdToMyr : null;
+  const rateToMyr = (currency: string): number | null => {
+    if (currency === "MYR") return 1;
+    if (currency === "USD") return usdToMyr;
+    const rate = market.ratesToMyr?.get(currency);
+    return isUsableRate(rate) ? rate : null;
+  };
+
+  // Where each ticker trades, from its newest trade; a ticker with no trades
+  // yet (a DCA target only) is placed by its suffix.
+  const marketByTicker = new Map<string, Market>();
+  for (const trade of state.trades) marketByTicker.set(trade.ticker, normalizeTradeMarket(trade).market ?? "US");
 
   const holdings: PortfolioHolding[] = summary.positions.map((position) => {
     const costBasis = costBases.get(position.ticker)
       ?? calculatePositionCostBasis(trades, position.ticker);
+    const holdingMarket = marketByTicker.get(position.ticker) ?? marketOfTicker(position.ticker);
+    const currency = marketByTicker.has(position.ticker)
+      ? costBasis.currency
+      : MARKETS.find((info) => info.market === holdingMarket)?.defaultCurrency ?? "USD";
+    const isUsd = currency === "USD";
 
     // A holding is valued only when a usable price exists AND units are held.
     // Zero units is not a valuation failure — it is genuinely worth nothing.
+    // A quote in a different currency from the holding's is not a price for it:
+    // Hong Kong units times a dollar figure values nothing that exists.
     const live = getPrice(market.prices, position.ticker);
-    const priceUsd = live?.priceUsd ?? null;
-    const valued = priceUsd !== null;
+    const priceLocal = live && live.currency === currency ? live.priceUsd : null;
+    const rate = rateToMyr(currency);
 
-    const marketValueUsd = valued ? position.units * priceUsd : null;
-    const marketValueMyr = marketValueUsd !== null && usdToMyr !== null
-      ? marketValueUsd * usdToMyr
+    const marketValueLocal = priceLocal !== null ? position.units * priceLocal : null;
+    const marketValueMyr = marketValueLocal !== null && rate !== null
+      ? marketValueLocal * rate
       : null;
-    const unrealizedPnlUsd = marketValueUsd !== null ? marketValueUsd - position.investedUsd : null;
+    const unrealizedPnlLocal = marketValueLocal !== null ? marketValueLocal - costBasis.costBasisLocal : null;
     const unrealizedPnlMyr = marketValueMyr !== null ? marketValueMyr - position.investedMyr : null;
+    // Percentage return needs a cost to divide by; with none it is undefined,
+    // not zero.
+    const unrealizedPnlPercentLocal = unrealizedPnlLocal !== null && costBasis.costBasisLocal > 0
+      ? unrealizedPnlLocal / costBasis.costBasisLocal
+      : null;
 
     return {
       ticker: position.ticker,
+      market: holdingMarket,
+      currency,
+      investedLocal: costBasis.costBasisLocal,
+      averageCostLocal: costBasis.averageCostLocal,
+      realizedPnlLocal: costBasis.realizedPnlLocal,
+      priceLocal,
+      marketValueLocal,
+      unrealizedPnlLocal,
+      unrealizedPnlPercentLocal,
+      rateToMyr: rate,
       units: position.units,
       investedMyr: position.investedMyr,
       investedUsd: position.investedUsd,
@@ -234,16 +316,12 @@ export function getPortfolioSnapshot(
       realizedPnlMyr: costBasis.realizedPnlMyr,
       feesMyr: costBasis.feesMyr,
       feesInCostBasisMyr: costBasis.feeBasisMyr,
-      priceUsd,
-      marketValueUsd,
+      priceUsd: isUsd ? priceLocal : null,
+      marketValueUsd: isUsd ? marketValueLocal : null,
       marketValueMyr,
-      unrealizedPnlUsd,
+      unrealizedPnlUsd: isUsd ? unrealizedPnlLocal : null,
       unrealizedPnlMyr,
-      // Percentage return needs a cost to divide by; with none it is undefined,
-      // not zero.
-      unrealizedPnlPercent: unrealizedPnlUsd !== null && position.investedUsd > 0
-        ? unrealizedPnlUsd / position.investedUsd
-        : null,
+      unrealizedPnlPercent: isUsd ? unrealizedPnlPercentLocal : null,
       unrealizedPnlPercentMyr: unrealizedPnlMyr !== null && position.investedMyr > 0
         ? unrealizedPnlMyr / position.investedMyr
         : null,
@@ -255,23 +333,29 @@ export function getPortfolioSnapshot(
   // excluded from the totals and reported in unpricedTickers, so it can never
   // be silently counted as worth zero.
   const heldHoldings = holdings.filter((holding) => holding.units > 0);
-  const priced = heldHoldings.filter((holding) => holding.marketValueUsd !== null);
-  const unpriced = heldHoldings.filter((holding) => holding.marketValueUsd === null);
+  const priced = heldHoldings.filter((holding) => holding.marketValueLocal !== null);
+  const unpriced = heldHoldings.filter((holding) => holding.marketValueLocal === null);
+  const pricedUsd = priced.filter((holding) => holding.currency === "USD");
+  // A ringgit total needs every priced holding in ringgit. Adding up only the
+  // ones with a known rate would quietly shrink the portfolio.
+  const allInRinggit = priced.every((holding) => holding.marketValueMyr !== null);
 
   const valuationStatus: ValuationStatus = priced.length === 0
     ? "unavailable"
     : unpriced.length === 0 ? "complete" : "partial";
 
   const hasValuation = priced.length > 0;
-  const totalInvestmentValueUsd = hasValuation
-    ? priced.reduce((sum, holding) => sum + (holding.marketValueUsd ?? 0), 0)
+  // The dollar totals cover the dollar holdings only. Adding a Hong Kong
+  // holding's value into a dollar figure would be adding different units.
+  const totalInvestmentValueUsd = pricedUsd.length > 0
+    ? pricedUsd.reduce((sum, holding) => sum + (holding.marketValueUsd ?? 0), 0)
     : null;
-  const totalInvestmentValueMyr = hasValuation && usdToMyr !== null
+  const totalInvestmentValueMyr = hasValuation && allInRinggit
     ? priced.reduce((sum, holding) => sum + (holding.marketValueMyr ?? 0), 0)
     : null;
   // Compared against the cost of the priced holdings only, so a partial
   // valuation is not measured against the whole portfolio's cost.
-  const pricedInvestedUsd = priced.reduce((sum, holding) => sum + holding.investedUsd, 0);
+  const pricedInvestedUsd = pricedUsd.reduce((sum, holding) => sum + holding.investedUsd, 0);
   const pricedInvestedMyr = priced.reduce((sum, holding) => sum + holding.investedMyr, 0);
   const unrealizedPnlUsd = totalInvestmentValueUsd !== null
     ? totalInvestmentValueUsd - pricedInvestedUsd
@@ -301,7 +385,7 @@ export function getPortfolioSnapshot(
   // zero. That case stays on cost, and the label says so rather than claiming a
   // market basis it did not use.
   const marketTotalMyr = priced.reduce((sum, holding) => sum + (holding.marketValueMyr ?? 0), 0);
-  const useMarket = valuationStatus === "complete" && marketTotalMyr > 0;
+  const useMarket = valuationStatus === "complete" && allInRinggit && marketTotalMyr > 0;
   const allocationBasis: "market" | "cost" = useMarket ? "market" : "cost";
 
   const weighted: PortfolioHolding[] = useMarket
@@ -362,6 +446,98 @@ export function getPortfolioSnapshot(
     unpricedTickers: unpriced.map((holding) => holding.ticker),
     valuedAt: quoteTimes.length > 0 ? Math.max(...quoteTimes) : null,
     usdToMyrUsed: hasValuation ? usdToMyr : null,
+    byCurrency: currencySubtotals(weighted),
+  };
+}
+
+/** Group held holdings by currency. See CurrencySubtotal. */
+function currencySubtotals(holdings: PortfolioHolding[]): CurrencySubtotal[] {
+  const groups = new Map<string, PortfolioHolding[]>();
+  for (const holding of holdings) {
+    if (holding.units <= 0) continue;
+    groups.set(holding.currency, [...(groups.get(holding.currency) ?? []), holding]);
+  }
+  return [...groups].map(([currency, group]): CurrencySubtotal => {
+    const priced = group.filter((holding) => holding.marketValueLocal !== null);
+    const rate = group[0].rateToMyr;
+    const marketValueLocal = priced.length > 0
+      ? priced.reduce((sum, holding) => sum + (holding.marketValueLocal ?? 0), 0)
+      : null;
+    const marketValueMyr = marketValueLocal !== null && rate !== null
+      ? priced.reduce((sum, holding) => sum + (holding.marketValueMyr ?? 0), 0)
+      : null;
+    const pricedInvestedMyr = priced.reduce((sum, holding) => sum + holding.investedMyr, 0);
+    return {
+      currency,
+      tickers: group.map((holding) => holding.ticker),
+      investedLocal: group.reduce((sum, holding) => sum + holding.investedLocal, 0),
+      investedMyr: group.reduce((sum, holding) => sum + holding.investedMyr, 0),
+      marketValueLocal,
+      marketValueMyr,
+      unrealizedPnlMyr: marketValueMyr !== null ? marketValueMyr - pricedInvestedMyr : null,
+      rateToMyr: rate,
+      valuationStatus: priced.length === 0 ? "unavailable" : priced.length === group.length ? "complete" : "partial",
+    };
+  }).sort((a, b) => b.investedMyr - a.investedMyr);
+}
+
+/** One slice of the portfolio: a market or a currency, in ringgit and as a share. */
+export interface ExposureSlice<K extends string> {
+  key: K;
+  tickers: Ticker[];
+  myr: number;
+  /** myr over the whole portfolio, 0..1. */
+  share: number;
+}
+
+/** Where the money sits: by the market a listing trades on, and by the currency it is priced in. */
+export interface PortfolioExposure {
+  /**
+   * The same basis the allocation uses: "market" once every held holding is
+   * worth a known ringgit amount, "cost" otherwise. Mixing the two would give
+   * shares of a portfolio that does not exist.
+   */
+  basis: "market" | "cost";
+  totalMyr: number;
+  /** Largest first. */
+  markets: ExposureSlice<Market>[];
+  /** Largest first. The ringgit slice is the part with no currency risk. */
+  currencies: ExposureSlice<string>[];
+}
+
+/**
+ * Split the held portfolio by market and by currency.
+ *
+ * They are different questions. A London ETF priced in dollars is London by
+ * market and dollars by currency: the currency split is the one that says how
+ * much a move in the ringgit changes the portfolio's value.
+ */
+export function getPortfolioExposure(snapshot: PortfolioSnapshot): PortfolioExposure {
+  const held = snapshot.holdings.filter((holding) => holding.units > 0);
+  const basis = snapshot.allocationBasis;
+  const amount = (holding: PortfolioHolding): number =>
+    basis === "market" ? holding.marketValueMyr ?? 0 : holding.investedMyr;
+  const totalMyr = held.reduce((sum, holding) => sum + amount(holding), 0);
+
+  const slices = <K extends string>(keyOf: (holding: PortfolioHolding) => K): ExposureSlice<K>[] => {
+    const groups = new Map<K, ExposureSlice<K>>();
+    for (const holding of held) {
+      const key = keyOf(holding);
+      const slice = groups.get(key) ?? { key, tickers: [], myr: 0, share: 0 };
+      slice.tickers.push(holding.ticker);
+      slice.myr += amount(holding);
+      groups.set(key, slice);
+    }
+    return [...groups.values()]
+      .map((slice) => ({ ...slice, share: totalMyr > 0 ? slice.myr / totalMyr : 0 }))
+      .sort((a, b) => b.myr - a.myr);
+  };
+
+  return {
+    basis,
+    totalMyr,
+    markets: slices((holding) => holding.market),
+    currencies: slices((holding) => holding.currency),
   };
 }
 
