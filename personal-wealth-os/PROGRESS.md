@@ -66,7 +66,8 @@ Bucket 从「写死的月额」改成「按真实收入分配的瀑布」，free
 - **你已在 5174 核对真实持仓**：Market 页「Your position」「Weight vs target」正确。
 - **Quick overview 整齐版完成（2026-09-17）**：`/quick` 改成 iOS 风格（小图标头部、Invested 大数字、分组列表、目标带进度条），隐私模式照样模糊金额。PR #72 已合并。
 - **AH-1 完成（2026-09-17）**：助手记录按账号分开存，修掉同一浏览器换账号看到上一个人记录的问题；旧记录交给第一个登入的账号。PR #73 已合并。
-- **当前**：AH-2 助手记录存到 Firestore（执行中）。之后：整理 WEALTHUP_CONTEXT.md 待办。
+- **AH-2 完成（2026-09-17）**：助手记录存到 Firestore（`users/{uid}/assistant/history`），登入和打开助手时同步，换设备看得到；清除会同步到所有设备。PR #74 已合并，你已实测。
+- **当前**：整理 `WEALTHUP_CONTEXT.md` 第 9 节待办清单（计划中）。
 
 ## 侧栏滚动条（S-1，已合并）
 
@@ -173,7 +174,6 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 
 ## FUTURE IDEAS / 待清
 
-- **AI 助手聊天记录存 Firestore**（跟账号走、换设备可见、不串号）。现在存浏览器 localStorage，只在这台电脑这个浏览器里有。
 - `functions/` 的 `firebase-functions` 版本偏旧，部署时 CLI 提示升级（有破坏性变更，单独做）。
 
 - `WEALTHUP_CONTEXT.md` 第 9 节 P0-P4 待办清单整体过一遍 —— 本轮做掉的多项（限流、字节预算、
