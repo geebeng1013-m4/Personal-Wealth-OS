@@ -1048,6 +1048,20 @@
   .wu-dividend__caution {
     color: var(--warning);
   }
+  /* Title, amount, then the row's own buttons — one line per payout. */
+  .wu-ledger-row.wu-dividend {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    padding-block: var(--space-2);
+  }
+  .wu-dividend .wu-ledger-row__amount {
+    display: grid;
+    justify-items: end;
+    gap: 2px;
+  }
+  .wu-dividend .wu-ledger-row__amount small {
+    font: var(--weight-regular) var(--text-caption) / 1.2 var(--font-sans);
+    color: var(--text-faint);
+  }
   .wu-dividend__actions {
     flex-wrap: wrap;
     justify-content: flex-end;
@@ -1057,7 +1071,7 @@
     padding-bottom: var(--space-3);
   }
   @media (max-width: 720px) {
-    .wu-dividend {
+    .wu-ledger-row.wu-dividend {
       grid-template-columns: minmax(0, 1fr) auto;
     }
     .wu-dividend .wu-dividend__actions {

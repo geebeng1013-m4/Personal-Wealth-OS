@@ -908,29 +908,38 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
   const suggestionFor = (id: string | undefined): DividendSuggestion | undefined =>
     dividendSuggestions.find((suggestion) => suggestion.id === id);
 
-  function bindDividendActions(): void {
-    root.querySelectorAll<HTMLButtonElement>(".div-confirm").forEach((button) => button.addEventListener("click", () => {
-      const suggestion = suggestionFor(button.dataset.id);
+  // One delegated handler on the card, because its contents are repainted
+  // whenever suggestions arrive or a price refreshes — buttons bound
+  // individually would lose their listeners on the first repaint.
+  root.querySelector<HTMLElement>("#pfDividends")?.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-id], button.div-cancel");
+    if (!button) return;
+    const id = button.dataset.id;
+
+    if (button.classList.contains("div-confirm")) {
+      const suggestion = suggestionFor(id);
       if (suggestion) recordDividend(dividendFromSuggestion(suggestion), "Recorded a dividend");
-    }));
-    root.querySelectorAll<HTMLButtonElement>(".div-ignore").forEach((button) => button.addEventListener("click", () => {
-      const suggestion = suggestionFor(button.dataset.id);
+      return;
+    }
+    if (button.classList.contains("div-ignore")) {
+      const suggestion = suggestionFor(id);
       if (suggestion) recordDividend(dismissedFromSuggestion(suggestion), "Ignored a suggested dividend");
-    }));
-    root.querySelectorAll<HTMLButtonElement>(".div-edit").forEach((button) => button.addEventListener("click", () => {
-      editingSuggestionId = button.dataset.id ?? null;
+      return;
+    }
+    if (button.classList.contains("div-edit")) {
+      editingSuggestionId = id ?? null;
       repaintDividends();
-      bindDividendActions();
-    }));
-    root.querySelectorAll<HTMLButtonElement>(".div-cancel").forEach((button) => button.addEventListener("click", () => {
+      return;
+    }
+    if (button.classList.contains("div-cancel")) {
       editingSuggestionId = null;
       repaintDividends();
-      bindDividendActions();
-    }));
-    root.querySelectorAll<HTMLButtonElement>(".div-save").forEach((button) => button.addEventListener("click", () => {
-      const suggestion = suggestionFor(button.dataset.id);
+      return;
+    }
+    if (button.classList.contains("div-save")) {
+      const suggestion = suggestionFor(id);
       if (!suggestion) return;
-      const value = (id: string): string => root.querySelector<HTMLInputElement>("#" + id)?.value ?? "";
+      const value = (fieldId: string): string => root.querySelector<HTMLInputElement>("#" + fieldId)?.value ?? "";
       const gross = Number(value("divGross"));
       const tax = Number(value("divTax"));
       // The figures on the statement win, but tax above gross is not a statement.
@@ -945,18 +954,19 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
         gross,
         withholdingTax: tax,
       }), "Recorded a dividend");
-    }));
-    root.querySelectorAll<HTMLButtonElement>(".div-delete").forEach((button) => button.addEventListener("click", () => {
-      const id = button.dataset.id;
+      return;
+    }
+    if (button.classList.contains("div-delete")) {
       const dividend = (state.dividends ?? []).find((item) => item.id === id);
       if (!dividend) return;
-      if (!confirm(`Remove the ${dividend.ticker} dividend with ex-date ${dividend.exDate}?\n\nIt will be suggested again if the feed still carries it.`)) return;
+      if (!confirm(`Remove the ${dividend.ticker} dividend with ex-date ${dividend.exDate}?
+
+It will be suggested again if the feed still carries it.`)) return;
       const next = { ...state, dividends: (state.dividends ?? []).filter((item) => item.id !== id) };
       setState(next, "Removed a dividend");
       rerender(root, next, setState, "portfolio", navigate);
-    }));
-  }
-  bindDividendActions();
+    }
+  });
 
   root.querySelector<HTMLFormElement>("#tradeForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
