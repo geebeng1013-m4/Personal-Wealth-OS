@@ -180,43 +180,26 @@ VITE_DEMO_MODE=          # 只在 build:demo 时 true，生产绝不能设
 | `fe6f2e0` + `f38bf4d` | 快照存储按**字节大小**（2 MB）而非仅数量限制，且永不抛异常 |
 | `797b4ed` | 关闭 esbuild service 子进程，让测试进程能退出（Linux CI 挂起根因） |
 | 财务侧调查（memory 里）| Moomoo 手续费（每单最低费）吃掉约 2pp 收益，FX 只影响约 0.1pp；WealthUp 现同时显示「计费后」和「计费前」收益 |
+| PR #3（2026-09-08 合并）| 原第 9 节 P0：快照字节预算分支合并，临时诊断提交没有进 main |
+| `750e267` + `1b72109` | 原 P1「服务端时间戳」：改成按同步点（`lastSyncedAt`，schema v20）判断云端副本能不能覆盖本地，不再比较设备时钟。唯一例外是 v20 以前的旧数据第一次加载，同步一次后就不再有 |
+| `1b72109` | 原 P1「实时订阅」：`main.ts` 接上 `subscribeToFirestore`，另一台设备的改动会自动出现，跟本地未同步编辑冲突时重新推送本地 |
+| `79f95a0` + `5edb11b` | 原 P1「配额 / 被刷」：`/api/market`、`/api/quote` 按 IP 限流并加缓存；AI 助手云函数也有限流 |
+| `796c0e7` | 原 P2「上游异常结构」：行情代理的上游字段变化有测试锁住；页面标「Market data may be delayed」，不冒充实时 |
+| `api/market.ts` 注释 | 原 P2「`yahooSession` 冷启动」：已注明是 serverless 实例内的尽力而为缓存 |
+| `26d18d2` 等 | 原 P2「快速切 ticker 竞态」：Market 页每个请求返回时检查是不是仍是当前代码，旧结果不覆盖新页面 |
+| `8af41bd` 起 | 原 P3「拆 `ui.ts`」：页面拆到 `src/pages/*`，`ui.ts` 从 ~1.9k 行降到 ~730 行 |
+| 运维确认 | 原 P4「Authorized domains」：`wealthup.cc` 登录正常，已在 Firebase Auth 授权域名里 |
 
 ---
 
 ## 9. 开发计划 / 待办（按优先级）
 
-### P0 —— 先把当前分支收尾
-- [ ] **`fix/snapshot-storage-budget` (PR #3) 合并**：`main` 已经因 PR #4 领先 2 个提交，
-      本分支需要 rebase / merge `main`，跑 `typecheck + test + build`，确认 CI 绿，然后合并。
-- [ ] 分支历史里有一串临时诊断提交（`b1640a6` 探针、`9f4edb7` 隔离实验等）已被后续提交回退——
-      合并时用 squash 或确认净 diff 只剩 `fe6f2e0` + `f38bf4d` 的实质改动。
+> 日常任务、当前进度和候选想法以 `PLAN.md` / `PROGRESS.md` 为准。这里只放**跨很多任务都还没解决的长期事项**。
+> 原来的 P0–P3 已全部完成（2026-09-17 逐项对照代码），记录在第 8 节；原 P3 里属于「每次都要做」的三条移到了第 12 节。
 
-### P1 —— 稳健性 / 数据安全
-- [ ] **服务端时间戳**：`cloudCopyWins` 现在信任设备 `Date.now()`，时钟歪的设备会赢不该赢的冲突。
-      引入 Firestore `serverTimestamp()` 作为权威 `updatedAt`（这是 schema 变更 → version 20 + 迁移）。
-- [ ] **多标签页 / 实时订阅**：`subscribeToFirestore` 已实现但 `main.ts` 里 `cloudSyncUnsub` 目前没接
-      `onSnapshot`。决定是否要「另一台设备改了，当前页自动刷新」，如要则接上并处理与本地未保存编辑的合并。
-- [x] **迁移测试覆盖**：已有 —— `tests/architecture.test.ts` 的 "arch: every earlier persisted state
-      migrates to the current version"（表格驱动，覆盖 v3 → v19）。
-- [ ] **配额 / 滥用**：Firestore 免费额度、行情代理被刷。给 `/api/*` 加简单速率限制或缓存命中率监控。
-
-### P2 —— 行情数据韧性
-- [ ] Yahoo / TradingView 上游随时可能改字段或封 UA。给每个 `kind` 补「上游异常结构」的测试，
-      失败时展示陈旧数据要带时间戳标识，不能冒充实时。
-- [ ] `api/market.ts` 的 `yahooSession`（cookie+crumb）是 serverless 实例内的模块级变量，
-      冷启动就没了——可接受，但记录一下这是「尽力而为」缓存。
-- [ ] 快速切换 ticker 的竞态：确认旧请求结果不会覆盖新选中页面（`main.ts` 的 `authRequestId` 模式可复用）。
-
-### P3 —— 产品 / 体验
-- [ ] `ui.ts` 还有 ~1.9k 行，继续按页面往 `src/pages/*` 拆（模板 + 绑定成对，见 `run-wealthup` skill 的提示）。
-- [ ] PWA：改静态资源 / 入口 / 缓存策略时同步升 `public/sw.js` 缓存版本并清旧缓存。
-- [ ] 可访问性：新交互控件要覆盖默认/悬停/聚焦/禁用/加载/空/错误 7 态；图标按钮要 `aria-label`；明暗主题都验。
-- [ ] Advisor 语气克制：估算收益 / 历史表现 / 规则输出不得表述为「保证结果」或个性化投资承诺。
-
-### P4 —— 运维
-- [ ] `firestore.rules` 改动后**必须**手动 `firebase deploy --only firestore:rules`（Vercel 不带）。写个 checklist 或 CI 步骤提醒。
-- [ ] `wealthup.cc` 必须在 Firebase Auth → Settings → Authorized domains 里（漏了 Google 登录直接失败）。
-- [ ] 监控：Vercel Functions 日志、Firebase 用量告警。
+### 运维（仍待办）
+- [ ] `firestore.rules` 改动后**必须**手动 `firebase deploy --only firestore:rules`（Vercel 不带）。还没有 checklist 或 CI 提醒。
+- [ ] 监控：Vercel Functions 日志、Firebase 用量告警。代码里看不出有没有设，要到 Vercel / Firebase 后台确认。
 
 ---
 
@@ -272,6 +255,9 @@ VITE_DEMO_MODE=          # 只在 build:demo 时 true，生产绝不能设
 - 改**Firebase**：验未登录 / 登录 / 退出 / 离线 / 权限拒绝 / 订阅清理，并复核 `firestore.rules`。
 - 改**UI**：桌面 + 移动尺寸手动过一遍导航/表单/空态/错误态/主题切换/无横向溢出。
 - 复杂财务规则 / 迁移 / 解析优先补可重复测试；补不了就在交付说明里列未覆盖风险。
+- 改 **PWA**（静态资源 / 入口 / 缓存策略）：同步升 `public/sw.js` 的 `CACHE_NAME` 版本并清旧缓存。
+- 新的**交互控件**：覆盖默认 / 悬停 / 聚焦 / 禁用 / 加载 / 空 / 错误 7 态；图标按钮要 `aria-label`；明暗主题都验。
+- **Advisor / 助手的措辞**：估算收益、历史表现、规则输出不得说成「保证结果」或个性化投资承诺。
 
 ---
 
