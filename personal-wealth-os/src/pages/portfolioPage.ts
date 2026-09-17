@@ -13,7 +13,7 @@
  * confirm: a misparse here rewrites the ringgit cost basis behind every holding.
  */
 
-import type { Trade, TradeType, WealthState } from "../models";
+import type { Market, TradeType, WealthState } from "../models";
 import { createId } from "../state";
 import { money, percent, tradeUnits } from "../rules";
 import { escapeHtml } from "../html";
@@ -34,11 +34,12 @@ import {
   type PortfolioSnapshot,
 } from "../portfolioSummary";
 import { exchangeRateOf, resolveExchangeCoverage, tradesWithExchangeCost } from "../currencyExchange";
-import { lotsText, marketLabel, ringgitLeg, sidesOf, tradeAmounts } from "../tradeCurrency";
+import { MARKETS, isMarket, lotsText, marketLabel, marketOfTicker, ringgitLeg, sidesOf, tradeAmounts } from "../tradeCurrency";
+import { currenciesFor, tradeFromEntry } from "../tradeEntry";
 import { exchangesFromText, mergeExchanges } from "../exchangeImport";
 import { rebalanceContributions, tradeExchangeRate } from "../financialHealth";
 import { recordsFromCsv } from "../csvImport";
-import { getUsdToMyr } from "../market";
+import { fetchRatesToMyr, getUsdToMyr } from "../market";
 import type { TradeDraft } from "../components/assistant/assistantTypes";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
@@ -104,17 +105,68 @@ function applyTradePrefill(root: HTMLElement, draft: TradeDraft): void {
     setField("platform", draft.platform);
   }
 
+  // The assistant reads US trades in dollars with a ringgit fee. Put the form on
+  // the ticker's market first, so the labels and fee choices match the figures.
+  setField("market", marketOfTicker(draft.ticker));
+  syncTradeFormMarket(root);
   setNumber("amountMyr", draft.amountMyr);
-  setNumber("amountUsd", draft.amountUsd);
-  setNumber("priceUsd", draft.priceUsd);
+  setNumber("amount", draft.amountUsd);
+  setNumber("price", draft.priceUsd);
   setNumber("units", draft.units);
-  setNumber("feeMyr", draft.feeMyr);
+  setNumber("fee", draft.feeMyr);
+  if (draft.feeMyr !== undefined) setField("feeCurrency", "MYR");
   if (draft.notes) setField("notes", draft.notes);
 
   // Bring it into view and mark it, so a form filled in from the other side of
   // a page change is not something the user has to go hunting for.
   form.classList.add("is-assistant-filled");
   form.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+/** A placeholder ticker for each market, in the form the user would type it. */
+const TICKER_EXAMPLES: Record<Market, string> = { US: "e.g. AAPL", MY: "e.g. 1155", HK: "e.g. 0700", SG: "e.g. D05", LSE: "e.g. VWRA" };
+
+/**
+ * Bring the Record-trade form in line with its chosen market and currency:
+ * the currency choices, the currency named in each label, the fee's currency
+ * choices, whether a separate ringgit amount is asked for, and the lots hint.
+ * Called on every change to market, currency, ticker or quantity.
+ */
+function syncTradeFormMarket(root: HTMLElement): void {
+  const form = root.querySelector<HTMLFormElement>("#tradeForm");
+  if (!form) return;
+  const marketField = form.elements.namedItem("market");
+  const currencyField = form.elements.namedItem("currency");
+  const feeCurrencyField = form.elements.namedItem("feeCurrency");
+  if (!(marketField instanceof HTMLSelectElement) || !(currencyField instanceof HTMLSelectElement) || !(feeCurrencyField instanceof HTMLSelectElement)) return;
+  const market: Market = isMarket(marketField.value) ? marketField.value : "US";
+
+  const choices = currenciesFor(market);
+  const currency = choices.includes(currencyField.value) ? currencyField.value : choices[0];
+  if (currencyField.options.length !== choices.length || [...currencyField.options].some((option, index) => option.value !== choices[index])) {
+    currencyField.innerHTML = choices.map((code) => `<option>${escapeHtml(code)}</option>`).join("");
+  }
+  currencyField.value = currency;
+  currencyField.disabled = choices.length === 1;
+
+  const feeChoices = currency === "MYR" ? ["MYR"] : [currency, "MYR"];
+  const feeCurrency = feeChoices.includes(feeCurrencyField.value) ? feeCurrencyField.value : feeChoices[0];
+  feeCurrencyField.innerHTML = feeChoices.map((code) => `<option>${escapeHtml(code)}</option>`).join("");
+  feeCurrencyField.value = feeCurrency;
+
+  root.querySelectorAll<HTMLElement>(".pf-cur").forEach((label) => { label.textContent = currency; });
+  const ringgitWrap = root.querySelector<HTMLElement>("#pfAmountMyrWrap");
+  if (ringgitWrap) ringgitWrap.hidden = currency === "MYR";
+  const customTicker = root.querySelector<HTMLInputElement>("#customTickerInput");
+  if (customTicker) customTicker.placeholder = TICKER_EXAMPLES[market];
+
+  const lotsHint = root.querySelector<HTMLElement>("#pfLotsHint");
+  const unitsField = form.elements.namedItem("units");
+  if (lotsHint && unitsField instanceof HTMLInputElement) {
+    const lots = lotsText(market, Number(unitsField.value));
+    lotsHint.textContent = lots ? `= ${lots}` : "";
+    lotsHint.hidden = !lots;
+  }
 }
 
 /** A conversion rate, at the precision the difference actually shows up in. */
@@ -566,15 +618,18 @@ export function portfolioTemplate(state: WealthState): string {
           <label class="wu-field-row"><span class="wu-field-row__label">Date</span><input class="wu-field" name="date" type="date" required></label>
           <label class="wu-field-row"><span class="wu-field-row__label">Platform</span><select class="wu-field" name="platform" id="platformSelect">${knownPlatforms(state).map((pf) => "<option" + (pf === lastUsedPlatform(state) ? " selected" : "") + ">" + escapeHtml(pf) + "</option>").join("")}<option value="__custom__">+ Custom</option></select></label>
           <div id="customPlatformWrap" class="wu-field-row--wide" style="display:none;"><label class="wu-field-row"><span class="wu-field-row__label">Custom Platform</span><input class="wu-field" name="customPlatform" id="customPlatformInput" type="text" placeholder="e.g. IBKR, Webull, Rakuten Trade"></label></div>
+          <label class="wu-field-row"><span class="wu-field-row__label">Market</span><select class="wu-field" name="market" id="pfMarket">${MARKETS.map((info) => `<option value="${info.market}">${escapeHtml(info.label)}</option>`).join("")}</select></label>
+          <label class="wu-field-row"><span class="wu-field-row__label">Currency</span><select class="wu-field" name="currency" id="pfCurrency" disabled><option>USD</option></select></label>
           <label class="wu-field-row"><span class="wu-field-row__label">Ticker</span><select class="wu-field" name="ticker" id="tickerSelect"><option>VOO</option><option>QQQM</option>${state.customTickers.map((t) => "<option>" + escapeHtml(t) + "</option>").join("")}<option value="__custom__">+ Custom</option></select></label>
-          <div id="customTickerWrap" class="wu-field-row--wide" style="display:none;"><label class="wu-field-row"><span class="wu-field-row__label">Custom Ticker</span><input class="wu-field" name="customTicker" id="customTickerInput" type="text" placeholder="e.g. AAPL" style="text-transform:uppercase"></label></div>
+          <div id="customTickerWrap" class="wu-field-row--wide" style="display:none;"><label class="wu-field-row"><span class="wu-field-row__label">Custom Ticker</span><input class="wu-field" name="customTicker" id="customTickerInput" type="text" placeholder="e.g. AAPL" style="text-transform:uppercase"></label><small class="t-caption t-faint">The market's suffix is added for you: 1155 on Malaysia becomes 1155.KL.</small></div>
           <label class="wu-field-row"><span class="wu-field-row__label">Type</span><select class="wu-field" name="type"><option>DCA</option><option>Dip Buy</option><option>Manual Buy</option><option>Sell</option></select></label>
-          <label class="wu-field-row"><span class="wu-field-row__label">Amount MYR</span><input class="wu-field" name="amountMyr" type="number" min="0" step="0.01"></label>
-          <label class="wu-field-row"><span class="wu-field-row__label">Amount USD</span><input class="wu-field" name="amountUsd" type="number" min="0" step="0.01"></label>
-          <label class="wu-field-row"><span class="wu-field-row__label">Price / Unit USD</span><input class="wu-field" name="priceUsd" type="number" min="0" step="0.01"></label>
-          <label class="wu-field-row"><span class="wu-field-row__label">Filled Quantity</span><input class="wu-field" name="units" type="number" min="0" step="0.0001"></label>
-          <label class="wu-field-row"><span class="wu-field-row__label">Fee MYR</span><input class="wu-field" name="feeMyr" type="number" min="0" step="0.01"></label>
+          <label class="wu-field-row"><span class="wu-field-row__label">Filled Quantity</span><input class="wu-field" name="units" type="number" min="0" step="0.0001"><small class="t-caption t-faint" id="pfLotsHint" hidden></small></label>
+          <label class="wu-field-row"><span class="wu-field-row__label">Price / Unit <span class="pf-cur">USD</span></span><input class="wu-field" name="price" type="number" min="0" step="0.0001"></label>
+          <label class="wu-field-row"><span class="wu-field-row__label">Amount <span class="pf-cur">USD</span></span><input class="wu-field" name="amount" type="number" min="0" step="0.01"><small class="t-caption t-faint">Blank = price × quantity</small></label>
+          <label class="wu-field-row" id="pfAmountMyrWrap"><span class="wu-field-row__label">Amount MYR</span><input class="wu-field" name="amountMyr" type="number" min="0" step="0.01"><small class="t-caption t-faint">What it cost in ringgit. Blank = today's rate; your recorded conversions replace it.</small></label>
+          <div class="wu-field-row"><span class="wu-field-row__label">Fee</span><div class="wu-field-pair"><input class="wu-field" name="fee" type="number" min="0" step="0.01" aria-label="Fee"><select class="wu-field" name="feeCurrency" id="pfFeeCurrency" aria-label="Fee currency"><option>USD</option><option>MYR</option></select></div></div>
           <label class="wu-field-row"><span class="wu-field-row__label">Notes</span><input class="wu-field" name="notes" type="text" placeholder="Optional"></label>
+          <p class="wu-field-row__error wu-field-row--wide" id="pfTradeError" role="alert"></p>
           <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Record contribution</button></div>
         </form>
         <small class="t-caption t-faint">Importing instead? Moomoo and custom transaction CSV exports are supported.</small>
@@ -657,7 +712,18 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
   const customWrap = root.querySelector<HTMLElement>("#customTickerWrap");
   tickerSelect?.addEventListener("change", () => {
     if (customWrap) customWrap.style.display = tickerSelect.value === "__custom__" ? "block" : "none";
+    // A ticker already on file says where it trades.
+    const marketField = root.querySelector<HTMLSelectElement>("#pfMarket");
+    if (marketField && tickerSelect.value !== "__custom__") {
+      marketField.value = marketOfTicker(tickerSelect.value);
+      syncTradeFormMarket(root);
+    }
   });
+  root.querySelector<HTMLSelectElement>("#pfMarket")?.addEventListener("change", () => syncTradeFormMarket(root));
+  root.querySelector<HTMLSelectElement>("#pfCurrency")?.addEventListener("change", () => syncTradeFormMarket(root));
+  root.querySelector<HTMLInputElement>('#tradeForm input[name="units"]')
+    ?.addEventListener("input", () => syncTradeFormMarket(root));
+  syncTradeFormMarket(root);
 
   // Same "+ Custom" reveal for the broker.
   const platformSelect = root.querySelector<HTMLSelectElement>("#platformSelect");
@@ -675,32 +741,56 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
     pendingTradePrefill = null;
   }
 
-  root.querySelector<HTMLFormElement>("#tradeForm")?.addEventListener("submit", (event) => {
+  root.querySelector<HTMLFormElement>("#tradeForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;
+    // A disabled select is left out of FormData; the currency it shows still counts.
+    const currencyField = form.elements.namedItem("currency");
     const data = new FormData(form);
-    let ticker = String(data.get("ticker") ?? "");
-    if (ticker === "__custom__") {
-      ticker = String(data.get("customTicker") ?? "").toUpperCase().trim();
-      if (!ticker) return;
+    const error = root.querySelector<HTMLElement>("#pfTradeError");
+    let tickerInput = String(data.get("ticker") ?? "");
+    if (tickerInput === "__custom__") {
+      tickerInput = String(data.get("customTicker") ?? "");
+      if (!tickerInput.trim()) return;
     }
     let platform = String(data.get("platform") ?? "");
     if (platform === "__custom__") platform = String(data.get("customPlatform") ?? "").trim();
     if (!platform) platform = lastUsedPlatform(state);
-    const trade: Trade = {
+    const marketValue = String(data.get("market") ?? "US");
+    const market: Market = isMarket(marketValue) ? marketValue : "US";
+    const currency = currencyField instanceof HTMLSelectElement ? currencyField.value : currenciesFor(market)[0];
+
+    // Today's rate, only needed when the ringgit amount was left blank.
+    let rate: number | null = currency === "MYR" ? 1 : null;
+    if (rate === null && !(Number(data.get("amountMyr")) > 0)) {
+      rate = currency === "USD"
+        ? getUsdToMyr()
+        : livePriceInputs().ratesToMyr?.get(currency)
+          ?? (await fetchRatesToMyr([currency], state.currencyExchanges).catch(() => new Map<string, number>())).get(currency)
+          ?? null;
+    }
+
+    const trade = tradeFromEntry({
       id: createId("trade"),
       date: String(data.get("date") ?? ""),
       platform,
-      ticker,
+      ticker: tickerInput,
+      market,
+      currency,
       type: String(data.get("type")) as TradeType,
+      amount: Number(data.get("amount")) || 0,
+      price: Number(data.get("price")) || 0,
+      units: Number(data.get("units")) || 0,
       amountMyr: Number(data.get("amountMyr")) || 0,
-      amountUsd: Number(data.get("amountUsd")) || 0,
-      priceUsd: Number(data.get("priceUsd")) || 0,
-      units: Number(data.get("units")) || undefined,
-      feeMyr: Number(data.get("feeMyr")) || 0,
-      exchangeRate: Number(data.get("amountUsd")) > 0 ? Number(data.get("amountMyr")) / Number(data.get("amountUsd")) : getUsdToMyr(),
+      fee: Number(data.get("fee")) || 0,
+      feeCurrency: String(data.get("feeCurrency") ?? "MYR"),
       notes: String(data.get("notes") ?? ""),
-    };
+    }, rate);
+    if (!trade) {
+      if (error) error.textContent = "Enter the amount, or the price and quantity, so the trade has a value.";
+      return;
+    }
+    const ticker = trade.ticker;
     // Save custom ticker to memory if new
     const customTickers = state.customTickers.includes(ticker)
       ? state.customTickers
