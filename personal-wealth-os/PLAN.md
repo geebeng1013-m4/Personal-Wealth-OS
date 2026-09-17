@@ -703,7 +703,7 @@ Preview（另一个会话做的，项目代码没有改动）：
   - 手机：一列，顺序照手机 Preview。
   - 记账表单点开才出现、保存后收起；助手预填要先打开表单；See all 展开完整表格（含 ✕ 和 Clear all）；Allocation health 小卡拿掉，状态改用 chip。
   - 行情轮询只重画新的价格区域，不能关掉已打开的表单。
-  - 不改计算，不改金额小数位（两位小数问题未决定）。
+  - 不改计算，不改金额小数位。
 - **决定**：Fees 卡说明行用 B「Before fees +X (+Y%)」，保留扣手续费前的收益；没有手续费或没有价格时退回「Across N contributions」。
 - **结果（demo 数据）**：
   | | 改前 | 改后 |
@@ -773,12 +773,12 @@ Preview（另一个会话做的，项目代码没有改动）：
   - 拿掉顶部检查卡、每条规则的 emoji 和 Edit / × 按钮（收进展开里）；一直展开的笔记表单收起来。How WealthUp works 不改。
   - **发现的问题**：Bear Market Deployment 的文字写死「MYR 80 / 120 / 200」，跟真实台阶（demo 300 / 450 / 750）不一样；DCA Mandate 和 Opportunity Reserve 只写 VOO / QQQM，T-4 之后会漏掉 VXUS 等；隐藏（×）的规则没有办法再显示回来。
 
-### T-6 — Goals / Budget / TVM  `[ ]`  ← **Current Task**（先做计划）
+### T-6 — Goals / Budget / TVM  `[x]`（2026-09-17，PR #64–#66 已合并）
 - 小改：去掉标签和标题重复（「JAPAN TRIP」+「Japan Trip 2027」），统一数字写法；顺便把 Dashboard 的 featured goal 选择器移到 Goals。
 - **Budget 另有整齐版 Preview（2026-09-17，照新的按收入分配页面做）**：https://claude.ai/artifact/44nSoHD6iLzbSzkiCFq9LY
   - 手机：This month 卡（收入 + 状态 chip + 按层分色比例条）→ Layers 分组列表（「色块 · 名称 · 规则 / 拿到多少 · 状态 ›」，点整行展开编辑）→ Leftover goes to / + Add a layer → Your months → Set aside。
   - 电脑：4 个数字（This month / Extra caught / Swing / Set aside）→ 层表格整行 → Your months | Plan rules。
-  - **你看过说「可以」**：采用我的建议——手机每层不放进度条（电脑表格保留）；规则选择改成三段选择。金额两位小数仍未决定。
+  - **你看过说「可以」**：采用我的建议——手机每层不放进度条（电脑表格保留）；规则选择改成三段选择。
 - **已定（2026-09-17）**：
   1. 拆成 3 个小任务，一页一个 PR：**T-6a Budget → T-6b Goals → T-6c TVM**。
   2. featured goal：Goals 页点一个目标展开，里面有「Show on Dashboard」；正在 Dashboard 上的那个标「On Dashboard」chip；Dashboard 的下拉框拿掉，Next goal 卡照旧显示所选目标。
@@ -786,11 +786,15 @@ Preview（另一个会话做的，项目代码没有改动）：
 - **计划**：
   - **T-6a Budget** `[x]`（2026-09-17，PR #64 已合并）：照 Budget Preview 做；拿掉顶部检查卡；层的编辑、上下移、删除、加一层、剩下的钱给谁、Opportunity 编辑都保留。结果（demo）：手机 1,393px → 1,012px，电脑 1,389px → 931px，徽章 5 → 0；修了手机上编辑面板撑出卡片的问题。
   - **T-6b Goals** `[x]`（2026-09-17，PR #65 已合并；手机 1,507px → 805px，电脑 982px → 767px；财务目标点句子才编辑；+ Add goal 自动展开；Dashboard 下拉框拿掉，改在 Goals 点「Show on Dashboard」）：照全站 Preview——手机总进度卡（已存 / 目标总额、完成几个、每月存多少）+ 每个目标一行（名称 · 每月 · 进度条 · % · 金额），完成的排最后；电脑 4 个数字 + 目标表整行；「+ Add goal」收起；去掉重复的大写标签；财务目标句保留 Lato；拿掉顶部检查卡；Dashboard 的 featured goal 选择器移到 Goals。
-  - **T-6c TVM** ← **Current Task**，等「执行 T-6c」。已定（2026-09-17）：每行右边保留小的「Solve」，点哪行解哪个；第一个分页叫「TVM」，另外两个「Inflation」「What if I spend this?」。计划：照 Preview——三个工具用分段选择器切换，一次一个；结果放大数字卡（电脑加本金 vs 利息比例条）；输入整理成清单；不改计算。
+  - **T-6c TVM** `[x]`（2026-09-17，PR #66 已合并；你看过后把「Solve」改回 PV / PMT / FV / Rate / Periods；Reset 移到标题并清空三个工具）。已定（2026-09-17）：每行右边保留小的「Solve」，点哪行解哪个；第一个分页叫「TVM」，另外两个「Inflation」「What if I spend this?」。计划：照 Preview——三个工具用分段选择器切换，一次一个；结果放大数字卡（电脑加本金 vs 利息比例条）；输入整理成清单；不改计算。
 
-### T-6d — Investment Growth  `[ ]`（2026-09-17 你提出：也要 iOS 感觉）
+### T-6d — Investment Growth  `[ ]`  ← **Current Task**，等「执行 T-6d」
 - 现在是单独的 React 组件（`src/calculator/InvestmentGrowthCalculator.tsx`，用自己的 Tailwind 样式），跟其他页面的卡片、字体、颜色不是同一套。
-- 还没有整齐版 Preview。做法照 Budget：先做一个手机 + 电脑的 Preview 给你看，你说可以之后再做计划、再执行。
+- **Preview（2026-09-17）**：https://claude.ai/artifact/BpEiPFT9QCztsiqF2ARwSw
+  - 手机：结果卡（预计金额 + interest chip + 本金 vs 利息比例条）→ 增长图卡 → 输入清单（直接打字，Monthly / Annually 分段选择）→ 页底估算说明。
+  - 电脑：标题右边 Reset → 4 个数字（Projected value / You put in / Interest / Growth share）→ Inputs | Growth 图，一样高。
+- **已定**：1. 图保留鼠标移上去（手机点图）看某一年的数字；2. 保留「Growth share」；3. 金额不显示两位小数。
+- 不改计算（`investmentGrowth.ts`）。
 
 ### T-7 — Market  `[ ]`（最后做）
 - demo 里图表是空的，需要真实行情数据才能判断。
