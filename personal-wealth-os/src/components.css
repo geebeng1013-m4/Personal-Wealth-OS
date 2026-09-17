@@ -2668,6 +2668,186 @@
     }
   }
 
+  /* ---- monthly review (T-5c) --------------------------------------------- */
+  /* Desktop: four figures, then the history as one table. Phone: this month's
+     card, the score bars and short history rows. Rows open in place. */
+  .wu-review-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-2);
+    height: 96px;
+  }
+  .wu-review-bars__month {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-1);
+    height: 100%;
+    min-width: 0;
+  }
+  .wu-review-bars i {
+    display: block;
+    width: 100%;
+    max-width: 22px;
+    border-radius: 5px 5px 2px 2px;
+    background: var(--accent);
+  }
+  .wu-review-bars i.is-low {
+    background: var(--warning);
+  }
+  .wu-review-bars small {
+    font: var(--weight-medium) var(--text-overline) / 1 var(--font-mono);
+    color: var(--text-faint);
+    text-transform: uppercase;
+  }
+  .wu-review-bars--mini {
+    height: 28px;
+    gap: 3px;
+    margin-top: auto;
+  }
+  .wu-review-bars--mini small {
+    display: none;
+  }
+  .wu-review-bars--mini i {
+    border-radius: 2px;
+  }
+  .wu-review-list {
+    display: grid;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .wu-review + .wu-review {
+    border-top: 1px solid var(--border-subtle);
+  }
+  .wu-review__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 10px;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: var(--row-h);
+    padding: var(--space-1) 0;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: var(--weight-regular) var(--text-body) / 1.3 var(--font-sans);
+    text-align: left;
+    cursor: pointer;
+  }
+  button.wu-review__row:hover .wu-review__month {
+    color: var(--accent);
+  }
+  .wu-review__row:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+    border-radius: var(--radius-sm);
+  }
+  .wu-review__head,
+  .wu-review__col {
+    display: none;
+  }
+  .wu-review__month {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    font-weight: var(--weight-medium);
+  }
+  .wu-review__month small {
+    font-size: var(--text-body-sm);
+    font-weight: var(--weight-regular);
+    color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .wu-review__num,
+  .wu-review__score {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .wu-review__score {
+    font-weight: var(--weight-semibold);
+    white-space: nowrap;
+  }
+  .wu-review__score small {
+    font-weight: var(--weight-regular);
+    color: var(--text-faint);
+  }
+  .wu-review__note {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+  }
+  .wu-review__chev {
+    color: var(--text-muted);
+    font-size: 1.125rem;
+    line-height: 1;
+    transition: transform var(--dur-fast) var(--ease-standard);
+  }
+  .wu-review.is-open .wu-review__chev {
+    transform: rotate(90deg);
+  }
+  .wu-review.is-open {
+    margin-inline: calc(var(--space-3) * -1);
+    padding-inline: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--surface-hover);
+  }
+  .wu-review.is-open + .wu-review,
+  .wu-review + .wu-review.is-open {
+    border-top-color: transparent;
+  }
+  .wu-review__detail {
+    padding: 0 0 var(--space-4);
+  }
+  .wu-review-history > #reviewSeeAll {
+    align-self: flex-end;
+    justify-self: end;
+    margin-left: auto;
+  }
+  @media (max-width: 720px) {
+    .wu-review-tiles,
+    .wu-review-page .wu-page-header__actions {
+      display: none;
+    }
+  }
+  @media (min-width: 721px) {
+    .wu-review-month,
+    .wu-review-score {
+      display: none;
+    }
+    .wu-dash > .wu-review-form {
+      order: -2;
+    }
+    .wu-dash > .wu-review-tiles {
+      order: -1;
+    }
+    .wu-review__row {
+      grid-template-columns: minmax(0, 1fr) 88px 88px 64px 56px minmax(0, 2.2fr) 10px;
+      gap: var(--space-4);
+    }
+    .wu-review__head {
+      display: grid;
+      min-height: 26px;
+      cursor: default;
+      font: var(--weight-medium) var(--text-overline) / 1 var(--font-mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .wu-review__col {
+      display: block;
+    }
+    .wu-review__month small {
+      display: none;
+    }
+  }
+
   /* ---- badge --------------------------------------------------------- */
   .wu-badge {
     display: inline-flex;
