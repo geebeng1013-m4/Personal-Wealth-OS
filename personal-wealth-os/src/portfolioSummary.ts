@@ -170,6 +170,11 @@ export interface ValuationInputs {
   prices?: PriceMap;
   /** USD→MYR rate. Null/absent means MYR valuation stays unknown. */
   usdToMyr?: UsdToMyr;
+  /**
+   * MYR per unit for every other currency a holding or quote is in, MYR itself
+   * as 1. Absent currency = unknown rate. Not read by any figure yet (MM-4).
+   */
+  ratesToMyr?: ReadonlyMap<string, number>;
 }
 
 /**

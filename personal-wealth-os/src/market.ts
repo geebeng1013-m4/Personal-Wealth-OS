@@ -2,7 +2,9 @@
 // K-line chart powered by TradingView Widget
 
 import { calculatePositionCostBasis, type CostBasisTrade } from "./rules";
-import { normalizeQuotes, type PriceMap } from "./marketPrices";
+import { normalizeQuotes, type LivePrice, type PriceMap } from "./marketPrices";
+import { ringgitLeg, sidesOf } from "./tradeCurrency";
+import type { CurrencyExchange } from "./models";
 
 /**
  * Last-resort USD→MYR rate, used only when nothing better exists anywhere.
@@ -268,6 +270,26 @@ export async function fetchLivePrices(symbols: string[]): Promise<PriceMap> {
   const wanted = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))].sort();
   if (wanted.length === 0) return new Map();
 
+  // The route answers at most QUOTE_BATCH_SIZE symbols and rejects the whole
+  // request beyond that, so a portfolio spread across markets would get no
+  // price at all. Batches of a sorted list stay stable, which keeps the edge
+  // cache effective. A batch that fails costs only its own symbols.
+  const batches: string[][] = [];
+  for (let index = 0; index < wanted.length; index += QUOTE_BATCH_SIZE) {
+    batches.push(wanted.slice(index, index + QUOTE_BATCH_SIZE));
+  }
+  const results = await Promise.all(batches.map(fetchPriceBatch));
+  const prices = new Map<string, LivePrice>();
+  for (const batch of results) {
+    for (const [ticker, price] of batch) prices.set(ticker, price);
+  }
+  return prices;
+}
+
+/** The most symbols /api/quote accepts in one request (its MAX_SYMBOLS). */
+export const QUOTE_BATCH_SIZE = 12;
+
+async function fetchPriceBatch(wanted: string[]): Promise<PriceMap> {
   const cacheKey = "prices_" + wanted.join(",");
   const cached = getCached(cacheKey);
   if (cached) return normalizeQuotes(cached);
@@ -291,6 +313,86 @@ export async function fetchLivePrices(symbols: string[]): Promise<PriceMap> {
   } catch {
     return new Map();
   }
+}
+
+// --- Rates for every currency ---------------------------------------------------
+
+/** MYR per one unit of each currency. Absent currency = unknown rate. */
+export type RatesToMyr = ReadonlyMap<string, number>;
+
+/** Live rates from the FX API, MYR per unit, with when they were fetched. */
+let cachedRatesToMyr: Map<string, number> | null = null;
+let cachedRatesTimestamp = 0;
+
+/**
+ * The newest recorded conversion from ringgit into each currency, as MYR per
+ * unit. The same evidence fetchUsdToMyr falls back on, for every currency.
+ */
+function ratesFromRecords(exchanges: Partial<CurrencyExchange>[]): Map<string, number> {
+  const newest = new Map<string, { date: string; rate: number }>();
+  for (const exchange of exchanges) {
+    const sides = sidesOf(exchange);
+    const leg = sides ? ringgitLeg(sides) : null;
+    if (!leg || !leg.intoForeign || typeof exchange.date !== "string") continue;
+    const known = newest.get(leg.currency);
+    if (!known || exchange.date > known.date) {
+      newest.set(leg.currency, { date: exchange.date, rate: leg.myrAmount / leg.foreignAmount });
+    }
+  }
+  return new Map([...newest].map(([currency, { rate }]) => [currency, rate]));
+}
+
+/**
+ * Current MYR per unit for each currency asked for.
+ *
+ * The API first, then the user's newest conversion into that currency. Unlike
+ * the dollar there is no constant to fall back to: a currency with neither
+ * stays absent, and every consumer reads that as "ringgit value unknown".
+ *
+ * The dollar is not answered here. It keeps its own path (fetchUsdToMyr), with
+ * trade-stamped rates as further evidence, so adding markets cannot move a
+ * single existing dollar figure. MYR is always 1.
+ */
+export async function fetchRatesToMyr(
+  currencies: string[],
+  exchanges: Partial<CurrencyExchange>[] = [],
+): Promise<RatesToMyr> {
+  const wanted = [...new Set(currencies)].filter((currency) => /^[A-Z]{3}$/.test(currency) && currency !== "USD");
+  const rates = new Map<string, number>();
+  if (wanted.includes("MYR")) rates.set("MYR", 1);
+  const foreign = wanted.filter((currency) => currency !== "MYR");
+  if (foreign.length === 0) return rates;
+
+  if (cachedRatesToMyr === null || Date.now() - cachedRatesTimestamp >= FX_CACHE_TTL) {
+    try {
+      const res = await fetch("https://open.er-api.com/v6/latest/MYR", { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const json = await res.json() as { rates?: Record<string, unknown> };
+        const live = new Map<string, number>();
+        for (const [currency, perMyr] of Object.entries(json.rates ?? {})) {
+          // The API states foreign units per ringgit; invert to ringgit per unit.
+          if (typeof perMyr === "number" && Number.isFinite(perMyr) && perMyr > 0) live.set(currency, 1 / perMyr);
+        }
+        if (live.size > 0) {
+          cachedRatesToMyr = live;
+          cachedRatesTimestamp = Date.now();
+        }
+      }
+    } catch { /* fall through to the records */ }
+  }
+
+  const recorded = ratesFromRecords(exchanges);
+  for (const currency of foreign) {
+    const rate = cachedRatesToMyr?.get(currency) ?? recorded.get(currency);
+    if (rate !== undefined) rates.set(currency, rate);
+  }
+  return rates;
+}
+
+/** Test seam: forget every cached rate for non-dollar currencies. */
+export function resetRatesToMyrCache(): void {
+  cachedRatesToMyr = null;
+  cachedRatesTimestamp = 0;
 }
 
 export async function fetchMultipleQuotes(symbols: string[]): Promise<MarketQuote[]> {

@@ -14,7 +14,8 @@
 import type { WealthState } from "./models";
 import type { PriceMap } from "./marketPrices";
 import type { ValuationInputs } from "./portfolioSummary";
-import { fetchLivePrices, fetchUsdToMyr } from "./market";
+import { fetchLivePrices, fetchRatesToMyr, fetchUsdToMyr, type RatesToMyr } from "./market";
+import { normalizeTradeMarket } from "./tradeCurrency";
 
 /**
  * Per-root teardown for the live-price poll.
@@ -36,6 +37,8 @@ export const priceRefreshCleanup = new WeakMap<HTMLElement, () => void>();
 // consumer renders as unknown rather than as zero.
 let livePrices: PriceMap = new Map();
 let liveUsdToMyr: number | null = null;
+/** MYR per unit for every non-dollar currency held or quoted. See fetchRatesToMyr. */
+let liveRatesToMyr: RatesToMyr = new Map();
 let priceFetchInFlight = false;
 /** Tickers the last fetch covered, so switching symbols can refetch. */
 let pricedSymbols = "";
@@ -67,7 +70,7 @@ export const PRICE_POLL_INTERVAL_MS = PRICE_STALE_AFTER_MS / 2;
 
 /** The market inputs handed to the canonical portfolio snapshot. */
 export function livePriceInputs(): ValuationInputs {
-  return { prices: livePrices, usdToMyr: liveUsdToMyr };
+  return { prices: livePrices, usdToMyr: liveUsdToMyr, ratesToMyr: liveRatesToMyr };
 }
 
 /**
@@ -94,13 +97,25 @@ export function refreshLivePrices(state: WealthState, onUpdated: () => void): vo
   void Promise.all([
     fetchLivePrices(symbols),
     fetchUsdToMyr(state.trades, state.currencyExchanges).catch(() => null),
-  ]).then(([prices, rate]) => {
+  ]).then(async ([prices, rate]) => {
+    if (prices.size === 0) {
+      priceFetchInFlight = false;
+      return; // unknown stays unknown; do not overwrite a good price with nothing
+    }
+    // Every currency a trade was made in or a quote came back in. Asked for
+    // after the quotes, because only a quote says what currency a listing is
+    // priced in today.
+    const currencies = [
+      ...state.trades.map((trade) => normalizeTradeMarket(trade).currency ?? "USD"),
+      ...[...prices.values()].map((price) => price.currency),
+    ];
+    const rates = await fetchRatesToMyr(currencies, state.currencyExchanges).catch(() => new Map<string, number>());
     priceFetchInFlight = false;
-    if (prices.size === 0) return; // unknown stays unknown; do not overwrite a good price with nothing
     livePrices = prices;
     pricedSymbols = key;
     pricesFetchedAt = Date.now();
     liveUsdToMyr = typeof rate === "number" && Number.isFinite(rate) && rate > 0 ? rate : null;
+    liveRatesToMyr = rates;
     onUpdated();
   }).catch(() => { priceFetchInFlight = false; });
 }

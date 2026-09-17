@@ -20,8 +20,12 @@
 /** One usable live price. Constructing this guarantees `priceUsd` is valid. */
 export interface LivePrice {
   ticker: string;
-  /** Always finite and > 0. */
+  /**
+   * Always finite and > 0, and stated in `currency` — dollars only for a dollar
+   * listing. The name predates other markets; read `currency` alongside it.
+   */
   priceUsd: number;
+  /** ISO code the price is in. Never a minor unit: pence arrive as pounds. */
   currency: string;
   /** Milliseconds since epoch. */
   quotedAt: number;
@@ -47,6 +51,26 @@ export function isUsablePrice(value: unknown): value is number {
 /** Same rule, applied to an FX rate. */
 export function isUsableRate(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+/**
+ * Currencies some exchanges quote in hundredths, mapped to the real currency.
+ *
+ * London prices many listings in pence: Yahoo reports ISF.L as "GBp" 1050.8,
+ * which is GBP 10.508. Read as pounds, the holding would be worth a hundred
+ * times what it is. Johannesburg (ZAc) and Tel Aviv (ILA) do the same.
+ */
+const MINOR_UNITS: Readonly<Record<string, string>> = {
+  GBp: "GBP",
+  GBX: "GBP",
+  ZAc: "ZAR",
+  ILA: "ILS",
+};
+
+/** A quote's currency and a divisor that restates its figures in that currency. */
+export function majorCurrency(currency: string): { currency: string; divisor: number } {
+  const major = MINOR_UNITS[currency];
+  return major ? { currency: major, divisor: 100 } : { currency, divisor: 1 };
 }
 
 function text(value: unknown, fallback: string): string {
@@ -80,13 +104,14 @@ export function normalizeQuotes(payload: unknown): PriceMap {
     if (!ticker) continue;
     if (!isUsablePrice(quote.price)) continue;
 
+    const { currency, divisor } = majorCurrency(text(quote.currency, "USD"));
     prices.set(ticker, {
       ticker,
-      priceUsd: quote.price,
-      currency: text(quote.currency, "USD"),
+      priceUsd: quote.price / divisor,
+      currency,
       quotedAt: timestamp(quote.quotedAt),
       marketState: text(quote.marketState, "UNKNOWN"),
-      previousClose: isUsablePrice(quote.previousClose) ? quote.previousClose : null,
+      previousClose: isUsablePrice(quote.previousClose) ? quote.previousClose / divisor : null,
     });
   }
 
