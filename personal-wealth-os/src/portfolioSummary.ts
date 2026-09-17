@@ -273,7 +273,7 @@ export function getPortfolioSnapshot(
   // portfolioSummary() restates ringgit costs from the recorded conversions;
   // the fallback below must read the same trades or one holding could be priced
   // against a cost basis the rest of the snapshot disagrees with.
-  const trades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? []);
+  const trades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? [], state.dividends ?? []);
 
   // FX is only applied when a real rate was supplied. No rate means the MYR
   // valuation stays unknown rather than being converted at an invented number.

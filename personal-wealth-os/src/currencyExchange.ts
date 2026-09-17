@@ -18,6 +18,13 @@
  * This module holds the missing half of the story and derives from it the one
  * fact that matters: for each buy, how many ringgit were really spent.
  *
+ * WHAT ELSE FILLS A POOL
+ *
+ * A dividend does. It arrives as cash in the same balance, and a later order
+ * spends it like any other money there — which is why dollars the user never
+ * converted can still fund a buy. It enters at its own pay-date rate, so the
+ * ringgit it carries is what it was worth on the day it landed.
+ *
  * ONE POOL PER CURRENCY
  *
  * Each foreign currency is its own cash balance at the broker, so each gets its
@@ -46,7 +53,7 @@
  *
  * Pure: imports only the domain types. No fetching, no persistence, no UI.
  */
-import type { CurrencyExchange, ExchangeDirection, Trade } from "./models";
+import type { CurrencyExchange, Dividend, ExchangeDirection, Trade } from "./models";
 import { exchangeSides, normalizeTradeMarket, ringgitLeg, sidesOf } from "./tradeCurrency";
 
 /** Max records kept, so the list cannot grow without bound. */
@@ -208,6 +215,7 @@ function poolRate(pool: Pool): number | null {
 
 type TimelineEntry =
   | { kind: "exchange"; date: string; order: number; exchange: CurrencyExchange }
+  | { kind: "dividend"; date: string; order: number; dividend: Dividend }
   | { kind: "trade"; date: string; order: number; trade: Trade };
 
 /**
@@ -232,10 +240,15 @@ type TimelineEntry =
 export function resolveExchangeCoverage(
   trades: Trade[],
   exchanges: CurrencyExchange[],
+  dividends: Dividend[] = [],
 ): ExchangeCoverage {
   const timeline: TimelineEntry[] = [
     ...exchanges.map((exchange, index): TimelineEntry =>
       ({ kind: "exchange", date: exchange.date, order: index, exchange })),
+    ...dividends
+      .filter((dividend) => dividend.status === "confirmed" && dividend.currency !== "MYR")
+      .map((dividend, index): TimelineEntry =>
+        ({ kind: "dividend", date: dividend.payDate, order: index, dividend })),
     ...trades.map((trade, index): TimelineEntry =>
       ({ kind: "trade", date: trade.date, order: index, trade })),
   ].sort((a, b) =>
@@ -244,7 +257,8 @@ export function resolveExchangeCoverage(
     // sequence. The shortfall settlement below makes this tie-break immaterial
     // to the resulting cost, so it is a statement of intent, not a load-bearing
     // rule.
-    || (a.kind === b.kind ? a.order - b.order : a.kind === "exchange" ? -1 : 1));
+    // Money in before money out on a shared date, for the reason below.
+    || (a.kind === b.kind ? a.order - b.order : a.kind === "trade" ? 1 : b.kind === "trade" ? -1 : 0));
 
   const pools = new Map<string, Pool>();
   const poolFor = (currency: string): Pool => {
@@ -306,6 +320,24 @@ export function resolveExchangeCoverage(
         pool.units -= drawn;
         pool.myr -= drawn * rate;
       }
+      continue;
+    }
+
+    if (entry.kind === "dividend") {
+      // Cash into the balance at what it was worth on the pay date. Without a
+      // rate its ringgit value is unknown, and adding the money without its
+      // cost would quietly cheapen everything already in the pool, so it is
+      // left out — it is still counted as income in the dividend figures.
+      const { dividend } = entry;
+      const rate = dividend.rateToMyr !== undefined && dividend.rateToMyr > 0
+        ? dividend.rateToMyr
+        : nearestConversionRate(dividend.payDate, dividend.currency, exchanges);
+      const net = Math.max(dividend.gross - dividend.withholdingTax, 0);
+      if (rate === null || !(net > 0)) continue;
+      const pool = poolFor(dividend.currency);
+      const surplus = settleShortfalls(pool, net, rate);
+      pool.units += surplus;
+      pool.myr += surplus * rate;
       continue;
     }
 
@@ -461,11 +493,13 @@ function withFeeInRinggit(trade: Trade, rate: number | null): Trade {
 export function tradesWithExchangeCost(
   trades: Trade[],
   exchanges: CurrencyExchange[],
+  dividends: Dividend[] = [],
 ): Trade[] {
   const needsWork = exchanges.length > 0
+    || dividends.length > 0
     || trades.some((trade) => normalizeTradeMarket(trade).currency !== "USD");
   if (!needsWork) return trades;
-  const { costs, proceedsRates } = resolveExchangeCoverage(trades, exchanges);
+  const { costs, proceedsRates } = resolveExchangeCoverage(trades, exchanges, dividends);
 
   return trades.map((original) => {
     const trade = normalizeTradeMarket(original);

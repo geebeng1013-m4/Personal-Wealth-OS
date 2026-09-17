@@ -220,7 +220,7 @@ function conversionCoverageNote(state: WealthState): string {
   if (records.length === 0) {
     return "No conversions recorded. Ringgit costs currently use the rate that was live when each trade was imported, which is not a rate you paid — the dollar figures are unaffected.";
   }
-  const coverage = resolveExchangeCoverage(state.trades, records);
+  const coverage = resolveExchangeCoverage(state.trades, records, state.dividends ?? []);
   const average = coverage.averageRecordedRate;
   const rate = average === null ? "" : ` Average ${rateText(average)}.`;
   const leftover = coverage.unspentUsd > 0.01
@@ -688,11 +688,11 @@ export function portfolioTemplate(state: WealthState): string {
   const portfolio = getPortfolioSnapshot(state, new Date(), livePriceInputs());
   // Ringgit amounts as the portfolio costs them: a Hong Kong trade's MYR figure
   // comes from its HKD conversions, a Malaysian trade's is its own amount.
-  const sortedTrades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? [])
+  const sortedTrades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? [], state.dividends ?? [])
     .sort((a, b) => b.date.localeCompare(a.date));
   const recentTrades = sortedTrades.slice(0, RECENT_LIMIT);
   const conversions = state.currencyExchanges ?? [];
-  const coverage = conversions.length ? resolveExchangeCoverage(state.trades, conversions) : null;
+  const coverage = conversions.length ? resolveExchangeCoverage(state.trades, conversions, state.dividends ?? []) : null;
   const coverageText = !coverage
     ? "Not recorded"
     : coverage.totalBuyUsd > 0 ? `${percent(Math.min(coverage.coverage, 1), 0)} covered` : `${conversions.length} recorded`;

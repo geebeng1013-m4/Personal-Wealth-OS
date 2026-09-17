@@ -192,7 +192,7 @@ export function rebalanceContributions(
   state: WealthState,
   portfolio?: Pick<PortfolioSnapshot, "allocationBasis" | "holdings">,
 ): Array<{ ticker: string; amount: number }> {
-  const trades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? []);
+  const trades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? [], state.dividends ?? []);
   const positions = Object.keys(state.dca.targets).map((ticker) => calculatePositionCostBasis(trades, ticker));
   const useMarket = portfolio?.allocationBasis === "market";
   const valueOf = (ticker: string, costBasisMyr: number): number => {

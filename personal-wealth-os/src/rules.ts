@@ -188,7 +188,7 @@ export function portfolioSummary(
   // buy, so every figure below rests on a rate the user really got rather than
   // one inferred from a trade date. With no conversions recorded this hands
   // back the trades untouched and nothing changes.
-  const trades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? []);
+  const trades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? [], state.dividends ?? []);
   const tickerSet = new Set<string>(Object.keys(state.dca.targets));
   trades.forEach((trade) => tickerSet.add(trade.ticker));
   const tickers = Array.from(tickerSet);
