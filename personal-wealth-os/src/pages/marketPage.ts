@@ -121,9 +121,9 @@ function etfHoldingsRowsTemplate(profile: EtfHoldingsProfile): string {
 
 export function etfTopHoldingsTemplate(selected: EtfHoldingsSymbol = "VOO"): string {
   const profile = ETF_TOP_HOLDINGS[selected];
-  return `<section class="wu-card etf-holdings-panel" aria-labelledby="etfHoldingsTitle">
-    <div class="wu-card__header">
-      <div class="wu-stack wu-stack--sm"><span class="wu-label">Fund Composition</span><h3 class="wu-card__title t-heading" id="etfHoldingsTitle">Top Holdings</h3></div>
+  return `<div class="etf-holdings-panel wu-stack wu-stack--sm" aria-labelledby="etfHoldingsTitle">
+    <div class="wu-row wu-row--between">
+      <span class="wu-label" id="etfHoldingsTitle">Top holdings</span>
       <div class="etf-holdings-tabs" role="tablist" aria-label="Select ETF holdings">
         ${(Object.keys(ETF_TOP_HOLDINGS) as EtfHoldingsSymbol[]).map((symbol) => `<button class="etf-holdings-tab${symbol === selected ? " active" : ""}" data-etf-holdings="${symbol}" type="button" role="tab" aria-selected="${symbol === selected}">${symbol}</button>`).join("")}
       </div>
@@ -141,25 +141,24 @@ export function etfTopHoldingsTemplate(selected: EtfHoldingsSymbol = "VOO"): str
       <div class="wu-row wu-row--between t-caption t-faint" aria-live="polite"><span><strong id="etfHoldingsSymbol" class="t-subheading">${selected}</strong> · Top Holdings <b id="etfHoldingsTotal" class="t-num">${profile.topHoldingsTotalPercent}</b></span><small id="etfHoldingsDateWrap">Holdings as at <time id="etfHoldingsDate">${profile.updateDate}</time> · fixed snapshot, not live</small></div>
       <ol id="etfHoldingsList" class="etf-holdings-list" style="list-style:none;margin:0;padding:0">${etfHoldingsRowsTemplate(profile)}</ol>
     </div>
-  </section>`;
+  </div>`;
 }
 
 export function marketTemplate(state: WealthState): string {
-  const tabs = [
-    { id: "pnl", label: "Your position", icon: "" },
-    { id: "risk", label: "Risk", icon: "" },
-    { id: "dividends", label: "Income", icon: "" },
-    { id: "sectors", label: "Composition", icon: "" },
-    { id: "compare", label: "Compare", icon: "" },
-    { id: "calendar", label: "Context", icon: "" },
-  ];
-
-  const tabButtons = tabs.map((t, i) =>
-    '<button class="market-tab-btn' + (i === 0 ? ' active' : '') + '" data-tab="' + t.id + '" type="button">' + t.label + '</button>'
-  ).join("");
-
+  // One figure as a list row: label (with a quiet note) on the left, the value
+  // on the right. bindMarket fills the value by id.
   const stat = (id: string, label: string, note = ""): string =>
-    `<div class="wu-card wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">${label}</span><span class="wu-metric__value t-num" id="${id}">--</span>${note ? `<span class="wu-metric__note t-caption">${note}</span>` : ""}</div></div>`;
+    `<li><span class="wu-market-stat__label">${label}${note ? `<small>${note}</small>` : ""}</span><span class="wu-market-stat__value" id="${id}">--</span></li>`;
+
+  // T-7b: the research views are one list; each row opens its section in place.
+  const section = (id: string, title: string, sub: string, body: string): string =>
+    `<li class="wu-market-section" data-section="${id}">
+        <button class="wu-market-section__row market-section-row" data-tab="${id}" type="button" aria-expanded="false" aria-controls="mkt-${id}">
+          <span class="wu-market-section__title">${title}<small>${sub}</small></span>
+          <span class="wu-market-section__chev" aria-hidden="true">›</span>
+        </button>
+        <div class="wu-market-section__body" data-tab-content="${id}" id="mkt-${id}" hidden>${body}</div>
+      </li>`;
 
   return `<div class="wu">
     ${pageHeader({
@@ -243,84 +242,60 @@ export function marketTemplate(state: WealthState): string {
         </section>
       </div>
 
-      <div class="market-tabs" role="tablist" aria-label="Market research views">
-        ${tabButtons}
-      </div>
-
-      <!-- P&L Tab -->
-      <div class="market-tab-content active" data-tab-content="pnl">
-        <div id="pnlPanel" style="display:none;">
-          <div class="wu-grid wu-grid--wide">
-            ${stat("pnl-invested", "💰 Invested USD")}
-            ${stat("pnl-units", "📊 Units")}
-            ${stat("pnl-cost", "💵 Avg Cost")}
-            ${stat("pnl-value", "📈 Market Value")}
-            <div class="wu-card wu-card--pad-sm"><div class="wu-metric"><span class="wu-metric__label wu-label">🟢🔴 P&L</span><span class="wu-metric__value t-num" id="pnl-amount">--</span><span class="wu-metric__note t-caption" id="pnl-pct">--</span></div></div>
-            ${stat("pnl-fees", "💸 Fees")}
-          </div>
-          <div id="pnl-trades-list" style="margin-top:var(--space-3)"></div>
-        </div>
-        <div id="pnl-empty" class="wu-empty">No trades for this ticker</div>
-      </div>
-
-      <!-- Risk Tab -->
-      <div class="market-tab-content" data-tab-content="risk">
-        <div id="riskContent" class="wu-grid wu-grid--wide">
-          ${stat("risk-drawdown", "📉 Max Drawdown", "From peak to trough")}
-          ${stat("risk-sharpe", "📊 Sharpe Ratio", "Risk-adjusted return")}
-          ${stat("risk-beta", "🎯 Portfolio Beta", "vs S&amp;P 500")}
-          ${stat("risk-volatility", "📐 Volatility", "Annualized σ")}
-          ${stat("risk-current-dd", "🔄 Current Drawdown", "From all-time high")}
-          ${stat("risk-winrate", "📅 Win Rate", "Positive months")}
-        </div>
-      </div>
-
-      <!-- Dividends Tab -->
-      <div class="market-tab-content" data-tab-content="dividends">
-        <div id="dividendsContent" class="wu-stack">
-          <p id="div-source" class="wu-note"></p>
-          <div class="wu-grid wu-grid--wide">
-            ${stat("div-yield", "💰 Dividend Yield")}
-            ${stat("div-frequency", "📅 Frequency")}
-            ${stat("div-annual", "💵 Annual Dividend")}
-            ${stat("div-pe", "📊 P/E Ratio")}
-          </div>
-          <article class="wu-card wu-card--pad-sm">
-            <h5 class="t-subheading" style="margin-bottom:var(--space-3)">Recent Dividend History</h5>
-            <div id="div-history"></div>
-          </article>
-        </div>
-      </div>
-
-      <!-- Sectors Tab -->
-      <div class="market-tab-content" data-tab-content="sectors">
-        <div id="sectorsContent">
-          ${etfTopHoldingsTemplate()}
-        </div>
-      </div>
-
-      <!-- Compare Tab -->
-      <div class="market-tab-content" data-tab-content="compare">
-        <div id="compareContent" class="stock-compare wu-stack">
-          <div class="wu-stack wu-stack--sm"><span class="wu-label">Asset Comparison</span><h3 class="t-heading">Your holdings, side by side</h3><p class="t-body-sm t-muted">Every asset you hold or watch, in one view. Fees, yields and fund sizes are fetched live; the descriptive rows are editorial and say what each instrument is for.</p></div>
-          <div id="compareProfiles"></div>
-          <div id="compareMatrix"></div>
-        </div>
-      </div>
-
-      <!-- Calendar Tab -->
-      <div class="market-tab-content" data-tab-content="calendar">
-        <div id="calendarContent">
-          <article class="wu-card ctx-card">
-            <div class="wu-card__header">
-              <div class="wu-stack wu-stack--sm"><span class="wu-label">Historical Context</span><h3 class="wu-card__title t-heading">How this has fallen before</h3></div>
-              <span class="wu-badge wu-badge--neutral" id="ctxRange">—</span>
+      <section class="wu-card wu-stack wu-stack--sm wu-market-more" aria-labelledby="mktMoreLabel">
+        <div class="wu-tc__top"><span class="wu-label" id="mktMoreLabel">More about <span data-market-symbol>VOO</span> · tap to open</span></div>
+        <ul class="wu-market-sections">
+          ${section("pnl", "Your position", "Cost, value, profit and every trade", `
+            <div id="pnlPanel" style="display:none;">
+              <ul class="wu-facts wu-facts--plain wu-market-stats">
+                ${stat("pnl-invested", "Invested")}
+                ${stat("pnl-units", "Units")}
+                ${stat("pnl-cost", "Average cost")}
+                ${stat("pnl-value", "Market value")}
+                <li><span class="wu-market-stat__label">Unrealised P&amp;L<small id="pnl-pct">--</small></span><span class="wu-market-stat__value" id="pnl-amount">--</span></li>
+                ${stat("pnl-fees", "Fees")}
+              </ul>
+              <div id="pnl-trades-list"></div>
             </div>
-            <p class="t-body-sm t-muted" style="margin-bottom:var(--space-3)">Every decline of 10% or more on record, how long it took to come back, and what holding through it was worth. Computed from daily closes.</p>
-            <div id="ctxBody"><p class="wu-empty">Loading price history…</p></div>
-          </article>
-        </div>
-      </div>
+            <p id="pnl-empty" class="wu-dash__note">No trades for this symbol yet.</p>`)}
+          ${section("risk", "Risk", "Drawdown, volatility and how it moves with the market", `
+            <ul id="riskContent" class="wu-facts wu-facts--plain wu-market-stats">
+              ${stat("risk-current-dd", "Current drawdown", "From all-time high")}
+              ${stat("risk-drawdown", "Max drawdown", "Peak to trough, past year")}
+              ${stat("risk-volatility", "Volatility", "Annualised")}
+              ${stat("risk-sharpe", "Sharpe ratio", "Return for the risk taken")}
+              ${stat("risk-beta", "Beta", "vs S&amp;P 500")}
+              ${stat("risk-winrate", "Win rate", "Months that ended up")}
+            </ul>`)}
+          ${section("dividends", "Income", "Dividend yield, frequency and history", `
+            <div id="dividendsContent" class="wu-stack wu-stack--sm">
+              <p id="div-source" class="wu-dash__note"></p>
+              <ul class="wu-facts wu-facts--plain wu-market-stats">
+                ${stat("div-yield", "Dividend yield")}
+                ${stat("div-frequency", "Frequency")}
+                ${stat("div-annual", "Annual dividend")}
+                ${stat("div-pe", "P/E ratio")}
+              </ul>
+              <span class="wu-label">Recent dividend history</span>
+              <div id="div-history"></div>
+            </div>`)}
+          ${section("sectors", "Composition", "Fees, fund size, sectors and top holdings", `
+            <div id="sectorsContent">
+              ${etfTopHoldingsTemplate()}
+            </div>`)}
+          ${section("compare", "Compare", "Your holdings side by side", `
+            <div id="compareContent" class="stock-compare wu-stack wu-stack--sm">
+              <p class="wu-dash__note">Every asset you hold or watch, in one view. Fees, yields and fund sizes are fetched live; the descriptive rows are editorial and say what each instrument is for.</p>
+              <div id="compareProfiles"></div>
+              <div id="compareMatrix"></div>
+            </div>`)}
+          ${section("calendar", "History", "How it has fallen before, and how long it took to recover", `
+            <div id="calendarContent" class="wu-stack wu-stack--sm ctx-card">
+              <div class="wu-row wu-row--between"><p class="wu-dash__note">Every decline of 10% or more on record, how long it took to come back, and what holding through it was worth. Computed from daily closes.</p><span class="wu-chip wu-chip--muted" id="ctxRange">—</span></div>
+              <div id="ctxBody"><p class="wu-dash__note">Loading price history…</p></div>
+            </div>`)}
+        </ul>
+      </section>
     </div>
   </div>`;
 }
@@ -688,17 +663,15 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       const rows = tradesForTicker.map((t) => {
         const isBuy = t.type !== "Sell";
         const units = tradeUnits(t).toFixed(4);
-        return '<div class="wu-list__row">' +
-          '<dt class="wu-row wu-row--tight">' +
-            '<span class="market-trade-dir ' + (isBuy ? "is-buy" : "is-sell") + '" aria-hidden="true">' + (isBuy ? "↑" : "↓") + '</span>' +
-            '<span class="t-num">' + escapeHtml(t.date) + '</span>' +
-            '<span class="t-faint">' + escapeHtml(t.type) + '</span>' +
-          '</dt>' +
-          '<dd class="t-num">' + units + ' units @ $' + t.priceUsd.toFixed(2) + '</dd>' +
-        '</div>';
+        // Same row as the tidy trade lists elsewhere: what and when on the left,
+        // units and price on the right.
+        return '<li class="wu-ledger-row wu-ledger-row--plain">' +
+          '<span class="wu-ledger-row__title">' + escapeHtml(t.type) + '<small>' + escapeHtml(t.date.slice(0, 10)) + '</small></span>' +
+          '<span class="wu-ledger-row__amount ' + (isBuy ? "" : "t-negative") + '">' + (isBuy ? "" : "−") + units + ' units<small class="wu-market-trade-price">@ USD ' + t.priceUsd.toFixed(2) + '</small></span>' +
+        '</li>';
       }).join("");
       tradeListEl.innerHTML = rows
-        ? '<p class="wu-label">Trade detail — ' + escapeHtml(symbol) + '</p><dl class="wu-list">' + rows + '</dl>'
+        ? '<span class="wu-label">Trades · ' + escapeHtml(symbol) + '</span><ul class="wu-ledger-list">' + rows + '</ul>'
         : "";
     }
   }
@@ -1128,15 +1101,15 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     }
   }
 
-  // Tab switching
-  root.querySelectorAll<HTMLButtonElement>(".market-tab-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      root.querySelectorAll<HTMLButtonElement>(".market-tab-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      root.querySelectorAll<HTMLElement>(".market-tab-content").forEach((c) => c.classList.remove("active"));
-      const tabId = btn.dataset.tab;
-      const content = root.querySelector<HTMLElement>('[data-tab-content="' + tabId + '"]');
-      if (content) content.classList.add("active");
+  // Research rows: each opens its section in place. Every section's data is
+  // already loaded for the selected symbol, so opening one only shows it.
+  root.querySelectorAll<HTMLButtonElement>(".market-section-row").forEach((row) => {
+    row.addEventListener("click", () => {
+      const body = root.querySelector<HTMLElement>('[data-tab-content="' + row.dataset.tab + '"]');
+      if (!body) return;
+      body.hidden = !body.hidden;
+      row.setAttribute("aria-expanded", String(!body.hidden));
+      row.closest(".wu-market-section")?.classList.toggle("is-open", !body.hidden);
     });
   });
 
