@@ -24,6 +24,9 @@
  * changes (see setAssistantOwner). Kept under one browser-wide key, the next
  * person to sign in on the same browser read the last one's questions and
  * records. Preferences stay per browser — they say nothing about anyone.
+ *
+ * This is the device's copy. assistantSync keeps it and the account's cloud
+ * copy converged (AH-2); historyMerge decides how two copies become one.
  */
 
 import { createId } from "../../state";
@@ -32,25 +35,31 @@ import type {
   AssistantMessage,
   AssistantMode,
   RecordEntry,
-  RecordStatus,
 } from "./assistantTypes";
+import {
+  MAX_ASK_MESSAGES,
+  MAX_RECORD_ENTRIES,
+  mergeHistory,
+  normalizeAsk,
+  normalizeRecords,
+  storableHistory,
+  type AssistantHistory,
+} from "./historyMerge";
 
 const ASK_KEY = "wealthup-assistant-ask";
 const RECORDS_KEY = "wealthup-assistant-records";
 const PREFS_KEY = "wealthup-assistant-prefs";
+const CLEARED_KEY = "wealthup-assistant-cleared";
 /**
  * Where an account's history is kept. The bare keys, with no uid, are what
  * builds before AH-1 wrote for whoever was signed in.
  */
 function askKey(uid: string): string { return `${ASK_KEY}:${uid}`; }
 function recordsKey(uid: string): string { return `${RECORDS_KEY}:${uid}`; }
+function clearedKey(uid: string): string { return `${CLEARED_KEY}:${uid}`; }
 /** Pre-split storage, where both modes shared one transcript. */
 const LEGACY_MESSAGES_KEY = "wealthup-assistant-messages";
 
-/** The proxy caps a conversation at 20 turns anyway. */
-const MAX_ASK_MESSAGES = 40;
-/** The Record log is history the user is meant to browse, so it is kept longer. */
-const MAX_RECORD_ENTRIES = 120;
 
 /**
  * What is remembered across visits. Figure sharing is deliberately NOT here —
@@ -94,65 +103,50 @@ function readPrefs(): AssistantPrefs {
 
 function readAsk(): AssistantMessage[] {
   if (!owner) return [];
-  const parsed = read<unknown>(askKey(owner), []);
-  if (!Array.isArray(parsed)) return [];
-  return parsed
-    .filter((entry): entry is AssistantMessage =>
-      typeof entry === "object" && entry !== null &&
-      typeof (entry as AssistantMessage).content === "string" &&
-      ((entry as AssistantMessage).role === "user" || (entry as AssistantMessage).role === "assistant"))
-    .map((entry) => ({
-      id: typeof entry.id === "string" ? entry.id : createId("msg"),
-      role: entry.role,
-      content: entry.content,
-      at: typeof entry.at === "number" ? entry.at : Date.now(),
-      ...(typeof entry.visit === "string" ? { visit: entry.visit } : {}),
-      ...(entry.failed === true ? { failed: true as const } : {}),
-    }))
-    .slice(-MAX_ASK_MESSAGES);
+  return normalizeAsk(read<unknown>(askKey(owner), []));
 }
-
-const STATUSES: readonly RecordStatus[] = [
-  "pending", "draft", "filled", "discarded", "expired", "unrecognised", "failed",
-];
 
 function readRecords(): RecordEntry[] {
   if (!owner) return [];
-  const parsed = read<unknown>(recordsKey(owner), []);
-  if (!Array.isArray(parsed)) return [];
-  return parsed
-    .filter((entry): entry is RecordEntry =>
-      typeof entry === "object" && entry !== null && typeof (entry as RecordEntry).said === "string")
-    .map((entry) => {
-      const stored = STATUSES.includes(entry.status) ? entry.status : "expired";
-      return {
-        id: typeof entry.id === "string" ? entry.id : createId("rec"),
-        at: typeof entry.at === "number" ? entry.at : Date.now(),
-        said: entry.said,
-        // A draft never survives a reload, so anything stored mid-flight or
-        // still offering to fill a form comes back as history only.
-        status: stored === "draft" || stored === "pending" ? "expired" : stored,
-        ...(typeof entry.summary === "string" ? { summary: entry.summary } : {}),
-        ...(entry.target === "ledger" || entry.target === "portfolio" ? { target: entry.target } : {}),
-        ...(typeof entry.reason === "string" ? { reason: entry.reason } : {}),
-        ...(Array.isArray(entry.unresolved) ? { unresolved: entry.unresolved.filter((v) => typeof v === "string") } : {}),
-        ...(Array.isArray(entry.dropped) ? { dropped: entry.dropped.filter((v) => typeof v === "string") } : {}),
-      };
-    })
-    .slice(-MAX_RECORD_ENTRIES);
+  return normalizeRecords(read<unknown>(recordsKey(owner), []));
+}
+
+function readCleared(): { ask: number; records: number } {
+  if (!owner) return { ask: 0, records: 0 };
+  const parsed = read<Partial<{ ask: number; records: number }>>(clearedKey(owner), {});
+  return {
+    ask: typeof parsed.ask === "number" ? parsed.ask : 0,
+    records: typeof parsed.records === "number" ? parsed.records : 0,
+  };
 }
 
 function writeAsk(): void {
   if (!owner) return;
-  write(askKey(owner), askLog.slice(-MAX_ASK_MESSAGES).map(({ id, role, content, at, visit, failed }) => ({
-    id, role, content, at, ...(visit ? { visit } : {}), ...(failed ? { failed } : {}),
-  })));
+  write(askKey(owner), storableHistory(currentHistory()).ask);
 }
 
 function writeRecords(): void {
   if (!owner) return;
   // `draft` is stripped: see RecordStatus in assistantTypes.
-  write(recordsKey(owner), recordLog.slice(-MAX_RECORD_ENTRIES).map(({ draft: _draft, ...rest }) => rest));
+  write(recordsKey(owner), storableHistory(currentHistory()).records);
+}
+
+function writeCleared(): void {
+  if (!owner) return;
+  write(clearedKey(owner), cleared);
+}
+
+function currentHistory(): AssistantHistory {
+  return { ask: askLog, records: recordLog, askClearedAt: cleared.ask, recordsClearedAt: cleared.records };
+}
+
+/** Told whenever the user changes the history on this device. */
+const changeListeners = new Set<() => void>();
+/** Told whenever history from another device has been merged in. */
+const mergeListeners = new Set<() => void>();
+
+function changed(): void {
+  for (const listener of changeListeners) listener();
 }
 
 /** One-time move off the pre-split single transcript. */
@@ -184,6 +178,7 @@ let owner: string | null = null;
 let prefs: AssistantPrefs = readPrefs();
 let askLog: AssistantMessage[] = [];
 let recordLog: RecordEntry[] = [];
+let cleared = { ask: 0, records: 0 };
 dropLegacyStorage();
 
 /**
@@ -276,10 +271,49 @@ export function setAssistantOwner(uid: string | null, options: { adoptUnowned?: 
   if (uid && options.adoptUnowned !== false) adoptUnownedHistory(uid);
   askLog = readAsk();
   recordLog = readRecords();
+  cleared = readCleared();
 }
 
 /** The account whose history is loaded, or null when nobody is signed in. */
 export function assistantOwner(): string | null { return owner; }
+
+/** Listen for the user changing the history here. Returns the unsubscribe. */
+export function onAssistantHistoryChange(listener: () => void): () => void {
+  changeListeners.add(listener);
+  return () => { changeListeners.delete(listener); };
+}
+
+/** Listen for history from another device arriving. Returns the unsubscribe. */
+export function onAssistantHistoryMerged(listener: () => void): () => void {
+  mergeListeners.add(listener);
+  return () => { mergeListeners.delete(listener); };
+}
+
+/**
+ * Fold another copy of `uid`'s history into this device's and keep the result.
+ *
+ * Merges against the history as it is NOW, not as it was when the other copy
+ * was requested, so a message sent while the cloud read was on its way is not
+ * lost. Returns what the cloud should hold, or null — touching nothing — when
+ * `uid` is no longer the signed-in account.
+ */
+export function mergeAssistantHistory(uid: string, other: AssistantHistory | null): AssistantHistory | null {
+  if (!owner || owner !== uid) return null;
+  const before = currentHistory();
+  const merged = mergeHistory(before, other);
+  askLog = merged.ask;
+  recordLog = merged.records;
+  cleared = { ask: merged.askClearedAt, records: merged.recordsClearedAt };
+  writeAsk();
+  writeRecords();
+  writeCleared();
+  const arrived = merged.ask.length !== before.ask.length ||
+    merged.records.length !== before.records.length ||
+    merged.ask.some((m, i) => m.id !== before.ask[i]?.id) ||
+    merged.records.some((r, i) => r.id !== before.records[i]?.id || r.status !== before.records[i]?.status);
+  if (arrived) for (const listener of mergeListeners) listener();
+  return storableHistory(merged);
+}
 
 // --- Ask: a conversation ---------------------------------------------------
 
@@ -307,6 +341,7 @@ export function appendAskMessage(message: Omit<AssistantMessage, "id" | "at">): 
   };
   askLog = [...askLog, full].slice(-MAX_ASK_MESSAGES);
   writeAsk();
+  changed();
   return full;
 }
 
@@ -319,6 +354,7 @@ export function beginRecord(said: string): RecordEntry {
   const entry: RecordEntry = { id: createId("rec"), at: Date.now(), said, status: "pending" };
   recordLog = [...recordLog, entry].slice(-MAX_RECORD_ENTRIES);
   writeRecords();
+  changed();
   return entry;
 }
 
@@ -326,6 +362,7 @@ export function beginRecord(said: string): RecordEntry {
 export function updateRecord(id: string, patch: Partial<Omit<RecordEntry, "id" | "at" | "said">>): void {
   recordLog = recordLog.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry));
   writeRecords();
+  changed();
 }
 
 export function findRecordDraft(id: string): AssistantDraft | undefined {
@@ -343,13 +380,22 @@ export function clearHistory(mode: AssistantMode): void {
   inFlight?.abort();
   inFlight = null;
   sending = false;
+  // Remembered as a time, so the other devices drop the same history instead
+  // of handing it back on the next merge (see historyMerge). Never earlier than
+  // the newest entry cleared, whatever this device's clock says.
+  const latest = (entries: readonly { at: number }[]): number =>
+    entries.reduce((max, entry) => Math.max(max, entry.at), Date.now());
   if (mode === "help") {
+    cleared = { ...cleared, ask: latest(askLog) };
     askLog = [];
     writeAsk();
   } else {
+    cleared = { ...cleared, records: latest(recordLog) };
     recordLog = [];
     writeRecords();
   }
+  writeCleared();
+  changed();
 }
 
 /** Test seam: back to a first-run assistant, signed in as `uid`. */
@@ -360,11 +406,13 @@ export function __resetAssistantStore(uid = "test-user"): void {
   sharingFigures = false;
   askLog = [];
   recordLog = [];
+  cleared = { ask: 0, records: 0 };
   panelOpen = false;
   sending = false;
   inFlight = null;
   writeAsk();
   writeRecords();
+  writeCleared();
   write(PREFS_KEY, prefs);
 }
 
@@ -377,4 +425,5 @@ export function __reloadAssistantStore(): void {
   panelOpen = false;
   askLog = readAsk();
   recordLog = readRecords();
+  cleared = readCleared();
 }
