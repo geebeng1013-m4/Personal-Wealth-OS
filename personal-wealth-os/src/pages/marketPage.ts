@@ -17,9 +17,10 @@ import type { WealthState } from "../models";
 import { escapeHtml, getTheme } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import { UNKNOWN } from "./valuationFormat";
+import { money, percent } from "../rules";
 import { tradeUnits } from "../rules";
 import { tradesWithExchangeCost } from "../currencyExchange";
-import { buildAssetHistory, triggerHistory, type AssetHistory } from "../drawdowns";
+import { assetDrawdownBelow, buildAssetHistory, triggerHistory, type AssetHistory } from "../drawdowns";
 import {
   fetchFundamentals,
   fetchEtfComposition,
@@ -145,7 +146,6 @@ export function etfTopHoldingsTemplate(selected: EtfHoldingsSymbol = "VOO"): str
 
 export function marketTemplate(state: WealthState): string {
   const tabs = [
-    { id: "chart", label: "Long-term view", icon: "" },
     { id: "pnl", label: "Your position", icon: "" },
     { id: "risk", label: "Risk", icon: "" },
     { id: "dividends", label: "Income", icon: "" },
@@ -168,44 +168,87 @@ export function marketTemplate(state: WealthState): string {
       sub: "Check your ETFs' price, holdings and risk before changing anything.",
     })}
     <div class="wu-stack wu-stack--xl">
-      <div class="wu-card wu-card--pad-sm wu-row wu-row--between">
-        <span class="wu-label">Current principle</span>
-        <span class="wu-row wu-row--tight"><strong class="t-subheading">Context before action</strong><span class="t-caption t-faint">Review the mandate before changing allocation.</span></span>
-      </div>
-
-      <div class="wu-stack wu-stack--lg">
-        <div class="market-symbols" role="group" aria-label="Select investment">
-          <button class="market-symbol-btn active" data-symbol="VOO" type="button"><strong>VOO</strong><small>Core market</small></button>
-          <button class="market-symbol-btn" data-symbol="QQQM" type="button"><strong>QQQM</strong><small>Growth allocation</small></button>
-          ${state.customTickers.map((ticker) => '<div class="market-custom-symbol" data-symbol="' + escapeHtml(ticker) + '"><button class="market-symbol-btn" data-symbol="' + escapeHtml(ticker) + '" type="button"><strong>' + escapeHtml(ticker) + '</strong><small>Custom watchlist</small></button><button class="market-symbol-remove" data-remove-symbol="' + escapeHtml(ticker) + '" type="button" aria-label="Remove ' + escapeHtml(ticker) + '">×</button></div>').join("")}
+      <!-- T-7a: pick a symbol, read four figures, see the long-term chart -->
+      <div class="wu-market-picker">
+        <div class="wu-segmented market-symbols" role="group" aria-label="Select investment">
+          <button class="wu-segmented__option market-symbol-btn active is-active" data-symbol="VOO" type="button">VOO</button>
+          <button class="wu-segmented__option market-symbol-btn" data-symbol="QQQM" type="button">QQQM</button>
+          ${state.customTickers.map((ticker) => '<button class="wu-segmented__option market-symbol-btn" data-symbol="' + escapeHtml(ticker) + '" type="button">' + escapeHtml(ticker) + '</button>').join("")}
+          <button class="wu-segmented__option wu-market-add-toggle" id="marketAddToggle" type="button" aria-expanded="false" aria-controls="marketAddPanel" aria-label="Add or remove symbols">＋</button>
         </div>
-        <form id="customSymbolForm" class="wu-row"><label class="wu-field-row"><span class="wu-field-row__label">Add symbol</span><span class="wu-row wu-row--tight"><input class="wu-field" id="customSymbolInput" name="symbol" type="text" maxlength="20" placeholder="e.g. AAPL" autocomplete="off" spellcheck="false"><button class="wu-btn wu-btn--secondary wu-btn--sm" type="submit">Add</button></span></label><small id="customSymbolMessage" class="t-caption t-faint" aria-live="polite"></small></form>
-        <span class="t-caption t-faint">Market data may be delayed</span>
+      </div>
+      <section class="wu-card wu-stack wu-stack--sm wu-market-add" id="marketAddPanel" aria-labelledby="marketAddLabel" hidden>
+        <div class="wu-tc__top"><span class="wu-label" id="marketAddLabel">Symbols you watch</span></div>
+        <form id="customSymbolForm" class="wu-row wu-row--tight wu-market-add__form">
+          <input class="wu-field" id="customSymbolInput" name="symbol" type="text" maxlength="20" placeholder="Add a symbol, e.g. AAPL" autocomplete="off" spellcheck="false" aria-label="Symbol to add">
+          <button class="wu-btn wu-btn--secondary wu-btn--sm" type="submit">Add</button>
+        </form>
+        <small id="customSymbolMessage" class="t-caption t-faint" aria-live="polite"></small>
+        <ul class="wu-market-watch" id="marketWatchList">
+          ${state.customTickers.map((ticker) => '<li class="market-custom-symbol" data-symbol="' + escapeHtml(ticker) + '"><span>' + escapeHtml(ticker) + '</span><button class="wu-btn wu-btn--ghost wu-btn--sm market-symbol-remove" data-remove-symbol="' + escapeHtml(ticker) + '" type="button" aria-label="Remove ' + escapeHtml(ticker) + '">Remove</button></li>').join("")}
+        </ul>
+      </section>
+
+      <div class="wu-dash">
+        <!-- ROW 1 (desktop) — four figures for the selected symbol -->
+        <div class="wu-dash__full wu-dash__tiles wu-market-tiles">
+          <section class="wu-card wu-dash__tile" aria-labelledby="mktPriceLabel">
+            <div class="wu-tc__top"><span class="wu-label" id="mktPriceLabel"><span data-market-symbol>VOO</span> price</span></div>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">USD</span><span data-market="price">--</span></p>
+            <p class="wu-dash__note" data-market="priceNote">Market data may be delayed</p>
+          </section>
+          <section class="wu-card wu-dash__tile" aria-labelledby="mktDropLabel">
+            <div class="wu-tc__top"><span class="wu-label" id="mktDropLabel">From all-time high</span></div>
+            <p class="wu-money wu-money--md"><span data-market="drop">--</span></p>
+            <p class="wu-dash__note" data-market="dropNote">Checking price history…</p>
+          </section>
+          <section class="wu-card wu-dash__tile" aria-labelledby="mktValueLabel">
+            <div class="wu-tc__top"><span class="wu-label" id="mktValueLabel">Your position</span></div>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span data-market="value">--</span></p>
+            <p class="wu-dash__note" data-market="valueNote">--</p>
+          </section>
+          <section class="wu-card wu-dash__tile" aria-labelledby="mktWeightLabel">
+            <div class="wu-tc__top"><span class="wu-label" id="mktWeightLabel">Weight vs target</span></div>
+            <p class="wu-money wu-money--md"><span data-market="weight">--</span><span class="wu-money__of" data-market="target"></span></p>
+            <p class="wu-dash__note" data-market="weightNote">--</p>
+          </section>
+        </div>
+
+        <!-- ROW 2 — the long-term chart; on a phone the price leads the card -->
+        <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-market-chart" aria-labelledby="mktChartLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="mktChartLabel"><span data-market-symbol>VOO</span> · long-term view</span><span class="wu-market-phone" data-market="dropChip"></span></div>
+          <p class="wu-money wu-market-phone"><span class="wu-money__cur">USD</span><span data-market="price">--</span></p>
+          <div class="wu-segmented market-intervals" role="group" aria-label="Chart period">
+            <button class="wu-segmented__option interval-btn" data-interval="D" type="button">1D</button>
+            <button class="wu-segmented__option interval-btn" data-interval="W" type="button">1W</button>
+            <button class="wu-segmented__option interval-btn" data-interval="M" type="button">1M</button>
+            <button class="wu-segmented__option interval-btn" data-interval="5" type="button">YTD</button>
+            <button class="wu-segmented__option interval-btn active is-active" data-interval="12M" type="button">1Y</button>
+            <button class="wu-segmented__option interval-btn" data-interval="60M" type="button">5Y</button>
+          </div>
+          <div class="market-chart-card">
+            <div id="tradingview_container" style="width:100%;"></div>
+          </div>
+          <p class="wu-dash__note">Context before action — review your plan before changing allocation. Market data may be delayed.</p>
+        </section>
+
+        <!-- phone — your position in one card -->
+        <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-market-position wu-market-phone" aria-labelledby="mktPhonePosLabel">
+          <div class="wu-tc__top"><span class="wu-label" id="mktPhonePosLabel">Your position</span><span data-market="weightChip"></span></div>
+          <div class="wu-three">
+            <div><span>Value</span><b data-market="value">--</b></div>
+            <div><span>Weight</span><b data-market="weight">--</b></div>
+            <div><span>Target</span><b data-market="targetPlain">--</b></div>
+          </div>
+        </section>
       </div>
 
       <div class="market-tabs" role="tablist" aria-label="Market research views">
         ${tabButtons}
       </div>
 
-      <!-- Chart Tab -->
-      <div class="market-tab-content active" data-tab-content="chart">
-        <div class="wu-stack">
-          <div class="wu-row wu-row--between"><span class="wu-label">Price context — historical perspective</span><div class="market-intervals" role="group" aria-label="Chart period">
-            <button class="interval-btn" data-interval="D" type="button">1D</button>
-            <button class="interval-btn" data-interval="W" type="button">1W</button>
-            <button class="interval-btn" data-interval="M" type="button">1M</button>
-            <button class="interval-btn" data-interval="5" type="button">YTD</button>
-            <button class="interval-btn active" data-interval="12M" type="button">1Y</button>
-            <button class="interval-btn" data-interval="60M" type="button">5Y</button>
-          </div></div>
-          <article class="wu-card wu-card--pad-sm market-chart-card">
-            <div id="tradingview_container" style="width:100%;"></div>
-          </article>
-        </div>
-      </div>
-
       <!-- P&L Tab -->
-      <div class="market-tab-content" data-tab-content="pnl">
+      <div class="market-tab-content active" data-tab-content="pnl">
         <div id="pnlPanel" style="display:none;">
           <div class="wu-grid wu-grid--wide">
             ${stat("pnl-invested", "💰 Invested USD")}
@@ -424,10 +467,80 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     loadEtfComposition(symbol);
   }
 
+  /** Every element showing one figure; the phone and desktop layouts each carry a copy. */
+  const setAll = (key: string, html: string): void => {
+    root.querySelectorAll<HTMLElement>('[data-market="' + key + '"]').forEach((el) => { el.innerHTML = html; });
+  };
+
+  /**
+   * The four figures for the selected symbol. Price, value and weight come from
+   * the canonical portfolio snapshot — this renders, it does not calculate. A
+   * symbol without a quote or a position says so instead of showing zero.
+   */
+  function updateTiles(symbol: string): void {
+    root.querySelectorAll<HTMLElement>("[data-market-symbol]").forEach((el) => { el.textContent = symbol; });
+    const holding = getHolding(getPortfolioSnapshot(state, new Date(), livePriceInputs()), symbol as Ticker);
+    const price = holding?.priceUsd ?? null;
+    setAll("price", price == null ? UNKNOWN : price.toFixed(2));
+    setAll("priceNote", price == null ? "No live quote for this symbol" : "Market data may be delayed");
+    const held = holding != null && holding.units > 0;
+    setAll("value", held && holding.marketValueMyr != null ? escapeHtml(money(holding.marketValueMyr, "").trim()) : UNKNOWN);
+    setAll("valueNote", held ? holding.units.toFixed(4) + " units" : "Not held");
+    const target = holding?.targetAllocation ?? state.dca.targets[symbol] ?? 0;
+    if (!holding || (!held && target <= 0)) {
+      setAll("weight", UNKNOWN);
+      setAll("target", "");
+      setAll("targetPlain", target > 0 ? percent(target) : UNKNOWN);
+      setAll("weightNote", "Not part of your plan");
+      setAll("weightChip", "");
+      return;
+    }
+    const drift = holding.drift;
+    setAll("weight", percent(holding.actualAllocation));
+    setAll("target", target > 0 ? "/ " + percent(target) : "");
+    setAll("targetPlain", target > 0 ? percent(target) : "None");
+    const chip = Math.abs(drift) <= 0.005
+      ? '<span class="wu-chip">On target</span>'
+      : '<span class="wu-chip wu-chip--warning">' + (drift > 0 ? "Above" : "Below") + " target</span>";
+    setAll("weightChip", target > 0 ? chip : "");
+    const status = Math.abs(drift) <= 0.005 ? "On target" : (drift > 0 ? "Above" : "Below") + " target";
+    setAll("weightNote", target > 0 ? status + " · " + (drift >= 0 ? "+" : "−") + percent(Math.abs(drift), 1) : "No target set");
+  }
+
+  /** How far below its all-time high the symbol trades, and where the next dip-buy step sits. */
+  function updateDrop(symbol: string): void {
+    setAll("drop", UNKNOWN);
+    setAll("dropNote", "Checking price history…");
+    setAll("dropChip", "");
+    void assetDrawdownBelow(symbol).then((below) => {
+      if (symbol !== currentSymbol) return;
+      if (below === null) {
+        setAll("dropNote", "Price history unavailable");
+        return;
+      }
+      const text = below < 0.05 ? "At high" : "−" + below.toFixed(1) + "%";
+      setAll("drop", '<span class="' + (below >= 10 ? "t-negative" : "") + '">' + text + "</span>");
+      setAll("dropChip", below < 0.05 ? "" : '<span class="wu-chip wu-chip--warning">−' + below.toFixed(1) + "% from high</span>");
+      // The dip-buy ladder watches VOO and QQQM only (see advisorPage), so the
+      // step is only worth mentioning for those two.
+      if (symbol !== "VOO" && symbol !== "QQQM") {
+        setAll("dropNote", "From its highest close");
+        return;
+      }
+      const next = state.opportunity.tranches.filter((tranche) => !tranche.deployed).map((tranche) => tranche.drawdown).sort((a, b) => a - b)[0];
+      setAll("dropNote", next === undefined
+        ? "No dip-buy steps waiting"
+        : below >= next ? "At your −" + next + "% dip-buy step" : "Next dip-buy step at −" + next + "%");
+    });
+  }
+
   function selectSymbol(btn: HTMLButtonElement): void {
     currentSymbol = btn.dataset.symbol || "VOO";
+    updateDrop(currentSymbol);
     root.querySelectorAll<HTMLButtonElement>(".market-symbol-btn").forEach((button) => {
       button.classList.toggle("active", button === btn);
+      // is-active is what the segmented control's glass lens follows
+      button.classList.toggle("is-active", button === btn);
     });
     createWidget(currentSymbol, currentInterval);
     updatePnL(currentSymbol);
@@ -438,39 +551,35 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     loadRisk(currentSymbol);
   }
 
-  function createCustomSymbolElement(symbol: string): HTMLDivElement {
-    const item = document.createElement("div");
-    item.className = "market-custom-symbol";
-    item.dataset.symbol = symbol;
-
+  function createCustomSymbolElement(symbol: string): { button: HTMLButtonElement; row: HTMLLIElement } {
     const symbolButton = document.createElement("button");
-    symbolButton.className = "market-symbol-btn";
+    symbolButton.className = "wu-segmented__option market-symbol-btn";
     symbolButton.dataset.symbol = symbol;
     symbolButton.type = "button";
-
-    const symbolName = document.createElement("strong");
-    symbolName.textContent = symbol;
-    const symbolDescription = document.createElement("small");
-    symbolDescription.textContent = "Custom watchlist";
-    symbolButton.append(symbolName, symbolDescription);
+    symbolButton.textContent = symbol;
     symbolButton.addEventListener("click", () => selectSymbol(symbolButton));
 
+    const row = document.createElement("li");
+    row.className = "market-custom-symbol";
+    row.dataset.symbol = symbol;
+    const name = document.createElement("span");
+    name.textContent = symbol;
     const removeButton = document.createElement("button");
-    removeButton.className = "market-symbol-remove";
+    removeButton.className = "wu-btn wu-btn--ghost wu-btn--sm market-symbol-remove";
     removeButton.dataset.removeSymbol = symbol;
     removeButton.type = "button";
     removeButton.setAttribute("aria-label", "Remove " + symbol);
-    removeButton.textContent = "×";
-    removeButton.addEventListener("click", () => removeCustomSymbol(symbol, item));
-
-    item.append(symbolButton, removeButton);
-    return item;
+    removeButton.textContent = "Remove";
+    removeButton.addEventListener("click", () => removeCustomSymbol(symbol, row));
+    row.append(name, removeButton);
+    return { button: symbolButton, row };
   }
 
   function removeCustomSymbol(symbol: string, item: HTMLElement): void {
     customTickers = customTickers.filter((ticker) => ticker !== symbol);
     setState({ ...state, customTickers }, "Remove market symbol");
     item.remove();
+    root.querySelector<HTMLButtonElement>('.market-symbol-btn[data-symbol="' + CSS.escape(symbol) + '"]')?.remove();
 
     if (currentSymbol === symbol) {
       const fallbackButton = root.querySelector<HTMLButtonElement>('.market-symbol-btn[data-symbol="VOO"]');
@@ -529,6 +638,7 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
 
   // Update P&L panel
   function updatePnL(symbol: string) {
+    updateTiles(symbol);
     const pnlPanel = root.querySelector<HTMLElement>("#pnlPanel");
     const pnlEmpty = root.querySelector<HTMLElement>("#pnl-empty");
     const hasTrades = state.trades.some((t) => t.ticker === symbol);
@@ -1071,13 +1181,12 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     customTickers = [...customTickers, symbol];
     setState({ ...state, customTickers }, "Add market symbol");
 
-    const symbols = root.querySelector<HTMLElement>(".market-symbols");
-    const item = createCustomSymbolElement(symbol);
-    symbols?.appendChild(item);
+    const { button: symbolButton, row } = createCustomSymbolElement(symbol);
+    root.querySelector<HTMLElement>("#marketAddToggle")?.before(symbolButton);
+    root.querySelector<HTMLElement>("#marketWatchList")?.appendChild(row);
     if (input) input.value = "";
     setCustomSymbolMessage(symbol + " added.");
-    const symbolButton = item.querySelector<HTMLButtonElement>(".market-symbol-btn");
-    if (symbolButton) selectSymbol(symbolButton);
+    selectSymbol(symbolButton);
   });
 
   // Interval buttons
@@ -1085,14 +1194,26 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     btn.addEventListener("click", () => {
       currentInterval = btn.dataset.interval || "D";
       root.querySelectorAll<HTMLButtonElement>(".interval-btn").forEach((b) => {
-        b.classList.remove("active");
+        b.classList.remove("active", "is-active");
       });
-      btn.classList.add("active");
+      btn.classList.add("active", "is-active");
       createWidget(currentSymbol, currentInterval);
     });
   });
 
+  // The ＋ in the symbol switcher opens the add / remove panel.
+  root.querySelector<HTMLButtonElement>("#marketAddToggle")?.addEventListener("click", (event) => {
+    const toggle = event.currentTarget as HTMLButtonElement;
+    const panel = root.querySelector<HTMLElement>("#marketAddPanel");
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    toggle.setAttribute("aria-expanded", String(!panel.hidden));
+    toggle.classList.toggle("active", !panel.hidden);
+    if (!panel.hidden) root.querySelector<HTMLInputElement>("#customSymbolInput")?.focus();
+  });
+
   // Initial load
+  updateDrop(currentSymbol);
   createWidget(currentSymbol, currentInterval);
   updatePnL(currentSymbol);
   updateStaticForSymbol(currentSymbol);

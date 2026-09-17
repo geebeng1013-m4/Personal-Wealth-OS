@@ -3597,7 +3597,6 @@
      instead of re-rendering), so the class names and the .active hook stay;
      only the look is brought into the wu idiom. */
   .market-tabs,
-  .market-intervals,
   .etf-holdings-tabs {
     display: flex;
     flex-wrap: wrap;
@@ -3610,7 +3609,6 @@
     max-width: 100%;
   }
   .market-tab-btn,
-  .interval-btn,
   .etf-holdings-tab {
     appearance: none;
     border: none;
@@ -3625,12 +3623,10 @@
       color var(--dur-fast) var(--ease-standard);
   }
   .market-tab-btn:hover,
-  .interval-btn:hover,
   .etf-holdings-tab:hover {
     color: var(--text);
   }
   .market-tab-btn.active,
-  .interval-btn.active,
   .etf-holdings-tab.active {
     background: var(--surface-raised);
     color: var(--text);
@@ -3677,73 +3673,84 @@
       height: 340px;
     }
   }
-  .market-symbols {
-    display: flex;
-    flex: none;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: var(--space-3);
+  /* ---- market top (T-7a): symbol switcher, figures, chart --------------- */
+  .wu-market-picker {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
-  .market-custom-symbol {
-    display: inline-flex;
-    align-items: stretch;
-    flex: none;
+  .wu-market-picker::-webkit-scrollbar {
+    display: none;
   }
-  .market-symbol-btn {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 2px;
-    min-width: 120px;
-    min-height: 0;
-    height: auto;
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text);
-    cursor: pointer;
-    transition: border-color var(--dur-fast) var(--ease-standard),
-      background var(--dur-fast) var(--ease-standard);
+  .market-symbols .wu-segmented__option,
+  .market-intervals .wu-segmented__option {
+    min-height: 32px;
+    padding-inline: var(--space-4);
+    font-size: var(--text-body-sm);
   }
-  .market-symbol-btn:hover {
-    border-color: var(--border-strong);
-  }
-  .market-symbol-btn strong {
-    font: var(--weight-semibold) var(--text-subheading) / 1 var(--font-sans);
-  }
-  .market-symbol-btn small {
-    font: var(--weight-regular) var(--text-overline) / 1.2 var(--font-sans);
-    color: var(--text-faint);
-  }
-  .market-symbol-btn.active {
-    border-color: var(--accent-line);
-    background: var(--accent-soft);
-  }
-  .market-symbol-btn.active strong {
+  .wu-market-add-toggle.active {
     color: var(--accent);
   }
-  .market-custom-symbol .market-symbol-btn {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
+  .wu-market-add__form .wu-field {
+    flex: 1;
+    min-width: 0;
+    text-transform: uppercase;
+  }
+  .wu-market-add__form .wu-field::placeholder {
+    text-transform: none;
+  }
+  .wu-market-watch {
+    display: grid;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .wu-market-watch > li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 44px;
+    border-top: 1px solid var(--border-subtle);
+    font-weight: var(--weight-semibold);
+  }
+  .wu-market-watch > li:first-child {
+    border-top: 0;
   }
   .market-symbol-remove {
-    border: 1px solid var(--border);
-    border-left: none;
-    border-top-right-radius: var(--radius-sm);
-    border-bottom-right-radius: var(--radius-sm);
-    background: var(--surface);
-    color: var(--text-faint);
-    padding: 0 var(--space-2);
-    cursor: pointer;
-    transition: color var(--dur-fast) var(--ease-standard),
-      background var(--dur-fast) var(--ease-standard);
-  }
-  .market-symbol-remove:hover {
     color: var(--negative);
-    background: var(--negative-soft);
   }
+  .wu-market-chart .market-intervals {
+    align-self: flex-start;
+  }
+  .wu-market-phone {
+    display: none;
+  }
+  @media (max-width: 720px) {
+    .wu-market-tiles {
+      display: none;
+    }
+    .wu-market-phone {
+      display: revert;
+    }
+    .wu-money.wu-market-phone {
+      display: flex;
+    }
+    .wu-market-position.wu-market-phone {
+      display: grid;
+    }
+  }
+  @media (min-width: 721px) {
+    /* the chart card's label row carries the periods on a desktop */
+    .wu-market-chart {
+      position: relative;
+    }
+    .wu-market-chart .market-intervals {
+      position: absolute;
+      top: var(--space-4);
+      right: var(--space-5);
+    }
+  }
+
   .etf-holding-track {
     height: 6px;
     border-radius: var(--radius-pill);
