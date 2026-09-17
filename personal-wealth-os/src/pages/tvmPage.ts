@@ -445,7 +445,7 @@ export function bindTvmCalculator(root: HTMLElement, state: WealthState): void {
         }
         rerenderResult();
         // On a phone the result sits above the inputs; bring it into view.
-        if (window.matchMedia("(max-width: 720px)").matches) {
+        if (window.matchMedia("(max-width: 900px)").matches) {
           root.querySelector<HTMLElement>("#tvmOutput")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
       });
