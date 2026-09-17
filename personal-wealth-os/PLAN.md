@@ -784,8 +784,8 @@ Preview（另一个会话做的，项目代码没有改动）：
   2. featured goal：Goals 页点一个目标展开，里面有「Show on Dashboard」；正在 Dashboard 上的那个标「On Dashboard」chip；Dashboard 的下拉框拿掉，Next goal 卡照旧显示所选目标。
   3. TVM 输入：清单排版照 Preview（名称左、数值右、每行一样高），但数值格子直接可以输入，不用先点开；Nominal / Effective、End / Beginning 用小分段选择。
 - **计划**：
-  - **T-6a Budget**：照 Budget Preview 做（上面已定的两点）；拿掉顶部检查卡；层的编辑、上下移、删除、加一层、剩下的钱给谁、Opportunity 编辑都保留。
-  - **T-6b Goals**：照全站 Preview——手机总进度卡（已存 / 目标总额、完成几个、每月存多少）+ 每个目标一行（名称 · 每月 · 进度条 · % · 金额），完成的排最后；电脑 4 个数字 + 目标表整行；「+ Add goal」收起；去掉重复的大写标签；财务目标句保留 Lato；拿掉顶部检查卡；Dashboard 的 featured goal 选择器移到 Goals。
+  - **T-6a Budget** `[x]`（2026-09-17，PR #64 已合并）：照 Budget Preview 做；拿掉顶部检查卡；层的编辑、上下移、删除、加一层、剩下的钱给谁、Opportunity 编辑都保留。结果（demo）：手机 1,393px → 1,012px，电脑 1,389px → 931px，徽章 5 → 0；修了手机上编辑面板撑出卡片的问题。
+  - **T-6b Goals** ← **Current Task**，等你回答问题再说「执行 T-6b」：照全站 Preview——手机总进度卡（已存 / 目标总额、完成几个、每月存多少）+ 每个目标一行（名称 · 每月 · 进度条 · % · 金额），完成的排最后；电脑 4 个数字 + 目标表整行；「+ Add goal」收起；去掉重复的大写标签；财务目标句保留 Lato；拿掉顶部检查卡；Dashboard 的 featured goal 选择器移到 Goals。
   - **T-6c TVM**：照 Preview——三个工具用分段选择器切换，一次一个；结果放大数字卡（电脑加本金 vs 利息比例条）；输入整理成清单；不改计算。
 
 ### T-7 — Market  `[ ]`（最后做）
