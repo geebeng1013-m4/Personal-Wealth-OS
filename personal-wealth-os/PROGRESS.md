@@ -51,7 +51,7 @@ Bucket 从「写死的月额」改成「按真实收入分配的瀑布」，free
 - **T-3 完成（2026-09-16）**：Portfolio 4 个数字卡（Fees 显示扣手续费前收益）、持仓整行对齐目标、下一笔 + 最近 5 条、表单和面板点开才出现；手机 5,001px → 1,528px，电脑 3,887px → 1,049px，徽章 90 → 0。PR #58 已合并。
 - **T-4 完成（2026-09-17）**：Settings 改成分组列表，点一行在下面编辑；DCA targets 每只 ETF 一个输入框、可「+ Add ETF」并同步到 Portfolio 下拉；修掉保存会删 VXUS、Stage 被改成 Student 两个 bug；手机 3,505px → 1,424px。PR #59 已合并。
 - **Budget 整齐版 Preview**：https://claude.ai/artifact/44nSoHD6iLzbSzkiCFq9LY ，你说可以，放进 T-6。
-- **当前**：T-5（Advisor / Review / Money Leaks / Rules），先做计划。
+- **当前**：T-5 拆成 4 个小任务（T-5a Money Leaks → T-5b Advisor → T-5c Review → T-5d Rules），等你说「执行 T-5a」。
 
 ## 侧栏滚动条（S-1，已合并）
 

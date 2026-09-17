@@ -737,8 +737,18 @@ Preview（另一个会话做的，项目代码没有改动）：
   4. Dip-buy tranches 只显示当前值，不能编辑。
 - **提议（你已确认，已做）**：targets 列表 = 已有目标 ∪ 交易过的代码 ∪ 自定义代码，新代码默认 0%；编辑面板里可以「+ Add ETF」；在 Settings 加的代码也出现在 Portfolio 记账表单的下拉里；Opportunity reserve 的分配同样每只一个输入框（现在也只存 VOO/QQQM）；显示目标合计，不是 100% 时提示但不阻止保存。
 
-### T-5 — Advisor / Review / Money Leaks / Rules  `[ ]`  ← **Current Task**（先做计划）
+### T-5 — Advisor / Review / Money Leaks / Rules  `[ ]`  ← **Current Task**
 - 去掉重复的检查卡；建议和规则改成列表；免责声明移到页底；历史改成短行、点开看详情。
+- **照两个 Preview 的对应页面做**（全站手机 + 电脑 v2）。
+- **已定（2026-09-17）**：
+  1. 拆成 4 个小任务，一页一个 PR，按顺序做：**T-5a Money Leaks → T-5b Advisor → T-5c Review → T-5d Rules**。
+  2. Money Leaks 手机上点一行，详情在那一行下面展开；电脑照 Preview 左清单右详情。
+  3. Rules 点一行在下面展开编辑，原来的编辑和隐藏功能照旧。
+- **共同做法**：Advisor / Review / Rules 顶部的检查卡拿掉（只留 Dashboard Priority 和 Money Leaks 页）；免责声明、估算说明移到页底小字；不改计算；Advisor / Rules 的机会储备分配列出所有代码（T-4 之后不只 VOO / QQQM）。
+- **T-5a Money Leaks** `[ ]` ← 等「执行 T-5a」
+  - 手机：总数卡（每月流失 · 一年多少 · 几项，chip 显示高优先级数）→ 按影响排的清单（名称 · 类型 · 金额，状态用小字）→ 点一行下面展开详情（说明 + Inspect in Ledger / Mark as done）→ 页底估算说明。
+  - 电脑：4 个数字（Each month / Each year / Findings / High priority）→ 清单 | 详情两张一样高 → 页底估算说明。
+- **T-5b Advisor** `[ ]`、**T-5c Review** `[ ]`、**T-5d Rules** `[ ]`：做完上一页再照 Preview 做。
 
 ### T-6 — Goals / Budget / TVM  `[ ]`
 - 小改：去掉标签和标题重复（「JAPAN TRIP」+「Japan Trip 2027」），统一数字写法；顺便把 Dashboard 的 featured goal 选择器移到 Goals。
