@@ -1038,6 +1038,34 @@
   .wu-table tbody tr:last-child td {
     border-bottom: none;
   }
+  /* Dividends: the three figures, a suggestion's own row of buttons, and the
+     edit fields that drop below it. */
+  .wu-dividend-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-4);
+  }
+  .wu-dividend__caution {
+    color: var(--warning);
+  }
+  .wu-dividend__actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .wu-dividend .wu-dividend-edit {
+    grid-column: 1 / -1;
+    padding-bottom: var(--space-3);
+  }
+  @media (max-width: 720px) {
+    .wu-dividend {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .wu-dividend .wu-dividend__actions {
+      grid-column: 1 / -1;
+      justify-content: flex-start;
+    }
+  }
+
   /* An amount and its unit on one line — e.g. a fee and the currency it was paid in. */
   .wu-field-pair {
     display: grid;
