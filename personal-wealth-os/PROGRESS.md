@@ -49,7 +49,9 @@ Bucket 从「写死的月额」改成「按真实收入分配的瀑布」，free
 - **T-1 完成（2026-09-16）**：Dashboard 13 张卡 → 7 张，标题 16 → 1；手机 3,718px → 1,568px，桌面一屏看完（825px）。电脑版按你的截图做成 4 磁贴 + 两栏 + 页底链接；手机全站间距调宽。PR #54 已合并。
 - **T-2 完成（2026-09-16）**：Ledger 摘要卡合并、记账表单和筛选收进按钮、最近 5 笔、账户一张卡；手机 3,037px → 1,359px。PR #55 已合并；#57 补上漏掉的行对齐（`--row-h` 52px）、Recent 卡片底部和右侧对齐、chip 玻璃效果，已合并。
 - **T-3 完成（2026-09-16）**：Portfolio 4 个数字卡（Fees 显示扣手续费前收益）、持仓整行对齐目标、下一笔 + 最近 5 条、表单和面板点开才出现；手机 5,001px → 1,528px，电脑 3,887px → 1,049px，徽章 90 → 0。PR #58 已合并。
-- **当前**：T-4（Settings），计划已写进 PLAN.md，等你回答几个问题再说「执行 T-4」。
+- **T-4 完成（2026-09-17）**：Settings 改成分组列表，点一行在下面编辑；DCA targets 每只 ETF 一个输入框、可「+ Add ETF」并同步到 Portfolio 下拉；修掉保存会删 VXUS、Stage 被改成 Student 两个 bug；手机 3,505px → 1,424px。PR #59 已合并。
+- **Budget 整齐版 Preview**：https://claude.ai/artifact/44nSoHD6iLzbSzkiCFq9LY ，你说可以，放进 T-6。
+- **当前**：T-5（Advisor / Review / Money Leaks / Rules），先做计划。
 
 ## 侧栏滚动条（S-1，已合并）
 

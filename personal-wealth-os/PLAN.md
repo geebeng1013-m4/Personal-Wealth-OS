@@ -719,8 +719,11 @@ Preview（另一个会话做的，项目代码没有改动）：
   2. `.wu-tc__top` 预留 chip 的高度，有 chip 和没 chip 的卡数字对齐；所有卡标签行高约 7px。
 - **没做到**：电脑版第 3 行两张卡底边对齐，但卡里的行没有上下对齐（左边先有一句话）。
 
-### T-4 — Settings  `[ ]`  ← **Current Task**
+### T-4 — Settings  `[x]`（2026-09-17，PR #59 已合并）
 - 7 个常驻表单改成 iOS 式分组列表：每项显示当前值，点进去再编辑。
+- **结果（demo 数据）**：手机 3,505px → 1,424px，电脑 1,862px → 1,040px，看得见的输入框 32 → 3。1026/1026 测试（合并 main 后）、build 通过。
+- **修掉的现有 bug**：保存 DCA targets / Opportunity 分配不再删掉 VOO、QQQM 以外的代码（VXUS）；Stage 保存不再被改成 Student。
+- **跟以前不同**：Monthly cash flow 和 Monthly DCA 拆成两行，各自保存、各自同步规则；Version History 快照只在原本就存的保存（Recurring、Liabilities、隐私）才存。
 - **照 Preview 的 Settings 部分做**（同上两个链接）。
 - **计划（2026-09-16，等「执行 T-4」）**：
   - 手机：Profile / Money in & out / Plan / Privacy / Data 五组列表，最后单独一行红色 Reset。
@@ -732,13 +735,17 @@ Preview（另一个会话做的，项目代码没有改动）：
   2. DCA targets 改成每只 ETF 一个输入框，不再丢 VXUS；你另外希望新加的股票/ETF 也一起出现在这里（提议见下，等你确认）。
   3. Stage 下拉加上当前存的值，保存不再被覆盖。
   4. Dip-buy tranches 只显示当前值，不能编辑。
-- **提议（等确认）**：targets 列表 = 已有目标 ∪ 交易过的代码 ∪ 自定义代码，新代码默认 0%；编辑面板里可以「+ Add ETF」；在 Settings 加的代码也出现在 Portfolio 记账表单的下拉里；Opportunity reserve 的分配同样每只一个输入框（现在也只存 VOO/QQQM）；显示目标合计，不是 100% 时提示但不阻止保存。
+- **提议（你已确认，已做）**：targets 列表 = 已有目标 ∪ 交易过的代码 ∪ 自定义代码，新代码默认 0%；编辑面板里可以「+ Add ETF」；在 Settings 加的代码也出现在 Portfolio 记账表单的下拉里；Opportunity reserve 的分配同样每只一个输入框（现在也只存 VOO/QQQM）；显示目标合计，不是 100% 时提示但不阻止保存。
 
-### T-5 — Advisor / Review / Money Leaks / Rules  `[ ]`
+### T-5 — Advisor / Review / Money Leaks / Rules  `[ ]`  ← **Current Task**（先做计划）
 - 去掉重复的检查卡；建议和规则改成列表；免责声明移到页底；历史改成短行、点开看详情。
 
 ### T-6 — Goals / Budget / TVM  `[ ]`
-- 小改：去掉标签和标题重复（「JAPAN TRIP」+「Japan Trip 2027」），统一数字写法。
+- 小改：去掉标签和标题重复（「JAPAN TRIP」+「Japan Trip 2027」），统一数字写法；顺便把 Dashboard 的 featured goal 选择器移到 Goals。
+- **Budget 另有整齐版 Preview（2026-09-17，照新的按收入分配页面做）**：https://claude.ai/artifact/44nSoHD6iLzbSzkiCFq9LY
+  - 手机：This month 卡（收入 + 状态 chip + 按层分色比例条）→ Layers 分组列表（「色块 · 名称 · 规则 / 拿到多少 · 状态 ›」，点整行展开编辑）→ Leftover goes to / + Add a layer → Your months → Set aside。
+  - 电脑：4 个数字（This month / Extra caught / Swing / Set aside）→ 层表格整行 → Your months | Plan rules。
+  - **你看过说「可以」**：采用我的建议——手机每层不放进度条（电脑表格保留）；规则选择改成三段选择。金额两位小数仍未决定。
 
 ### T-7 — Market  `[ ]`（最后做）
 - demo 里图表是空的，需要真实行情数据才能判断。
