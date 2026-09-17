@@ -12,6 +12,11 @@
 - **`main`**：`0beedc7`（2026-09-17，PR #71 iPad 排版已合并；整齐版 T 系列 + T-8 全部完成）。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 
+## 股息和预扣税（D 系列，计划中）
+
+计划书定稿（2026-09-18）：https://claude.ai/artifact/QUVcjJRdTy7YszkoeKQDM1 。决定见 `PLAN.md` D 系列。
+- **当前**：等 PR #75 合并，然后说「开始 D-1」。
+
 ## 多市场 Portfolio（MM 系列，进行中）
 
 让 Portfolio 记得进马股、港股、新加坡股、伦敦 ETF。决定和任务清单见 `PLAN.md` MM 系列；
