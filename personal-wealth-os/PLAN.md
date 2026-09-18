@@ -52,8 +52,11 @@
 - 实测：5199 独立无头 Edge 五项都落到正确字段、无报错、手机无横向溢出；你在 5174 真实账号确认看不到卡片、数字不变。
 - FUTURE IDEAS：Ledger 账户 Edit 目前是连续 3 个浏览器弹窗，可改成页面内表格。
 
-### F-8 — 登录页介绍区  `[ ]`
-- 已定：文案用英文（跟你沟通用中文）。待定：有没有公开的演示版地址。
+### F-8 — 登录页介绍区  `[x]`（2026-09-18，PR #86 + #87 已合并上线）
+- 登录卡片：标题「Your money, investments and goals, all in one place.」+ Google 按钮 + 两行放心说明（Free. Your data stays private to you. / For guidance only, not financial advice.）。
+- 3 个重点（real net worth / real returns / stay on plan）：宽 1100 以上卡片在正中、重点在右；更窄就排在卡片下面，手机第一屏看得到按钮。
+- 已定：英文文案；不做公开演示版；不放截图。只改 `renderLogin()` 和 `shell.css` 登录样式。
+- 实测 360 到 1400 宽共 6 种尺寸：无横向溢出、无报错，放心说明每种尺寸都是两行。
 
 ### F-9 — 右侧线条  `[ ]`
 - 朋友截图已拿到：是浏览器自带的浅色滚动条画在深色页面上（主内容区没设 `color-scheme` / 滚动条样式，只有侧栏有自定义）。
