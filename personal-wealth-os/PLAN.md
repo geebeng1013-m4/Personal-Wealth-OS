@@ -20,12 +20,16 @@
 
 分析报告：https://claude.ai/code/artifact/989dcaef-777d-4469-a7a7-9f488fb7d756
 
-### F-1 — 移除 Quick overview（/quick）  `[x]`（2026-09-18，分支 `fix/remove-quick-view`，PR 待开）
+### F-1 — 移除 Quick overview（/quick）  `[x]`（2026-09-18，PR #79）
 - 原因：内容大部分和 Overview 重复；进过 /quick 后刷新会一直回到 Quick 页（路由 bug）；主屏图标默认打开这个没有导航的页面。
 - 做法：manifest `start_url` 改为 `/`；`/quick`、`/#quick` 保留为跳转（旧收藏和已装的图标不失效）；删除 Quick 模板和样式。
 
-### 其他反馈（待你决定先后）
-- 首屏慢：`/assets/*` 长缓存、字体自托管、Logo 改 SVG、拆包。
+### F-2 — 首屏：长缓存 + 字体自托管 + Logo 缩小  `[x]`（2026-09-18，分支 `perf/first-load-assets`）
+- `/assets/*` 加一年 immutable 缓存；字体改为 fontsource 打包（不再请求 Google）；登录页 Logo PNG 230 KB → 62 KB（SVG 是另一种设计，不能直接换）；Service Worker 不再预下载 608 KB 的旧 Quick Logo。
+- 实测：Google 连不上时登录页 1.0 秒出现（原来超过 30 秒白屏）。正常网络首次打开时间没变，瓶颈是 1.2 MB 的 JS，留给拆包那一条。
+
+### 其他反馈（待做）
+- 首屏慢（剩下的）：拆包、HTML 骨架屏、已登录用户不先闪登录页。
 - 点按钮背景光效重置：光效只挂载一次。
 - 光效帧率封顶 + 自动降级。
 - 右侧线条：等朋友截图。
