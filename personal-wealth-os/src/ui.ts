@@ -6,7 +6,7 @@ import { escapeHtml } from "./html";
 import { pageHeader } from "./components/pageHeader";
 import { assistantTemplate, mountAssistant } from "./components/assistant/assistantWidget";
 import { DISCLAIMER_SHORT } from "./components/disclaimer";
-import { mountSideRays } from "./sideRays";
+import { createSideRays, type SideRays } from "./sideRays";
 
 import type { Navigate, Setter } from "./pages/pageTypes";
 import { bindReview, reviewTemplate } from "./pages/reviewPage";
@@ -24,7 +24,9 @@ import { settleTabbarLens } from "./liquidGlass";
 import { mountSidebarScrollbar } from "./sidebarScrollbar";
 import { mountTitleBar } from "./titleBar";
 
-const sideRaysCleanup = new WeakMap<HTMLElement, () => void>();
+// Created on the first render that has a shell, then reused by every later
+// one (see createSideRays): rebuilding it made the light jump on each click.
+let sideRays: SideRays | null = null;
 const sidebarScrollbarCleanup = new WeakMap<HTMLElement, () => void>();
 const titleBarCleanup = new WeakMap<HTMLElement, () => void>();
 const calculatorCleanup = new WeakMap<HTMLElement, () => void>();
@@ -266,8 +268,6 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   document.body.classList.remove("sidebar-menu-open");
   calculatorCleanup.get(root)?.();
   calculatorCleanup.delete(root);
-  sideRaysCleanup.get(root)?.();
-  sideRaysCleanup.delete(root);
   sidebarScrollbarCleanup.get(root)?.();
   sidebarScrollbarCleanup.delete(root);
   titleBarCleanup.get(root)?.();
@@ -288,16 +288,17 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   }
   // After the scroll position is restored, so restoring it can't show the thumb.
   sidebarScrollbarCleanup.set(root, mountSidebarScrollbar(root));
-  const sideRays = root.querySelector<HTMLElement>("#sideRays");
-  if (sideRays) {
-    const cleanup = mountSideRays(sideRays, {
+  const sideRaysContainer = root.querySelector<HTMLElement>("#sideRays");
+  if (sideRaysContainer) {
+    // Phones get brighter light (DG-6): the source is tucked under the brand bar.
+    const intensity = window.matchMedia("(max-width: 900px)").matches ? 4 : 2.6;
+    sideRays ??= createSideRays({
       speed: 2.5,
       // Brand bronze + green (theme.css --c-bronze-400 / --c-green-500), DG-1.
       // blend 0.75 weights rayColor2, so green leads and bronze accents.
       rayColor1: "#c79b57",
       rayColor2: "#57a78f",
-      // Phones get brighter light (DG-6): the source is tucked under the brand bar.
-      intensity: window.matchMedia("(max-width: 900px)").matches ? 4 : 2.6,
+      intensity,
       spread: 2,
       origin: "top-right",
       tilt: 0,
@@ -306,7 +307,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
       falloff: 1.1,
       opacity: 1,
     });
-    sideRaysCleanup.set(root, cleanup);
+    sideRays.attach(sideRaysContainer, intensity);
   }
   const mount = root.querySelector<HTMLElement>("#pageMount");
   if (!mount) return;

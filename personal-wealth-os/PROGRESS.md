@@ -17,7 +17,8 @@
 朋友试用后反馈 6 条，分析报告：https://claude.ai/code/artifact/989dcaef-777d-4469-a7a7-9f488fb7d756
 - **F-1 完成（2026-09-18）**：移除 Quick overview。`/quick`、`/#quick`、`/quick#ledger` 都跳到对应的完整页面，刷新后不再回到 Quick。
   typecheck / 1173 测试 / build 全绿，5199 实测通过。PR #79。
-- **F-2 完成（2026-09-18）**：`/assets` 长缓存、字体自托管、Logo 230 KB → 62 KB。Google 连不上时登录页 1.0 秒出现（原来 30 秒以上白屏）。分支 `perf/first-load-assets`，叠在 F-1 上。
+- **F-2 完成（2026-09-18）**：`/assets` 长缓存、字体自托管、Logo 230 KB → 62 KB。Google 连不上时登录页 1.0 秒出现（原来 30 秒以上白屏）。PR #80（叠在 #79 上）。
+- **F-3 完成（2026-09-18）**：点按钮时背景光效不再重置——光效只建一次，画布跟着页面搬家。实测切页面、点筛选都只有 1 个 WebGL 上下文。分支 `fix/rays-persist`。
 - **当前**：按报告一条一条处理（见 `PLAN.md` F 系列）。
 
 ## 股息和预扣税（D 系列，计划中）
