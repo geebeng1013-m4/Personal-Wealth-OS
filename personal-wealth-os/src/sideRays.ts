@@ -104,6 +104,28 @@ function originToFlip(origin: SideRaysOrigin): [number, number] {
   }
 }
 
+/**
+ * How hard the light works, best first. The light is a slow drift, so 30 fps
+ * reads the same as the display's own 60/90/120/144 Hz while drawing a fraction
+ * of the frames, and it is blurry by nature, so one canvas pixel per CSS pixel
+ * is enough. A tier with fps 0 draws a single still frame.
+ */
+const TIERS = [
+  { fps: 0, dpr: 0.5 },
+  { fps: 20, dpr: 0.5 },
+  { fps: 30, dpr: 1 },
+] as const;
+const TOP_TIER = TIERS.length - 1;
+/** Frames measured before judging a tier. */
+const SAMPLE_FRAMES = 60;
+/** Step down when frames take this much longer than the display's own frame. */
+const SLOW_FACTOR = 1.5;
+
+function prefersSavingData(): boolean {
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+  return connection?.saveData === true;
+}
+
 export interface SideRays {
   /** Show the light in `container`, moving the one canvas there if it was elsewhere. */
   attach(container: HTMLElement, intensity: number): void;
@@ -120,10 +142,12 @@ export interface SideRays {
  * clock started here keeps running.
  */
 export function createSideRays(options: SideRaysOptions): SideRays {
+  // Data saver asks for less; a still frame is the least.
+  let tier = prefersSavingData() ? 0 : TOP_TIER;
   const renderer = new Renderer({
     alpha: true,
     antialias: false,
-    dpr: Math.min(window.devicePixelRatio, 2),
+    dpr: Math.min(window.devicePixelRatio, TIERS[tier].dpr),
   });
   const gl = renderer.gl;
   gl.canvas.classList.add("side-rays-canvas");
@@ -157,7 +181,7 @@ export function createSideRays(options: SideRaysOptions): SideRays {
   let container: HTMLElement | null = null;
   const resize = (): void => {
     if (!container) return;
-    renderer.dpr = Math.min(window.devicePixelRatio, 2);
+    renderer.dpr = Math.min(window.devicePixelRatio, TIERS[tier].dpr);
     const width = Math.max(container.clientWidth, 1);
     const height = Math.max(container.clientHeight, 1);
     renderer.setSize(width, height);
@@ -168,17 +192,52 @@ export function createSideRays(options: SideRaysOptions): SideRays {
   const startedAt = performance.now();
   let animationFrame: number | null = null;
   let isVisible = true;
+  let needsFrame = true;
+  let lastTick = 0;
+  let lastDraw = 0;
+
+  // The display's frame time is the shortest gap seen between callbacks: a
+  // frame can arrive late, never early. Gaps well above it mean the page is
+  // dropping frames, and the light steps down a tier.
+  let displayFrameMs = Infinity;
+  let sampleSum = 0;
+  let sampleCount = 0;
+  const measure = (gapMs: number): void => {
+    // A gap this long is a paused tab or a stalled page, not a frame.
+    if (gapMs <= 0 || gapMs > 250) return;
+    displayFrameMs = Math.min(displayFrameMs, gapMs);
+    sampleSum += gapMs;
+    sampleCount += 1;
+    if (sampleCount < SAMPLE_FRAMES) return;
+    const averageMs = sampleSum / sampleCount;
+    sampleSum = 0;
+    sampleCount = 0;
+    if (tier > 0 && averageMs > displayFrameMs * SLOW_FACTOR) {
+      tier -= 1;
+      resize();
+      needsFrame = true;
+    }
+  };
 
   const render = (now: number): void => {
     animationFrame = null;
     if (!isVisible || document.hidden) return;
-    program.uniforms.iTime.value = (now - startedAt) / 1000;
-    renderer.render({ scene: mesh });
-    if (!reduceMotion) animationFrame = requestAnimationFrame(render);
+    if (lastTick) measure(now - lastTick);
+    lastTick = now;
+    const { fps } = TIERS[tier];
+    // 2 ms of slack so a 60 Hz display lands on every other frame, not every third.
+    if (needsFrame || (fps > 0 && now - lastDraw >= 1000 / fps - 2)) {
+      program.uniforms.iTime.value = (now - startedAt) / 1000;
+      renderer.render({ scene: mesh });
+      lastDraw = now;
+      needsFrame = false;
+    }
+    if (!reduceMotion && fps > 0) animationFrame = requestAnimationFrame(render);
   };
 
   const startRendering = (): void => {
     if (!isVisible || document.hidden || animationFrame !== null) return;
+    lastTick = 0;
     animationFrame = requestAnimationFrame(render);
   };
 
@@ -217,8 +276,9 @@ export function createSideRays(options: SideRaysOptions): SideRays {
         resize();
       }
       isVisible = true;
-      // With reduced motion the loop draws a single frame, so each new
-      // container needs its own.
+      // With reduced motion or a still tier the loop draws a single frame, so
+      // each new container needs its own.
+      needsFrame = true;
       stopRendering();
       startRendering();
     },
