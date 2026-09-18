@@ -16,6 +16,41 @@
 
 ---
 
+## 新用户问答引导（O 系列）  （2026-09-19 定）
+
+问题：新用户登录后直接看到全 0 的 Overview；F-7 清单只说「去哪里填」，不说为什么、填完有什么用。
+做法：全新账号先走一段问答（开场 + 6 题 + 结果页「你的计划」），每题马上回一句「这对你意味着什么」；
+之后 Overview 一次只给一个「下一步」，每步写「Because: 你说过……」，把估计变成真实数据。
+概念 Demo：https://claude.ai/artifact/Rxy8M1rjE7CF2ZjVpeCRK6
+
+**已定的决定（2026-09-19，照建议）**
+1. 答案保存在 Schema v26 新字段 `onboardingAnswers`（Because 那一行要用）；老数据迁移为空。
+2. 第 4 题现金同时写入 Bank 账户余额和安全垫现有金额（`emergency.current`），之后可在 Settings 改。
+3. 每月分配（估算）：安全垫未满时 安全垫 50 / 目标 30 / 投资 20；满了以后 目标 60 / 投资 40。结果页写明「按你的数字估算」+ disclaimer。
+4. 第 5 题只问有没有投资，不问金额；有的话下一步是「加第一笔交易」。
+5. 下一步可以打开已预填的表单（数字来自用户答案），但保存由用户自己按。F-7「不替用户填」的规则就此放宽。
+6. Demo 模式加 `?fresh` 参数，用空数据开始，只为测试新用户流程；不影响线上。
+
+**写到哪里**：第 1 题 → `profile` 的主要目标 / `financialGoal`；第 2 题 → 预填「记薪水」；第 3 题 → `monthly-spending-limit` 规则 + 安全垫目标 = 3 × 开销；第 4 题 → Bank 余额 + `emergency.current`；第 6 题 → 第一个 Goal。
+只给全新账号看（无 `onboardingDone`、余额全 0、无交易、无目标），老用户永远看不到。按 Start my plan 才一次写入（一个 undo 点）。
+
+### O-1 — 问答逻辑 + Schema v26  `[ ]`
+- `src/onboardingQuiz.ts`：题目、答案类型、结果计算（每月剩余、安全垫月数、目标日期、分配）、`applyOnboardingAnswers(state, answers)`。
+- Schema v26 + 迁移；测试：答案写对位置、跳过的题不写、老用户迁移后不触发、开销大于收入不出错。
+
+### O-2 — 问答画面 + 新账号路由  `[ ]`
+- `src/pages/onboardingPage.ts`：全屏 8 屏（像登录页，无侧栏），`main.ts` 对全新账号先显示；可跳过、可「我自己设置」。
+- Demo `?fresh`；5199 走完一遍，深色 / 浅色 / 手机 / 桌面截图；老账号看不到。
+
+### O-3 — Overview「下一步」卡片  `[ ]`
+- `src/onboarding.ts` 改成按顺序的下一步列表（because 文字、完成状态从数据判断）；Dashboard 卡片换样式 + 计划条 + `estimate` 标签。
+- `onboardingGuide.ts` 支持预填。顺序：记薪水 → 转钱进安全垫 → 记这周开销 →（有投资）加第一笔交易；跳过的题变成对应的下一步。
+- 你在 5174 确认真实账号不受影响。
+
+### O-4 — PR、合并、上线、文档  `[ ]`
+
+FUTURE IDEAS：做完之后的节奏提醒（发薪日 / 每周 / 月底 Review）——需要通知功能，现在没有。
+
 ## 用户反馈（F 系列）  （2026-09-18，朋友试用后反馈）
 
 分析报告：https://claude.ai/code/artifact/989dcaef-777d-4469-a7a7-9f488fb7d756
