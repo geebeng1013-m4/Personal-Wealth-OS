@@ -24,6 +24,7 @@ import { isDemoMode } from "./demo";
 import { demoStateFor, DEMO_USER_DISPLAY_NAME, DEMO_USER_EMAIL, DEMO_USER_PHOTO } from "./demoData";
 import { initSaveErrorToasts } from "./components/toast";
 import { initLiquidGlass } from "./liquidGlass";
+import { mountPageScrollbar } from "./pageScrollbar";
 
 // Drop stale cached ticker data from previous sessions so localStorage doesn't grow unbounded.
 pruneMarketCache();
@@ -32,6 +33,7 @@ pruneMarketCache();
 // a failed write (quota, blocked storage, rejected sync) is completely silent.
 initSaveErrorToasts();
 initLiquidGlass();
+mountPageScrollbar();
 
 // PWA install prompt
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
