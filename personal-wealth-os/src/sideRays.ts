@@ -104,7 +104,22 @@ function originToFlip(origin: SideRaysOrigin): [number, number] {
   }
 }
 
-export function mountSideRays(container: HTMLElement, options: SideRaysOptions): () => void {
+export interface SideRays {
+  /** Show the light in `container`, moving the one canvas there if it was elsewhere. */
+  attach(container: HTMLElement, intensity: number): void;
+}
+
+/**
+ * One light for the life of the page.
+ *
+ * renderApp rebuilds the shell on every navigation and on many in-page clicks.
+ * Mounting a fresh light each time threw away the WebGL context and restarted
+ * the animation clock, so the light visibly jumped whenever a button was
+ * pressed. Instead the canvas is created once and moved into each new
+ * container: a canvas keeps its context when it moves in the DOM, and the
+ * clock started here keeps running.
+ */
+export function createSideRays(options: SideRaysOptions): SideRays {
   const renderer = new Renderer({
     alpha: true,
     antialias: false,
@@ -112,7 +127,6 @@ export function mountSideRays(container: HTMLElement, options: SideRaysOptions):
   });
   const gl = renderer.gl;
   gl.canvas.classList.add("side-rays-canvas");
-  container.replaceChildren(gl.canvas);
 
   const [flipX, flipY] = originToFlip(options.origin);
   const program = new Program(gl, {
@@ -140,33 +154,31 @@ export function mountSideRays(container: HTMLElement, options: SideRaysOptions):
   });
   const mesh = new Mesh(gl, { geometry: new Triangle(gl), program });
 
+  let container: HTMLElement | null = null;
   const resize = (): void => {
+    if (!container) return;
     renderer.dpr = Math.min(window.devicePixelRatio, 2);
     const width = Math.max(container.clientWidth, 1);
     const height = Math.max(container.clientHeight, 1);
     renderer.setSize(width, height);
     program.uniforms.iResolution.value = [gl.canvas.width, gl.canvas.height];
   };
-  const resizeObserver = new ResizeObserver(resize);
-  resizeObserver.observe(container);
-  resize();
 
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const startedAt = performance.now();
   let animationFrame: number | null = null;
   let isVisible = true;
-  let isDisposed = false;
 
   const render = (now: number): void => {
     animationFrame = null;
-    if (isDisposed || !isVisible || document.hidden) return;
+    if (!isVisible || document.hidden) return;
     program.uniforms.iTime.value = (now - startedAt) / 1000;
     renderer.render({ scene: mesh });
     if (!reduceMotion) animationFrame = requestAnimationFrame(render);
   };
 
   const startRendering = (): void => {
-    if (isDisposed || !isVisible || document.hidden || animationFrame !== null) return;
+    if (!isVisible || document.hidden || animationFrame !== null) return;
     animationFrame = requestAnimationFrame(render);
   };
 
@@ -176,27 +188,39 @@ export function mountSideRays(container: HTMLElement, options: SideRaysOptions):
     animationFrame = null;
   };
 
+  // Both observers follow the current container. When a render replaces the
+  // shell (or the login screen replaces it), the old container leaves the DOM,
+  // the intersection observer reports it gone, and drawing stops until the
+  // next attach.
+  const resizeObserver = new ResizeObserver(resize);
   const intersectionObserver = new IntersectionObserver(([entry]) => {
     isVisible = entry?.isIntersecting ?? false;
     if (isVisible) startRendering();
     else stopRendering();
   }, { threshold: 0.1 });
-  intersectionObserver.observe(container);
 
-  const handleVisibilityChange = (): void => {
+  document.addEventListener("visibilitychange", () => {
     if (document.hidden) stopRendering();
     else startRendering();
-  };
-  document.addEventListener("visibilitychange", handleVisibilityChange);
-  startRendering();
+  });
 
-  return () => {
-    isDisposed = true;
-    stopRendering();
-    intersectionObserver.disconnect();
-    resizeObserver.disconnect();
-    document.removeEventListener("visibilitychange", handleVisibilityChange);
-    gl.getExtension("WEBGL_lose_context")?.loseContext();
-    gl.canvas.remove();
+  return {
+    attach(next, intensity) {
+      program.uniforms.iIntensity.value = intensity;
+      if (next !== container) {
+        resizeObserver.disconnect();
+        intersectionObserver.disconnect();
+        container = next;
+        container.replaceChildren(gl.canvas);
+        resizeObserver.observe(container);
+        intersectionObserver.observe(container);
+        resize();
+      }
+      isVisible = true;
+      // With reduced motion the loop draws a single frame, so each new
+      // container needs its own.
+      stopRendering();
+      startRendering();
+    },
   };
 }
