@@ -829,9 +829,8 @@
   line-height: 1.55;
   text-wrap: pretty;
 }
-/* Three points under the card: one column on a phone, three across once the
-   row has room. The same width as the card until then, so the page reads as
-   one column. */
+/* Three points: under the card on a phone, a column to its right once the
+   row has room for both. */
 .login-features {
   width: 100%;
   max-width: 432px;
@@ -863,12 +862,14 @@
   font-size: 13px;
   line-height: 1.5;
 }
-@media (min-width: 760px) {
-  .login-features {
-    max-width: 720px;
+@media (min-width: 900px) {
+  .login-container {
+    flex-direction: row;
+    align-items: center;
+    gap: 28px;
   }
-  .login-features ul {
-    grid-template-columns: repeat(3, 1fr);
+  .login-features {
+    max-width: 320px;
   }
 }
 .google-signin-btn {
