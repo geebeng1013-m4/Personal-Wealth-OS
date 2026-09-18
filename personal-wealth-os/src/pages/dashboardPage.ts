@@ -13,6 +13,8 @@ import { createId } from "../state";
 import { money, percent } from "../rules";
 import { escapeHtml } from "../html";
 import { buildOverviewModel } from "../overview";
+import { buildOnboardingChecklist, type OnboardingChecklist, type OnboardingStepId } from "../onboarding";
+import { queueGuide } from "../onboardingGuide";
 import type { PortfolioSnapshot } from "../portfolioSummary";
 import { assetDrawdownBelow } from "../drawdowns";
 import { getPrice } from "../marketPrices";
@@ -89,6 +91,8 @@ export function dashboardTemplate(state: WealthState): string {
     ${state.financialGoal
       ? `<button class="wu-goal-line dashboard-nav" data-page="goals" type="button" aria-label="My financial goal: ${escapeHtml(state.financialGoal)}. Edit on the Goals page"><span class="wu-goal-line__label">Financial goal</span><span class="wu-goal-line__text">${escapeHtml(state.financialGoal)}</span></button>`
       : `<button class="wu-goal-line wu-goal-line--empty dashboard-nav" data-page="goals" type="button"><span class="wu-goal-line__text">Write down your financial goal</span><span aria-hidden="true">→</span></button>`}
+
+    ${onboardingCard(buildOnboardingChecklist(state))}
 
     <!-- Filled by bindDashboard after an async price check: shown only when a
          dip-buy tranche is reached and not yet deployed. -->
@@ -198,6 +202,32 @@ export function dashboardTemplate(state: WealthState): string {
 }
 
 /*
+ * The new-user "Get started" card (F-7). Shown only until the four required
+ * steps are done or the user hides it; each step opens the page that holds its
+ * field, and the guide there points at the field itself.
+ */
+function onboardingCard(checklist: OnboardingChecklist): string {
+  if (!checklist.visible) return "";
+  const ratio = checklist.requiredDoneCount / checklist.requiredCount;
+  return `<section class="wu-card wu-onboard wu-stack wu-stack--sm" aria-labelledby="ovOnboardTitle">
+      <div class="wu-tc__top"><span class="wu-label" id="ovOnboardTitle">Get started</span><span class="wu-chip">${checklist.requiredDoneCount} of ${checklist.requiredCount} done</span></div>
+      <p class="t-body-sm t-muted">Fill in these basics and your Overview starts showing real numbers. Tap a step and we'll take you to the right field.</p>
+      <div class="wu-bar" role="progressbar" aria-valuenow="${Math.round(ratio * 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="Setup progress">
+        <span class="wu-bar__fill" style="width:${Math.round(ratio * 100)}%"></span>
+      </div>
+      <ol class="wu-onboard__steps">
+        ${checklist.steps.map((step) => `<li><button class="wu-onboard__step${step.done ? " is-done" : ""}" type="button" data-onboard-step="${step.id}">
+          <span class="wu-onboard__check" aria-hidden="true">${step.done ? "✓" : ""}</span>
+          <span class="wu-onboard__text"><span>${escapeHtml(step.title)}${step.optional ? ` <small class="wu-onboard__optional">Optional</small>` : ""}</span><small>${escapeHtml(step.hint)}</small></span>
+          <span class="visually-hidden">${step.done ? "Done" : "Not done yet"}</span>
+          <span aria-hidden="true">›</span>
+        </button></li>`).join("")}
+      </ol>
+      <div class="wu-row wu-dash__actions"><button class="wu-btn wu-btn--ghost wu-btn--sm" id="onboardHide" type="button">Hide this checklist</button></div>
+    </section>`;
+}
+
+/*
  * The Dashboard's one-line valuation note.
  *
  * When every holding is priced, "Market data may be delayed · last traded 9h
@@ -224,6 +254,28 @@ export function bindDashboard(
   navigate: Navigate | undefined,
   rerender: RenderApp,
 ): void {
+  // "Get started" (F-7). Finishing the required steps retires the card for
+  // good, so emptying the data later never brings a beginner's card back.
+  const checklist = buildOnboardingChecklist(state);
+  // `state` itself is replaced so every handler here, which builds its next
+  // state from it, carries the flag instead of quietly writing it back to false.
+  if (checklist.complete && !state.onboardingDone) {
+    state = { ...state, onboardingDone: true };
+    setState(state);
+  }
+  root.querySelectorAll<HTMLButtonElement>("[data-onboard-step]").forEach((button) => button.addEventListener("click", () => {
+    const page = queueGuide(button.dataset.onboardStep as OnboardingStepId);
+    if (navigate) navigate(page);
+    else rerender(root, state, setState, page);
+  }));
+  root.querySelector<HTMLButtonElement>("#onboardHide")?.addEventListener("click", () => {
+    if (!confirm("Hide the Get started checklist? It will not come back.")) return;
+    const next: WealthState = { ...state, onboardingDone: true };
+    setState(next, "Hide Get started checklist");
+    if (navigate) navigate("dashboard");
+    else rerender(root, next, setState, "dashboard");
+  });
+
   // Record the priority action straight from the Dashboard. The id is
   // validated against the live Advisor snapshot, so a stale button can never
   // write a record for advice that is no longer current.
