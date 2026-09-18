@@ -37,9 +37,13 @@
 - 每个页面第一次打开时才下载，页面切换改成异步；主程序现在 501 KB（gzip 149 KB）。逐页实测。
 
 ### P-6a — app 内节奏提醒  `[ ]`
-- 打开 app 时 Overview 按日子显示一张提醒（同一天只一张，顺序：发薪 > 月底 > 每周）：
-  发薪日前 1 天到后 3 天且这个周期没记薪水 →「记下这个月的薪水」（预填）；最后 3 天到下月头 3 天 →「这个月的 Review」（估计 vs 真实）；距上次查看满 7 天 →「30 秒看一下这周开销」。
-- 发薪日从上一笔薪水的日期推算，不另外问。「Done」或做完就收起，「Not now」今天不再出现。新手卡片没做完时先显示新手卡片。
+- **家**：现有 Review 页（Monthly check-in）最上面加「Check-ins」区块：发薪、每周、月底三种。到期的有按钮；没到的写「Opens Oct 29」「Next one on Monday」；做完打勾。月底那项接着填原本的月度 Review 表单。
+- **入口（2026-09-19 选 A）**：侧栏 Review 下面的灰色小字 "Monthly check-in" 有待办时变成绿色 "2 check-ins due"；不用红点、不用数字。手机 More 上一个小绿点，More 页里 Review 同样换小字。
+- **Overview 只有一行**「2 check-ins due →」，点了去 Review；没有待办不出现（遵守 Overview 只放状态）。
+- **发薪日**：来自 Settings 里收入类的 recurring（`dayOfMonth`，短月份退到月底）。没有的话，记完薪水问一次「每个月 25 号左右发吗？」→ 一键存成 recurring。收入不固定（Budget 选 variable）不做发薪提醒。窗口：发薪日前 2 天到后 5 天；窗口内记了薪水就算这个月已记。两份收入各一个。
+- **每周**：星期一起到期，直到这周看过。**月底**：最后 3 天到下月头 3 天。
+- 新手「Your next step」卡片还在时，Check-ins 先不出现。
+- 概念 Demo（v3）：https://claude.ai/artifact/Bz1Cd6m3xnmQuRBiVeuR4J 。Demo 里的日历只是模拟，网站上不放。
 
 ### P-6b — 真正的推送通知  （以后再说，需要单独计划）
 - 需要：存每个用户每台设备的推送订阅（数据库）、服务器定时任务、VAPID 密钥；iPhone 要先加到主屏幕。
