@@ -1,14 +1,6 @@
 import type { WealthState } from "./models";
 import { emptyState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, IMPORT_SNAPSHOT_LABEL, type Snapshot } from "./state";
-import {
-  emergencyRatio,
-  money,
-  percent,
-} from "./rules";
-import { getPortfolioSnapshot } from "./portfolioSummary";
 import { refreshLivePrices, priceRefreshCleanup, PRICE_POLL_INTERVAL_MS } from "./livePrices";
-import { getGoalsSnapshot } from "./goalSummary";
-import { getBudgetSnapshot } from "./budgetSummary";
 import { bindTvmCalculator, tvmCalculatorTemplate } from "./pages/tvmPage";
 import { escapeHtml } from "./html";
 import { pageHeader } from "./components/pageHeader";
@@ -264,60 +256,6 @@ function shellTemplate(activePage: string, state: WealthState, user?: AppUser): 
  * card stays until the underlying facts change.
  */
 
-export function quickViewTemplate(state: WealthState): string {
-  const portfolio = getPortfolioSnapshot(state);
-  const emergency = emergencyRatio(state);
-  // PLANNED surplus (allowance minus basic spending), not the recorded
-  // income-minus-expenses surplus the Dashboard shows. The label says so:
-  // the two are different facts and routinely differ.
-  const surplus = getBudgetSnapshot(state).plannedSurplus;
-  const investedMyr = portfolio.totalInvestedMyr;
-  // Progress uses the canonical currentAmount, so Quick View, the Goals page
-  // and the Dashboard can never disagree about how funded a goal is.
-  const amount = (value: number): string => money(value, "").trim();
-  // One row per goal: name and percentage, the progress bar underneath.
-  const goalRows = getGoalsSnapshot(state).ordered.map((g) => {
-    const pct = Math.round(g.progress * 100);
-    return `<li class="wu-quick-goal">
-          <span class="wu-quick-goal__name">${escapeHtml(g.label)}</span>
-          <span class="wu-quick-goal__pct wu-quick-amount${pct >= 80 ? " t-positive" : ""}">${pct}%</span>
-          <span class="wu-bar" role="progressbar" aria-valuenow="${Math.min(pct, 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(g.label)} progress"><span class="wu-bar__fill" style="width:${Math.min(pct, 100)}%"></span></span>
-        </li>`;
-  }).join("");
-
-  return `
-    <div class="wu wu-quick">
-      <header class="wu-quick__head">
-        <img class="wu-quick__logo" src="/brand/wealthup-logo.png" alt="">
-        <div>
-          <p class="wu-quick__name">WealthUp</p>
-          <p class="wu-dash__note">Quick overview</p>
-        </div>
-      </header>
-
-      <section class="wu-card wu-stack wu-stack--sm" aria-label="Invested">
-        <span class="wu-label">Invested</span>
-        <p class="wu-money"><span class="wu-money__cur">MYR</span><span class="wu-quick-amount">${amount(investedMyr)}</span></p>
-      </section>
-
-      <section class="wu-card wu-quick__card" aria-label="This month">
-        <ul class="wu-facts wu-facts--plain wu-quick__facts">
-          <li><span>Emergency fund</span><span class="wu-quick-amount${emergency >= 0.8 ? " t-positive" : ""}">${percent(emergency)}</span></li>
-          <li><span>Planned surplus</span><span class="wu-quick-amount">${money(surplus)}</span></li>
-          <li><span>DCA per month</span><span class="wu-quick-amount">${money(state.dca.monthly)}</span></li>
-        </ul>
-      </section>
-
-      ${state.goals.length > 0 ? `<section class="wu-card wu-stack wu-stack--sm wu-quick__card" aria-labelledby="quickGoalsLabel">
-        <span class="wu-label" id="quickGoalsLabel">Goals</span>
-        <ul class="wu-quick-goals">${goalRows}</ul>
-      </section>` : ""}
-
-      <button class="wu-btn wu-btn--primary wu-btn--block" id="openFullApp" type="button">Open full app</button>
-    </div>
-  `;
-}
-
 export function renderApp(root: HTMLElement, state: WealthState, setState: Setter, activePage = "dashboard", navigate?: Navigate, user?: AppUser, onLogout?: () => void): void {
   document.body.classList.toggle("mask-financial-amounts", state.privacy.maskAmounts);
   const currentSidebarScrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
@@ -336,16 +274,6 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   titleBarCleanup.delete(root);
   priceRefreshCleanup.get(root)?.();
   priceRefreshCleanup.delete(root);
-
-  // Quick view — no sidebar, just condensed data
-  if (activePage === "quick") {
-    root.className = "app-shell";
-    root.innerHTML = '<main class="main quick-view-main">' + quickViewTemplate(state) + '</main>';
-    root.querySelector("#openFullApp")?.addEventListener("click", () => {
-      renderApp(root, state, setState, "dashboard", navigate, user, onLogout);
-    });
-    return;
-  }
 
   root.className = "app-shell";
   root.innerHTML = shellTemplate(activePage, state, user);

@@ -3,7 +3,7 @@
   "short_name": "WealthUp",
   "description": "Investment discipline, cash flow, and goal tracking",
   "id": "/",
-  "start_url": "/#quick",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#141310",

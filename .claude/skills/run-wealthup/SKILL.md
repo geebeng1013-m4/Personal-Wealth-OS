@@ -105,8 +105,7 @@ done
 ## Page ids
 
 `dashboard` `portfolio` `goals` `market` `ledger` `buckets` `money-leaks`
-`advisor` `review` `rules` `tvm` `calculator` `settings` — plus `quick`, which
-is a separate route (`/quick`), not in the main nav.
+`advisor` `review` `rules` `tvm` `calculator` `settings`.
 
 ## What a good smoke check asserts
 
