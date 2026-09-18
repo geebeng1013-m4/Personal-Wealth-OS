@@ -28,6 +28,11 @@
 - **F-9 完成（2026-09-18）**：页面右边那条原生滚动条（宽、有箭头）在电脑上隐藏，换成跟侧栏一样只在滚动 / 鼠标靠近右边缘时出现的细滑块；手机不变。PR #88 已合并，线上 www.wealthup.cc 已确认是新版本（`main` = `12588f2`）。
 - **F 系列全部完成**：朋友的 6 条反馈（F-1..F-9）都已上线。
 
+## FUTURE IDEAS 清理（P 系列）
+
+- **2026-09-19 计划已定**：P-1 问候名字 → P-2 滚动条合并 → P-3 小滚动条 → P-4 Ledger 原地编辑 → P-5 页面按需加载 → P-6a app 内提醒；推送（P-6b）以后再说。概念 Demo：https://claude.ai/artifact/Bz1Cd6m3xnmQuRBiVeuR4J
+- **下一步**：P-1（等你说开始）。
+
 ## 新用户问答引导（O 系列）
 
 - **2026-09-19 计划已定**（6 个决定照建议，见 `PLAN.md` O 系列）。概念 Demo：https://claude.ai/artifact/Rxy8M1rjE7CF2ZjVpeCRK6
