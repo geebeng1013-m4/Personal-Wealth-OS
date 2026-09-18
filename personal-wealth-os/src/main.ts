@@ -134,14 +134,17 @@ const appPages = new Set([
 ]);
 
 function pageFromLocation(): string {
-  if (window.location.pathname === "/quick") return "quick";
+  // Quick View is gone. Bookmarks to /quick and home-screen icons installed
+  // with the old start_url (/#quick) still open, and land on the Overview.
+  if (window.location.pathname === "/quick" || window.location.hash === "#quick") {
+    const hash = window.location.hash === "#quick" ? "#dashboard" : window.location.hash;
+    window.history.replaceState(null, "", `/${hash}`);
+  }
   const hashPage = window.location.hash.slice(1);
-  if (hashPage === "quick") return "quick";
   return appPages.has(hashPage) ? hashPage : "dashboard";
 }
 
 function rememberPage(page: string): void {
-  if (page === "quick") return;
   const nextHash = `#${page}`;
   if (window.location.hash !== nextHash) {
     window.history.replaceState(null, "", nextHash);
@@ -174,7 +177,7 @@ function setState(next: WealthState, changeLabel?: string): void {
 }
 
 function navigate(page: string): void {
-  currentPage = appPages.has(page) || page === "quick" ? page : "dashboard";
+  currentPage = appPages.has(page) ? page : "dashboard";
   rememberPage(currentPage);
   renderApp(root!, state, setState, currentPage, navigate, currentUser ?? undefined, handleLogout);
 }

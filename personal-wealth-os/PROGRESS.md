@@ -12,6 +12,13 @@
 - **`main`**：`0beedc7`（2026-09-17，PR #71 iPad 排版已合并；整齐版 T 系列 + T-8 全部完成）。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 
+## 用户反馈（F 系列）
+
+朋友试用后反馈 6 条，分析报告：https://claude.ai/code/artifact/989dcaef-777d-4469-a7a7-9f488fb7d756
+- **F-1 完成（2026-09-18）**：移除 Quick overview。`/quick`、`/#quick`、`/quick#ledger` 都跳到对应的完整页面，刷新后不再回到 Quick。
+  typecheck / 1173 测试 / build 全绿，5199 实测通过。分支 `fix/remove-quick-view`，PR 待开。
+- **当前**：等你决定下一条（见 `PLAN.md` F 系列）。
+
 ## 股息和预扣税（D 系列，计划中）
 
 计划书定稿（2026-09-18）：https://claude.ai/artifact/QUVcjJRdTy7YszkoeKQDM1 。决定见 `PLAN.md` D 系列。

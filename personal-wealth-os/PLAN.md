@@ -16,6 +16,21 @@
 
 ---
 
+## 用户反馈（F 系列）  （2026-09-18，朋友试用后反馈）
+
+分析报告：https://claude.ai/code/artifact/989dcaef-777d-4469-a7a7-9f488fb7d756
+
+### F-1 — 移除 Quick overview（/quick）  `[x]`（2026-09-18，分支 `fix/remove-quick-view`，PR 待开）
+- 原因：内容大部分和 Overview 重复；进过 /quick 后刷新会一直回到 Quick 页（路由 bug）；主屏图标默认打开这个没有导航的页面。
+- 做法：manifest `start_url` 改为 `/`；`/quick`、`/#quick` 保留为跳转（旧收藏和已装的图标不失效）；删除 Quick 模板和样式。
+
+### 其他反馈（待你决定先后）
+- 首屏慢：`/assets/*` 长缓存、字体自托管、Logo 改 SVG、拆包。
+- 点按钮背景光效重置：光效只挂载一次。
+- 光效帧率封顶 + 自动降级。
+- 右侧线条：等朋友截图。
+- 首屏：登录页加落地区；新用户 Overview 的引导。
+
 ## 插队：「From all-time high」实时更新  `[x]`（2026-09-18，PR #76 已合并上线）
 
 问题：Market / Advisor 抄底阶梯 / Dashboard 抄底提醒的「离历史高点多远」只在打开页面时算一次，
