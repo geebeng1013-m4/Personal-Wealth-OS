@@ -40,8 +40,10 @@
 - 登录后在 localStorage 记 `wealthup-signed-in`，登出清掉；开机有标记就等 Firebase 确认，不先画登录页。
 - `index.html` 内联骨架（上次登录过：App 轮廓；否则：Logo 方块），并在首帧前套用主题。
 
-### F-6 — 拆包  `[~]`
-- Firestore（主包里约 1.3 MB 未压缩）改为第一次用到时才加载；第三方库单独分包，发版时不必重新下载。
+### F-6 — 拆包  `[x]`（2026-09-18，PR #84 已合并上线）
+- Firestore 移到 `src/firestore.ts`，第一次用到时才加载（已登录者开机即后台预载，未登录者不下载）；Firebase app/auth 单独成 `firebase-core` 包，发版只改我们代码时不必重下。
+- 实测：首屏前 JS 333 → 171 KB（gzip）；Slow 4G + 4 倍 CPU 降速，首屏约 2.75 → 1.81 秒。真实账号 5174 同步已手验。
+- FUTURE IDEAS：各页面按需加载（需把页面切换改成异步）；背景光效 ogl 延后加载（约 40 KB gzip）。
 
 ### 其他反馈（待做）
 - 右侧线条：等朋友截图。
