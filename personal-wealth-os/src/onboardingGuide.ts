@@ -13,7 +13,10 @@
  * when the user has entered the value themselves.
  */
 
-import type { OnboardingStepId } from "./onboarding";
+import type { NextStepId, OnboardingStepId } from "./onboarding";
+
+/** Every step that leads to a field: the F-7 checklist's and the O-3 next steps' ("move-to-buffer" is ticked on the card). */
+export type GuideId = OnboardingStepId | Exclude<NextStepId, "move-to-buffer">;
 
 interface GuideSpec {
   page: string;
@@ -25,7 +28,21 @@ interface GuideSpec {
   tipAfter?: string;
 }
 
-const GUIDES: Record<OnboardingStepId, GuideSpec> = {
+const GUIDES: Record<GuideId, GuideSpec> = {
+  // The Overview has already filled the entry form (applyLedgerDraft); these
+  // only point at it.
+  "record-pay": {
+    page: "ledger",
+    reveal: "#ledgerAddToggle",
+    target: "#ledgerAmount",
+    tip: "Filled in from your answer. Check the amount and date, then press Save.",
+  },
+  "log-spending": {
+    page: "ledger",
+    reveal: "#ledgerAddToggle",
+    target: "#ledgerAmount",
+    tip: "Enter one thing you spent, pick its category, then press Save.",
+  },
   balances: {
     page: "ledger",
     reveal: "#ledgerAccountsPanel",
@@ -59,10 +76,10 @@ const GUIDES: Record<OnboardingStepId, GuideSpec> = {
   },
 };
 
-let queued: OnboardingStepId | null = null;
+let queued: GuideId | null = null;
 
 /** Remember the step; the next render of its page shows the way. */
-export function queueGuide(step: OnboardingStepId): string {
+export function queueGuide(step: GuideId): string {
   queued = step;
   return GUIDES[step].page;
 }
