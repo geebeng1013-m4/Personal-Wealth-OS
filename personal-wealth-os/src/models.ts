@@ -461,6 +461,12 @@ export interface WealthState {
    * serve, not a target any figure is measured against. "" when not set. (v21)
    */
   financialGoal: string;
+  /**
+   * The new-user "Get started" checklist is gone for good: either every
+   * required step was done once, or the user hid it. Synced with the rest of
+   * the state so it stays gone on every device. (v25)
+   */
+  onboardingDone: boolean;
 }
 
 export interface PortfolioPosition {

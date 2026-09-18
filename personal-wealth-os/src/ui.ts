@@ -18,6 +18,7 @@ import { bindLedger, ledgerTemplate } from "./pages/ledgerPage";
 import { bindPortfolio, portfolioTemplate, patchPortfolioValuation } from "./pages/portfolioPage";
 import { bindMarket, marketTemplate } from "./pages/marketPage";
 import { bindDashboard, dashboardTemplate } from "./pages/dashboardPage";
+import { runQueuedGuide } from "./onboardingGuide";
 import { bindMoneyLeaks, moneyLeaksTemplate, setSelectedMoneyLeakId } from "./pages/moneyLeaksPage";
 import { bindAdvisor, advisorPageTemplate } from "./pages/advisorPage";
 import { settleTabbarLens } from "./liquidGlass";
@@ -352,6 +353,10 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   // that is already wired up. It lives outside #pageMount and is re-mounted on
   // every render, with its conversation held in module state.
   mountAssistant(root, state, navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user, onLogout)));
+
+  // A "Get started" step picked on the Dashboard points at its field here,
+  // once this page is fully wired (F-7).
+  runQueuedGuide(root, activePage);
 }
 
 function keepActiveNavigationVisible(root: HTMLElement): void {

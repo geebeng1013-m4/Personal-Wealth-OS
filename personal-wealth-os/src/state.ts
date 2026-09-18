@@ -1,4 +1,5 @@
 import type { AllocationPlan, AllocationStep, Bucket, LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
+import { buildOnboardingChecklist } from "./onboarding";
 import { getDefaultFinancialRules, normalizeFinancialRules, repairPlaceholderRules } from "./financialRules";
 import { normalizeActionRecords } from "./actionRecords";
 import { normalizeCurrencyExchanges } from "./currencyExchange";
@@ -11,7 +12,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 24;
+export const CURRENT_VERSION = 25;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -257,6 +258,7 @@ export const defaultState: WealthState = {
   currencyExchanges: [],
   dividends: [],
   financialGoal: "",
+  onboardingDone: false,
 };
 
 // Derived from defaultState's own planning config so the seed rules and the
@@ -369,6 +371,7 @@ export function emptyState(): WealthState {
     currencyExchanges: [],
     dividends: [],
     financialGoal: "",
+    onboardingDone: false,
   };
   // A brand-new user has no planning values yet, so these seed rules are
   // mostly disabled placeholders — present and valid, but asserting nothing.
@@ -655,6 +658,14 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   // v21: the user's financial goal sentence. Purely additive — older data has
   // none and starts empty; a stored value is tidied, never discarded.
   merged.financialGoal = normalizeFinancialGoal(candidate.financialGoal);
+
+  // v25: the new-user checklist's "gone for good" flag. Data from before v25
+  // that already shows use (any checklist step done) belongs to someone past
+  // getting started, so it arrives done — otherwise an early user who never
+  // touched the Ledger would suddenly be shown a beginner's card. Untouched
+  // older accounts start false and get the checklist like any new user.
+  merged.onboardingDone = candidate.onboardingDone === true
+    || ((input.version ?? 0) < 25 && buildOnboardingChecklist(merged).doneCount > 0);
   const requestedOverviewGoalId = typeof candidate.overviewGoalId === "string" ? candidate.overviewGoalId : "";
   merged.overviewGoalId = merged.goals.some((goal) => goal.id === requestedOverviewGoalId)
     ? requestedOverviewGoalId
