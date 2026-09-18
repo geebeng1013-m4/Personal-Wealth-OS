@@ -5,6 +5,7 @@ import { normalizeActionRecords } from "./actionRecords";
 import { normalizeCurrencyExchanges } from "./currencyExchange";
 import { normalizeTradeMarket } from "./tradeCurrency";
 import { normalizeDividends } from "./dividends";
+import { normalizeOnboardingAnswers } from "./onboardingQuiz";
 import {
   saveToFirestore,
   loadFromFirestore,
@@ -12,7 +13,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 25;
+export const CURRENT_VERSION = 26;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -259,6 +260,7 @@ export const defaultState: WealthState = {
   dividends: [],
   financialGoal: "",
   onboardingDone: false,
+  onboardingAnswers: null,
 };
 
 // Derived from defaultState's own planning config so the seed rules and the
@@ -372,6 +374,7 @@ export function emptyState(): WealthState {
     dividends: [],
     financialGoal: "",
     onboardingDone: false,
+    onboardingAnswers: null,
   };
   // A brand-new user has no planning values yet, so these seed rules are
   // mostly disabled placeholders — present and valid, but asserting nothing.
@@ -666,6 +669,10 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   // older accounts start false and get the checklist like any new user.
   merged.onboardingDone = candidate.onboardingDone === true
     || ((input.version ?? 0) < 25 && buildOnboardingChecklist(merged).doneCount > 0);
+  // v26: the first-run Q&A's answers. Purely additive — older data has none
+  // (null), which only shows the quiz to an account that is still empty (see
+  // shouldShowOnboardingQuiz); a stored answer set is tidied, never dropped.
+  merged.onboardingAnswers = normalizeOnboardingAnswers(candidate.onboardingAnswers);
   const requestedOverviewGoalId = typeof candidate.overviewGoalId === "string" ? candidate.overviewGoalId : "";
   merged.overviewGoalId = merged.goals.some((goal) => goal.id === requestedOverviewGoalId)
     ? requestedOverviewGoalId

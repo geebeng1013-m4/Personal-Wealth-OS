@@ -34,9 +34,10 @@
 **写到哪里**：第 1 题 → `profile` 的主要目标 / `financialGoal`；第 2 题 → 预填「记薪水」；第 3 题 → `monthly-spending-limit` 规则 + 安全垫目标 = 3 × 开销；第 4 题 → Bank 余额 + `emergency.current`；第 6 题 → 第一个 Goal。
 只给全新账号看（无 `onboardingDone`、余额全 0、无交易、无目标），老用户永远看不到。按 Start my plan 才一次写入（一个 undo 点）。
 
-### O-1 — 问答逻辑 + Schema v26  `[ ]`
+### O-1 — 问答逻辑 + Schema v26  `[x]`（2026-09-19，分支 `o-onboarding-qa`，O-4 时一起开 PR）
 - `src/onboardingQuiz.ts`：题目、答案类型、结果计算（每月剩余、安全垫月数、目标日期、分配）、`applyOnboardingAnswers(state, answers)`。
 - Schema v26 + 迁移；测试：答案写对位置、跳过的题不写、老用户迁移后不触发、开销大于收入不出错。
+- 已做：第 2 题写 `cashflow.allowance`（Budget 读的计划收入）；第 3 题写 `cashflow.otherFixed` 并像 Settings 保存一样同步开销上限规则，安全垫目标 = 3 × 开销，`monthlyTopUp` = 分配给安全垫的钱；只填空着的值，绝不覆盖。17 个新测试，1203 全绿。
 
 ### O-2 — 问答画面 + 新账号路由  `[ ]`
 - `src/pages/onboardingPage.ts`：全屏 8 屏（像登录页，无侧栏），`main.ts` 对全新账号先显示；可跳过、可「我自己设置」。

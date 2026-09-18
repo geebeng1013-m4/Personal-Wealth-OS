@@ -31,7 +31,8 @@
 ## 新用户问答引导（O 系列）
 
 - **2026-09-19 计划已定**（6 个决定照建议，见 `PLAN.md` O 系列）。概念 Demo：https://claude.ai/artifact/Rxy8M1rjE7CF2ZjVpeCRK6
-- **下一步**：O-1 问答逻辑 + Schema v26（等你说开始）。
+- **O-1 完成（2026-09-19）**：`src/onboardingQuiz.ts` + Schema v26（`onboardingAnswers`）。答案写到 app 已经在读的地方，只填空值不覆盖；老用户、用过的账号永远不会看到问卷。17 个新测试，1203 全绿。
+- **下一步**：O-2 问答画面 + 新账号路由（等你说开始）。
 
 ## 股息和预扣税（D 系列，计划中）
 

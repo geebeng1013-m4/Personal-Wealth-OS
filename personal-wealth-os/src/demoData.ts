@@ -286,6 +286,7 @@ export const demoState: WealthState = {
   actionRecords: [],
   financialGoal: "RM20,000 invested in ETFs by 25, with a full emergency fund first.",
   onboardingDone: false,
+  onboardingAnswers: null,
 };
 
 // Seeded from the demo user's own planning config, exactly as a real upgrading
