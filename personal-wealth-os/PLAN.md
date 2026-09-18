@@ -21,8 +21,9 @@
 用户说「都做了吧」。顺序由小到大、风险由低到高；每个 Task 做完停下来报告。P-1..P-3 同一个 PR，P-4、P-5、P-6a 各一个 PR。
 概念 Demo：https://claude.ai/artifact/Bz1Cd6m3xnmQuRBiVeuR4J
 
-### P-1 — 问候语显示名字  `[ ]`
+### P-1 — 问候语显示名字  `[x]`（2026-09-19，分支 `p-cleanup`）
 - `profile.name` 空时用 Google 登录名的第一个字（现在显示「there」）。只改显示，不写数据；Settings 填了名字就用他填的。
+- 已做：`greetingName()`（`dashboardPage.ts`）+ `ui.ts` 传入登录名；3 个测试。5199：新账号「Good morning, Alex」，有名字的账号照旧。
 
 ### P-2 — 两个滚动条模块合并  `[ ]`
 - `sidebarScrollbar.ts` 和 `pageScrollbar.ts` 抽成一个 `overlayScrollbar.ts`，行为不变。

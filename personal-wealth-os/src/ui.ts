@@ -314,7 +314,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   if (!mount) return;
 
   const templates: Record<string, string> = {
-    dashboard: dashboardTemplate(state),
+    dashboard: dashboardTemplate(state, user?.displayName ?? ""),
     portfolio: portfolioTemplate(state),
     market: marketTemplate(state),
     ledger: ledgerTemplate(state),
