@@ -303,7 +303,21 @@ function currencyConversionsPanel(state: WealthState): string {
  * when a record is written so the list is rebuilt without the one just acted on.
  */
 let dividendSuggestions: DividendSuggestion[] = [];
-let dividendsRequested = false;
+/**
+ * What the current suggestions were worked out from. A signed-in page first
+ * renders before the cloud copy of the state arrives, with no trades at all;
+ * asking once and never again left a real account on that empty answer. So
+ * the question is asked again whenever the trades or recorded dividends change.
+ */
+let dividendsRequestKey: string | null = null;
+/** Whether the feeds have answered for the current key. */
+let dividendsAnswered = false;
+
+function dividendRequestKey(state: WealthState): string {
+  const tickers = [...new Set(state.trades.map((trade) => trade.ticker))].sort().join(",");
+  const latest = state.trades.reduce((newest, trade) => (trade.date > newest ? trade.date : newest), "");
+  return `${state.trades.length}|${tickers}|${latest}|${(state.dividends ?? []).length}`;
+}
 /** The suggestion whose figures are open for editing, if any. */
 let editingSuggestionId: string | null = null;
 
@@ -595,7 +609,7 @@ function dividendsBody(state: WealthState, portfolio: PortfolioSnapshot): string
   }</div>`;
 
   if (received.length === 0 && suggestions.length === 0) {
-    return `${head}<p class="wu-empty">${dividendsRequested
+    return `${head}<p class="wu-empty">${dividendsAnswered
       ? "No payouts found for your holdings yet. They appear here as each ex-dividend date passes."
       : "Checking your holdings' payout history…"}</p>`;
   }
@@ -881,18 +895,24 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
     pendingTradePrefill = null;
   }
 
-  // Dividend suggestions: asked for once per page load, then painted in place.
-  // Failure is silent — the card simply says nothing is waiting.
+  // Dividend suggestions: asked for whenever what they depend on changes, then
+  // painted in place. Failure is silent — the card says nothing is waiting.
   const repaintDividends = (): void => {
     const card = root.querySelector<HTMLElement>("#pfDividends");
     if (card) card.innerHTML = dividendsBody(state, getPortfolioSnapshot(state, new Date(), livePriceInputs()));
   };
-  if (!dividendsRequested) {
-    dividendsRequested = true;
-    void loadDividendSuggestions(state).then((list) => {
+  const requestKey = dividendRequestKey(state);
+  if (requestKey !== dividendsRequestKey) {
+    dividendsRequestKey = requestKey;
+    dividendsAnswered = false;
+    // An answer for a state that has since changed is dropped, not painted.
+    const settle = (list: DividendSuggestion[]): void => {
+      if (dividendsRequestKey !== requestKey) return;
       dividendSuggestions = list;
+      dividendsAnswered = true;
       repaintDividends();
-    }).catch(() => repaintDividends());
+    };
+    void loadDividendSuggestions(state).then(settle).catch(() => settle([]));
   }
 
   const recordDividend = (dividend: Dividend, label: string): void => {
