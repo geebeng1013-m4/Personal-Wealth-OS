@@ -55,4 +55,17 @@ function devApiRoutes(): Plugin {
 export default defineConfig({
   root: resolve(__dirname),
   plugins: [react(), devApiRoutes()],
+  build: {
+    rollupOptions: {
+      output: {
+        // Firebase's core rarely changes between our releases. In its own file
+        // it keeps its year-long cache when only our code changes. Firestore is
+        // deliberately not listed: it loads on demand (see src/firebase.ts).
+        manualChunks(id) {
+          if (/node_modules\/@firebase\/(app|auth|component|logger|util)\//.test(id)) return "firebase-core";
+          return undefined;
+        },
+      },
+    },
+  },
 });
