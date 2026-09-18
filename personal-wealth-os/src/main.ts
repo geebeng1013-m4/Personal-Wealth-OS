@@ -244,6 +244,27 @@ function handleCloudSnapshot(uid: string, snap: CloudSnapshot): void {
   // cleanly, so nothing is lost, only deferred.
 }
 
+// A hint, not a credential: it only decides what shows while Firebase checks
+// the real session. index.html reads the same key to pick its skeleton.
+const SIGNED_IN_HINT_KEY = "wealthup-signed-in";
+
+function wasSignedIn(): boolean {
+  try {
+    return localStorage.getItem(SIGNED_IN_HINT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberSignedIn(signedIn: boolean): void {
+  try {
+    if (signedIn) localStorage.setItem(SIGNED_IN_HINT_KEY, "1");
+    else localStorage.removeItem(SIGNED_IN_HINT_KEY);
+  } catch {
+    // Storage blocked: the next load just shows the login page first, as before.
+  }
+}
+
 function renderLogin(): void {
   document.body.classList.toggle("mask-financial-amounts", state.privacy.maskAmounts);
   root!.className = "login-shell";
@@ -291,6 +312,7 @@ function renderLogin(): void {
 
 async function handleAuth(user: User | null): Promise<void> {
   const requestId = ++authRequestId;
+  rememberSignedIn(user !== null);
 
   if (user) {
     currentUser = user;
@@ -385,8 +407,10 @@ if (isDemoMode()) {
 
   renderApp(root!, state, setState, currentPage, navigate, demoUser, handleLogout);
 } else {
-  // Production path: real Firebase auth
-  renderLogin();
+  // Production path: real Firebase auth. Firebase takes a moment to confirm
+  // the session, so someone who was signed in last time keeps the skeleton
+  // from index.html until it does, instead of seeing the login page flash.
+  if (!wasSignedIn()) renderLogin();
   onAuth((user) => {
     void handleAuth(user).catch((error: unknown) => {
       console.error("[Auth] Failed to initialize signed-in session:", error);
