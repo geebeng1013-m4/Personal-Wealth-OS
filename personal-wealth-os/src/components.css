@@ -2145,8 +2145,8 @@
     .wu-portfolio-summary {
       display: none;
     }
-    /* Desktop reading order: form, figures, holdings, where the money is, then
-       next contribution beside recent activity. The phone keeps the source order, which puts the
+    /* Desktop reading order: form, figures, holdings, where the money is,
+       dividends, then next contribution beside recent activity. The phone keeps the source order, which puts the
        next contribution before the holdings. */
     .wu-dash > .wu-portfolio-entry {
       order: -3;
@@ -2155,7 +2155,8 @@
       order: -2;
     }
     .wu-dash > #pfHoldings,
-    .wu-dash > #pfExposure {
+    .wu-dash > #pfExposure,
+    .wu-dash > #pfDividends {
       order: -1;
     }
   }
