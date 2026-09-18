@@ -13,7 +13,7 @@ import "./shell.css";
 import "./components/assistant/assistant.css";
 import "./legacy-tail.css";
 import type { WealthState } from "./models";
-import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint } from "./state";
+import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint, createId } from "./state";
 import { renderApp } from "./ui";
 import { onAuth, preloadFirestore, signInWithGoogle, handleRedirectResult, logOut, subscribeToFirestore, loadAssistantHistory, saveAssistantHistory, type CloudSnapshot } from "./firebase";
 import { setAssistantOwner } from "./components/assistant/assistantStore";
@@ -24,6 +24,8 @@ import { isDemoMode } from "./demo";
 import { demoStateFor, DEMO_USER_DISPLAY_NAME, DEMO_USER_EMAIL, DEMO_USER_PHOTO } from "./demoData";
 import { initSaveErrorToasts } from "./components/toast";
 import { initLiquidGlass } from "./liquidGlass";
+import { applyOnboardingAnswers, shouldShowOnboardingQuiz, skipOnboardingQuiz } from "./onboardingQuiz";
+import { renderOnboarding, resetOnboardingDraft } from "./pages/onboardingPage";
 import { mountPageScrollbar } from "./pageScrollbar";
 
 // Drop stale cached ticker data from previous sessions so localStorage doesn't grow unbounded.
@@ -166,6 +168,12 @@ let currentPage = pageFromLocation();
 let currentUser: User | null = null;
 let cloudSyncUnsub: (() => void) | null = null;
 let authRequestId = 0;
+/**
+ * The new-user Q&A (O-2) may only open once this account is known to be new:
+ * its data is already on this device, or the cloud has answered. Until then an
+ * empty local state could just be a returning user on a new device.
+ */
+let quizAllowed = false;
 
 // Expose theme toggle and page nav globally
 (window as unknown as Record<string, unknown>).__pwo = {
@@ -191,6 +199,34 @@ function navigate(page: string): void {
   currentPage = appPages.has(page) ? page : "dashboard";
   rememberPage(currentPage);
   renderApp(root!, state, setState, currentPage, navigate, currentUser ?? undefined, handleLogout);
+}
+
+/** The signed-in screen: the first-run Q&A for an untouched new account, otherwise the app. */
+function renderSignedIn(user: User): void {
+  if (!quizAllowed || !shouldShowOnboardingQuiz(state)) {
+    renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
+    return;
+  }
+  const enterApp = () => {
+    currentPage = "dashboard";
+    rememberPage(currentPage);
+    renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
+    window.scrollTo(0, 0);
+  };
+  // The user's own calendar day (YYYY-MM-DD), not UTC's.
+  const today = () => new Date().toLocaleDateString("en-CA");
+  renderOnboarding(root!, {
+    userName: user.displayName ?? "",
+    onFinish: (answers) => {
+      // One save for every answer: a single undo point in version history.
+      setState(applyOnboardingAnswers(state, answers, { goalId: createId("goal"), today: today() }), "Set up your plan");
+      enterApp();
+    },
+    onSkipAll: () => {
+      setState(skipOnboardingQuiz(state, today()), "Skipped the setup questions");
+      enterApp();
+    },
+  });
 }
 
 async function handleLogout(): Promise<void> {
@@ -345,11 +381,12 @@ async function handleAuth(user: User | null): Promise<void> {
 
     const userStorageKey = `personal-wealth-os-state-${user.uid}`;
     const hasLocalData = localStorage.getItem(userStorageKey) !== null;
+    quizAllowed = hasLocalData;
 
     // Show the user-specific local state immediately. Cloud access can be slow,
     // unavailable offline, or denied without preventing access to saved data.
     state = loadState(user.uid);
-    renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
+    renderSignedIn(user);
 
     // Warm the exchange rate cache early so the dashboard renders with current
     // rates — and hand it the user's own conversions, so a failed request falls
@@ -359,17 +396,18 @@ async function handleAuth(user: User | null): Promise<void> {
     try {
       const cloud = await loadStateFromCloud();
       if (requestId !== authRequestId || currentUser?.uid !== user.uid) return;
+      quizAllowed = true;
 
       if (cloud.outcome === "cloud-applied") {
         state = cloud.state;
-        renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
+        renderSignedIn(user);
       } else if (cloud.outcome === "local-kept-newer") {
         // This device holds edits the cloud has never seen — it was offline, or
         // the write was rejected. Keep them on screen and push them up, rather
         // than letting the older cloud document overwrite work the user did.
         console.warn("[Auth] Local data is newer than the cloud copy; keeping local and syncing it up.");
         state = cloud.state;
-        renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
+        renderSignedIn(user);
         await syncLocalToCloud(state);
       } else if (hasLocalData) {
         // User has local data from before, sync it up
@@ -380,7 +418,7 @@ async function handleAuth(user: User | null): Promise<void> {
         saveState(state, user.uid);
         await syncLocalToCloud(state);
         if (requestId !== authRequestId || currentUser?.uid !== user.uid) return;
-        renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
+        renderSignedIn(user);
       }
     } catch (err) {
       // A failed read is not the same as an empty cloud document. Keep the local
@@ -396,6 +434,7 @@ async function handleAuth(user: User | null): Promise<void> {
     currentUser = null;
     // Clear in-memory state to prevent leaking to next user
     state = emptyState();
+    resetOnboardingDraft();
     stopAssistantSync();
     setAssistantOwner(null);
     if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
@@ -406,9 +445,12 @@ async function handleAuth(user: User | null): Promise<void> {
 // --- Demo mode: skip Firebase, load static demo data ---
 if (isDemoMode()) {
   console.log("[Demo] Design Review mode — Firebase auth and writes are disabled.");
+  // `?fresh` starts an empty account, to walk the new-user Q&A (O-2). It keeps
+  // its own storage so it never touches the fixture the plain demo shows.
+  const fresh = new URLSearchParams(window.location.search).has("fresh");
   // Create a minimal mock user so the UI renders normally without real auth.
   const demoUser = {
-    uid: "demo-user",
+    uid: fresh ? "demo-fresh-user" : "demo-user",
     displayName: DEMO_USER_DISPLAY_NAME,
     email: DEMO_USER_EMAIL,
     photoURL: DEMO_USER_PHOTO,
@@ -420,9 +462,10 @@ if (isDemoMode()) {
   // Keep edits made in the preview deployment across rerenders and refreshes.
   // The demo user is isolated from real accounts by its dedicated uid.
   const demoStorageKey = "personal-wealth-os-state-demo-user";
-  state = localStorage.getItem(demoStorageKey) ? loadState(demoUser.uid) : demoStateFor(new Date());
+  state = fresh ? emptyState() : localStorage.getItem(demoStorageKey) ? loadState(demoUser.uid) : demoStateFor(new Date());
 
-  renderApp(root!, state, setState, currentPage, navigate, demoUser, handleLogout);
+  quizAllowed = true;
+  renderSignedIn(demoUser);
 } else {
   // Production path: real Firebase auth. Firebase takes a moment to confirm
   // the session, so someone who was signed in last time keeps the skeleton

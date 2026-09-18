@@ -13,8 +13,9 @@ import { createId } from "../state";
 import { money, percent } from "../rules";
 import { escapeHtml } from "../html";
 import { buildOverviewModel } from "../overview";
-import { buildOnboardingChecklist, type OnboardingChecklist, type OnboardingStepId } from "../onboarding";
-import { queueGuide } from "../onboardingGuide";
+import { buildNextSteps, type NextStep, type NextStepId, type NextSteps } from "../onboarding";
+import { queueGuide, type GuideId } from "../onboardingGuide";
+import { applyLedgerDraft } from "./ledgerPage";
 import type { PortfolioSnapshot } from "../portfolioSummary";
 import { assetDrawdownBelow } from "../drawdowns";
 import { getPrice } from "../marketPrices";
@@ -92,7 +93,7 @@ export function dashboardTemplate(state: WealthState): string {
       ? `<button class="wu-goal-line dashboard-nav" data-page="goals" type="button" aria-label="My financial goal: ${escapeHtml(state.financialGoal)}. Edit on the Goals page"><span class="wu-goal-line__label">Financial goal</span><span class="wu-goal-line__text">${escapeHtml(state.financialGoal)}</span></button>`
       : `<button class="wu-goal-line wu-goal-line--empty dashboard-nav" data-page="goals" type="button"><span class="wu-goal-line__text">Write down your financial goal</span><span aria-hidden="true">→</span></button>`}
 
-    ${onboardingCard(buildOnboardingChecklist(state))}
+    ${nextStepCard(buildNextSteps(state))}
 
     <!-- Filled by bindDashboard after an async price check: shown only when a
          dip-buy tranche is reached and not yet deployed. -->
@@ -202,28 +203,94 @@ export function dashboardTemplate(state: WealthState): string {
 }
 
 /*
- * The new-user "Get started" card (F-7). Shown only until the four required
- * steps are done or the user hides it; each step opens the page that holds its
- * field, and the guide there points at the field itself.
+ * "Your next step" (O-3, replacing F-7's Get started list). One step at a
+ * time, each with the answer it comes from, until the required ones are done
+ * or the user hides the card. "Later" moves a step to the back of the queue
+ * for this session only.
  */
-function onboardingCard(checklist: OnboardingChecklist): string {
-  if (!checklist.visible) return "";
-  const ratio = checklist.requiredDoneCount / checklist.requiredCount;
-  return `<section class="wu-card wu-onboard wu-stack wu-stack--sm" aria-labelledby="ovOnboardTitle">
-      <div class="wu-tc__top"><span class="wu-label" id="ovOnboardTitle">Get started</span><span class="wu-chip">${checklist.requiredDoneCount} of ${checklist.requiredCount} done</span></div>
-      <p class="t-body-sm t-muted">Fill in these basics and your Overview starts showing real numbers. Tap a step and we'll take you to the right field.</p>
-      <div class="wu-bar" role="progressbar" aria-valuenow="${Math.round(ratio * 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="Setup progress">
-        <span class="wu-bar__fill" style="width:${Math.round(ratio * 100)}%"></span>
-      </div>
-      <ol class="wu-onboard__steps">
-        ${checklist.steps.map((step) => `<li><button class="wu-onboard__step${step.done ? " is-done" : ""}" type="button" data-onboard-step="${step.id}">
-          <span class="wu-onboard__check" aria-hidden="true">${step.done ? "✓" : ""}</span>
-          <span class="wu-onboard__text"><span>${escapeHtml(step.title)}${step.optional ? ` <small class="wu-onboard__optional">Optional</small>` : ""}</span><small>${escapeHtml(step.hint)}</small></span>
-          <span class="visually-hidden">${step.done ? "Done" : "Not done yet"}</span>
-          <span aria-hidden="true">›</span>
-        </button></li>`).join("")}
+const laterSteps = new Set<NextStepId>();
+/** Steps done at the last render, to spot one finished since. */
+let previouslyDone: Set<NextStepId> | null = null;
+/**
+ * The step most recently finished. Its line stays until the next one is done:
+ * the Overview can render more than once on the way back from another page,
+ * and a one-render message would be gone before anyone read it.
+ */
+let lastFinished: NextStepId | null = null;
+
+function monthsFromNow(months: number): string {
+  const date = new Date();
+  date.setDate(1);
+  date.setMonth(date.getMonth() + months);
+  return date.toLocaleDateString("en-MY", { month: "long", year: "numeric" });
+}
+
+function currentStep(next: NextSteps): NextStep | undefined {
+  const open = next.steps.filter((step) => !step.done);
+  return open.find((step) => !laterSteps.has(step.id)) ?? open[0];
+}
+
+function justDoneLine(next: NextSteps): string {
+  const before = previouslyDone;
+  previouslyDone = new Set(next.steps.filter((step) => step.done).map((step) => step.id));
+  const fresh = before ? next.steps.filter((step) => step.done && !before.has(step.id)) : [];
+  if (fresh.length) lastFinished = fresh[fresh.length - 1].id;
+  const step = next.steps.find((item) => item.id === lastFinished && item.done);
+  if (!step) return "";
+  const plan = next.plan;
+  const text: Record<NextStepId, string> = {
+    "record-pay": "Pay recorded. The Budget page now shows how your plan splits it.",
+    balances: "Balances set. Your net worth now starts from real numbers.",
+    "safety-buffer": "Safety buffer target set.",
+    "move-to-buffer": plan ? `Buffer topped up: ${money(plan.bufferCurrent)} of ${money(plan.bufferTarget)}.` : "Buffer topped up.",
+    "log-spending": "Spending recorded. Your Overview now measures it against your plan.",
+    goal: "Goal added. Your plan now has a date to aim for.",
+    investment: "Trade recorded. Your real return starts counting from here.",
+  };
+  return `<p class="wu-next__done" role="status"><span aria-hidden="true">✓</span> ${escapeHtml(text[step.id])}</p>`;
+}
+
+function nextStepCard(next: NextSteps): string {
+  if (!next.visible) {
+    previouslyDone = null;
+    lastFinished = null;
+    return "";
+  }
+  const step = currentStep(next);
+  const acknowledged = justDoneLine(next);
+  const plan = next.plan;
+  const estimate = `<span class="wu-next__est">estimate</span>`;
+  const bufferCell = plan && plan.bufferTarget > 0
+    ? `<div><span class="wu-next__k">Safety buffer ${plan.bufferEstimate ? estimate : ""}</span>
+        <span class="wu-next__v">${money(Math.min(plan.bufferCurrent, plan.bufferTarget))} <small>/ ${money(plan.bufferTarget)}</small></span>
+        <span class="wu-bar" aria-hidden="true"><span class="wu-bar__fill" style="width:${Math.min(100, Math.round((plan.bufferCurrent / plan.bufferTarget) * 100))}%"></span></span></div>`
+    : "";
+  const goalCell = plan && plan.goalName
+    ? `<div><span class="wu-next__k">${escapeHtml(plan.goalName)} ${plan.goalEstimate ? estimate : ""}</span>
+        <span class="wu-next__v wu-next__v--text">${plan.goalMonths !== null ? `Around ${monthsFromNow(plan.goalMonths)}` : "No date yet"}</span></div>`
+    : "";
+  const planStrip = bufferCell || goalCell ? `<div class="wu-next__plan">${bufferCell}${goalCell}</div>` : "";
+  const openCount = next.steps.filter((item) => !item.done).length;
+  return `<section class="wu-card wu-onboard wu-next wu-stack wu-stack--sm" aria-labelledby="ovNextTitle">
+      <div class="wu-tc__top"><span class="wu-label" id="ovNextTitle">Your next step</span><span class="wu-chip">${next.doneCount} of ${next.steps.length} done</span></div>
+      ${planStrip}
+      ${acknowledged}
+      ${step ? `<div class="wu-next__step">
+        <h3 class="wu-next__title">${escapeHtml(step.title)}${step.optional ? ` <small class="wu-onboard__optional">Optional</small>` : ""}</h3>
+        <p class="wu-next__because"><strong>Because:</strong> ${escapeHtml(step.because)}</p>
+        ${step.detail ? `<p class="t-body-sm t-muted">${escapeHtml(step.detail)}</p>` : ""}
+        <div class="wu-row wu-dash__actions">
+          <button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-next-step="${step.id}">${escapeHtml(step.cta)}</button>
+          ${openCount > 1 ? `<button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-next-later="${step.id}">Later</button>` : ""}
+        </div>
+      </div>` : ""}
+      <ol class="wu-next__path" aria-label="All steps">
+        ${next.steps.map((item) => `<li class="${item.done ? "is-done" : item === step ? "is-now" : ""}">
+          <span class="wu-onboard__check" aria-hidden="true">${item.done ? "✓" : ""}</span>
+          <span>${escapeHtml(item.title)}${item.optional ? " (optional)" : ""}</span>
+          <span class="visually-hidden">${item.done ? "Done" : "Not done yet"}</span></li>`).join("")}
       </ol>
-      <div class="wu-row wu-dash__actions"><button class="wu-btn wu-btn--ghost wu-btn--sm" id="onboardHide" type="button">Hide this checklist</button></div>
+      <div class="wu-row wu-dash__actions"><button class="wu-btn wu-btn--ghost wu-btn--sm" id="onboardHide" type="button">Hide this for good</button></div>
     </section>`;
 }
 
@@ -254,26 +321,60 @@ export function bindDashboard(
   navigate: Navigate | undefined,
   rerender: RenderApp,
 ): void {
-  // "Get started" (F-7). Finishing the required steps retires the card for
+  // "Your next step" (O-3). Finishing the required steps retires the card for
   // good, so emptying the data later never brings a beginner's card back.
-  const checklist = buildOnboardingChecklist(state);
+  const nextSteps = buildNextSteps(state);
   // `state` itself is replaced so every handler here, which builds its next
   // state from it, carries the flag instead of quietly writing it back to false.
-  if (checklist.complete && !state.onboardingDone) {
+  if (nextSteps.complete && !state.onboardingDone) {
     state = { ...state, onboardingDone: true };
     setState(state);
   }
-  root.querySelectorAll<HTMLButtonElement>("[data-onboard-step]").forEach((button) => button.addEventListener("click", () => {
-    const page = queueGuide(button.dataset.onboardStep as OnboardingStepId);
+  const go = (page: string, next: WealthState = state) => {
     if (navigate) navigate(page);
-    else rerender(root, state, setState, page);
+    else rerender(root, next, setState, page);
+  };
+  root.querySelectorAll<HTMLButtonElement>("[data-next-step]").forEach((button) => button.addEventListener("click", () => {
+    const step = nextSteps.steps.find((item) => item.id === button.dataset.nextStep);
+    if (!step) return;
+    if (step.id === "move-to-buffer") {
+      // Only the user knows the transfer happened; this is their confirmation.
+      const next: WealthState = { ...state, emergency: { ...state.emergency, current: state.emergency.current + (step.amount ?? 0) } };
+      setState(next, "Moved money into the safety buffer");
+      go("dashboard", next);
+      return;
+    }
+    if (step.id === "record-pay" || step.id === "log-spending") {
+      // Open the entry form already filled from the user's answer; Save stays theirs.
+      const income = step.id === "record-pay";
+      const category = income
+        ? state.ledgerCategories.find((item) => item.id === "income-salary") ?? state.ledgerCategories.find((item) => item.type === "income")
+        : undefined;
+      const account = state.ledgerAccounts.find((item) => item.id === "account-bank")
+        ?? state.ledgerAccounts.find((item) => item.type === "bank");
+      applyLedgerDraft({
+        kind: "ledger",
+        type: income ? "income" : "expense",
+        amount: income ? state.onboardingAnswers?.monthlyIncome ?? 0 : 0,
+        categoryId: category?.id,
+        accountId: account?.id,
+        date: new Date().toLocaleDateString("en-CA"),
+        note: income ? "Pay" : "",
+        unresolved: [],
+        dropped: [],
+      });
+    }
+    go(queueGuide(step.id as GuideId));
+  }));
+  root.querySelectorAll<HTMLButtonElement>("[data-next-later]").forEach((button) => button.addEventListener("click", () => {
+    laterSteps.add(button.dataset.nextLater as NextStepId);
+    go("dashboard");
   }));
   root.querySelector<HTMLButtonElement>("#onboardHide")?.addEventListener("click", () => {
-    if (!confirm("Hide the Get started checklist? It will not come back.")) return;
+    if (!confirm("Hide your next steps? They will not come back.")) return;
     const next: WealthState = { ...state, onboardingDone: true };
-    setState(next, "Hide Get started checklist");
-    if (navigate) navigate("dashboard");
-    else rerender(root, next, setState, "dashboard");
+    setState(next, "Hide next steps");
+    go("dashboard", next);
   });
 
   // Record the priority action straight from the Dashboard. The id is

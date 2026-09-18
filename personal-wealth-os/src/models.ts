@@ -1,3 +1,4 @@
+import type { OnboardingAnswers } from "./onboardingQuiz";
 export type Currency = "MYR" | "USD";
 
 /**
@@ -467,6 +468,12 @@ export interface WealthState {
    * the state so it stays gone on every device. (v25)
    */
   onboardingDone: boolean;
+  /**
+   * What the new user answered in the first-run Q&A, or null if they have not
+   * taken or skipped it. Kept after "Start my plan" so the Overview can say
+   * "Because: you said ..." next to each next step. (v26)
+   */
+  onboardingAnswers: OnboardingAnswers | null;
 }
 
 export interface PortfolioPosition {

@@ -93,7 +93,8 @@ export function applyLedgerDraft(draft: LedgerDraft): void {
   ledgerEditingId = "";
   ledgerEntryType = draft.type;
   ledgerEntryDraft = {
-    amount: String(draft.amount),
+    // 0 = open the form for this type with the amount left for the user.
+    amount: draft.amount > 0 ? String(draft.amount) : "",
     accountId: draft.accountId ?? "",
     fromAccountId: "",
     toAccountId: "",
@@ -104,9 +105,9 @@ export function applyLedgerDraft(draft: LedgerDraft): void {
   };
   // The assistant filled the form, so it has to be on screen.
   ledgerEntryOpen = true;
-  // The amount is already filled, so stealing focus to it would only put the
-  // caret in a field the user is meant to be checking, not retyping.
-  suppressLedgerAmountFocus = true;
+  // A filled amount is for checking, not retyping, so the caret stays out of
+  // it; an empty one is where the user starts.
+  suppressLedgerAmountFocus = draft.amount > 0;
 }
 
 function localDateValue(iso?: string): string {
