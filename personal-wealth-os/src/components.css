@@ -369,7 +369,7 @@
     border-color: var(--border-strong);
   }
   /* A step above heading size, in full-strength text colour: it is a goal, not a
-     status line. Set in Lato Regular (loaded in index.html, 400 only) — the one
+     status line. Set in Lato Regular (bundled in main.ts, 400 only) — the one
      place it is used. Lato has no CJK glyphs, so a Chinese goal falls through to
      the system font. */
   .wu-goal-line:not(.wu-goal-line--empty) .wu-goal-line__text {

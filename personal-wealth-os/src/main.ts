@@ -1,3 +1,12 @@
+// Fonts ship with the app instead of from Google Fonts: the stylesheet link in
+// index.html blocked the first paint, and where Google is unreachable the page
+// stayed blank until the request timed out. Bundled, they also get the
+// long-lived cache every /assets file has.
+import "@fontsource-variable/inter/wght.css";
+import "@fontsource/geist-mono/400.css";
+import "@fontsource/geist-mono/500.css";
+import "@fontsource/geist-mono/600.css";
+import "@fontsource/lato/400.css";
 import "./theme.css";
 import "./components.css";
 import "./shell.css";

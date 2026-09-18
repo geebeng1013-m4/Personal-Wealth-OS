@@ -150,7 +150,7 @@
     --dur-slow: 320ms;
 
     /* ---- type ------------------------------------------------------------ */
-    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --font-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
     --weight-regular: 400;
