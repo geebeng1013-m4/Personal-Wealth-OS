@@ -113,6 +113,51 @@
   }
 }
 
+/* Page scrollbar (PLAN.md F-9): same overlay idea for the document itself,
+   drawn by pageScrollbar.ts. Mouse devices only — the native one there is
+   Windows' wide bar with arrows; touch keeps its own overlay scrollbar.
+   Above the fixed titlebar (110), below the assistant (130). */
+@media (hover: hover) and (pointer: fine) {
+  html {
+    scrollbar-width: none;
+  }
+  html::-webkit-scrollbar {
+    display: none;
+  }
+}
+.page-scrollbar {
+  position: fixed;
+  top: 0;
+  right: 3px;
+  z-index: 115;
+  width: 5px;
+  border-radius: 3px;
+  background: var(--scrollbar-thumb);
+  opacity: 0;
+  pointer-events: none;
+  touch-action: none;
+  transition: opacity 600ms ease, width 150ms ease, background-color 150ms ease;
+}
+.page-scrollbar.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: grab;
+  transition-duration: 120ms, 150ms, 150ms;
+}
+.page-scrollbar.is-visible:hover,
+.page-scrollbar.is-dragging {
+  width: 8px;
+  background: var(--scrollbar-thumb-strong);
+}
+.page-scrollbar.is-dragging {
+  cursor: grabbing;
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-scrollbar {
+    transition: none;
+  }
+}
+
 .brand {
   display: flex;
   align-items: center;
