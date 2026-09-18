@@ -15,7 +15,7 @@ import "./legacy-tail.css";
 import type { WealthState } from "./models";
 import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint } from "./state";
 import { renderApp } from "./ui";
-import { onAuth, signInWithGoogle, handleRedirectResult, logOut, subscribeToFirestore, loadAssistantHistory, saveAssistantHistory, type CloudSnapshot } from "./firebase";
+import { onAuth, preloadFirestore, signInWithGoogle, handleRedirectResult, logOut, subscribeToFirestore, loadAssistantHistory, saveAssistantHistory, type CloudSnapshot } from "./firebase";
 import { setAssistantOwner } from "./components/assistant/assistantStore";
 import { flushAssistantSync, startAssistantSync, stopAssistantSync } from "./components/assistant/assistantSync";
 import { fetchUsdToMyr, pruneMarketCache } from "./market";
@@ -316,6 +316,7 @@ async function handleAuth(user: User | null): Promise<void> {
 
   if (user) {
     currentUser = user;
+    preloadFirestore();
     console.log(`[Auth] User signed in: ${user.uid} (${user.email})`);
 
     // Unsubscribe from previous cloud sync if any
@@ -410,7 +411,8 @@ if (isDemoMode()) {
   // Production path: real Firebase auth. Firebase takes a moment to confirm
   // the session, so someone who was signed in last time keeps the skeleton
   // from index.html until it does, instead of seeing the login page flash.
-  if (!wasSignedIn()) renderLogin();
+  if (wasSignedIn()) preloadFirestore();
+  else renderLogin();
   onAuth((user) => {
     void handleAuth(user).catch((error: unknown) => {
       console.error("[Auth] Failed to initialize signed-in session:", error);
