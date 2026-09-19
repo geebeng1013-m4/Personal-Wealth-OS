@@ -21,9 +21,12 @@
 用户选择维持「等网络最多 3 秒」（C），但要像 Meta 一样，等待时先看到 Logo 而不是空白。目标是全球用户，iPhone 和 Android 都要检查。
 限制：Service Worker 等网络的那段时间网页还没到，只能靠手机系统的启动画面填补（Android 按 manifest 自动生成；iPhone 需要 `apple-touch-startup-image`，现在一张都没有）。
 
-### S-1 — 网页开场画面换成 Logo  `[ ]`
+### S-1 — 网页开场画面换成 Logo  `[x]`（2026-09-19，分支 `launch-logo`，未合并）
 - `index.html` 的灰色方块 / 灰色 app 轮廓，换成深色背景正中的 WealthUp Logo（直接写进 HTML，不另外下载）；app 好了就淡出，不刻意多停。
 - 验证：无头 Edge 深 / 浅色、手机 / 电脑尺寸截图；网页一到就是 Logo。
+- 定案（2026-09-19）：不放名字。Android 12+ 系统启动画面只能是背景色 + 圆形图标，放不了名字；为了三个画面完全一样，统一成 #141310 + 正中白色 W。
+- 已做：`public/brand/launch-mark.png`（从 maskable 图标去掉底色的透明 W，7 KB，直接内嵌进 index.html）；`#launch` 全屏覆盖，W 120px 呼吸（只缩放），`#app` 一有内容就 0.22 秒淡出后移除，不刻意多停；减少动画时不呼吸不淡出。原本的灰色方块 / app 轮廓和 `boot-signed-in` 删除。
+- 实测（本机正式版预览，慢网 + 4 倍慢 CPU）：手机深 / 浅、电脑都是 W → 淡出 → 登录页；demo app、新用户问卷、登录页三条路开场画面都会退场、不挡点击、无报错。截图：https://claude.ai/artifact/QokisbrA54w7YtwYpmzqFg
 
 ### S-2 — iPhone 启动图片  `[ ]`
 - 脚本生成各种 iPhone 尺寸的「深色背景 + 正中 Logo」启动图，加上 `apple-touch-startup-image` 设定。
