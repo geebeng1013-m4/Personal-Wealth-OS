@@ -3824,6 +3824,42 @@
     }
   }
 
+  /* ---- account / category edited in place (P-4) ------------------------- */
+  .ledger-inline-edit {
+    border-color: var(--accent-line);
+  }
+  .ledger-inline-edit__grid {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: var(--space-2) var(--space-3);
+  }
+  .ledger-inline-edit__wide {
+    grid-column: 1 / -1;
+  }
+  .ledger-edit-category {
+    flex-wrap: wrap;
+    align-items: center;
+    color: var(--text);
+  }
+  .ledger-inline-edit__icon {
+    flex: 0 0 64px;
+  }
+  .ledger-inline-edit__name {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+  .ledger-inline-edit__icon .wu-field,
+  .ledger-inline-edit__name .wu-field {
+    width: 100%;
+  }
+  .ledger-inline-edit__error {
+    flex-basis: 100%;
+    margin: 0;
+  }
+  .ledger-inline-edit__error:empty {
+    display: none;
+  }
+
   /* ---- market page controls -------------------------------------------- */
   /* bindMarket manages the .active state on these itself (it patches the DOM
      instead of re-rendering), so the class names and the .active hook stay;
