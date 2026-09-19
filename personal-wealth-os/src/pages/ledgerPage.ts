@@ -57,6 +57,14 @@ let ledgerRecentExpanded = false;
 let ledgerHistoryOpen = false;
 let ledgerCategoriesOpen = false;
 let ledgerAccountsOpen = false;
+/**
+ * The account or category being edited in place (P-4). Editing used to be a
+ * chain of browser prompt() dialogs, one field at a time with no way back;
+ * the row now opens as a small form with every field in view.
+ * One at a time: opening one closes any other.
+ */
+let editingAccountId = "";
+let editingCategoryId = "";
 
 const ledgerAccountGroupsOpen: Record<LedgerAccountType, boolean> = {
   bank: true,
@@ -108,6 +116,10 @@ export function applyLedgerDraft(draft: LedgerDraft): void {
   // A filled amount is for checking, not retyping, so the caret stays out of
   // it; an empty one is where the user starts.
   suppressLedgerAmountFocus = draft.amount > 0;
+}
+
+function defaultAccountIcon(type: LedgerAccountType): string {
+  return type === "bank" ? "🏦" : type === "wallet" ? "👛" : "📈";
 }
 
 function localDateValue(iso?: string): string {
@@ -385,7 +397,16 @@ export function ledgerTemplate(state: WealthState): string {
             <label class="wu-field-row"><span class="wu-field-row__label">Type</span><select class="wu-field" name="type"><option value="expense">Expense</option><option value="income">Income</option></select></label>
             <div class="wu-row wu-self-end"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Add Category</button></div>
           </form>
-          <ul class="wu-list">${state.ledgerCategories.map((category) => `<li class="wu-list__row"><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)} &middot; ${category.type}</span><button class="wu-btn wu-btn--ghost wu-btn--sm edit-category" data-id="${escapeHtml(category.id)}" type="button">Edit</button><button class="wu-btn wu-btn--ghost wu-btn--icon delete-category" data-id="${escapeHtml(category.id)}" type="button" aria-label="Delete ${escapeHtml(category.label)}">&times;</button></li>`).join("")}</ul>
+          <ul class="wu-list">${state.ledgerCategories.map((category) => category.id === editingCategoryId
+            ? `<li class="wu-list__row ledger-inline-edit"><form class="ledger-edit-category wu-row wu-row--tight" data-id="${escapeHtml(category.id)}" aria-label="Edit ${escapeHtml(category.label)}">
+                <label class="ledger-inline-edit__icon"><span class="visually-hidden">Icon</span><input class="wu-field" name="icon" maxlength="12" value="${escapeHtml(category.icon)}" aria-label="Icon"></label>
+                <label class="ledger-inline-edit__name"><span class="visually-hidden">Label</span><input class="wu-field" name="label" maxlength="40" required value="${escapeHtml(category.label)}" aria-label="Category label"></label>
+                <span class="t-caption t-faint">${category.type}</span>
+                <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button>
+                <button class="wu-btn wu-btn--ghost wu-btn--sm cancel-inline-edit" type="button">Cancel</button>
+                <p class="wu-field-row__error ledger-inline-edit__error" role="alert"></p>
+              </form></li>`
+            : `<li class="wu-list__row"><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)} &middot; ${category.type}</span><button class="wu-btn wu-btn--ghost wu-btn--sm edit-category" data-id="${escapeHtml(category.id)}" type="button" aria-label="Edit ${escapeHtml(category.label)}">Edit</button><button class="wu-btn wu-btn--ghost wu-btn--icon delete-category" data-id="${escapeHtml(category.id)}" type="button" aria-label="Delete ${escapeHtml(category.label)}">&times;</button></li>`).join("")}</ul>
         </div></details>
         <details id="ledgerAccountsPanel" class="wu-details"${ledgerAccountsOpen ? " open" : ""}><summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-heading">Account Manager</strong><span class="t-caption t-faint">${state.ledgerAccounts.length} accounts</span></span></summary><div class="wu-stack">
           <form id="ledgerAccountForm" class="wu-grid wu-grid--2">
@@ -396,7 +417,18 @@ export function ledgerTemplate(state: WealthState): string {
             <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Add Account</button></div>
           </form>
           <p id="ledgerAccountError" class="wu-field-row__error" role="alert"></p>
-          <div class="wu-stack wu-stack--sm">${balances.map(({ account, balance }) => `<div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-stack wu-stack--sm"><div class="wu-row wu-row--between"><div class="wu-stack wu-stack--sm"><strong class="t-subheading">${escapeHtml(account.icon ?? "•")} ${escapeHtml(account.name)}</strong><span class="t-caption t-faint">${accountTypeMeta(account.type).label}</span></div><div class="wu-row wu-row--tight"><button class="wu-btn wu-btn--ghost wu-btn--sm edit-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Edit ${escapeHtml(account.name)}">Edit</button><button class="wu-btn wu-btn--ghost wu-btn--icon delete-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Delete ${escapeHtml(account.name)}">&times;</button></div></div><div class="wu-row wu-row--between"><span class="t-caption t-muted">Opening ${money(account.openingBalance)}</span><span class="t-caption t-muted">Current ${money2(balance)}</span></div>${account.type === "investment" ? `<label class="wu-switch account-portfolio-link"><input type="checkbox" class="toggle-portfolio-link" data-id="${escapeHtml(account.id)}"${account.holdsTrackedPortfolio ? " checked" : ""}><span class="wu-switch__track"></span><span class="wu-switch__label">This account holds my tracked portfolio</span></label>` : ""}</div></div>`).join("")}</div>
+          <div class="wu-stack wu-stack--sm">${balances.map(({ account, balance }) => account.id === editingAccountId
+            ? `<form class="wu-card wu-card--inset wu-card--pad-sm wu-stack wu-stack--sm ledger-edit-account ledger-inline-edit" data-id="${escapeHtml(account.id)}" aria-label="Edit ${escapeHtml(account.name)}">
+                <div class="ledger-inline-edit__grid">
+                  <label class="wu-field-row"><span class="wu-field-row__label">Icon</span><input class="wu-field" name="icon" maxlength="12" value="${escapeHtml(account.icon ?? defaultAccountIcon(account.type))}"></label>
+                  <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="name" maxlength="40" required value="${escapeHtml(account.name)}"></label>
+                  <label class="wu-field-row ledger-inline-edit__wide"><span class="wu-field-row__label">Opening balance (MYR)</span><input class="wu-field" name="openingBalance" type="number" min="0" step="0.01" inputmode="decimal" required value="${account.openingBalance}"></label>
+                </div>
+                <span class="t-caption t-faint">${accountTypeMeta(account.type).label} · current ${money2(balance)}</span>
+                <p class="wu-field-row__error ledger-inline-edit__error" role="alert"></p>
+                <div class="wu-row wu-row--tight"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button><button class="wu-btn wu-btn--ghost wu-btn--sm cancel-inline-edit" type="button">Cancel</button></div>
+              </form>`
+            : `<div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-stack wu-stack--sm"><div class="wu-row wu-row--between"><div class="wu-stack wu-stack--sm"><strong class="t-subheading">${escapeHtml(account.icon ?? "•")} ${escapeHtml(account.name)}</strong><span class="t-caption t-faint">${accountTypeMeta(account.type).label}</span></div><div class="wu-row wu-row--tight"><button class="wu-btn wu-btn--ghost wu-btn--sm edit-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Edit ${escapeHtml(account.name)}">Edit</button><button class="wu-btn wu-btn--ghost wu-btn--icon delete-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Delete ${escapeHtml(account.name)}">&times;</button></div></div><div class="wu-row wu-row--between"><span class="t-caption t-muted">Opening ${money(account.openingBalance)}</span><span class="t-caption t-muted">Current ${money2(balance)}</span></div>${account.type === "investment" ? `<label class="wu-switch account-portfolio-link"><input type="checkbox" class="toggle-portfolio-link" data-id="${escapeHtml(account.id)}"${account.holdsTrackedPortfolio ? " checked" : ""}><span class="wu-switch__track"></span><span class="wu-switch__label">This account holds my tracked portfolio</span></label>` : ""}</div></div>`).join("")}</div>
         </div></details>
       </div>
     </div>`;
@@ -588,14 +620,48 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
     if (!label || !["income", "expense"].includes(type)) return;
     refresh({ ...state, ledgerCategories: [...state.ledgerCategories, { id: createId("category"), label, icon, type }] }, "Add ledger category");
   });
+  // In-place editing (P-4). Opening, cancelling and saving all re-render with
+  // the scroll kept, so the row stays where the user was looking.
+  const openInlineEdit = (kind: "account" | "category", id: string) => {
+    editingAccountId = kind === "account" ? id : "";
+    editingCategoryId = kind === "category" ? id : "";
+    refresh(state, undefined, true);
+    const field = root.querySelector<HTMLInputElement>(kind === "account" ? '.ledger-edit-account input[name="name"]' : '.ledger-edit-category input[name="label"]');
+    field?.focus({ preventScroll: true });
+    field?.select();
+  };
+  const closeInlineEdit = (next = state, label?: string) => {
+    editingAccountId = "";
+    editingCategoryId = "";
+    refresh(next, label, true);
+  };
+  root.querySelectorAll<HTMLButtonElement>(".cancel-inline-edit").forEach((button) => button.addEventListener("click", () => closeInlineEdit()));
+  root.querySelectorAll<HTMLFormElement>(".ledger-inline-edit").forEach((form) => {
+    form.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeInlineEdit();
+    });
+    // A message about the last attempt is wrong as soon as the field changes.
+    form.addEventListener("input", () => showInlineError(form, ""));
+  });
+  const showInlineError = (form: HTMLFormElement, message: string) => {
+    const error = form.querySelector<HTMLElement>(".ledger-inline-edit__error");
+    if (error) error.textContent = message;
+  };
+
   root.querySelectorAll<HTMLButtonElement>(".edit-category").forEach((button) => button.addEventListener("click", () => {
-    const category = state.ledgerCategories.find((item) => item.id === button.dataset.id);
-    if (!category) return;
-    const label = prompt("Category label", category.label)?.trim();
-    if (!label) return;
-    const icon = prompt("Category icon", category.icon)?.trim() || "•";
-    refresh({ ...state, ledgerCategories: state.ledgerCategories.map((item) => item.id === category.id ? { ...item, label: label.slice(0, 40), icon: icon.slice(0, 12) } : item) }, "Edit ledger category");
+    if (button.dataset.id) openInlineEdit("category", button.dataset.id);
   }));
+  root.querySelector<HTMLFormElement>(".ledger-edit-category")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    const category = state.ledgerCategories.find((item) => item.id === form.dataset.id);
+    if (!category) return closeInlineEdit();
+    const data = new FormData(form);
+    const label = String(data.get("label") ?? "").trim().slice(0, 40);
+    const icon = String(data.get("icon") ?? "").trim().slice(0, 12) || "•";
+    if (!label) return showInlineError(form, "Give the category a name.");
+    closeInlineEdit({ ...state, ledgerCategories: state.ledgerCategories.map((item) => item.id === category.id ? { ...item, label, icon } : item) }, "Edit ledger category");
+  });
   root.querySelectorAll<HTMLButtonElement>(".delete-category").forEach((button) => button.addEventListener("click", () => {
     const id = button.dataset.id;
     if (!id) return;
@@ -619,18 +685,22 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
     refresh({ ...state, ledgerAccounts: [...state.ledgerAccounts, { id: createId("account"), name, icon, type, openingBalance: Math.round((openingBalance + Number.EPSILON) * 100) / 100 }] }, "Add ledger account");
   });
   root.querySelectorAll<HTMLButtonElement>(".edit-account").forEach((button) => button.addEventListener("click", () => {
-    const account = state.ledgerAccounts.find((item) => item.id === button.dataset.id);
-    if (!account) return;
-    const name = prompt("Account name", account.name)?.trim();
-    if (!name) return;
-    const fallbackIcon = account.type === "bank" ? "🏦" : account.type === "wallet" ? "👛" : "📈";
-    const icon = prompt("Account icon", account.icon ?? fallbackIcon)?.trim() || "•";
-    const openingInput = prompt("Opening balance (MYR)", String(account.openingBalance));
-    if (openingInput === null) return;
-    const openingBalance = Number(openingInput);
-    if (!Number.isFinite(openingBalance) || openingBalance < 0) { alert("Opening balance must be a non-negative number."); return; }
-    refresh({ ...state, ledgerAccounts: state.ledgerAccounts.map((item) => item.id === account.id ? { ...item, name: name.slice(0, 40), icon: icon.slice(0, 12), openingBalance: Math.round((openingBalance + Number.EPSILON) * 100) / 100 } : item) }, "Edit ledger account");
+    if (button.dataset.id) openInlineEdit("account", button.dataset.id);
   }));
+  root.querySelector<HTMLFormElement>(".ledger-edit-account")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    const account = state.ledgerAccounts.find((item) => item.id === form.dataset.id);
+    if (!account) return closeInlineEdit();
+    const data = new FormData(form);
+    const name = String(data.get("name") ?? "").trim().slice(0, 40);
+    const icon = String(data.get("icon") ?? "").trim().slice(0, 12) || "•";
+    const rawOpening = String(data.get("openingBalance") ?? "").trim();
+    const openingBalance = Number(rawOpening);
+    if (!name) return showInlineError(form, "Give the account a name.");
+    if (!rawOpening || !Number.isFinite(openingBalance) || openingBalance < 0) return showInlineError(form, "Opening balance must be zero or more.");
+    closeInlineEdit({ ...state, ledgerAccounts: state.ledgerAccounts.map((item) => item.id === account.id ? { ...item, name, icon, openingBalance: Math.round((openingBalance + Number.EPSILON) * 100) / 100 } : item) }, "Edit ledger account");
+  });
   // Mark an investment account as holding the tracked portfolio, so net worth
   // takes its value from the portfolio's market price instead of counting the
   // recorded balance on top of the holdings it already represents.
