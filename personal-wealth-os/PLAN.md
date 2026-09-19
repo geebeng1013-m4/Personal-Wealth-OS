@@ -28,12 +28,15 @@
 - 已做：`public/brand/launch-mark.png`（从 maskable 图标去掉底色的透明 W，7 KB，直接内嵌进 index.html）；`#launch` 全屏覆盖，W 120px 呼吸（只缩放），`#app` 一有内容就 0.22 秒淡出后移除，不刻意多停；减少动画时不呼吸不淡出。原本的灰色方块 / app 轮廓和 `boot-signed-in` 删除。
 - 实测（本机正式版预览，慢网 + 4 倍慢 CPU）：手机深 / 浅、电脑都是 W → 淡出 → 登录页；demo app、新用户问卷、登录页三条路开场画面都会退场、不挡点击、无报错。截图：https://claude.ai/artifact/QokisbrA54w7YtwYpmzqFg
 
-### S-2 — iPhone 启动图片  `[ ]`
+### S-2 — iPhone 启动图片  `[x]`（2026-09-19，分支 `launch-logo`）
 - 脚本生成各种 iPhone 尺寸的「深色背景 + 正中 Logo」启动图，加上 `apple-touch-startup-image` 设定。
 - 实机：请用户在 iPhone 上确认；不确定 iOS 是否只在「加到主屏幕」时读取，可能要删掉图标重新加。
+- 已做：`scripts/generate-launch-images.py` 生成 31 张（iPhone 13 种直向 + iPad 9 种直向和横向，共 868 KB，每台只下载自己那张）并把设定写进 index.html 的 LAUNCH-IMAGES 区块；也重新产生 `launch-mark.png`（内容不变）。
+- 实测：31 张尺寸、背景色、W 宽度（120 点）和位置全部正确；跟网页开场画面逐像素比对，差异只在边缘（< 0.2%），位置最多差 1 个像素，交接不会跳。
 
-### S-2b — Android 启动画面检查  `[ ]`
+### S-2b — Android 启动画面检查  `[x]`（2026-09-19，不用改）
 - 用浏览器检查工具读线上 manifest（名字、背景色、图标大小、可安装性错误），确认 Android 能自动生成「图标 + 名字」启动画面；不符合就补。没有 Android 实机，需要朋友帮看。
+- 结果：线上 manifest 名字、standalone、192/512 图标（含 maskable）、background_color #141310 都符合；maskable 底色也是 #141310，画出来就是一个 W，跟 iPhone / 网页一样。无头浏览器不支持 Chrome 的可安装性检查，改为逐项对照条件。真机待朋友确认。
 
 ### S-3 — PR → 用户检查 → 用户说可以才合并  `[ ]`
 
