@@ -327,6 +327,39 @@
     max-width: 100%;
   }
 
+  /* Inner scroll areas (assistant transcript, version history, wide tables):
+     a thin thumb in the theme's colour instead of Windows' wide grey bar with
+     arrows (PLAN.md P-3). Mouse devices only; touch keeps its overlay bars.
+     In this lowest layer on purpose, so every rule that hides a scrollbar
+     (segmented controls, the sidebar) still wins.
+     Chromium draws arrow buttons even for `scrollbar-width: thin`, and ignores
+     ::-webkit-scrollbar once that property is set, so it gets the pseudo-
+     elements only; the standard properties are for browsers without them. */
+  @media (hover: hover) and (pointer: fine) {
+    body *::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    body *::-webkit-scrollbar-track,
+    body *::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+    body *::-webkit-scrollbar-thumb {
+      border: 2px solid transparent;
+      border-radius: 10px;
+      background: var(--scrollbar-thumb) padding-box;
+    }
+    body *::-webkit-scrollbar-thumb:hover {
+      background: var(--scrollbar-thumb-strong) padding-box;
+    }
+    @supports not selector(::-webkit-scrollbar) {
+      body * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--scrollbar-thumb) transparent;
+      }
+    }
+  }
+
   ::selection {
     background: var(--accent-soft);
   }
