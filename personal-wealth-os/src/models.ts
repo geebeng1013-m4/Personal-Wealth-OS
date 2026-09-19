@@ -1,4 +1,5 @@
 import type { OnboardingAnswers } from "./onboardingQuiz";
+import type { CheckinState } from "./checkins";
 export type Currency = "MYR" | "USD";
 
 /**
@@ -474,6 +475,8 @@ export interface WealthState {
    * "Because: you said ..." next to each next step. (v26)
    */
   onboardingAnswers: OnboardingAnswers | null;
+  /** What the Review page's check-ins remember: the last weekly look, the payday question. (v27) */
+  checkins: CheckinState;
 }
 
 export interface PortfolioPosition {

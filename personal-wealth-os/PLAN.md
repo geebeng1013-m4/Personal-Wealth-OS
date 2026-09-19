@@ -88,7 +88,7 @@ P-5 页面按需加载：用户决定先不做。
 ### P-5 — 页面按需加载  （2026-09-19 用户决定先不做）
 - 每个页面第一次打开时才下载，页面切换改成异步；主程序现在 501 KB（gzip 149 KB）。逐页实测。
 
-### P-6a — app 内节奏提醒  `[ ]`
+### P-6a — app 内节奏提醒  `[x]`（2026-09-20，分支 `p6a-checkins`，PR 待检查）
 - **家**：现有 Review 页（Monthly check-in）最上面加「Check-ins」区块：发薪、每周、月底三种。到期的有按钮；没到的写「Opens Oct 29」「Next one on Monday」；做完打勾。月底那项接着填原本的月度 Review 表单。
 - **入口（2026-09-19 选 A）**：侧栏 Review 下面的灰色小字 "Monthly check-in" 有待办时变成绿色 "2 check-ins due"；不用红点、不用数字。手机 More 上一个小绿点，More 页里 Review 同样换小字。
 - **Overview 只有一行**「2 check-ins due →」，点了去 Review；没有待办不出现（遵守 Overview 只放状态）。
@@ -96,6 +96,11 @@ P-5 页面按需加载：用户决定先不做。
 - **每周**：星期一起到期，直到这周看过。**月底**：最后 3 天到下月头 3 天。
 - 新手「Your next step」卡片还在时，Check-ins 先不出现。
 - 概念 Demo（v3）：https://claude.ai/artifact/Bz1Cd6m3xnmQuRBiVeuR4J 。Demo 里的日历只是模拟，网站上不放。
+- 已做：`src/checkins.ts`（`buildCheckins` / `confirmWeeklyCheck` / `answerPayPrompt`）+ Schema v27 `checkins { weeklyCheckedOn, payPromptAnswered }`；Review 页最上面「Check-ins」卡片（电脑 `order: -3`）；侧栏 Review 小字 / More 页小字变绿、手机 More 小绿点；Overview 一行「N check-ins due →」。
+- 用户决定（2026-09-20）：列表**只放当天要做的**，还没到时间的不列出；做完就从列表消失（刚做完那一下显示一行「✓ …」）；今天没有要做的，整张卡片不出现。
+- 细节：发薪用收入类 recurring；「Record MYR X」打开预填的 Ledger；每周显示本周个人开销和本月 vs 上限；「Start review」打开表单并把月份设成要复盘的月（月初 = 上个月）；没有每月收入时记完薪水问一次「每个月 N 号左右发吗？」。
+- 测试时抓到一个 bug：Ledger 新记的交易日期存成 UTC 时间戳（马来西亚 9 月 30 日 0 点 = `2026-09-29T16:00Z`），原本当成日期字串读，薪水记了也不算。改成跟 app 其他地方一样用 `new Date()` 读本地日期；补了测试。
+- 实测（5199，测试浏览器假装 9 月 30 日 / 10 月 2 日）：三项到期、按钮都正确、侧栏 / More / Overview 数字同步、月初复盘上个月、新账号的「每月收入」问题；电脑深浅色 + 手机无溢出无报错。15 个新测试，1234 全绿。截图：https://claude.ai/artifact/3bQrVDwdGNQdBKdc22MT9B
 
 ### P-6b — 真正的推送通知  （以后再说，需要单独计划）
 - 需要：存每个用户每台设备的推送订阅（数据库）、服务器定时任务、VAPID 密钥；iPhone 要先加到主屏幕。

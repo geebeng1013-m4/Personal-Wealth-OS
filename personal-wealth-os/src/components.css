@@ -507,6 +507,10 @@
     color: var(--text-faint);
     font-size: var(--text-caption);
   }
+  .more-row__sub.is-due {
+    color: var(--accent);
+    font-weight: var(--weight-semibold);
+  }
   .more-row__chev {
     flex: none;
     color: var(--text-faint);
@@ -2932,6 +2936,10 @@
     .wu-review-score {
       display: none;
     }
+    /* Check-ins first (P-6a): they are what needs doing today. */
+    .wu-dash > .wu-checkins {
+      order: -3;
+    }
     .wu-dash > .wu-review-form {
       order: -2;
     }
@@ -3822,6 +3830,134 @@
     .wu-ledger-entry {
       position: static;
     }
+  }
+
+  /* ---- check-ins on the Review page (P-6a) ------------------------------ */
+  .wu-checkins {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .wu-checkins__list {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .wu-checkin {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    gap: var(--space-3);
+    align-items: center;
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .wu-checkin:first-child {
+    border-top: 0;
+  }
+  @media (max-width: 640px) {
+    .wu-checkin { grid-template-columns: 18px minmax(0, 1fr); }
+    .wu-checkin__actions { grid-column: 2; }
+  }
+  .wu-checkin__mark {
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--text-faint);
+    border-radius: 50%;
+    font-size: 10px;
+  }
+  .wu-checkin.is-due .wu-checkin__mark {
+    border-color: var(--warning);
+    background: var(--warning-soft);
+  }
+  .wu-checkin.is-done .wu-checkin__mark {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .wu-checkin__text {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .wu-checkin__text strong {
+    font-size: var(--text-body);
+    font-weight: var(--weight-semibold);
+  }
+  .wu-checkin__text small {
+    color: var(--text-muted);
+    font-size: var(--text-body-sm);
+  }
+  .wu-checkin.is-later .wu-checkin__text strong,
+  .wu-checkin.is-done .wu-checkin__text strong {
+    color: var(--text-muted);
+  }
+  .wu-checkin.is-done .wu-checkin__text strong {
+    text-decoration: line-through;
+  }
+  .wu-checkin__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    justify-content: flex-end;
+  }
+  @media (max-width: 640px) {
+    .wu-checkin__actions { justify-content: flex-start; }
+  }
+  .wu-checkin__actions:empty {
+    display: none;
+  }
+  .wu-checkins__done {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--accent-soft);
+    font-size: var(--text-body-sm);
+  }
+  .wu-checkins__done span {
+    color: var(--accent);
+    font-weight: var(--weight-bold);
+  }
+  .wu-checkins__prompt {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--radius-md);
+    background: var(--accent-soft);
+  }
+  .wu-checkins__prompt p {
+    margin: 0;
+    font-size: var(--text-body-sm);
+  }
+  /* The one line on the Overview that points at them. */
+  .wu-checkins-line {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    justify-self: start;
+    margin-bottom: var(--space-4);
+    padding: 5px 12px;
+    border: 1px solid var(--accent-line);
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--text);
+    font: var(--weight-medium) var(--text-body-sm) / 1.4 var(--font-sans);
+    cursor: pointer;
+  }
+  .wu-checkins-line:hover {
+    border-color: var(--accent);
+  }
+  .wu-checkins-line:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+  .wu-checkins-line__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
   }
 
   /* ---- account / category edited in place (P-4) ------------------------- */
