@@ -1,14 +1,19 @@
 """
 Launch-screen images for the installed app (PLAN.md S-1 / S-2).
 
-Every launch screen is the same picture: #141310 with the white W in the
-middle, 120 CSS px wide. It is all Android can draw from the manifest
-(background_color + icon), so iPhone and the page itself show exactly that
-too and the three hand over without a jump.
+Every launch screen is #141310 with the white W in the middle, 120 CSS px
+wide, and on iPhone, iPad and desktop the name "WealthUp" near the bottom
+(its baseline box ends 9 % above the bottom edge). Android draws its own
+splash from the manifest (background_color + icon) and cannot show a name,
+so the page hides the name on Android and all three hand over without a
+jump on every platform.
+
+Reads public/brand/launch-name.png (scripts/render-launch-name.mjs, 3x).
 
 Writes:
-  public/brand/launch-mark.png   the W on a transparent ground (inlined into
-                                 index.html's launch screen)
+  public/brand/launch-mark.png   the W on a transparent ground
+  public/brand/launch-name.png   trimmed to its ink
+  index.html                     both inlined as data URIs in #launch
   public/splash/*.png            one iOS startup image per screen size
   index.html                     the <link rel="apple-touch-startup-image">
                                  block between the LAUNCH-IMAGES markers
@@ -24,6 +29,9 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 ICON = ROOT / "public/icons/icon-512-maskable.png"
 MARK_OUT = ROOT / "public/brand/launch-mark.png"
+NAME = ROOT / "public/brand/launch-name.png"
+NAME_SCALE = 3  # launch-name.png is drawn at 3x
+NAME_BOTTOM = 0.09  # gap under the name, as a share of the screen height
 SPLASH_DIR = ROOT / "public/splash"
 INDEX = ROOT / "index.html"
 
@@ -80,16 +88,26 @@ def scaled(mark: Image.Image, width: int) -> Image.Image:
     return mark.resize((width, round(mark.height * width / mark.width)), Image.LANCZOS)
 
 
-def splash(mark: Image.Image, w: int, h: int, dpr: int) -> Image.Image:
+def splash(mark: Image.Image, name: Image.Image, w: int, h: int, dpr: int) -> Image.Image:
     canvas = Image.new("RGB", (w * dpr, h * dpr), GROUND)
     m = scaled(mark, MARK_CSS_WIDTH * dpr)
     canvas.paste(m, ((canvas.width - m.width) // 2, (canvas.height - m.height) // 2), m)
+    n = scaled(name, round(name.width * dpr / NAME_SCALE))
+    canvas.paste(n, ((canvas.width - n.width) // 2, round(canvas.height * (1 - NAME_BOTTOM)) - n.height), n)
     return canvas
+
+
+def data_uri(path: Path) -> str:
+    import base64
+    return "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode()
 
 
 def main() -> None:
     mark = transparent_mark()
     scaled(mark, MARK_CSS_WIDTH * 2).save(MARK_OUT, optimize=True)
+    name = Image.open(NAME).convert("RGBA")
+    name = name.crop(name.getbbox())
+    name.save(NAME, optimize=True)
 
     SPLASH_DIR.mkdir(parents=True, exist_ok=True)
     for old in SPLASH_DIR.glob("apple-splash-*.png"):
@@ -102,14 +120,14 @@ def main() -> None:
         screens.append((label, w, h, dpr, "portrait"))
         screens.append((label, h, w, dpr, "landscape"))
     for label, w, h, dpr, orientation in screens:
-        name = f"apple-splash-{w * dpr}x{h * dpr}.png"
-        if name not in seen:
-            splash(mark, w, h, dpr).save(SPLASH_DIR / name, optimize=True)
-            seen.add(name)
+        file = f"apple-splash-{w * dpr}x{h * dpr}.png"
+        if file not in seen:
+            splash(mark, name, w, h, dpr).save(SPLASH_DIR / file, optimize=True)
+            seen.add(file)
         # Media features are in portrait terms: device-width is the short side.
         short, long = min(w, h), max(w, h)
         links.append(
-            f'    <link rel="apple-touch-startup-image" href="/splash/{name}" media="screen and (device-width: {short}px) and '
+            f'    <link rel="apple-touch-startup-image" href="/splash/{file}" media="screen and (device-width: {short}px) and '
             f'(device-height: {long}px) and (-webkit-device-pixel-ratio: {dpr}) and (orientation: {orientation})" /><!-- {label} -->'
         )
 
@@ -125,8 +143,19 @@ def main() -> None:
     else:
         anchor = '    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />'
         html = html.replace(anchor, anchor + "\n" + block, 1)
+    # The page's launch screen shows the same two images, inlined so they
+    # paint with the HTML; its CSS sizes the name at 1/NAME_SCALE.
+    import re
+    for element_id, path in (("launch-mark", MARK_OUT), ("launch-name", NAME)):
+        html, count = re.subn(rf'(<img id="{element_id}"[^>]*? src=")data:image/png;base64,[^"]*(")', rf"\g<1>{data_uri(path)}\g<2>", html)
+        if count != 1:
+            raise SystemExit(f"index.html needs exactly one <img id=\"{element_id}\" ... src=\"data:...\">")
+    css_width = f"width: {name.width / NAME_SCALE:g}px;"
+    html, count = re.subn(r"(#launch-name \{[^}]*?)width: [0-9.]+px;", rf"\g<1>{css_width}", html)
+    if count != 1:
+        raise SystemExit("index.html needs one #launch-name rule with a width")
     INDEX.write_text(html, encoding="utf-8")
-    print(f"{len(seen)} images, {len(links)} links, mark {MARK_OUT.name}")
+    print(f"{len(seen)} images, {len(links)} links; name {name.width}x{name.height} px = {name.width / NAME_SCALE:.2f} CSS px wide")
 
 
 if __name__ == "__main__":

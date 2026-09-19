@@ -854,6 +854,18 @@ export type CloudSyncResult =
   | { outcome: "cloud-applied"; state: WealthState }
   | { outcome: "local-kept-newer"; state: WealthState };
 
+/**
+ * Whether the state the cloud load returned has to replace what is already
+ * on screen. The launch path renders the local copy first; when the cloud
+ * copy is that same save (same updatedAt), rendering again only rebuilt the
+ * whole shell a moment after it appeared — the flash after the launch W
+ * (PLAN.md S-5). A different save, e.g. an edit made on another device,
+ * still re-renders.
+ */
+export function cloudLoadNeedsRender(onScreen: Pick<WealthState, "updatedAt">, loaded: Pick<WealthState, "updatedAt">): boolean {
+  return onScreen.updatedAt !== loaded.updatedAt;
+}
+
 export async function loadStateFromCloud(): Promise<CloudSyncResult> {
   const user = currentUser();
   if (!user) return { outcome: "no-cloud-document", state: null };
