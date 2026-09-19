@@ -16,7 +16,7 @@
 
 ---
 
-## FUTURE IDEAS 清理（P 系列）  （2026-09-19 定）
+## FUTURE IDEAS 清理（P 系列）  （2026-09-19 定；P-1..P-3 PR #90 已合并上线）
 
 用户说「都做了吧」。顺序由小到大、风险由低到高；每个 Task 做完停下来报告。P-1..P-3 同一个 PR，P-4、P-5、P-6a 各一个 PR。
 概念 Demo：https://claude.ai/artifact/Bz1Cd6m3xnmQuRBiVeuR4J
