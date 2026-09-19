@@ -22,7 +22,7 @@ import { runQueuedGuide } from "./onboardingGuide";
 import { bindMoneyLeaks, moneyLeaksTemplate, setSelectedMoneyLeakId } from "./pages/moneyLeaksPage";
 import { bindAdvisor, advisorPageTemplate } from "./pages/advisorPage";
 import { settleTabbarLens } from "./liquidGlass";
-import { mountSidebarScrollbar } from "./sidebarScrollbar";
+import { mountSidebarScrollbar } from "./overlayScrollbar";
 import { mountTitleBar } from "./titleBar";
 
 // Created on the first render that has a shell, then reused by every later
@@ -314,7 +314,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   if (!mount) return;
 
   const templates: Record<string, string> = {
-    dashboard: dashboardTemplate(state),
+    dashboard: dashboardTemplate(state, user?.displayName ?? ""),
     portfolio: portfolioTemplate(state),
     market: marketTemplate(state),
     ledger: ledgerTemplate(state),

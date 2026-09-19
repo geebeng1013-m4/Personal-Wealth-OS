@@ -36,7 +36,17 @@ import {
 } from "./valuationFormat";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
-export function dashboardTemplate(state: WealthState): string {
+/** Who "Good morning, …" greets: the Settings name, else the sign-in name's first word, else "there". */
+export function greetingName(profileName: string, signedInName: string): string {
+  return profileName.trim() || signedInName.trim().split(/\s+/)[0] || "there";
+}
+
+/**
+ * The Overview. `signedInName` is the account's display name, used only to
+ * greet someone who has not typed a name in Settings yet (P-1): a new account
+ * would otherwise read "Good morning, there". Display only, never saved.
+ */
+export function dashboardTemplate(state: WealthState, signedInName = ""): string {
   // The Dashboard's single read model. Every canonical figure below is read
   // from it — this template formats and renders, it does not calculate.
   const overview = buildOverviewModel(state, new Date(), livePriceInputs());
@@ -82,7 +92,7 @@ export function dashboardTemplate(state: WealthState): string {
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
     ${pageHeader({
-      eyebrow: `Good ${getGreeting()}, ${overview.greetingName}`,
+      eyebrow: `Good ${getGreeting()}, ${greetingName(state.profile.name, signedInName)}`,
       title: "Overview",
       sub: overview.headline,
     })}

@@ -21,14 +21,18 @@
 用户说「都做了吧」。顺序由小到大、风险由低到高；每个 Task 做完停下来报告。P-1..P-3 同一个 PR，P-4、P-5、P-6a 各一个 PR。
 概念 Demo：https://claude.ai/artifact/Bz1Cd6m3xnmQuRBiVeuR4J
 
-### P-1 — 问候语显示名字  `[ ]`
+### P-1 — 问候语显示名字  `[x]`（2026-09-19，分支 `p-cleanup`）
 - `profile.name` 空时用 Google 登录名的第一个字（现在显示「there」）。只改显示，不写数据；Settings 填了名字就用他填的。
+- 已做：`greetingName()`（`dashboardPage.ts`）+ `ui.ts` 传入登录名；3 个测试。5199：新账号「Good morning, Alex」，有名字的账号照旧。
 
-### P-2 — 两个滚动条模块合并  `[ ]`
+### P-2 — 两个滚动条模块合并  `[x]`（2026-09-19，分支 `p-cleanup`）
 - `sidebarScrollbar.ts` 和 `pageScrollbar.ts` 抽成一个 `overlayScrollbar.ts`，行为不变。
+- 已做：共用的 `overlayThumb()`（位置、出现 / 淡出、拖动）+ `mountSidebarScrollbar` / `mountPageScrollbar` 两个入口，各自保留「什么算用户滚动」和闪一下的规则。两个旧文件删除。5199 重跑 F-9 检查（开页闪、导航不出现、滚轮出现、淡出、边缘出现、拖动）加侧栏同样的检查，全部一致。
 
-### P-3 — 弹窗内部的小滚动条  `[ ]`
+### P-3 — 弹窗内部的小滚动条  `[x]`（2026-09-19，分支 `p-cleanup`）
 - 助手聊天面板等内部滚动区改用 CSS 细滚动条（颜色跟主题、无箭头），只在鼠标设备。
+- 已做：`theme.css` 的 `wu-base` layer（最低优先级，所有「隐藏滚动条」的规则照样赢）。Chromium 用 `::-webkit-scrollbar`：`scrollbar-width: thin` 在 Windows 仍画箭头，而且设了它就不再读 `::-webkit-scrollbar`；Firefox 用 `@supports not selector(::-webkit-scrollbar)` 的标准写法（这台机没有 Firefox，未实测）。
+- 实测（自开 demo 5207，因 5199 没开）：版本历史列表深 / 浅色都是细圆角滑块、无箭头；html、侧栏仍隐藏；800 宽时分段按钮、Market 标签仍隐藏。
 
 ### P-4 — Ledger 账户 / 分类原地编辑  `[ ]`
 - 把连续的 `prompt()` 弹窗换成那一行原地展开的小表单（Save / Cancel），跟 Goals 的编辑一样。

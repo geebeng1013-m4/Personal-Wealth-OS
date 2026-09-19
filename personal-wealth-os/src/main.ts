@@ -26,7 +26,7 @@ import { initSaveErrorToasts } from "./components/toast";
 import { initLiquidGlass } from "./liquidGlass";
 import { applyOnboardingAnswers, shouldShowOnboardingQuiz, skipOnboardingQuiz } from "./onboardingQuiz";
 import { renderOnboarding, resetOnboardingDraft } from "./pages/onboardingPage";
-import { mountPageScrollbar } from "./pageScrollbar";
+import { mountPageScrollbar } from "./overlayScrollbar";
 
 // Drop stale cached ticker data from previous sessions so localStorage doesn't grow unbounded.
 pruneMarketCache();

@@ -33,7 +33,7 @@
   overflow: hidden;
 }
 /* iOS-style scrolling (PLAN.md S-1): the native scrollbar is hidden and
-   sidebarScrollbar.ts draws an overlay thumb that only shows while scrolling.
+   overlayScrollbar.ts draws an overlay thumb that only shows while scrolling.
    Edge fades hint that there is more above / below. */
 .sidebar-scroll {
   position: relative;
@@ -114,7 +114,7 @@
 }
 
 /* Page scrollbar (PLAN.md F-9): same overlay idea for the document itself,
-   drawn by pageScrollbar.ts. Mouse devices only — the native one there is
+   drawn by overlayScrollbar.ts. Mouse devices only — the native one there is
    Windows' wide bar with arrows; touch keeps its own overlay scrollbar.
    Above the fixed titlebar (110), below the assistant (130). */
 @media (hover: hover) and (pointer: fine) {
