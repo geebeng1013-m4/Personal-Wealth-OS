@@ -16,7 +16,7 @@
 
 ---
 
-## FUTURE IDEAS 清理（P 系列）  （2026-09-19 定；P-1..P-3 PR #90 已合并上线）
+## FUTURE IDEAS 清理（P 系列）  （2026-09-19 定；P-1..P-3 PR #90、P-4 PR #91 已合并上线）
 
 用户说「都做了吧」。顺序由小到大、风险由低到高；每个 Task 做完停下来报告。P-1..P-3 同一个 PR，P-4、P-5、P-6a 各一个 PR。
 概念 Demo：https://claude.ai/artifact/Bz1Cd6m3xnmQuRBiVeuR4J
@@ -34,7 +34,7 @@
 - 已做：`theme.css` 的 `wu-base` layer（最低优先级，所有「隐藏滚动条」的规则照样赢）。Chromium 用 `::-webkit-scrollbar`：`scrollbar-width: thin` 在 Windows 仍画箭头，而且设了它就不再读 `::-webkit-scrollbar`；Firefox 用 `@supports not selector(::-webkit-scrollbar)` 的标准写法（这台机没有 Firefox，未实测）。
 - 实测（自开 demo 5207，因 5199 没开）：版本历史列表深 / 浅色都是细圆角滑块、无箭头；html、侧栏仍隐藏；800 宽时分段按钮、Market 标签仍隐藏。
 
-### P-4 — Ledger 账户 / 分类原地编辑  `[x]`（2026-09-19，分支 `p4-ledger-edit`）
+### P-4 — Ledger 账户 / 分类原地编辑  `[x]`（2026-09-19，PR #91 已合并上线）
 - 把连续的 `prompt()` 弹窗换成那一行原地展开的小表单（Save / Cancel），跟 Goals 的编辑一样。
 - 已做：`ledgerPage.ts` 记 `editingAccountId` / `editingCategoryId`，那一行画成表单（账户：图标、名字、期初余额；分类：图标、名字）。检查规则照旧（名字必填、期初 ≥ 0、长度上限、四舍五入到分），错误显示在表单里，一改输入就清掉；Esc / Cancel 关闭；同时只开一个；保存保留滚动位置。账户类型仍不可改。
 - 实测（5199，独立无头 Edge）：深 / 浅桌面 + 390 手机，没有任何浏览器弹窗，存值正确，无横向溢出、无报错。
