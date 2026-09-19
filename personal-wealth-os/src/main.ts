@@ -13,7 +13,7 @@ import "./shell.css";
 import "./components/assistant/assistant.css";
 import "./legacy-tail.css";
 import type { WealthState } from "./models";
-import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint, createId } from "./state";
+import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint, createId, cloudLoadNeedsRender } from "./state";
 import { renderApp } from "./ui";
 import { onAuth, preloadFirestore, signInWithGoogle, handleRedirectResult, logOut, subscribeToFirestore, loadAssistantHistory, saveAssistantHistory, type CloudSnapshot } from "./firebase";
 import { setAssistantOwner } from "./components/assistant/assistantStore";
@@ -399,8 +399,11 @@ async function handleAuth(user: User | null): Promise<void> {
       quizAllowed = true;
 
       if (cloud.outcome === "cloud-applied") {
+        // The same save as the one already rendered from local storage: adopt
+        // it (its sync point is now confirmed) without rebuilding the screen.
+        const needsRender = cloudLoadNeedsRender(state, cloud.state);
         state = cloud.state;
-        renderSignedIn(user);
+        if (needsRender) renderSignedIn(user);
       } else if (cloud.outcome === "local-kept-newer") {
         // This device holds edits the cloud has never seen — it was offline, or
         // the write was rejected. Keep them on screen and push them up, rather
