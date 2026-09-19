@@ -295,6 +295,13 @@
 .nav-item.active small {
   color: var(--text-muted);
 }
+/* Review's subtitle while check-ins are due (PLAN.md P-6a, option A): the
+   words change and turn green; no badge. Placed after the active rule so it
+   also wins on the Review page itself. */
+.nav-item .nav-label small.nav-due {
+  color: var(--accent);
+  font-weight: 600;
+}
 
 /* ---- profile card ---- */
 .profile-card {
@@ -719,6 +726,22 @@
   }
   .tabbar.is-pressed .tabbar__lens {
     --lens-scale: 1.14;
+  }
+  /* Review sits under More on a phone: a small green dot while check-ins
+     are due (P-6a). Ringed in the bar's colour so it reads on the glass. */
+  .tabbar__btn.has-due .tabbar__icon {
+    position: relative;
+  }
+  .tabbar__btn.has-due .tabbar__icon::after {
+    content: "";
+    position: absolute;
+    top: -1px;
+    right: -3px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--surface);
   }
   .tabbar__btn {
     position: relative;

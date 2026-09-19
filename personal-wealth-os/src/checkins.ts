@@ -15,7 +15,7 @@
 import type { LedgerTransaction, RecurringTransaction, WealthState } from "./models";
 import { buildNextSteps } from "./onboarding";
 import { getFinancialRule } from "./financialRules";
-import { ledgerMonthTotals } from "./ledgerSummary";
+import { ledgerMonthTotals, transactionsInRange } from "./ledgerSummary";
 
 /** What the check-ins remember between visits. (v27) */
 export interface CheckinState {
@@ -86,9 +86,16 @@ export function isoDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function parseIso(iso: string): Date {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d);
+/**
+ * The local calendar day a ledger date falls on. Entries hold either a date
+ * ("2026-08-18") or a full UTC timestamp ("2026-09-29T16:00:00.000Z" is
+ * 30 Sep in Malaysia); read both the way the rest of the ledger does
+ * (transactionsInRange: new Date(), then local time). Null if unreadable.
+ */
+function localDayOf(value: string): Date | null {
+  const time = new Date(value);
+  if (!Number.isFinite(time.getTime())) return null;
+  return new Date(time.getFullYear(), time.getMonth(), time.getDate());
 }
 
 function addDays(date: Date, days: number): Date {
@@ -136,7 +143,10 @@ function payCheckin(state: WealthState, recurring: RecurringTransaction, today: 
   const base = { id: `pay:${recurring.id}`, kind: "pay" as const, recurring };
   const label = recurring.label || "pay";
   if (open) {
-    const recorded = incomes.some((tx) => Math.abs(daysBetween(open, parseIso(tx.date))) <= PAY_MATCH_DAYS);
+    const recorded = incomes.some((tx) => {
+      const day = localDayOf(tx.date);
+      return day !== null && Math.abs(daysBetween(open, day)) <= PAY_MATCH_DAYS;
+    });
     return recorded
       ? { ...base, status: "done", title: `Payday · ${label} recorded`, detail: `Recorded for ${shortDate(open)}.` }
       : { ...base, status: "due", title: `Payday · record this month's ${label}`, detail: `${label} usually comes in on the ${ordinal(recurring.dayOfMonth)} (${rm(recurring.amount)}).` };
@@ -152,9 +162,9 @@ function weeklyCheckin(state: WealthState, checkins: CheckinState, today: Date):
     const next = addDays(weekStart, 7);
     return { ...base, status: "later", title: "Weekly check · done this week", detail: `Next one on Monday, ${shortDate(next)}.`, opensOn: isoDate(next) };
   }
-  const from = isoDate(weekStart), to = isoDate(today);
-  const week = state.ledgerTransactions
-    .filter((tx) => tx.type === "expense" && tx.fundingSource !== "sponsored" && tx.date >= from && tx.date <= to)
+  const thisWeek = transactionsInRange(state.ledgerTransactions, { start: weekStart, end: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999) });
+  const week = thisWeek
+    .filter((tx) => tx.type === "expense" && tx.fundingSource !== "sponsored")
     .reduce((sum, tx) => sum + tx.amount, 0);
   const month = ledgerMonthTotals(state.ledgerTransactions, monthKey(today)).personalExpenses;
   const limit = plannedSpending(state);
@@ -197,15 +207,19 @@ function monthEndCheckin(state: WealthState, today: Date): Checkin {
 
 function payPrompt(state: WealthState, checkins: CheckinState, hasMonthlyIncome: boolean): PayPrompt | null {
   if (hasMonthlyIncome || checkins.payPromptAnswered || state.allocation.incomeType === "variable") return null;
-  const latest = [...personalIncomes(state.ledgerTransactions)].sort((a, b) => b.date.localeCompare(a.date))[0];
+  const dated = personalIncomes(state.ledgerTransactions)
+    .map((tx) => ({ tx, day: localDayOf(tx.date) }))
+    .filter((entry): entry is { tx: LedgerTransaction; day: Date } => entry.day !== null)
+    .sort((a, b) => b.day.getTime() - a.day.getTime());
+  const latest = dated[0];
   if (!latest) return null;
-  const category = state.ledgerCategories.find((item) => item.id === latest.categoryId);
+  const category = state.ledgerCategories.find((item) => item.id === latest.tx.categoryId);
   return {
-    amount: latest.amount,
-    dayOfMonth: parseIso(latest.date).getDate(),
-    date: latest.date,
+    amount: latest.tx.amount,
+    dayOfMonth: latest.day.getDate(),
+    date: isoDate(latest.day),
     label: category?.label ?? "Salary",
-    accountId: latest.accountId,
+    accountId: latest.tx.accountId,
   };
 }
 

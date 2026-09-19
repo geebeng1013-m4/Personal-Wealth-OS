@@ -16,6 +16,7 @@ import { buildOverviewModel } from "../overview";
 import { buildNextSteps, type NextStep, type NextStepId, type NextSteps } from "../onboarding";
 import { queueGuide, type GuideId } from "../onboardingGuide";
 import { applyLedgerDraft } from "./ledgerPage";
+import { buildCheckins } from "../checkins";
 import type { PortfolioSnapshot } from "../portfolioSummary";
 import { assetDrawdownBelow } from "../drawdowns";
 import { getPrice } from "../marketPrices";
@@ -104,6 +105,8 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
       : `<button class="wu-goal-line wu-goal-line--empty dashboard-nav" data-page="goals" type="button"><span class="wu-goal-line__text">Write down your financial goal</span><span aria-hidden="true">→</span></button>`}
 
     ${nextStepCard(buildNextSteps(state))}
+
+    ${checkinsLine(buildCheckins(state).dueCount)}
 
     <!-- Filled by bindDashboard after an async price check: shown only when a
          dip-buy tranche is reached and not yet deployed. -->
@@ -227,6 +230,12 @@ let previouslyDone: Set<NextStepId> | null = null;
  * and a one-render message would be gone before anyone read it.
  */
 let lastFinished: NextStepId | null = null;
+
+/* One line of status (P-6a): the check-ins themselves live on Review. */
+function checkinsLine(due: number): string {
+  if (!due) return "";
+  return `<button class="wu-checkins-line dashboard-nav" data-page="review" type="button"><span class="wu-checkins-line__dot" aria-hidden="true"></span>${due} check-in${due > 1 ? "s" : ""} due<span aria-hidden="true">→</span></button>`;
+}
 
 function monthsFromNow(months: number): string {
   const date = new Date();

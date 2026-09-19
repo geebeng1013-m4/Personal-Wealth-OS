@@ -23,6 +23,7 @@ import { bindMoneyLeaks, moneyLeaksTemplate, setSelectedMoneyLeakId } from "./pa
 import { bindAdvisor, advisorPageTemplate } from "./pages/advisorPage";
 import { settleTabbarLens } from "./liquidGlass";
 import { mountSidebarScrollbar } from "./overlayScrollbar";
+import { buildCheckins } from "./checkins";
 import { mountTitleBar } from "./titleBar";
 
 // Created on the first render that has a shell, then reused by every later
@@ -113,7 +114,7 @@ function backToMoreButton(): string {
   return `<button class="wu-page-back" data-page="more" type="button" aria-label="Back to More"><span aria-hidden="true">${BACK_TO_MORE_ICON}</span></button>`;
 }
 
-function tabbarTemplate(activePage: string): string {
+function tabbarTemplate(activePage: string, checkinsDue: number): string {
   const items = primaryTabs
     .map(([id, label, icon]) => {
       const on = id === activePage;
@@ -124,7 +125,8 @@ function tabbarTemplate(activePage: string): string {
   // the four tabs. It reads as active on its own page and on any page reached
   // from it, so the bar never shows nothing selected.
   const moreActive = !primaryTabs.some(([id]) => id === activePage);
-  const more = `<button class="tabbar__btn tabbar__btn--more${moreActive ? " is-active" : ""}" data-page="more" type="button"><span class="tabbar__icon" aria-hidden="true">${TAB_ICONS.more}</span><span class="tabbar__label">More</span></button>`;
+  // Review lives under More on a phone, so due check-ins mark More (P-6a).
+  const more = `<button class="tabbar__btn tabbar__btn--more${moreActive ? " is-active" : ""}${checkinsDue ? " has-due" : ""}" data-page="more" type="button"${checkinsDue ? ` aria-label="More, ${checkinsDue} check-in${checkinsDue > 1 ? "s" : ""} due"` : ""}><span class="tabbar__icon" aria-hidden="true">${TAB_ICONS.more}</span><span class="tabbar__label">More</span></button>`;
   // The lens is the liquid-glass pill under the active tab; liquidGlass.ts
   // slides it over from the previous tab after each render.
   const tabCount = primaryTabs.length + 1;
@@ -150,21 +152,21 @@ const MORE_ICONS: Record<string, string> = {
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>',
 };
 
-function moreRow(id: string, label: string, sub: string): string {
+function moreRow(id: string, label: string, sub: string, due = false): string {
   return `<button class="more-row" data-page="${id}" type="button">`
     + `<span class="more-row__icon" aria-hidden="true">${MORE_ICONS[id] ?? ""}</span>`
     + `<span class="more-row__text"><span class="more-row__label">${escapeHtml(label)}</span>`
-    + (sub ? `<span class="more-row__sub">${escapeHtml(sub)}</span>` : "")
+    + (sub ? `<span class="more-row__sub${due ? " is-due" : ""}">${escapeHtml(sub)}</span>` : "")
     + `</span><span class="more-row__chev" aria-hidden="true">›</span></button>`;
 }
 
-function moreTemplate(user?: AppUser): string {
+function moreTemplate(checkinsDue: number, user?: AppUser): string {
   const tabIds = new Set(primaryTabs.map(([id]) => id));
   const groups = pageGroups
     .map(([title, groupPages]) => {
       const rows = groupPages
         .filter(([id]) => !tabIds.has(id))
-        .map(([id, english, sub]) => moreRow(id, english, sub))
+        .map(([id, english, sub]) => moreRow(id, english, navSubtitle(id, sub, checkinsDue), id === "review" && checkinsDue > 0))
         .join("");
       return rows
         ? `<section class="more-group"><p class="more-group__title t-overline">${escapeHtml(title)}</p><div class="more-group__rows">${rows}</div></section>`
@@ -180,13 +182,18 @@ function moreTemplate(user?: AppUser): string {
   </div>`;
 }
 
-function navTemplate(activePage: string): string {
+/** A page's subtitle, except Review's while check-ins are due (P-6a, sidebar option A). */
+function navSubtitle(id: string, subtitle: string, checkinsDue: number): string {
+  return id === "review" && checkinsDue > 0 ? `${checkinsDue} check-in${checkinsDue > 1 ? "s" : ""} due` : subtitle;
+}
+
+function navTemplate(activePage: string, checkinsDue: number): string {
   let pageIndex = 0;
   return pageGroups
     .map(([groupTitle, groupPages]) => {
       const items = groupPages.map(([id, english, chinese]) => {
         const index = pageIndex++;
-        return `<button class="nav-item ${id === activePage ? "active" : ""}" data-page="${id}" type="button" style="--nav-index:${index}"${id === activePage ? ' aria-current="page"' : ""}><i class="nav-node" aria-hidden="true"></i><span class="nav-label"><strong>${english}</strong><small>${chinese}</small></span></button>`;
+        return `<button class="nav-item ${id === activePage ? "active" : ""}" data-page="${id}" type="button" style="--nav-index:${index}"${id === activePage ? ' aria-current="page"' : ""}><i class="nav-node" aria-hidden="true"></i><span class="nav-label"><strong>${english}</strong><small${id === "review" && checkinsDue > 0 ? ' class="nav-due"' : ""}>${navSubtitle(id, chinese, checkinsDue)}</small></span></button>`;
       }).join("");
       return `<div class="nav-group"><div class="nav-group-title">${groupTitle}</div><div class="nav-group-items">${items}</div></div>`;
     })
@@ -195,6 +202,7 @@ function navTemplate(activePage: string): string {
 
 // Map ticker to TradingView symbol format (EXCHANGE:SYMBOL)
 function shellTemplate(activePage: string, state: WealthState, user?: AppUser): string {
+  const checkinsDue = buildCheckins(state).dueCount;
   const active = pages.find(([id]) => id === activePage);
   const userBadge = user ? `<div class="user-badge"><img src="${escapeHtml(user.photoURL || "")}" alt="" class="user-avatar" referrerpolicy="no-referrer"><span class="user-name">${escapeHtml(user.displayName || user.email || "User")}</span><button class="wu-btn wu-btn--ghost wu-btn--sm logout-btn" type="button">Sign Out</button></div>` : "";
   return `
@@ -211,7 +219,7 @@ function shellTemplate(activePage: string, state: WealthState, user?: AppUser): 
           </span>
         </div>
         <nav class="nav line-sidebar" aria-label="Primary navigation">
-          ${navTemplate(activePage)}
+          ${navTemplate(activePage, checkinsDue)}
         </nav>
         <div class="profile-card">
           <span class="eyebrow">Wealth Mandate</span>
@@ -240,7 +248,7 @@ function shellTemplate(activePage: string, state: WealthState, user?: AppUser): 
       </div>
       <section id="pageMount"></section>
     </main>
-    ${tabbarTemplate(activePage)}
+    ${tabbarTemplate(activePage, checkinsDue)}
     ${assistantTemplate()}
   `;
 }
@@ -327,7 +335,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
     review: reviewTemplate(state),
     settings: settingsTemplate(state),
     "money-leaks": moneyLeaksTemplate(state),
-    more: moreTemplate(user),
+    more: moreTemplate(buildCheckins(state).dueCount, user),
   };
   mount.innerHTML = templates[activePage] ?? templates.dashboard;
 

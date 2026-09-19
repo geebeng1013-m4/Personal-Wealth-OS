@@ -74,6 +74,18 @@ test("checkins: two monthly incomes give two payday check-ins", () => {
   assert.deepEqual(buildCheckins(state, day("2026-10-25")).items.filter((i) => i.kind === "pay").map((i) => [i.id, i.status]), [["pay:salary", "due"], ["pay:rent-in", "later"]]);
 });
 
+test("checkins: entries saved as full UTC timestamps count on their local day", () => {
+  // What the Ledger form saves: local midnight as an ISO timestamp.
+  const localMidnight = (y: number, m: number, d: number, h = 0, min = 0) => new Date(y, m - 1, d, h, min).toISOString();
+  const paid = settled({ ledgerTransactions: [tx("income", 4500, localMidnight(2026, 10, 25))] });
+  assert.equal(item(paid, "2026-10-26", "pay:salary")?.status, "done");
+  const spent = settled({ ledgerTransactions: [tx("expense", 40, localMidnight(2026, 10, 5, 0, 30)), tx("expense", 99, localMidnight(2026, 10, 4, 23, 30))] });
+  assert.match(item(spent, "2026-10-06", "weekly")?.detail ?? "", /^MYR 40 spent this week/, "00:30 on Monday is this week, 23:30 on Sunday is not");
+  const prompt = buildCheckins(settled({ recurringTransactions: [], ledgerTransactions: [tx("income", 4500, localMidnight(2026, 9, 30))] }), day("2026-10-01")).payPrompt;
+  assert.equal(prompt?.dayOfMonth, 30);
+  assert.equal(prompt?.date, "2026-09-30");
+});
+
 // --- weekly -------------------------------------------------------------------
 
 test("checkins: the weekly look is due from Monday until confirmed, then waits for next Monday", () => {

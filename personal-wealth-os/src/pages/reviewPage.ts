@@ -22,6 +22,8 @@ import { getFinancialSnapshot, monthlyClose } from "../financialHealth";
 import { ledgerMonthTotals } from "../ledgerSummary";
 import { formatScore, scoreOutOfTen, upsertReview } from "../reviewScore";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
+import { answerPayPrompt, buildCheckins, confirmWeeklyCheck, isoDate, type Checkin, type CheckinBoard } from "../checkins";
+import { applyLedgerDraft } from "./ledgerPage";
 
 /** Open/closed state that survives a re-render. */
 let reviewFormOpen = false;
@@ -42,6 +44,38 @@ function monthName(monthKey: string, long = false): string {
   const [year, month] = monthKey.split("-").map(Number);
   if (!year || !month) return monthKey;
   return new Date(year, month - 1, 1).toLocaleDateString("en-MY", { month: long ? "long" : "short", year: "numeric" });
+}
+
+/*
+ * Check-ins (P-6a): payday, the weekly look and the month-end review, at the
+ * top of this page. Each due item has one button that does the thing; later
+ * items say when they open. The sidebar and the Overview only point here.
+ */
+function checkinButton(item: Checkin): string {
+  if (item.status !== "due") return "";
+  if (item.kind === "pay") return `<button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-checkin-pay="${escapeHtml(item.recurring?.id ?? "")}">Record ${escapeHtml(money(item.recurring?.amount ?? 0))}</button>`;
+  if (item.kind === "weekly") return `<button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-checkin-weekly>Looks right</button><button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-checkin-spend>Add missing spending</button>`;
+  return `<button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-checkin-review="${escapeHtml(item.month ?? "")}">Start review</button>`;
+}
+
+function checkinsCard(board: CheckinBoard): string {
+  if (board.hidden) return "";
+  const prompt = board.payPrompt;
+  return `<section class="wu-card wu-dash__full wu-checkins" aria-labelledby="checkinsLabel">
+      <div class="wu-tc__top"><span class="wu-label" id="checkinsLabel">Check-ins</span><span class="wu-chip${board.dueCount ? " wu-chip--warning" : ""}">${board.dueCount ? `${board.dueCount} due` : "All clear"}</span></div>
+      ${prompt ? `<div class="wu-checkins__prompt">
+        <p>You recorded ${escapeHtml(money(prompt.amount))} on ${escapeHtml(new Date(prompt.date + "T00:00").toLocaleDateString("en-MY", { day: "numeric", month: "short" }))}. Is ${escapeHtml(prompt.label.toLowerCase())} paid around the ${prompt.dayOfMonth}${prompt.dayOfMonth % 10 === 1 && prompt.dayOfMonth !== 11 ? "st" : prompt.dayOfMonth % 10 === 2 && prompt.dayOfMonth !== 12 ? "nd" : prompt.dayOfMonth % 10 === 3 && prompt.dayOfMonth !== 13 ? "rd" : "th"} every month?</p>
+        <div class="wu-row wu-row--tight"><button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-pay-prompt="yes">Yes, save as monthly income</button><button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-pay-prompt="no">It changes</button></div>
+      </div>` : ""}
+      <ul class="wu-checkins__list">
+        ${board.items.map((item) => `<li class="wu-checkin is-${item.status}">
+          <span class="wu-checkin__mark" aria-hidden="true">${item.status === "done" ? "✓" : ""}</span>
+          <span class="wu-checkin__text"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.detail)}</small></span>
+          <span class="visually-hidden">${item.status === "due" ? "Due now" : item.status === "done" ? "Done" : "Not open yet"}</span>
+          <span class="wu-checkin__actions">${checkinButton(item)}</span>
+        </li>`).join("")}
+      </ul>
+    </section>`;
 }
 
 export function reviewTemplate(state: WealthState): string {
@@ -101,6 +135,7 @@ export function reviewTemplate(state: WealthState): string {
         actions: toggle(""),
       })}
       <div class="wu-dash">
+        ${checkinsCard(buildCheckins(state))}
         <!-- ROW 1 (desktop) — this month's figures and the score -->
         <div class="wu-dash__full wu-dash__tiles wu-review-tiles">
           <section class="wu-card wu-dash__tile" aria-labelledby="revIncomeLabel">
@@ -189,6 +224,51 @@ export function bindReview(root: HTMLElement, state: WealthState, setState: Sett
       if (focusId) root.querySelector<HTMLElement>("#" + focusId)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
   };
+
+  // Check-ins (P-6a).
+  const openLedger = (type: "income" | "expense", amount: number, accountId?: string) => {
+    const category = type === "income"
+      ? state.ledgerCategories.find((item) => item.id === "income-salary") ?? state.ledgerCategories.find((item) => item.type === "income")
+      : undefined;
+    applyLedgerDraft({
+      kind: "ledger", type, amount,
+      categoryId: category?.id,
+      accountId: accountId ?? state.ledgerAccounts.find((item) => item.id === "account-bank")?.id,
+      date: isoDate(new Date()), note: "", unresolved: [], dropped: [],
+    });
+    if (navigate) navigate("ledger");
+    else rerender(root, state, setState, "ledger", navigate);
+  };
+  root.querySelectorAll<HTMLButtonElement>("[data-checkin-pay]").forEach((button) => button.addEventListener("click", () => {
+    const recurring = state.recurringTransactions.find((item) => item.id === button.dataset.checkinPay);
+    if (recurring) openLedger("income", recurring.amount, recurring.accountId);
+  }));
+  root.querySelector<HTMLButtonElement>("[data-checkin-spend]")?.addEventListener("click", () => openLedger("expense", 0));
+  root.querySelector<HTMLButtonElement>("[data-checkin-weekly]")?.addEventListener("click", () => {
+    const next = confirmWeeklyCheck(state);
+    setState(next, "Weekly check");
+    repaint(next);
+  });
+  root.querySelector<HTMLButtonElement>("[data-checkin-review]")?.addEventListener("click", (event) => {
+    const month = (event.currentTarget as HTMLButtonElement).dataset.checkinReview ?? "";
+    reviewFormOpen = true;
+    repaint(state, "reviewFormPanel");
+    // Early in a month the review is for the one that just ended: point the
+    // form at it, and let its change handler bring in that month's figures.
+    const input = root.querySelector<HTMLInputElement>('#reviewForm input[name="month"]');
+    if (input && month && input.value !== month) {
+      input.value = month;
+      input.dispatchEvent(new Event("change"));
+    }
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-pay-prompt]").forEach((button) => button.addEventListener("click", () => {
+    const prompt = buildCheckins(state).payPrompt;
+    if (!prompt) return;
+    const save = button.dataset.payPrompt === "yes";
+    const next = answerPayPrompt(state, prompt, save, createId("recurring"));
+    setState(next, save ? "Saved monthly income" : "Payday question answered");
+    repaint(next);
+  }));
 
   root.querySelectorAll<HTMLButtonElement>(".review-toggle").forEach((button) => button.addEventListener("click", () => {
     reviewFormOpen = !reviewFormOpen;
