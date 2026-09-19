@@ -1,4 +1,11 @@
-const CACHE_NAME = "wealth-os-v18";
+const CACHE_NAME = "wealth-os-v19";
+
+// How long opening the app waits for the network before it shows the copy
+// already on the phone. A connection that is up but not answering (weak
+// signal, Wi-Fi that has not finished connecting) never fails fast: without a
+// limit the screen stayed blank until the request gave up, often long enough
+// that people closed the app and opened it again.
+const NAVIGATION_TIMEOUT_MS = 3000;
 const PRECACHE = [
   "/",
   "/index.html",
@@ -52,8 +59,21 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Fetch - always check the network for navigation so a new deployment cannot
-// remain pinned to an old index.html and its old hashed asset references.
+// Navigation - the network's index.html when it answers in time, so a new
+// deployment is not pinned to an old index.html and its old hashed assets.
+// If it is slow, the cached copy opens the app now; the network answer is
+// still saved for the next launch. With nothing cached (first visit) there
+// is nothing to fall back to, so it waits as before.
+async function navigationResponse(network) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match("/index.html");
+  if (!cached) return network.catch(() => Response.error());
+  return Promise.race([
+    network.catch(() => cached),
+    new Promise((resolve) => setTimeout(() => resolve(cached), NAVIGATION_TIMEOUT_MS)),
+  ]);
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
@@ -61,20 +81,19 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
   if (url.origin === location.origin && event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", copy));
-          }
-          return response;
-        })
-        .catch(async () => {
-          const cache = await caches.open(CACHE_NAME);
-          return (await cache.match("/index.html")) || Response.error();
-        })
-    );
+    let saved = Promise.resolve();
+    const network = fetch(event.request).then((response) => {
+      if (response.ok) {
+        // Cloned before the page can start reading the body.
+        const copy = response.clone();
+        saved = caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", copy));
+      }
+      return response;
+    });
+    // Keep the worker alive until a late answer is saved, even when the
+    // cached copy was already shown.
+    event.waitUntil(network.then(() => saved).catch(() => {}));
+    event.respondWith(navigationResponse(network));
     return;
   }
 
