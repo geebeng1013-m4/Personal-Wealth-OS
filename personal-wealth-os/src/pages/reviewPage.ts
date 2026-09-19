@@ -58,23 +58,36 @@ function checkinButton(item: Checkin): string {
   return `<button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-checkin-review="${escapeHtml(item.month ?? "")}">Start review</button>`;
 }
 
+/**
+ * One line confirming what was just done, shown on the render right after it
+ * and then dropped: a finished check-in leaves the list, and this is how the
+ * user sees it counted.
+ */
+let justDone: string | null = null;
+
 function checkinsCard(board: CheckinBoard): string {
+  const acknowledged = justDone;
+  justDone = null;
   if (board.hidden) return "";
+  // Only what is due today (user decision 2026-09-20): nothing is listed
+  // before its day, and a finished item leaves the list.
+  const due = board.items.filter((item) => item.status === "due");
   const prompt = board.payPrompt;
+  if (!due.length && !prompt && !acknowledged) return "";
   return `<section class="wu-card wu-dash__full wu-checkins" aria-labelledby="checkinsLabel">
-      <div class="wu-tc__top"><span class="wu-label" id="checkinsLabel">Check-ins</span><span class="wu-chip${board.dueCount ? " wu-chip--warning" : ""}">${board.dueCount ? `${board.dueCount} due` : "All clear"}</span></div>
+      <div class="wu-tc__top"><span class="wu-label" id="checkinsLabel">Check-ins</span>${due.length ? `<span class="wu-chip wu-chip--warning">${due.length} due</span>` : ""}</div>
+      ${acknowledged ? `<p class="wu-checkins__done" role="status"><span aria-hidden="true">✓</span> ${escapeHtml(acknowledged)}</p>` : ""}
       ${prompt ? `<div class="wu-checkins__prompt">
         <p>You recorded ${escapeHtml(money(prompt.amount))} on ${escapeHtml(new Date(prompt.date + "T00:00").toLocaleDateString("en-MY", { day: "numeric", month: "short" }))}. Is ${escapeHtml(prompt.label.toLowerCase())} paid around the ${prompt.dayOfMonth}${prompt.dayOfMonth % 10 === 1 && prompt.dayOfMonth !== 11 ? "st" : prompt.dayOfMonth % 10 === 2 && prompt.dayOfMonth !== 12 ? "nd" : prompt.dayOfMonth % 10 === 3 && prompt.dayOfMonth !== 13 ? "rd" : "th"} every month?</p>
         <div class="wu-row wu-row--tight"><button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-pay-prompt="yes">Yes, save as monthly income</button><button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-pay-prompt="no">It changes</button></div>
       </div>` : ""}
-      <ul class="wu-checkins__list">
-        ${board.items.map((item) => `<li class="wu-checkin is-${item.status}">
-          <span class="wu-checkin__mark" aria-hidden="true">${item.status === "done" ? "✓" : ""}</span>
+      ${due.length ? `<ul class="wu-checkins__list">
+        ${due.map((item) => `<li class="wu-checkin is-due">
+          <span class="wu-checkin__mark" aria-hidden="true"></span>
           <span class="wu-checkin__text"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.detail)}</small></span>
-          <span class="visually-hidden">${item.status === "due" ? "Due now" : item.status === "done" ? "Done" : "Not open yet"}</span>
           <span class="wu-checkin__actions">${checkinButton(item)}</span>
         </li>`).join("")}
-      </ul>
+      </ul>` : ""}
     </section>`;
 }
 
@@ -247,6 +260,7 @@ export function bindReview(root: HTMLElement, state: WealthState, setState: Sett
   root.querySelector<HTMLButtonElement>("[data-checkin-weekly]")?.addEventListener("click", () => {
     const next = confirmWeeklyCheck(state);
     setState(next, "Weekly check");
+    justDone = "Weekly check done. The next one is on Monday.";
     repaint(next);
   });
   root.querySelector<HTMLButtonElement>("[data-checkin-review]")?.addEventListener("click", (event) => {
@@ -267,6 +281,9 @@ export function bindReview(root: HTMLElement, state: WealthState, setState: Sett
     const save = button.dataset.payPrompt === "yes";
     const next = answerPayPrompt(state, prompt, save, createId("recurring"));
     setState(next, save ? "Saved monthly income" : "Payday question answered");
+    justDone = save
+      ? `Saved as monthly income. You'll get a reminder around the ${prompt.dayOfMonth}${prompt.dayOfMonth % 10 === 1 && prompt.dayOfMonth !== 11 ? "st" : prompt.dayOfMonth % 10 === 2 && prompt.dayOfMonth !== 12 ? "nd" : prompt.dayOfMonth % 10 === 3 && prompt.dayOfMonth !== 13 ? "rd" : "th"}.`
+      : "Got it. No payday reminder.";
     repaint(next);
   }));
 
