@@ -88,7 +88,7 @@ P-5 页面按需加载：用户决定先不做。
 ### P-5 — 页面按需加载  （2026-09-19 用户决定先不做）
 - 每个页面第一次打开时才下载，页面切换改成异步；主程序现在 501 KB（gzip 149 KB）。逐页实测。
 
-### P-6a — app 内节奏提醒  `[x]`（2026-09-20，分支 `p6a-checkins`，PR 待检查）
+### P-6a — app 内节奏提醒  `[x]`（2026-09-20，PR #95 已合并上线，`main` = `98a2f19`）
 - **家**：现有 Review 页（Monthly check-in）最上面加「Check-ins」区块：发薪、每周、月底三种。到期的有按钮；没到的写「Opens Oct 29」「Next one on Monday」；做完打勾。月底那项接着填原本的月度 Review 表单。
 - **入口（2026-09-19 选 A）**：侧栏 Review 下面的灰色小字 "Monthly check-in" 有待办时变成绿色 "2 check-ins due"；不用红点、不用数字。手机 More 上一个小绿点，More 页里 Review 同样换小字。
 - **Overview 只有一行**「2 check-ins due →」，点了去 Review；没有待办不出现（遵守 Overview 只放状态）。
