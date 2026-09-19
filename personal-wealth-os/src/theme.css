@@ -336,17 +336,19 @@
      ::-webkit-scrollbar once that property is set, so it gets the pseudo-
      elements only; the standard properties are for browsers without them. */
   @media (hover: hover) and (pointer: fine) {
+    /* 7px track, 1px clear on each side: a 5px thumb, the width of the
+       sidebar and page overlay thumbs. */
     body *::-webkit-scrollbar {
-      width: 10px;
-      height: 10px;
+      width: 7px;
+      height: 7px;
     }
     body *::-webkit-scrollbar-track,
     body *::-webkit-scrollbar-corner {
       background: transparent;
     }
     body *::-webkit-scrollbar-thumb {
-      border: 2px solid transparent;
-      border-radius: 10px;
+      border: 1px solid transparent;
+      border-radius: 7px;
       background: var(--scrollbar-thumb) padding-box;
     }
     body *::-webkit-scrollbar-thumb:hover {
