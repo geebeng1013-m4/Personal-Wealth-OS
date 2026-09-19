@@ -6,6 +6,7 @@ import { normalizeCurrencyExchanges } from "./currencyExchange";
 import { normalizeTradeMarket } from "./tradeCurrency";
 import { normalizeDividends } from "./dividends";
 import { normalizeOnboardingAnswers } from "./onboardingQuiz";
+import { EMPTY_CHECKIN_STATE, normalizeCheckinState } from "./checkins";
 import {
   saveToFirestore,
   loadFromFirestore,
@@ -13,7 +14,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 26;
+export const CURRENT_VERSION = 27;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -261,6 +262,7 @@ export const defaultState: WealthState = {
   financialGoal: "",
   onboardingDone: false,
   onboardingAnswers: null,
+  checkins: { ...EMPTY_CHECKIN_STATE },
 };
 
 // Derived from defaultState's own planning config so the seed rules and the
@@ -375,6 +377,7 @@ export function emptyState(): WealthState {
     financialGoal: "",
     onboardingDone: false,
     onboardingAnswers: null,
+    checkins: { ...EMPTY_CHECKIN_STATE },
   };
   // A brand-new user has no planning values yet, so these seed rules are
   // mostly disabled placeholders — present and valid, but asserting nothing.
@@ -673,6 +676,9 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   // (null), which only shows the quiz to an account that is still empty (see
   // shouldShowOnboardingQuiz); a stored answer set is tidied, never dropped.
   merged.onboardingAnswers = normalizeOnboardingAnswers(candidate.onboardingAnswers);
+  // v27: the check-ins' memory. Purely additive — older data starts with no
+  // weekly look and the payday question unasked; a stored value is tidied.
+  merged.checkins = normalizeCheckinState(candidate.checkins);
   const requestedOverviewGoalId = typeof candidate.overviewGoalId === "string" ? candidate.overviewGoalId : "";
   merged.overviewGoalId = merged.goals.some((goal) => goal.id === requestedOverviewGoalId)
     ? requestedOverviewGoalId
