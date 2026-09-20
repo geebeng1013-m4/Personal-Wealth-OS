@@ -253,6 +253,35 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 
 - PR #34 待你 review/merge。合并后：Wealth Vault 的 AI/OCR 取舍还没讨论出结论，其余产品打磨项由你定。
 
+## 两台设备不同步（T 系列，2026-09-20）
+
+你报告：电脑输入的 transaction 手机收不到，手机输入的电脑也收不到，**reload 也一样**。
+
+**根因**：`saveState` 把 `updatedAt` 盖在一个**新对象**上并持久化，但 `main.ts` 的 `setState` 内存里
+留着盖章前那份。`handleCloudSnapshot` 拿内存里那个旧 `updatedAt` 去比服务器回传的值，永远对不上，
+于是把「服务器确认了**本机自己的**写入」误判成「别台机器改了」（`apply-remote` 而不是
+`record-sync-point`）。`lastSyncedAt` 因此永不前进，从**第一笔编辑开始**这台机器就永久处于
+`updatedAt !== lastSyncedAt`，之后每次加载都走 `local-kept-newer`：拒收云端副本，并把自己那份
+推上去盖掉另一台的。**谁最后打开，谁的账留下。**
+
+这不是「没同步」，是**静默的数据覆盖**。
+
+**测试为什么没抓到**：`tests/cloudSync.test.ts` 每条都通过 —— 它们喂给 `reconcileCloudSnapshot`
+的 `local` 都是直接从 storage 读的，天然和写入的一致。断的是**两个零件之间的接缝**，没有测试覆盖。
+
+| PR | 内容 | 状态 |
+|---|---|---|
+| #97 | **T1**：`saveState` 返回它实际写下的那份，两个调用点都改成采用返回值 | merged |
+| #99 | **T2**：`adoptRemoteState` + `apply-remote` 真的上屏；聚焦输入框时延后重画 | merged（原 #98 因 rebase 冲突关闭） |
+
+- 新增 `tests/twoDeviceSync.test.ts`，并**先用旧写法跑过一遍确认它会失败**（报错正是线上观察到的 `apply-remote`）。
+- T2 的重画守卫在真实 DOM 上验过：空闲→重画、焦点在 `#ledgerAmount`→延后、失焦→重画，控制台零错误。
+- **未覆盖**：没有用两台真实登录设备跑端到端（demo 模式跳过 Firebase）。Firestore 的实际推送没被测到。
+
+**T3（进行中）**：两台机器在旧 bug 下都已被标记为「脏」，#97 上线后每台第一次加载还会把本地副本
+再推上云一次。只存在于另一台上的交易可能被最后覆盖一次。需要从两台各导出一份对比合并。
+比对/合并脚本已写好（会报告「只在 A / 只在 B / 有冲突」，不自动替用户决定），等你的导出文件。
+
 ## FUTURE IDEAS / 待清
 
 - `functions/` 的 `firebase-functions` 版本偏旧，部署时 CLI 提示升级（有破坏性变更，单独做）。
