@@ -865,6 +865,35 @@ export function recordCloudSyncPoint(uid: string, syncedUpdatedAt: number): Weal
 }
 
 /**
+ * Take a server-confirmed copy written by another device as this device's own.
+ *
+ * Only called for the `apply-remote` decision, which already established that
+ * this device has nothing unsynced — so everything being replaced is already
+ * on the server and there is nothing to snapshot. (loadStateFromCloud does
+ * snapshot, because it can also run against a local copy whose sync state is
+ * unknown.)
+ *
+ * Writes localStorage only, never Firestore, so it cannot loop with saveState.
+ * The copy arrived server-confirmed and this device was clean, so its
+ * `updatedAt` is by definition a sync point here too.
+ *
+ * A failed local write still returns the state: it is the correct copy, the
+ * screen should show it, and the next load reads it from the cloud again.
+ */
+export function adoptRemoteState(uid: string, remote: WealthState): WealthState {
+  const next = { ...remote, lastSyncedAt: remote.updatedAt };
+  try {
+    localStorage.setItem(getUserStorageKey(uid), JSON.stringify(next));
+  } catch (err) {
+    console.error("[adoptRemoteState] localStorage write failed:", err);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("pwo-save-error", { detail: { message: "A change from another device could not be cached locally." } }));
+    }
+  }
+  return next;
+}
+
+/**
  * What a cloud round-trip concluded.
  *
  * `state` is the copy the app should be on. It is null only when Firestore held
