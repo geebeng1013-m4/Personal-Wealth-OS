@@ -729,8 +729,23 @@ export function loadState(uid?: string): WealthState {
   }
 }
 
-export function saveState(state: WealthState, uid?: string, changeLabel?: string): void {
-  if (!uid) return; // Don't save to global key — prevents cross-user contamination
+/**
+ * Persist a state and hand back the copy that was actually written.
+ *
+ * The return value is not a convenience: `updatedAt` is stamped *here*, on a
+ * new object, so the caller's own copy does not carry it. A caller that keeps
+ * its pre-save object in memory is then permanently out of step with the
+ * stored one — and `reconcileCloudSnapshot` compares the in-memory `updatedAt`
+ * against the server's. Mismatched, it never recognises the server confirming
+ * this device's own write, so `lastSyncedAt` never advances, the device reads
+ * as "has unsynced edits" forever, and from then on it refuses every cloud
+ * copy and re-pushes its own over the other device's. Callers must adopt what
+ * this returns.
+ *
+ * Returns null when nothing was written: no uid, or the local write failed.
+ */
+export function saveState(state: WealthState, uid?: string, changeLabel?: string): WealthState | null {
+  if (!uid) return null; // Don't save to global key — prevents cross-user contamination
 
   // Auto-save snapshot of previous state before overwriting
   if (changeLabel) {
@@ -752,7 +767,7 @@ export function saveState(state: WealthState, uid?: string, changeLabel?: string
     // localStorage quota exceeded or serialization failure — surface to UI
     console.error("[saveState] localStorage write failed:", err);
     window.dispatchEvent(new CustomEvent("pwo-save-error", { detail: { message: "Local storage save failed. Data may not persist." } }));
-    return;
+    return null;
   }
   // Also sync to Firestore if logged in
   const user = currentUser();
@@ -762,6 +777,7 @@ export function saveState(state: WealthState, uid?: string, changeLabel?: string
       window.dispatchEvent(new CustomEvent("pwo-save-error", { detail: { message: "Cloud sync failed. Local copy is safe." } }));
     });
   }
+  return persisted;
 }
 
 type SyncTimes = Pick<WealthState, "updatedAt" | "lastSyncedAt">;
