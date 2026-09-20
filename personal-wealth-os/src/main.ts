@@ -13,7 +13,7 @@ import "./shell.css";
 import "./components/assistant/assistant.css";
 import "./legacy-tail.css";
 import type { WealthState } from "./models";
-import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint, createId, cloudLoadNeedsRender } from "./state";
+import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint, adoptRemoteState, createId, cloudLoadNeedsRender } from "./state";
 import { renderApp } from "./ui";
 import { onAuth, preloadFirestore, signInWithGoogle, handleRedirectResult, logOut, subscribeToFirestore, loadAssistantHistory, saveAssistantHistory, type CloudSnapshot } from "./firebase";
 import { setAssistantOwner } from "./components/assistant/assistantStore";
@@ -208,6 +208,8 @@ function navigate(page: string): void {
 
 /** The signed-in screen: the first-run Q&A for an untouched new account, otherwise the app. */
 function renderSignedIn(user: User): void {
+  // Whatever brought us here, the screen is about to show the current `state`.
+  screenIsStale = false;
   if (!quizAllowed || !shouldShowOnboardingQuiz(state)) {
     renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
     return;
@@ -282,10 +284,57 @@ function handleCloudSnapshot(uid: string, snap: CloudSnapshot): void {
   }
 
   // action === "apply-remote": another device changed the data and this device
-  // is clean. Deliberately do nothing on screen — no interruption. The next
-  // reload or sign-in runs loadStateFromCloud, which takes the cloud copy
-  // cleanly, so nothing is lost, only deferred.
+  // is clean, so the remote copy is strictly ahead of everything here. Adopt
+  // it right away — memory and local storage both — and put it on screen at
+  // the next moment that will not interrupt the user.
+  state = adoptRemoteState(uid, remote);
+  screenIsStale = true;
+  const user = currentUser;
+  if (user) showCurrentStateWhenUndisturbed(user);
 }
+
+/**
+ * True while the screen is older than `state` — a change from another device
+ * has been adopted but not yet drawn.
+ */
+let screenIsStale = false;
+
+/**
+ * Draw the current state, unless doing so would interrupt the user.
+ *
+ * renderApp replaces root.innerHTML wholesale (see ui.ts), so rebuilding while
+ * a field has focus throws away half-entered input and the caret with it, and
+ * the ledger's entry form only captures its draft when the type is switched.
+ * A change from another device is never worth that, so the rebuild waits for a
+ * moment when nothing inside the app holds focus.
+ *
+ * Nothing is lost by waiting: `state` and local storage already hold the
+ * remote copy, so an edit made on the stale screen is applied on top of it,
+ * and that edit's own re-render shows both.
+ */
+function showCurrentStateWhenUndisturbed(user: User): void {
+  if (!screenIsStale) return;
+  const focused = document.activeElement;
+  if (root && focused instanceof HTMLElement && focused !== root && root.contains(focused)) return;
+  // A rebuild starts the page from the top; the reader was not necessarily there.
+  const scrollY = window.scrollY;
+  renderSignedIn(user);
+  window.scrollTo(0, scrollY);
+}
+
+// Catching up a screen that stayed stale: when the user comes back to this
+// device (tab visible again, window refocused) and after any click, which runs
+// late enough that the app's own handlers — and any re-render they already
+// did — have gone first.
+function catchUpStaleScreen(): void {
+  if (!screenIsStale || document.visibilityState !== "visible") return;
+  const user = currentUser;
+  if (user) showCurrentStateWhenUndisturbed(user);
+}
+
+document.addEventListener("visibilitychange", catchUpStaleScreen);
+window.addEventListener("focus", catchUpStaleScreen);
+document.addEventListener("click", () => { setTimeout(catchUpStaleScreen, 0); });
 
 // A hint, not a credential: it only decides what shows while Firebase checks
 // the real session. index.html reads the same key to pick its skeleton.
