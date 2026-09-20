@@ -5,6 +5,7 @@ import {
   hasUnsyncedLocalEdits,
   reconcileCloudSnapshot,
   recordCloudSyncPoint,
+  saveState,
   loadStateFromCloud,
   migrateState,
   loadSnapshots,
@@ -300,6 +301,75 @@ test("cloud sync: resolving the conflict never writes to Firestore on its own", 
   await loadStateFromCloud();
 
   assert.equal(saved.length, 0);
+});
+
+// --- the save -> reconcile handoff ------------------------------------------
+//
+// Everything above feeds reconcileCloudSnapshot a `local` read straight from
+// storage, so it always agreed with what was written. The app does not: it
+// holds a state object in memory and hands a copy to saveState, which stamps
+// `updatedAt` on a copy of its own. These tests pin the handoff between the
+// two, which is where the two-device sync actually broke — a device that
+// saved one edit then never recognised its own write coming back, never
+// advanced lastSyncedAt, and from then on refused every cloud copy and
+// re-pushed its own over the other device's.
+
+test("save -> reconcile: the copy saveState returns carries the stamped updatedAt", () => {
+  startClean();
+  const inMemory = stateWith(1_000, "t", 1_000);
+  const written = saveState(inMemory, UID);
+
+  assert.ok(written, "saveState must hand back the copy it wrote");
+  assert.notEqual(written.updatedAt, inMemory.updatedAt, "the stamp lands on a different object");
+  assert.equal(
+    (JSON.parse(localStorage.getItem(KEY)!) as WealthState).updatedAt,
+    written.updatedAt,
+    "what is returned must be what is in storage",
+  );
+  assert.equal(saved.at(-1)?.state.updatedAt, written.updatedAt, "...and what went to the cloud");
+});
+
+test("save -> reconcile: adopting the returned copy lets the device go clean again", () => {
+  startClean();
+  // One edit saved, then the server echoes that same document back.
+  const written = saveState(stateWith(1_000, "t", 1_000), UID)!;
+
+  const action = reconcileCloudSnapshot(written, {
+    updatedAt: written.updatedAt,
+    hasPendingWrites: false,
+    fromCache: false,
+  });
+
+  assert.equal(action, "record-sync-point");
+  const marked = recordCloudSyncPoint(UID, written.updatedAt);
+  assert.equal(marked?.lastSyncedAt, written.updatedAt);
+  assert.equal(hasUnsyncedLocalEdits(marked!), false, "the device must end the round trip clean");
+});
+
+test("save -> reconcile: keeping the pre-save copy strands the device as dirty", () => {
+  // The regression itself, kept as a test because the symptom was silent and
+  // expensive: nothing errors, the write succeeds, and the device simply stops
+  // accepting the other one's data from that point on.
+  startClean();
+  const inMemory = stateWith(1_000, "t", 1_000);
+  saveState(inMemory, UID);
+
+  // A caller that keeps `inMemory` misreads the server confirming its OWN
+  // write as a remote change...
+  assert.equal(
+    reconcileCloudSnapshot(inMemory, {
+      updatedAt: (JSON.parse(localStorage.getItem(KEY)!) as WealthState).updatedAt,
+      hasPendingWrites: false,
+      fromCache: false,
+    }),
+    "apply-remote",
+    "the sync point is missed",
+  );
+  // ...so lastSyncedAt is never advanced, and the stored copy stays dirty for
+  // good: every later load keeps local and pushes it over the cloud.
+  const stored = JSON.parse(localStorage.getItem(KEY)!) as WealthState;
+  assert.equal(hasUnsyncedLocalEdits(stored), true);
+  assert.equal(cloudCopyWins(stored, { updatedAt: 9_000, lastSyncedAt: 9_000 }), false);
 });
 
 // A snapshot written by this file must not leak into another suite's fixtures.

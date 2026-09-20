@@ -191,7 +191,12 @@ function setState(next: WealthState, changeLabel?: string): void {
   // Only persist if a user is logged in (prevent saving to global key)
   const user = currentUser;
   if (user) {
-    saveState(next, user.uid, changeLabel);
+    // Adopt the saved copy, not `next`: saveState stamps `updatedAt` on a copy
+    // of its own, and handleCloudSnapshot matches that value against the one
+    // the server echoes back to decide the write is confirmed. Keeping `next`
+    // here leaves the two permanently apart, so the confirmation is never
+    // recognised and the device stays "dirty" forever (see saveState).
+    state = saveState(next, user.uid, changeLabel) ?? next;
   }
 }
 
@@ -418,7 +423,7 @@ async function handleAuth(user: User | null): Promise<void> {
       } else {
         // Brand new user — push fresh empty state to cloud
         state = emptyState();
-        saveState(state, user.uid);
+        state = saveState(state, user.uid) ?? state;
         await syncLocalToCloud(state);
         if (requestId !== authRequestId || currentUser?.uid !== user.uid) return;
         renderSignedIn(user);
