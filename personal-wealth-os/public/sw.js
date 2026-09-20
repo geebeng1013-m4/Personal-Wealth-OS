@@ -121,11 +121,19 @@ self.addEventListener("activate", (event) => {
 // a cached shell this cache cannot run, there is nothing safe to fall back to,
 // so it waits for the network as before.
 async function navigationResponse(network) {
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match("/index.html");
-  if (!cached || !(await shellIsBootable(cache, cached))) {
-    return network.catch(() => cached || Response.error());
+  // Nothing about reading the cache may stop the app opening, so any failure
+  // in here — storage blocked, a body that will not decode — leaves the
+  // network in charge rather than rejecting respondWith, which would hand the
+  // user a browser error page instead of the app.
+  let cached = null;
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const shell = await cache.match("/index.html");
+    if (shell && (await shellIsBootable(cache, shell))) cached = shell;
+  } catch {
+    cached = null;
   }
+  if (!cached) return network.catch(() => Response.error());
   return Promise.race([
     network.catch(() => cached),
     new Promise((resolve) => setTimeout(() => resolve(cached), NAVIGATION_TIMEOUT_MS)),
@@ -158,7 +166,10 @@ self.addEventListener("fetch", (event) => {
   // Versioned local assets can render immediately while refreshing in the background.
   if (url.origin === location.origin) {
     let background = Promise.resolve();
-    const served = caches.open(CACHE_NAME).then(async (cache) => {
+    const served = caches.open(CACHE_NAME).catch(() => null).then(async (cache) => {
+      // Storage the browser will not open is a reason to go to the network,
+      // not a reason to fail the request.
+      if (!cache) return fetch(event.request);
       const cached = await cache.match(event.request);
       if (cached && isUsableAsset(url.pathname, cached)) {
         background = fetch(event.request)
