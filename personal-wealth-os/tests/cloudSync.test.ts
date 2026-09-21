@@ -82,11 +82,16 @@ test("cloudCopyWins: with no local copy at all, the cloud is taken", () => {
 // Once a sync point exists, the decision is skew-proof: it only asks whether
 // local has edits the server has not confirmed, never which clock is bigger.
 
-test("cloudCopyWins: a clean local copy yields to the cloud even if its clock is behind", () => {
-  // Local was confirmed on the server at updatedAt 9000; the cloud doc a
-  // remote device wrote claims updatedAt 1000. Old logic kept local; the new
-  // logic takes the cloud, because local has nothing unsynced to lose.
-  assert.equal(cloudCopyWins({ updatedAt: 9_000, lastSyncedAt: 9_000 }, { updatedAt: 1_000, lastSyncedAt: 1_000 }), true);
+test("cloudCopyWins: a clean local copy still refuses an OLDER cloud copy", () => {
+  // This asserted the opposite until 2026-09-21, on the reasoning that a device
+  // with a sync point holds nothing the server lacks. `lastSyncedAt` is stamped
+  // by loadStateFromCloud and adoptRemoteState too, so "clean" is not that
+  // proof — and one stale device rolled the user's ledger back eight days.
+  assert.equal(cloudCopyWins({ updatedAt: 9_000, lastSyncedAt: 9_000 }, { updatedAt: 1_000, lastSyncedAt: 1_000 }), false);
+});
+
+test("cloudCopyWins: a clean local copy takes a NEWER cloud copy", () => {
+  assert.equal(cloudCopyWins({ updatedAt: 1_000, lastSyncedAt: 1_000 }, { updatedAt: 9_000, lastSyncedAt: 9_000 }), true);
 });
 
 test("cloudCopyWins: a dirty local copy is kept even if the cloud clock is ahead", () => {
@@ -252,13 +257,25 @@ test("cloud sync: an unreadable local copy does not block the cloud one", async 
 
 // --- dirty flag through the full load path --------------------------------
 
-test("cloud sync: a CLEAN local copy yields to an older-clock cloud, and is snapshotted", async () => {
-  // Local was confirmed synced at updatedAt 9000; a remote device then wrote a
-  // doc its own (slower) clock stamped 1000. Old rule kept local; new rule
-  // takes the cloud, because local has nothing unsynced to lose.
+test("cloud sync: a CLEAN local copy is kept against an OLDER cloud copy", async () => {
+  // The loss of 2026-09-21, through the reload path: a device left stranded by
+  // the pre-#97 bug pushed a copy eight days old, and the clean devices took
+  // it. Local is newer, so it is kept and pushed up instead.
   startClean();
   localStorage.setItem(KEY, JSON.stringify(stateWith(9_000, "clean-local", 9_000)));
-  setCloudDocument(stateWith(1_000, "remote-write", 1_000));
+  setCloudDocument(stateWith(1_000, "stale-remote-write", 1_000));
+
+  const result = await loadStateFromCloud();
+
+  assert.equal(result.outcome, "local-kept-newer");
+  assert.deepEqual(tradeIds(result.state!), ["clean-local"]);
+  assert.deepEqual(localTradeIds(), ["clean-local"], "local storage must be left untouched");
+});
+
+test("cloud sync: a CLEAN local copy yields to a NEWER cloud copy, and is snapshotted", async () => {
+  startClean();
+  localStorage.setItem(KEY, JSON.stringify(stateWith(1_000, "clean-local", 1_000)));
+  setCloudDocument(stateWith(9_000, "remote-write", 9_000));
 
   const result = await loadStateFromCloud();
 

@@ -802,19 +802,30 @@ export function hasUnsyncedLocalEdits(local: SyncTimes): boolean {
 /**
  * Whether the cloud copy should replace the local one on load.
  *
- *   - No local copy → take the cloud.
- *   - Local has a sync point (`lastSyncedAt > 0`) → the skew-proof rule: keep
- *     local only if it has unsynced edits; otherwise everything it holds is
- *     already on the server and taking the server's copy back is lossless. No
- *     device clocks are compared.
- *   - Local has no sync point yet (pre-v20 data on its first load after the
- *     upgrade) → fall back to the old rule, `cloud.updatedAt >= local.updatedAt`.
- *     This is the one window where a skewed clock can still matter; it closes
- *     as soon as the first confirmed sync writes a real `lastSyncedAt`.
+ * Two conditions, both required:
+ *
+ *   - Local must have nothing unsynced. Edits the server never confirmed are
+ *     never thrown away for a cloud copy, whatever either clock says.
+ *   - The cloud copy must not be OLDER than the local one. A copy older than
+ *     what is here can only remove records, never add any.
+ *
+ * The second condition used to be skipped once `lastSyncedAt > 0`, on the
+ * reasoning that a device with a sync point holds nothing the server lacks, so
+ * taking the server's copy back is lossless and no clocks need comparing. That
+ * held only as long as `lastSyncedAt` really meant "confirmed on the server" —
+ * and this very function also stamps it (see below), as does
+ * adoptRemoteState. A device can therefore read as clean while holding work the
+ * server never received, which is exactly what the pre-#97 sync bug left on
+ * every existing device. One of them pushing a copy from eight days earlier was
+ * enough to roll the others back.
+ *
+ * The cost is that a badly skewed device clock can now stall a real update
+ * instead of losing one: the two devices push at each other until the newer
+ * stamp wins. Losing an update to a stall is recoverable. Losing records is not.
  */
 export function cloudCopyWins(local: SyncTimes | null, cloud: SyncTimes): boolean {
   if (!local) return true;
-  if (local.lastSyncedAt > 0) return !hasUnsyncedLocalEdits(local);
+  if (hasUnsyncedLocalEdits(local)) return false;
   return cloud.updatedAt >= local.updatedAt;
 }
 
