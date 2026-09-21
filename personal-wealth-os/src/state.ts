@@ -830,6 +830,9 @@ export function cloudCopyWins(local: SyncTimes | null, cloud: SyncTimes): boolea
  *   apply-remote      — another device changed the doc and this device is
  *                       clean. The remote state should replace the local one.
  */
+/** Version History label for either path that replaces local data with the cloud's. */
+export const CLOUD_REFRESH_SNAPSHOT_LABEL = "Before cloud data refresh";
+
 export type CloudSnapshotAction = "ignore" | "record-sync-point" | "push-local" | "apply-remote";
 
 export function reconcileCloudSnapshot(
@@ -839,6 +842,16 @@ export function reconcileCloudSnapshot(
   if (snap.hasPendingWrites || snap.fromCache) return "ignore";
   if (snap.updatedAt === local.updatedAt) return "record-sync-point";
   if (hasUnsyncedLocalEdits(local)) return "push-local";
+  // A copy older than what is here can only remove records, never add any.
+  //
+  // "Clean" is supposed to mean "everything local is already on the server, so
+  // taking the server's copy back is lossless". It is only as good as
+  // `lastSyncedAt`, and that stamp is also set by loadStateFromCloud — so a
+  // device can read as clean while holding weeks of work the server never got.
+  // That is exactly what the sync bug fixed in #97 left behind on every
+  // existing device, and one of them pushing its stale copy up was enough to
+  // wipe the others. Push ours instead and let the newer copy win.
+  if (snap.updatedAt < local.updatedAt) return "push-local";
   return "apply-remote";
 }
 
@@ -867,11 +880,17 @@ export function recordCloudSyncPoint(uid: string, syncedUpdatedAt: number): Weal
 /**
  * Take a server-confirmed copy written by another device as this device's own.
  *
- * Only called for the `apply-remote` decision, which already established that
- * this device has nothing unsynced — so everything being replaced is already
- * on the server and there is nothing to snapshot. (loadStateFromCloud does
- * snapshot, because it can also run against a local copy whose sync state is
- * unknown.)
+ * The local copy is snapshotted first, under the same label the reload path
+ * uses, so the replacement is recoverable from Version History.
+ *
+ * It did not, originally: `apply-remote` means this device reads as clean, and
+ * the reasoning was that everything being replaced is therefore already on the
+ * server. That reasoning cost the author of this app the better part of a
+ * week's ledger. `lastSyncedAt` is also stamped by loadStateFromCloud, so
+ * "clean" is not proof the server has the data, and before this function
+ * existed `apply-remote` did nothing at all — the overwrite only happened on
+ * reload, through loadStateFromCloud, which does snapshot. Taking a snapshot
+ * costs one slot of a 20-slot history; not taking one cost real records.
  *
  * Writes localStorage only, never Firestore, so it cannot loop with saveState.
  * The copy arrived server-confirmed and this device was clean, so its
@@ -882,6 +901,12 @@ export function recordCloudSyncPoint(uid: string, syncedUpdatedAt: number): Weal
  */
 export function adoptRemoteState(uid: string, remote: WealthState): WealthState {
   const next = { ...remote, lastSyncedAt: remote.updatedAt };
+  const previousRaw = localStorage.getItem(getUserStorageKey(uid));
+  if (previousRaw) {
+    try {
+      saveSnapshot(migrateState(JSON.parse(previousRaw) as Partial<WealthState>), CLOUD_REFRESH_SNAPSHOT_LABEL, uid);
+    } catch { /* an unreadable local copy is not worth blocking the good one */ }
+  }
   try {
     localStorage.setItem(getUserStorageKey(uid), JSON.stringify(next));
   } catch (err) {
@@ -950,7 +975,7 @@ export async function loadStateFromCloud(): Promise<CloudSyncResult> {
   // and snapshotting that on every launch would push real history out of the
   // 20-slot budget.
   if (local && local.updatedAt !== cloud.updatedAt) {
-    saveSnapshot(local, "Before cloud data refresh", user.uid);
+    saveSnapshot(local, CLOUD_REFRESH_SNAPSHOT_LABEL, user.uid);
   }
   // Taking the server's copy: its updatedAt is, by definition, now a confirmed
   // sync point for this device.

@@ -283,10 +283,11 @@ function handleCloudSnapshot(uid: string, snap: CloudSnapshot): void {
     return;
   }
 
-  // action === "apply-remote": another device changed the data and this device
-  // is clean, so the remote copy is strictly ahead of everything here. Adopt
-  // it right away — memory and local storage both — and put it on screen at
-  // the next moment that will not interrupt the user.
+  // action === "apply-remote": another device changed the data, this device is
+  // clean, and the remote copy is not older than this one — reconcileCloudSnapshot
+  // checks that last part, which this comment once only assumed. Adopt it —
+  // memory and local storage both, snapshotting what it replaces — and put it on
+  // screen at the next moment that will not interrupt the user.
   state = adoptRemoteState(uid, remote);
   screenIsStale = true;
   const user = currentUser;

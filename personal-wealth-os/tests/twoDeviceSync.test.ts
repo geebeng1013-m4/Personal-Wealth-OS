@@ -86,7 +86,11 @@ test("two devices: the phone shows the PC's trade without a reload", async () =>
   assert.deepEqual(loadState(UID).trades.map((t) => t.id), ["typed-on-pc"], "and in storage, so a reload agrees");
   assert.equal(hasUnsyncedLocalEdits(adopted), false, "adopting leaves the phone clean, not dirty");
   assert.equal(saved.length, 1, "adopting must not write back to Firestore — that would loop");
-  assert.equal(loadSnapshots(UID).length, 0, "a clean device had nothing to lose, so no snapshot slot is burnt");
+  // This assertion used to read "a clean device had nothing to lose, so no
+  // snapshot slot is burnt". It was wrong, and it guarded the decision that
+  // let a stale cloud copy erase eight days of the user's ledger with no way
+  // back. A replaced copy is always worth one of the twenty slots.
+  assert.equal(loadSnapshots(UID).length, 1, "the replaced copy stays recoverable");
 
   reset(); clearSnapshots(UID); localStorage.clear();
 });
