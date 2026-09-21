@@ -282,6 +282,36 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 再推上云一次。只存在于另一台上的交易可能被最后覆盖一次。需要从两台各导出一份对比合并。
 比对/合并脚本已写好（会报告「只在 A / 只在 B / 有冲突」，不自动替用户决定），等你的导出文件。
 
+## #99 造成真实数据丢失 → #100 / #101(2026-09-21)
+
+用户报告 **13 Sep 之后的交易全部消失**(17 笔)。原因是前一天合并的 #99。
+
+1. `reconcileCloudSnapshot` 只凭「云端文档不同 + 本地干净」就返回 `apply-remote`，
+   **从不检查云端那份是否更新**。#99 自己的注释写着 "the remote copy is strictly ahead
+   of everything here" —— 没有任何代码验证过这句话。
+2. `adoptRemoteState` 刻意**跳过快照**，理由是「干净的设备没东西可丢」。但「干净」＝
+   `updatedAt === lastSyncedAt`，而 `lastSyncedAt` **也会被 `loadStateFromCloud` 和
+   `adoptRemoteState` 自己盖上** —— 设备可以显示干净，同时握着服务器从没收到的数据。
+   这正是 #97 之前的 bug 在每台在用设备上留下的状态；**#99 的 PR 说明里自己写明了这个
+   风险仍未解决（T3），却同时拆掉了唯一能兜住它的保险。**
+3. #99 之前 `apply-remote` 什么都不做，覆盖只发生在 reload 时经由 `loadStateFromCloud` ——
+   而那条路**会先存快照**。
+4. `tests/twoDeviceSync.test.ts` 里有一句 `assert.equal(loadSnapshots(UID).length, 0)` ——
+   它的作用就是**守护那个错误决定**。
+
+一台停在 9/13 的设备把旧副本推上云，其余设备立刻抄下来覆盖本地，无快照可回。
+
+| PR | 内容 | 状态 |
+|---|---|---|
+| #100 | 比本地旧的云端副本改判 `push-local`；`adoptRemoteState` 覆盖前必存快照；修正那条错误断言 | merged，已上线（`index-Mc4jrPMI.js`） |
+| #101 | reload 路径（`cloudCopyWins`）的同一个洞：干净的本地副本不再接受**更旧**的云端副本 | 待 merge |
+
+**#101 的取舍（用户已确认）**：设备时钟偏差大时，更新可能被拖住（两台互推直到较新的时间戳胜出），
+而不是丢记录。**被拖住的更新可以恢复，被删掉的记录不行。**
+
+**教训**：任何可能替换用户数据的代码路径，都必须先存快照。不要用「另一条路径也会写的标志位」
+推理出「这里不需要保险」。这次能恢复，只是因为磁盘上刚好躺着一份导出。
+
 ## FUTURE IDEAS / 待清
 
 - `functions/` 的 `firebase-functions` 版本偏旧，部署时 CLI 提示升级（有破坏性变更，单独做）。
