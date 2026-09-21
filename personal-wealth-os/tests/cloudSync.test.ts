@@ -6,6 +6,8 @@ import {
   reconcileCloudSnapshot,
   recordCloudSyncPoint,
   saveState,
+  adoptRemoteState,
+  saveSnapshot,
   loadStateFromCloud,
   migrateState,
   loadSnapshots,
@@ -370,6 +372,47 @@ test("save -> reconcile: keeping the pre-save copy strands the device as dirty",
   const stored = JSON.parse(localStorage.getItem(KEY)!) as WealthState;
   assert.equal(hasUnsyncedLocalEdits(stored), true);
   assert.equal(cloudCopyWins(stored, { updatedAt: 9_000, lastSyncedAt: 9_000 }), false);
+});
+
+// --- an older cloud copy must never be adopted ------------------------------
+//
+// The regression that cost a week of the user's ledger. `apply-remote` fired
+// on "the doc differs and we are clean" alone, and "clean" is only as good as
+// `lastSyncedAt` — which loadStateFromCloud also stamps. One device left
+// stranded by the pre-#97 bug pushed a copy from eight days earlier, and every
+// other device adopted it on the spot, without a snapshot.
+
+test("reconcile: a cloud copy OLDER than local is pushed over, never applied", () => {
+  assert.equal(
+    reconcileCloudSnapshot({ updatedAt: 9_000, lastSyncedAt: 9_000 }, { updatedAt: 1_000, hasPendingWrites: false, fromCache: false }),
+    "push-local",
+  );
+});
+
+test("reconcile: a newer cloud copy is still applied", () => {
+  assert.equal(
+    reconcileCloudSnapshot({ updatedAt: 1_000, lastSyncedAt: 1_000 }, { updatedAt: 9_000, hasPendingWrites: false, fromCache: false }),
+    "apply-remote",
+  );
+});
+
+test("adoptRemoteState: the copy it replaces is recoverable from Version History", () => {
+  startClean();
+  localStorage.setItem(KEY, JSON.stringify(stateWith(5_000, "about-to-be-replaced", 5_000)));
+
+  const adopted = adoptRemoteState(UID, stateWith(9_000, "from-the-other-device", 9_000));
+
+  assert.deepEqual(tradeIds(adopted), ["from-the-other-device"]);
+  const snapshots = loadSnapshots(UID);
+  assert.equal(snapshots.length, 1, "the replaced copy must be recoverable");
+  assert.deepEqual(tradeIds(snapshots[0].state), ["about-to-be-replaced"]);
+  assert.equal(saved.length, 0, "and adopting still must not write to Firestore");
+});
+
+test("adoptRemoteState: with nothing stored yet there is nothing to snapshot", () => {
+  startClean();
+  adoptRemoteState(UID, stateWith(9_000, "from-the-other-device", 9_000));
+  assert.equal(loadSnapshots(UID).length, 0);
 });
 
 // A snapshot written by this file must not leak into another suite's fixtures.
