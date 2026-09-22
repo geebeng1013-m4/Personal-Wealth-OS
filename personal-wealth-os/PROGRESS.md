@@ -9,7 +9,7 @@
 
 - **阶段**：V1 完成（2026-09-09）。核心正确性的洞都补上了。之后：**产品打磨** —— 手机比例这轮
   已收尾（M-1..M-6，见下）。App / 订阅方向因预算暂停（见下），先把产品本身做好。
-- **`main`**：`b256365`（2026-09-22，PR #112 Money Leaks 按账户余额判断 goal 已上线）。
+- **`main`**：`1ccb372`（2026-09-22，PR #113 连账户 goal 的最后两处已上线）。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 
 ## Goal 编辑框整理（已上线）
@@ -24,7 +24,8 @@
 - 验证：typecheck、1347 测试、build 全绿；demo 截图桌面/手机浅深色；你在 5174 用真实账号看过。线上 wealthup.cc 已确认是新版本。
 - **跟进（PR #112，`main` = `b256365`，已上线）**：Money Leaks 的「goal 每月没存钱」原本用存着的 Current（Laptop 5），
   改成跟 Goals 页一样用账户余额（28）；已经被账户存够的 goal 不再被标出，「Amount remaining」也跟 Goals 页一致。新增 2 个测试（1349 全绿）。
-- **正在做**：onboarding 下一步卡片算「几个月达标」、`state.ts` 默认挑 Dashboard goal，也还用存着的 Current。
+- **跟进（PR #113，`main` = `1ccb372`，已上线）**：Overview「Your plan」卡片的 goal 进度 / 几个月达标、没选 Dashboard goal 时的自动挑选，
+  都改用账户余额；卡片也改显示 Name（Short name 已不能改）。新增 2 个测试（1351 全绿）。现在 app 里没有地方再读连账户 goal 存着的 Current。
 
 ## 分红 Received 列表整理（已上线）
 
