@@ -40,3 +40,28 @@ test("detectMoneyLeakFindings: fee impact is averaged across the distinct months
   // 60 total across 2 distinct months -> 30/month, not 60/month.
   assert.equal(feeLeak!.monthlyImpact, 30);
 });
+
+// --- Goal drift reads the goal's canonical amount ----------------------------
+// A linked goal's progress is its account's balance; the typed goal.current is
+// ignored everywhere else, so it must not drive this finding either.
+
+function laptopGoalState(openingBalance: number, typedCurrent: number) {
+  const state = cloneDefaultState();
+  state.ledgerTransactions = [];
+  state.ledgerAccounts = [{ id: "acc-wallet", name: "Wallet", type: "wallet", openingBalance }];
+  state.goals = [{ id: "laptop", name: "Laptop", label: "Gaming laptop", current: typedCurrent, target: 4000, monthlyContribution: 0, note: "", accountId: "acc-wallet" }];
+  return state;
+}
+
+test("detectMoneyLeakFindings: a linked goal's shortfall uses the account balance, not the typed current", () => {
+  const leak = detectMoneyLeakFindings(laptopGoalState(28, 5)).leaks.find((item) => item.id === "goal-laptop");
+  assert.ok(leak, "an unfunded goal with no monthly amount is flagged");
+  assert.equal(leak!.monthlyImpact, (4000 - 28) / 12);
+  assert.equal(leak!.evidence.find((item) => item.label === "Amount remaining")?.value, "MYR 3972.00");
+  assert.equal(leak!.title, "Gaming laptop has no active contribution", "titled by the goal's Name");
+});
+
+test("detectMoneyLeakFindings: a linked goal its account already funds is not flagged", () => {
+  const summary = detectMoneyLeakFindings(laptopGoalState(4200, 0));
+  assert.equal(summary.leaks.some((item) => item.id === "goal-laptop"), false);
+});
