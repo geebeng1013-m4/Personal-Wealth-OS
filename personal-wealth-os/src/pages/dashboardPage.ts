@@ -19,6 +19,7 @@ import { buildLedgerTransaction } from "../ledger";
 import { syncPlanningRules } from "../financialRules";
 import { bufferMonthsFor } from "../onboardingQuiz";
 import { openBottomSheet } from "../components/bottomSheet";
+import { liabilityFields, readLiabilityForm } from "../components/liabilityForm";
 import { showNotice } from "../components/toast";
 import { classifyStage, STAGE_COUNT, type MoneyStage } from "../moneyStage";
 import { buildCheckins } from "../checkins";
@@ -247,7 +248,11 @@ function stageLine(stage: MoneyStage): string {
   const label = stage.step === null ? "Debt first" : `Stage ${stage.step} of ${STAGE_COUNT}`;
   const segments = stage.step === null ? "" : `<span class="wu-stage__steps" aria-hidden="true">${Array.from({ length: STAGE_COUNT }, (_, index) =>
     `<i class="${index < (stage.step ?? 0) ? "is-on" : ""}"></i>`).join("")}</span>`;
-  return `<p class="wu-stage">${segments}<span class="wu-stage__text"><strong>${label} · ${escapeHtml(stage.title)}</strong> <span class="wu-stage__why">${escapeHtml(stage.reason)}</span></span></p>`;
+  // Nothing left over to pay debts with (L-3): say where free help is.
+  const help = stage.debt?.tight
+    ? ` <span class="wu-stage__why">Can't keep up with the payments? <a href="https://www.akpk.org.my" target="_blank" rel="noopener noreferrer">AKPK</a>, set up by Bank Negara, helps for free.</span>`
+    : "";
+  return `<p class="wu-stage">${segments}<span class="wu-stage__text"><strong>${label} · ${escapeHtml(stage.title)}</strong> <span class="wu-stage__why">${escapeHtml(stage.reason)}</span>${help}</span></p>`;
 }
 
 /* One line of status (P-6a): the check-ins themselves live on Review. */
@@ -284,11 +289,14 @@ function planCard(next: NextSteps): string {
   if (!next.visible || !plan) return "";
   const rows: string[] = [];
   if (plan.bufferTarget > 0) {
-    const pct = Math.min(100, Math.round((plan.bufferCurrent / plan.bufferTarget) * 100));
+    // Debt first (L-3): the buffer fills to a month's spending for now, the rest after the debt.
+    const target = plan.bufferHold !== null ? Math.min(plan.bufferHold, plan.bufferTarget) : plan.bufferTarget;
+    const pct = Math.min(100, Math.round((plan.bufferCurrent / target) * 100));
     rows.push(`<div class="wu-plan__row">
-      <span class="wu-plan__name">Safety buffer</span>
-      <span class="wu-plan__value">${plainAmount(Math.min(plan.bufferCurrent, plan.bufferTarget))} <small>/ ${plainAmount(plan.bufferTarget)}</small></span>
-      <span class="wu-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Safety buffer ${pct}% funded"><span class="wu-bar__fill wu-bar__fill--warning" style="width:${pct}%"></span></span>
+      <span class="wu-plan__name">${plan.bufferHold !== null ? "Emergency money, for now" : "Safety buffer"}</span>
+      <span class="wu-plan__value">${plainAmount(Math.min(plan.bufferCurrent, target))} <small>/ ${plainAmount(target)}</small></span>
+      <span class="wu-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="${plan.bufferHold !== null ? "Emergency money" : "Safety buffer"} ${pct}% funded"><span class="wu-bar__fill wu-bar__fill--warning" style="width:${pct}%"></span></span>
+      ${plan.bufferHold !== null && target < plan.bufferTarget ? `<span class="wu-plan__note">The full ${plainAmount(plan.bufferTarget)} buffer comes after the debt.</span>` : ""}
     </div>`);
   }
   if (plan.goalName) {
@@ -305,7 +313,10 @@ function planCard(next: NextSteps): string {
       ${plan.goalMonths !== null
         ? `<span class="wu-plan__note">${debt ? "Cleared around" : "Around"} <strong>${monthsFromNow(plan.goalMonths)}</strong></span>`
         // Without a monthly amount there is no date to give; say how to get one.
-        : `<button class="wu-plan__link dashboard-nav" data-page="goals" type="button">Give it a monthly amount to get a date <span aria-hidden="true">→</span></button>`}
+        : debt
+          ? `<span class="wu-plan__note">No end date yet: what's left over each month doesn't cover more than the interest.</span>`
+          : `<button class="wu-plan__link dashboard-nav" data-page="goals" type="button">Give it a monthly amount to get a date <span aria-hidden="true">→</span></button>`}
+      ${debt && plan.debtInterest ? `<span class="wu-plan__note">About <strong>${money(plan.debtInterest)}</strong> of interest a month</span>` : ""}
     </div>`);
   }
   if (!rows.length) return "";
@@ -313,6 +324,7 @@ function planCard(next: NextSteps): string {
   return `<section class="wu-card wu-plan wu-stack wu-stack--sm" aria-labelledby="ovPlanTitle">
       <div class="wu-tc__top"><span class="wu-label" id="ovPlanTitle">Your plan</span>${estimate ? `<span class="wu-next__est" title="Still based on your rough answers">estimate</span>` : ""}</div>
       ${rows.join("")}
+      ${plan.goalKind === "debt" ? `<p class="t-caption t-faint">Estimates, for guidance only, not financial advice.</p>` : ""}
     </section>`;
 }
 
@@ -454,40 +466,26 @@ function openLedgerSheet(stepId: "record-pay" | "log-spending", state: WealthSta
   });
 }
 
-/** Same checks as the Settings liability form, plus: something must be owed. */
+/** The Settings liability form's fields and checks, plus: something must be owed. */
 function openDebtSheet(state: WealthState): void {
   const answers = state.onboardingAnswers;
+  const fromQuiz = answers?.primaryGoal === "debt";
   openBottomSheet({
     title: "Write down what you owe",
     destination: "Settings · liabilities",
-    intro: answers?.goalName && answers.goalAmount
+    intro: fromQuiz && answers.goalName && answers.goalAmount
       ? `Filled in from your answer (${answers.goalName}, about ${money(answers.goalAmount)}). Change it to what your statement says.`
       : "What your latest statement says you still owe.",
     body: `<div class="wu-grid wu-grid--2 wu-sheet__grid">
-        <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">What it is</span>
-          <input class="wu-field" name="name" maxlength="60" autocomplete="off" placeholder="Credit card" value="${escapeHtml(answers?.primaryGoal === "debt" ? answers.goalName ?? "" : "")}"></label>
-        ${amountField("Still owed", answers?.primaryGoal === "debt" ? answers.goalAmount ?? "" : "")}
-        <label class="wu-field-row"><span class="wu-field-row__label">Interest a year (%, optional)</span>
-          <input class="wu-field" name="annualRate" inputmode="decimal" autocomplete="off" placeholder="0"></label>
-        <label class="wu-field-row"><span class="wu-field-row__label">Minimum payment (optional)</span>
-          <span class="wu-affix"><span>MYR</span><input class="wu-field" name="minimumPayment" inputmode="decimal" autocomplete="off" placeholder="0"></span></label>
+        ${liabilityFields({ name: fromQuiz ? answers.goalName ?? "" : "", balance: fromQuiz ? answers.goalAmount ?? "" : "" })}
       </div>`,
     onSave: (form) => {
       if (!live) return "The Overview has closed. Open it again to save.";
-      const data = new FormData(form);
-      const name = String(data.get("name") ?? "").trim().slice(0, 60);
-      const number = (key: string): number => {
-        const raw = cleanNumber(String(data.get(key) ?? ""));
-        return raw === "" ? 0 : Number(raw);
-      };
-      const balance = number("amount");
-      const annualRate = number("annualRate");
-      const minimumPayment = number("minimumPayment");
-      if (!name) return "Give it a name, like Credit card.";
-      if (!Number.isFinite(balance) || balance <= 0) return "Enter how much is still owed, above 0.";
-      if (![annualRate, minimumPayment].every((value) => Number.isFinite(value) && value >= 0)) return "Interest and minimum payment can't be negative.";
+      const result = readLiabilityForm(new FormData(form), createId("liability"), today());
+      if (!result.ok) return result.error;
+      if (result.liability.balance <= 0) return "Enter how much is still owed, above 0.";
       const { state: current, setState, refresh } = live;
-      const next: WealthState = { ...current, liabilities: [...current.liabilities, { id: createId("liability"), name, balance, annualRate, minimumPayment }] };
+      const next: WealthState = { ...current, liabilities: [...current.liabilities, result.liability] };
       const failed = saveOrExplain(setState, next, "Add liability");
       if (failed) return failed;
       savedFromSheet = { id: "debt-add", page: "settings" };
@@ -647,8 +645,8 @@ export function bindDashboard(
     }
     if (step.id === "debt-pay") {
       // Paid in the bank or card app; the user's tap is the record. It comes
-      // off the largest debt, never below zero.
-      const largest = [...state.liabilities].sort((a, b) => b.balance - a.balance)[0];
+      // off the debt the step names (the highest rate), never below zero.
+      const largest = classifyStage(state).debt?.focus ?? [...state.liabilities].sort((a, b) => b.balance - a.balance)[0];
       if (!largest) return;
       const paid = Math.min(largest.balance, step.amount ?? 0);
       // The Q&A's pay-off goal moves with it, so Goals and the Next goal tile

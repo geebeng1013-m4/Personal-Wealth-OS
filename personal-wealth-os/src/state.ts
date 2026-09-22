@@ -1,4 +1,5 @@
-import type { AllocationPlan, AllocationStep, Bucket, LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
+import type { AllocationPlan, AllocationStep, Bucket, LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, Liability, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
+import { isDebtKind, isMonth } from "./debtPriority";
 import { buildOnboardingChecklist } from "./onboarding";
 import { getDefaultFinancialRules, normalizeFinancialRules, repairPlaceholderRules } from "./financialRules";
 import { normalizeActionRecords } from "./actionRecords";
@@ -14,7 +15,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 28;
+export const CURRENT_VERSION = 29;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -529,6 +530,23 @@ function validRuleCardOverrides(value: unknown): Partial<Record<RuleCardId, Rule
   return result;
 }
 
+/**
+ * v29: the rate is a fraction everywhere. Before, the Settings and Overview
+ * forms stored the typed percent (18 for 18%) while everything that read it
+ * expected 0.18. No debt charges 100% a year or more, so a stored value of 1
+ * or above is a typed percent. Data from an older build carries its older
+ * version, so a percent it writes is caught on the next load too.
+ * The v29 fields are kept only when well-formed; a bad one drops alone.
+ */
+function migrateLiability(item: Liability, version: number): Liability {
+  const { kind, endMonth, paidInFull, ...rest } = item;
+  const liability: Liability = { ...rest, annualRate: version < 29 && item.annualRate >= 1 ? item.annualRate / 100 : item.annualRate };
+  if (isDebtKind(kind)) liability.kind = kind;
+  if (isMonth(endMonth)) liability.endMonth = endMonth;
+  if (typeof paidInFull === "boolean") liability.paidInFull = paidInFull;
+  return liability;
+}
+
 export function migrateState(input: Partial<WealthState>): WealthState {
   const candidate = input as Partial<WealthState> & Record<string, unknown>;
   const merged = {
@@ -601,7 +619,7 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   })) : [];
   merged.liabilities = Array.isArray(input.liabilities) ? input.liabilities.filter((item) =>
     item && typeof item.id === "string" && typeof item.name === "string" && Number.isFinite(item.balance) && item.balance >= 0 && Number.isFinite(item.annualRate) && item.annualRate >= 0 && Number.isFinite(item.minimumPayment) && item.minimumPayment >= 0
-  ) : [];
+  ).map((item) => migrateLiability(item, input.version ?? 0)) : [];
   merged.recurringTransactions = Array.isArray(input.recurringTransactions) ? input.recurringTransactions.filter((item) =>
     item && typeof item.id === "string" && typeof item.label === "string" && Number.isFinite(item.amount) && item.amount > 0 && (item.type === "income" || item.type === "expense") && Number.isInteger(item.dayOfMonth) && item.dayOfMonth >= 1 && item.dayOfMonth <= 31
   ) : [];

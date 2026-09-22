@@ -15,6 +15,7 @@
  */
 
 import type { WealthState } from "../models";
+import { liabilityFields, readLiabilityForm } from "../components/liabilityForm";
 import { createId } from "../state";
 import { syncPlanningRules } from "../financialRules";
 import { DEFAULT_EMERGENCY_MONTHS, money, suggestedEmergencyTarget } from "../rules";
@@ -180,15 +181,13 @@ function recurringEditor(state: WealthState): string {
 }
 
 function liabilitiesEditor(state: WealthState): string {
-  const rows = state.liabilities.map((item) =>
-    `<li class="wu-list__row"><span>${escapeHtml(item.name)} &middot; ${item.annualRate.toFixed(2)}%</span><strong class="t-num">${money(item.balance)}</strong><button class="wu-btn wu-btn--ghost wu-btn--icon delete-liability" data-id="${escapeHtml(item.id)}" type="button" aria-label="Delete liability">&times;</button></li>`).join("");
+  const rows = state.liabilities.map((item) => {
+    const rate = item.paidInFull ? "paid in full" : item.annualRate > 0 ? `${pct(item.annualRate)}% a year` : "rate not set";
+    const until = item.endMonth ? ` &middot; until ${escapeHtml(item.endMonth)}` : "";
+    return `<li class="wu-list__row"><span>${escapeHtml(item.name)} &middot; ${rate}${until}</span><strong class="t-num">${money(item.balance)}</strong><button class="wu-btn wu-btn--ghost wu-btn--icon delete-liability" data-id="${escapeHtml(item.id)}" type="button" aria-label="Delete ${escapeHtml(item.name)}">&times;</button></li>`;
+  }).join("");
   return `${state.liabilities.length ? `<ul class="wu-list">${rows}</ul>` : `<p class="wu-empty">No liabilities recorded.</p>`}
-    ${editorForm("liability-add",
-      field("Name", `<input class="wu-field" name="name" maxlength="60" required>`) +
-      num("balance", "Balance MYR", "", "0.01") +
-      num("annualRate", "Annual rate %", "0", "0.01") +
-      num("minimumPayment", "Minimum payment MYR", "0", "0.01"),
-      "Add liability")}`;
+    ${editorForm("liability-add", `${liabilityFields()}<p class="wu-field-row__error wu-field-row--wide" role="alert" data-liability-error></p>`, "Add liability")}`;
 }
 
 export function settingsTemplate(state: WealthState): string {
@@ -342,12 +341,12 @@ export function bindSettings(root: HTMLElement, state: WealthState, setState: Se
   });
   root.querySelectorAll<HTMLButtonElement>(".delete-recurring").forEach((button) => button.addEventListener("click", () => saveOpen({ ...state, recurringTransactions: state.recurringTransactions.filter((item) => item.id !== button.dataset.id) }, "Delete recurring transaction")));
 
-  onSubmit("liability-add", (data) => {
-    const balance = Number(data.get("balance"));
-    const annualRate = Number(data.get("annualRate"));
-    const minimumPayment = Number(data.get("minimumPayment"));
-    if (![balance, annualRate, minimumPayment].every((value) => Number.isFinite(value) && value >= 0)) return;
-    saveOpen({ ...state, liabilities: [...state.liabilities, { id: createId("liability"), name: String(data.get("name") ?? "").trim().slice(0, 60), balance, annualRate, minimumPayment }] }, "Add liability");
+  onSubmit("liability-add", (data, form) => {
+    const result = readLiabilityForm(data, createId("liability"), new Date().toLocaleDateString("en-CA"));
+    const error = form.querySelector<HTMLElement>("[data-liability-error]");
+    if (error) error.textContent = result.ok ? "" : result.error;
+    if (!result.ok) return;
+    saveOpen({ ...state, liabilities: [...state.liabilities, result.liability] }, "Add liability");
   });
   root.querySelectorAll<HTMLButtonElement>(".delete-liability").forEach((button) => button.addEventListener("click", () => saveOpen({ ...state, liabilities: state.liabilities.filter((item) => item.id !== button.dataset.id) }, "Delete liability")));
 

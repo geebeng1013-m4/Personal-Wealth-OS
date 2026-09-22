@@ -19,8 +19,11 @@
 import { escapeHtml } from "../html";
 import { emptyState } from "../state";
 import { classifyStage, STAGE_COUNT, type MoneyStageId } from "../moneyStage";
+import type { DebtKind } from "../models";
+import { DEBT_KIND_IDS, DEBT_KINDS, debtTier, monthlyInstalment, monthlyInterest } from "../debtPriority";
 import {
   answeredCash,
+  answeredDebtRate,
   applyOnboardingAnswers,
   BUFFER_BANDS,
   bufferMonthsFor,
@@ -111,6 +114,10 @@ const STAGE_SHORT: Record<MoneyStageId, string> = {
 const SPEND_CHIPS = { student: [300, 600, 1000, 1500], other: [1500, 2500, 3500, 5000] };
 const GOAL_AMOUNTS = [500, 1000, 3000, 5000, 10000, 30000];
 const CUSTOM = "custom";
+const UNKNOWN = "unknown";
+/** Rates offered in the picker, in percent; the kind's typical one is added when missing. */
+const RATE_CHOICES = [1, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6, 7, 8, 10, 12, 15, 17, 18];
+const TERM_CHOICES = [6, 12, 24, 36, 48, 60, 84, 108, 120, 180, 240, 300, 360, 420];
 
 // --- the draft ------------------------------------------------------------------
 
@@ -123,12 +130,14 @@ interface Draft {
   answers: QuizAnswers;
   skipped: Set<SentenceId>;
   /** The amount pickers set to "Type an amount…", so their field stays open while empty. */
-  typing: Set<"income" | "spending" | "goal">;
+  typing: Set<"income" | "spending" | "goal" | "rate">;
+  /** The debt's rate was picked or typed, not the kind's typical one. */
+  rateEdited: boolean;
   /** The sentence to scroll into view after the next render. */
   reveal: SentenceId | null;
 }
 
-const freshDraft = (): Draft => ({ screen: "welcome", answers: {}, skipped: new Set(), typing: new Set(), reveal: null });
+const freshDraft = (): Draft => ({ screen: "welcome", answers: {}, skipped: new Set(), typing: new Set(), rateEdited: false, reveal: null });
 let draft: Draft = freshDraft();
 /** Typed text applies after this pause (or on Enter). */
 const TYPING_PAUSE_MS = 700;
@@ -149,7 +158,10 @@ function answered(id: SentenceId): boolean {
     case "spending": return a.monthlySpending !== undefined;
     case "savings": return a.bufferMonthsHave !== undefined && a.cashKeptIn !== undefined;
     case "want": return a.primaryGoal !== undefined;
-    case "goal": return Boolean(a.goalName) && (a.goalAmount ?? 0) > 0;
+    case "goal":
+      // A debt: what it is and how much; a card also whether it is cleared each month.
+      if (a.primaryGoal === "debt") return a.debtKind !== undefined && (a.goalAmount ?? 0) > 0 && (a.debtKind !== "credit-card" || a.debtPaidInFull !== undefined);
+      return Boolean(a.goalName) && (a.goalAmount ?? 0) > 0;
     case "longTerm": return (a.longTermGoals?.length ?? 0) > 0;
     case "invests": return a.invests !== undefined;
   }
@@ -161,6 +173,8 @@ function shownCount(): number {
   return open === -1 ? SENTENCES.length : open + 1;
 }
 
+const DEBT_FIELDS: Array<keyof QuizAnswers> = ["debtKind", "debtRate", "debtRateFlat", "debtMonthsLeft", "debtPaidInFull"];
+
 /** What a skipped sentence clears, so a half-picked answer is not saved. */
 const CLEARS: Record<SentenceId, Array<keyof QuizAnswers>> = {
   life: ["lifeStage"],
@@ -168,7 +182,7 @@ const CLEARS: Record<SentenceId, Array<keyof QuizAnswers>> = {
   spending: ["monthlySpending"],
   savings: ["bufferMonthsHave", "cashKeptIn"],
   want: ["primaryGoal"],
-  goal: ["goalName", "goalAmount"],
+  goal: ["goalName", "goalAmount", ...DEBT_FIELDS],
   longTerm: ["longTermGoals"],
   invests: ["invests"],
 };
@@ -176,6 +190,13 @@ const CLEARS: Record<SentenceId, Array<keyof QuizAnswers>> = {
 // --- small parts ----------------------------------------------------------------
 
 const rm = (value: number) => `RM${Math.round(value).toLocaleString("en-MY")}`;
+/** A fraction as people write a rate: 0.18 → "18%", 0.0565 → "5.7%". */
+const pct = (fraction: number) => `${Math.round(fraction * 1000) / 10}%`;
+function termLabel(months: number): string {
+  if (months < 12) return `${months} months`;
+  const years = months / 12;
+  return years === 1 ? "1 year" : `${Number.isInteger(years) ? years : years.toFixed(1)} years`;
+}
 const num = (text: string) => `<span class="onb-num">${escapeHtml(text)}</span>`;
 
 function monthsFromNow(months: number): string {
@@ -300,6 +321,8 @@ function goalSentence(): string {
   const debt = a.primaryGoal === "debt";
   const typing = draft.typing.has("goal") || (a.goalAmount !== undefined && !GOAL_AMOUNTS.includes(a.goalAmount));
   const value = typing ? CUSTOM : a.goalAmount !== undefined ? String(a.goalAmount) : "";
+  const amount = pick("goal", debt ? "How much is owed" : "How much it costs", value, [...GOAL_AMOUNTS.map((item): [string, string] => [String(item), rm(item)]), [CUSTOM, "Type an amount…"]]);
+  if (debt) return debtSentence(amount, typing);
   let reply = "";
   if (answered("goal")) {
     const plan = draftPlan();
@@ -308,13 +331,93 @@ function goalSentence(): string {
       : bubble(plan.leftover === null ? "Add your income and spending later, and we'll put a date on this." : "Once there's money left over each month, we'll put a date on this.", "warn");
   }
   const name = `<input class="onb-pill onb-pill--text${a.goalName ? " is-set" : ""}" id="onb-goal-name" data-goal-name maxlength="60" autocomplete="off"
-      placeholder="${debt ? "a credit card" : "a Japan trip"}" aria-label="${debt ? "What the debt is" : "What you're saving for"}" value="${escapeHtml(a.goalName ?? "")}">`;
-  const amount = pick("goal", debt ? "How much is owed" : "How much it costs", value, [...GOAL_AMOUNTS.map((item): [string, string] => [String(item), rm(item)]), [CUSTOM, "Type an amount…"]]);
-  const line = debt
-    ? `The debt is ${name} of ${amount}${typing ? ` ${typedAmount("goal", "Debt amount in RM", a.goalAmount)}` : ""}.`
-    : `In the short term, I'm saving for ${name} costing ${amount}${typing ? ` ${typedAmount("goal", "Goal amount in RM", a.goalAmount)}` : ""}.`;
+      placeholder="a Japan trip" aria-label="What you're saving for" value="${escapeHtml(a.goalName ?? "")}">`;
+  const line = `In the short term, I'm saving for ${name} costing ${amount}${typing ? ` ${typedAmount("goal", "Goal amount in RM", a.goalAmount)}` : ""}.`;
   // For a buffer or investing, a named goal is a bonus: "Nothing yet" moves on.
   return sentence("goal", line, reply).replace("Rather not say", needsGoal() ? "Rather not say" : "Nothing yet");
+}
+
+/**
+ * "The debt is [a car loan] of [RM30,000]. It's [3%] [flat], with [7 years]
+ * left." The kind fills in a typical rate and time left, marked as estimates;
+ * a card asks whether it is cleared every month instead of a term.
+ */
+function debtSentence(amount: string, typingAmount: boolean): string {
+  const a = draft.answers;
+  const kind = a.debtKind;
+  const info = kind ? DEBT_KINDS[kind] : null;
+  const kindPick = pick("debt-kind", "What the debt is", kind ?? "", DEBT_KIND_IDS.map((id) => [id, DEBT_KINDS[id].phrase]));
+  let line = `The debt is ${kindPick} of ${amount}${typingAmount ? ` ${typedAmount("goal", "Debt amount in RM", a.goalAmount)}` : ""}.`;
+  if (info && kind) {
+    const rate = ratePick(kind);
+    if (kind === "credit-card") {
+      const paid = a.debtPaidInFull === undefined ? "" : a.debtPaidInFull ? "full" : "part";
+      line += ` Each month I ${pick("debt-paid", "How much of the card you pay each month", paid, [["full", "pay it all off"], ["part", "pay only part of it"]])}${a.debtPaidInFull === false ? `, at ${rate} a year` : ""}.`;
+    } else if (!info.hasTerm) {
+      line += ` It charges about ${rate} a year.`;
+    } else {
+      const basis = info.quotedFlat
+        ? pick("debt-flat", "Flat or effective rate", a.debtRateFlat ? "flat" : "effective", [["flat", "flat"], ["effective", "a year (effective)"]])
+        : "a year";
+      const months = a.debtMonthsLeft;
+      const terms = months !== undefined && !TERM_CHOICES.includes(months) ? [...TERM_CHOICES, months].sort((x, y) => x - y) : TERM_CHOICES;
+      const term = pick("debt-term", "Time left to pay", months !== undefined ? String(months) : "", [...terms.map((item): [string, string] => [String(item), termLabel(item)]), [UNKNOWN, "not sure"]]);
+      line += ` It's ${rate} ${basis}, with ${term} left.`;
+    }
+  }
+  return sentence("goal", line, answered("goal") ? debtReply() : "");
+}
+
+function ratePick(kind: DebtKind): string {
+  const a = draft.answers;
+  const percent = a.debtRate !== undefined ? Math.round(a.debtRate * 10000) / 100 : undefined;
+  if (draft.typing.has("rate")) {
+    return `${pick("debt-rate", "Interest rate", CUSTOM, rateOptions(kind))} <input class="onb-pill onb-pill--text onb-pill--money${percent ? " is-set" : ""}" id="onb-rate-typed"
+      data-rate-typed type="text" inputmode="decimal" autocomplete="off" placeholder="%" aria-label="Interest rate in percent" value="${percent ?? ""}">`;
+  }
+  return pick("debt-rate", "Interest rate", percent !== undefined ? String(percent) : UNKNOWN, rateOptions(kind, percent));
+}
+
+function rateOptions(kind: DebtKind, current?: number): Array<[string, string]> {
+  const typical = Math.round(DEBT_KINDS[kind].typicalRate * 10000) / 100;
+  const choices = [...new Set([...RATE_CHOICES, ...(typical ? [typical] : []), ...(current !== undefined ? [current] : [])])].sort((x, y) => x - y);
+  return [...choices.map((item): [string, string] => [String(item), `${item}%`]), [UNKNOWN, "not sure"], [CUSTOM, "Type a rate…"]];
+}
+
+/** What the debt means for the plan, in the user's numbers. */
+function debtReply(): string {
+  const a = draft.answers;
+  const kind = a.debtKind;
+  if (!kind) return "";
+  const info = DEBT_KINDS[kind];
+  const owed = a.goalAmount ?? 0;
+  const rate = answeredDebtRate(a);
+  const notes: string[] = [];
+  if (a.debtRateFlat && rate > 0) notes.push(`Flat ${pct(a.debtRate ?? 0)} works out to about ${pct(rate)} a year in real terms.`);
+  if (!draft.rateEdited && a.debtRate !== undefined && a.debtPaidInFull !== true) notes.push(`A typical rate for ${info.phrase}; change it if yours is different.`);
+  const small = notes.length ? `<small class="onb-bubble__est">${notes.map(escapeHtml).join(" ")}</small>` : "";
+
+  if (a.debtPaidInFull) {
+    return bubble(`Clearing it every month means no interest. Keep doing that: it won't hold up your safety buffer.${small}`);
+  }
+  const tier = debtTier(rate);
+  const plan = draftPlan();
+  if (tier === "high" || tier === "unknown") {
+    const pace = plan.monthsToGoal !== null
+      ? `<br>At your pace, cleared in about ${num(`${plan.monthsToGoal} months`)}: ${num(monthsFromNow(plan.monthsToGoal))}.`
+      : plan.leftover === null ? "" : "<br>Once there's money left over each month, we'll put a date on it.";
+    const lead = tier === "high"
+      ? `At about ${num(pct(rate))} a year, that's roughly ${num(rm(monthlyInterest(owed, rate)))} of interest a month. Paying it off first is the surest return you can get.`
+      : "Without a rate we'll treat it as costly and put it first. Add the rate later to check.";
+    return bubble(`${lead}${pace}${small}`, tier === "high" ? "warn" : "good");
+  }
+  // Under 8%: paid on its schedule, the buffer first.
+  const months = info.hasTerm ? a.debtMonthsLeft : undefined;
+  const schedule = months
+    ? ` about ${num(rm(monthlyInstalment(owed, rate, months)))} a month, cleared around ${num(monthsFromNow(months))}.`
+    : " keep up the usual payments.";
+  const after = tier === "medium" ? " Once your buffer is full, extra money is split between paying it early and investing." : "";
+  return bubble(`At ${num(pct(rate))} a year, paying it on schedule is fine:${schedule} Your safety buffer comes first.${after}${small}`);
 }
 
 function longTermSentence(): string {
@@ -397,6 +500,16 @@ function stageCard(answers: QuizAnswers): string {
     </div>`;
 }
 
+function goalCardLine(plan: OnboardingPlan): string {
+  const a = draft.answers;
+  if (plan.debtOnSchedule) {
+    if (a.debtPaidInFull) return "Cleared every month. Nothing extra needed.";
+    const months = a.debtKind && DEBT_KINDS[a.debtKind].hasTerm ? a.debtMonthsLeft : undefined;
+    return months ? `Paid on its schedule: cleared around <strong>${monthsFromNow(months)}</strong>.` : "Paid on its schedule, with the usual payments.";
+  }
+  return plan.monthsToGoal !== null ? `Reached around <strong>${monthsFromNow(plan.monthsToGoal)}</strong>.` : "We'll date this once there's money left over each month.";
+}
+
 function planScreen(): string {
   const answers = draft.answers;
   const plan = draftPlan();
@@ -424,6 +537,7 @@ function planScreen(): string {
 
   if (plan.bufferTarget !== null && plan.bufferTarget > 0) {
     const when = plan.bufferFull ? "Already full. Keep it there."
+      : plan.debtFirst ? `On hold at ${rm(plan.starterTarget)} (a month of spending) while the debt is paid off.`
       : plan.monthsToBufferFull !== null ? `Full around ${monthsFromNow(plan.monthsToBufferFull)} if you add ${rm(plan.split.buffer)} a month.`
         : "We'll set a pace once there's money left over each month.";
     cards.push(`<div class="onb-card"><span class="onb-card__k">Safety buffer · ${months} months</span>
@@ -434,7 +548,7 @@ function planScreen(): string {
   if (goalName) {
     cards.push(`<div class="onb-card"><span class="onb-card__k">${goalName}</span>
       <span class="onb-card__v">${num(rm(answers.goalAmount ?? 0))}</span>
-      <p>${plan.monthsToGoal !== null ? `Reached around <strong>${monthsFromNow(plan.monthsToGoal)}</strong>.` : "We'll date this once there's money left over each month."}</p></div>`);
+      <p>${goalCardLine(plan)}</p></div>`);
   }
 
   const services: string[] = [];
@@ -540,7 +654,40 @@ export function renderOnboarding(root: HTMLElement, handlers: OnboardingHandlers
         break;
       case "savings": a.bufferMonthsHave = value as BufferBand; break;
       case "kept": a.cashKeptIn = value as CashKeptIn; break;
-      case "want": a.primaryGoal = value as PrimaryGoal; break;
+      case "want": {
+        const wasDebt = a.primaryGoal === "debt";
+        a.primaryGoal = value as PrimaryGoal;
+        // A debt and a savings goal are asked differently: switching starts the goal sentence over.
+        if (wasDebt !== (a.primaryGoal === "debt")) {
+          for (const field of CLEARS.goal) delete a[field];
+          draft.typing.delete("goal");
+          draft.typing.delete("rate");
+          draft.skipped.delete("goal");
+        }
+        break;
+      }
+      case "debt-kind": {
+        const kind = value as DebtKind;
+        const info = DEBT_KINDS[kind];
+        a.debtKind = kind;
+        a.goalName = info.label;
+        // The kind's typical figures, shown as estimates until changed.
+        if (info.typicalRate > 0) a.debtRate = info.typicalRate; else delete a.debtRate;
+        if (info.quotedFlat) a.debtRateFlat = true; else delete a.debtRateFlat;
+        if (info.hasTerm && info.typicalMonthsLeft) a.debtMonthsLeft = info.typicalMonthsLeft; else delete a.debtMonthsLeft;
+        delete a.debtPaidInFull;
+        draft.typing.delete("rate");
+        draft.rateEdited = false;
+        break;
+      }
+      case "debt-rate":
+        draft.rateEdited = true;
+        if (value === CUSTOM) { draft.typing.add("rate"); delete a.debtRate; }
+        else { draft.typing.delete("rate"); if (value === UNKNOWN) delete a.debtRate; else a.debtRate = Number(value) / 100; }
+        break;
+      case "debt-flat": a.debtRateFlat = value === "flat"; break;
+      case "debt-term": if (value === UNKNOWN) delete a.debtMonthsLeft; else a.debtMonthsLeft = Number(value); break;
+      case "debt-paid": a.debtPaidInFull = value === "full"; break;
       case "goal":
         if (value === CUSTOM) { draft.typing.add("goal"); delete a.goalAmount; } else { draft.typing.delete("goal"); a.goalAmount = Number(value); }
         break;
@@ -560,6 +707,10 @@ export function renderOnboarding(root: HTMLElement, handlers: OnboardingHandlers
       if (which === "income") { draft.answers.monthlyIncome = value; delete draft.answers.incomeRange; }
       if (which === "spending") draft.answers.monthlySpending = value;
       if (which === "goal") draft.answers.goalAmount = value;
+    } else if (input.hasAttribute("data-rate-typed")) {
+      // Typed as a percent; kept as a fraction. Under 100% a year, or not a rate.
+      const percent = parseAmount(input.value);
+      if (percent !== undefined && percent < 100) draft.answers.debtRate = percent / 100; else delete draft.answers.debtRate;
     } else if (input.hasAttribute("data-goal-name")) {
       draft.answers.goalName = input.value.trim().slice(0, 60) || undefined;
     } else {
@@ -598,7 +749,7 @@ export function renderOnboarding(root: HTMLElement, handlers: OnboardingHandlers
       for (const key of CLEARS[id]) delete draft.answers[key];
       if (id === "income") draft.typing.delete("income");
       if (id === "spending") draft.typing.delete("spending");
-      if (id === "goal") draft.typing.delete("goal");
+      if (id === "goal") { draft.typing.delete("goal"); draft.typing.delete("rate"); }
       draft.skipped.add(id);
       settle();
       return;

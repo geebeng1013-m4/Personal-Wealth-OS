@@ -3,7 +3,9 @@
  *
  * Four stages and one side track, checked in order:
  *
- *   debt     the Q&A's main goal is paying off debt, and it is not yet cleared
+ *   debt     a debt at 8% a year or more is still owed (or one without a rate,
+ *            when the Q&A put debt first): a month's spending aside first,
+ *            then every spare ringgit to it (L-1, see debtPriority.ts)
  *   1 base   spending is at or above income, or savings cover under a month
  *   2 buffer between a month and the safety buffer target
  *   3 ready  the buffer is full, nothing invested yet
@@ -17,11 +19,12 @@
  * Pure: no DOM, no storage.
  */
 
-import type { WealthState } from "./models";
+import type { Liability, WealthState } from "./models";
 import { getLedgerSnapshot } from "./ledgerSummary";
 import { money, suggestedEmergencyTarget } from "./rules";
 import { totalLiabilities } from "./financialHealth";
 import { bufferMonthsFor } from "./onboardingQuiz";
+import { debtTier, priorityDebts, starterBufferTarget } from "./debtPriority";
 
 export type MoneyStageId = "debt" | "base" | "buffer" | "ready" | "growing";
 
@@ -39,6 +42,21 @@ export interface MoneyStage {
   /** One line on why, from the user's own numbers. */
   reason: string;
   basis: MoneyStageBasis;
+  /** On the debt track only. */
+  debt?: DebtFocus;
+}
+
+export interface DebtFocus {
+  /** "starter": setting aside a month's spending first; "payoff": all spare money to the debt. */
+  phase: "starter" | "payoff";
+  starterTarget: number;
+  /** The debt to pay first; null when the user said there is one but none is recorded yet. */
+  focus: Liability | null;
+  /**
+   * Spending is at or above income, so nothing is left to pay it down with.
+   * The Overview then points to AKPK, Bank Negara's free debt counselling (L-3).
+   */
+  tight: boolean;
 }
 
 export const STAGE_COUNT = 4;
@@ -74,18 +92,58 @@ function spendingAboveIncome(state: WealthState, monthlySpending: number | null,
   return plannedIncome > 0 && monthlySpending !== null && monthlySpending >= plannedIncome;
 }
 
-export function classifyStage(state: WealthState, now = new Date()): MoneyStage {
-  // The debt track holds until the debts recorded are paid off. No debt
-  // recorded yet still counts: the user said it is there.
-  if (state.onboardingAnswers?.primaryGoal === "debt") {
-    const owed = totalLiabilities(state.liabilities);
-    if (owed > 0) return stage("debt", `${money(owed)} still owed.`, "debt");
-    if (state.liabilities.length === 0) return stage("debt", "You said paying off debt comes first.", "debt");
-  }
+/** "18%", "6.5%": a stored fraction as people write it. */
+function ratePercent(annualRate: number): string {
+  return `${Math.round(annualRate * 1000) / 10}%`;
+}
 
+/**
+ * The debt track, or null when no debt comes before the buffer. It holds until
+ * those debts are paid off; then the stage falls back to the main road.
+ */
+function debtStage(state: WealthState, monthly: number | null, now: Date): MoneyStage | null {
+  const saidDebtFirst = state.onboardingAnswers?.primaryGoal === "debt";
+  const debts = priorityDebts(state.liabilities, saidDebtFirst);
+  // Nothing recorded yet still counts: the user said it is there.
+  const unrecorded = saidDebtFirst && state.liabilities.length === 0;
+  if (debts.length === 0 && !unrecorded) return null;
+
+  const starterTarget = starterBufferTarget(monthly);
+  const focus = debts[0] ?? null;
+  const phase = state.emergency.current >= starterTarget ? "payoff" : "starter";
+  const debt: DebtFocus = { phase, starterTarget, focus, tight: spendingAboveIncome(state, monthly, now) };
+  const make = (reason: string): MoneyStage => ({ ...stage("debt", reason, "debt"), debt });
+
+  if (!focus) return make("You said paying off debt comes first.");
+  const owed = totalLiabilities(debts);
+  if (debtTier(focus.annualRate) === "unknown") {
+    return make(`${money(owed)} still owed. Add its interest rate to see whether it should come first.`);
+  }
+  const which = `${focus.name} at ${ratePercent(focus.annualRate)}`;
+  return phase === "starter"
+    ? make(`${which} comes first. Keep ${money(starterTarget)} aside for emergencies, then put the rest toward it.`)
+    : make(`${money(owed)} still owed. Every spare ringgit goes to ${which}, the highest rate, first.`);
+}
+
+export function classifyStage(state: WealthState, now = new Date()): MoneyStage {
   // Planned monthly spending: the same figure the buffer suggestion and the
   // Q&A use (Settings' fixed costs, which the Q&A fills in).
   const monthly = suggestedEmergencyTarget(state, 1)?.monthlyEssential ?? null;
+  const debt = debtStage(state, monthly, now);
+  if (debt) return debt;
+
+  const road = mainRoad(state, monthly, now);
+  // Put debt first, but every debt is cheap: say why the buffer still leads.
+  if (state.onboardingAnswers?.primaryGoal !== "debt") return road;
+  const owing = state.liabilities.filter((item) => item.balance > 0);
+  if (owing.length === 0) return road;
+  const why = owing.every((item) => item.paidInFull)
+    ? "You clear your card in full each month, so it costs no interest: the buffer comes first."
+    : "Your debt's rate is under 8%, so pay it on schedule: the buffer comes first.";
+  return { ...road, reason: `${road.reason} ${why}` };
+}
+
+function mainRoad(state: WealthState, monthly: number | null, now: Date): MoneyStage {
   const { current, target } = state.emergency;
   const cover = monthly ? current / monthly : null;
   // No target set: the usual size for this person (6 months when self-employed).

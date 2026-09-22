@@ -16,8 +16,19 @@
  * wherever it is shown.
  */
 
-import type { WealthState } from "./models";
+import type { DebtKind, Liability, WealthState } from "./models";
 import { syncGoalContributionRules, syncPlanningRules } from "./financialRules";
+import {
+  addMonths,
+  cardMinimumPayment,
+  DEBT_KINDS,
+  debtComesFirst,
+  debtTier,
+  flatToEffectiveRate,
+  isDebtKind,
+  monthlyInstalment,
+  starterBufferTarget,
+} from "./debtPriority";
 
 export type PrimaryGoal = "buffer" | "invest" | "save" | "debt";
 export const PRIMARY_GOALS: readonly PrimaryGoal[] = ["buffer", "invest", "save", "debt"];
@@ -74,7 +85,7 @@ export const CASH_KEPT_IN: readonly CashKeptIn[] = ["savings", "fixed-deposit", 
 export type LongTermGoal = "retirement" | "home" | "kids-education" | "self-education" | "travel" | "not-sure";
 export const LONG_TERM_GOALS: readonly LongTermGoal[] = ["retirement", "home", "kids-education", "self-education", "travel", "not-sure"];
 
-/** What the user answered. `undefined` = skipped. (Schema v26; the Q-3 fields v28) */
+/** What the user answered. `undefined` = skipped. (Schema v26; the Q-3 fields v28; the debt's details v29) */
 export interface OnboardingAnswers {
   primaryGoal?: PrimaryGoal;
   /** v28. */
@@ -96,6 +107,15 @@ export interface OnboardingAnswers {
   invests?: boolean;
   goalName?: string;
   goalAmount?: number;
+  /** v29, with a pay-off goal: what the debt is. `goalName` then holds its label. */
+  debtKind?: DebtKind;
+  /** v29: the rate as the user gave it (or the kind's typical one), a fraction; flat when `debtRateFlat`. */
+  debtRate?: number;
+  debtRateFlat?: boolean;
+  /** v29: instalments left, for a debt with a term. */
+  debtMonthsLeft?: number;
+  /** v29, a card: cleared in full every month. */
+  debtPaidInFull?: boolean;
   /** ISO date the quiz was finished or skipped. */
   answeredAt: string;
 }
@@ -119,7 +139,14 @@ export function answeredCash(answers: Pick<OnboardingAnswers, "cashInBank" | "bu
   if (answers.bufferMonthsHave === undefined || answers.monthlySpending === undefined) return null;
   return Math.round(BUFFER_BANDS[answers.bufferMonthsHave].months * answers.monthlySpending);
 }
+/** The debt's effective yearly rate from the answers, a flat rate converted; 0 = not given. */
+export function answeredDebtRate(answers: Pick<OnboardingAnswers, "debtRate" | "debtRateFlat" | "debtMonthsLeft">): number {
+  const rate = answers.debtRate ?? 0;
+  return answers.debtRateFlat ? flatToEffectiveRate(rate, answers.debtMonthsLeft ?? Number.NaN) : rate;
+}
+
 const MAX_AMOUNT = 1_000_000_000;
+const MAX_MONTHS_LEFT = 600;
 const MAX_GOAL_NAME = 60;
 
 /**
@@ -129,6 +156,14 @@ const MAX_GOAL_NAME = 60;
  */
 const SPLIT_WHILE_BUFFER_SHORT = { buffer: 0.5, goal: 0.3, invest: 0.2 } as const;
 const SPLIT_ONCE_BUFFER_FULL = { buffer: 0, goal: 0.6, invest: 0.4 } as const;
+/**
+ * A pay-off goal that comes first (L-1): half to the starter money until it
+ * holds a month's spending, then everything to the debt, nothing invested.
+ */
+const SPLIT_DEBT_STARTER_SHORT = { buffer: 0.5, goal: 0.5, invest: 0 } as const;
+const SPLIT_DEBT_STARTER_FULL = { buffer: 0, goal: 1, invest: 0 } as const;
+/** A 4–8% debt: buffer as usual, then spare money split between paying early and investing. */
+const SPLIT_MEDIUM_DEBT_BUFFER_FULL = { buffer: 0, goal: 0.5, invest: 0.5 } as const;
 
 export interface MonthlySplit {
   buffer: number;
@@ -150,6 +185,19 @@ export interface OnboardingPlan {
   monthsToBufferFull: number | null;
   /** Months until the goal amount at `split.goal`; null when there is no goal or no money for it. */
   monthsToGoal: number | null;
+  /**
+   * The pay-off goal comes before the buffer (L-1). The buffer then only
+   * fills to `starterTarget`, so `monthsToBufferFull` is null until the debt
+   * is cleared.
+   */
+  debtFirst: boolean;
+  /** A month's spending (RM1,000 without a spending answer); 0 when the debt does not come first. */
+  starterTarget: number;
+  /**
+   * A pay-off goal paid on its own schedule instead (under 8%, or a card
+   * cleared every month): it gets no extra share of the leftover.
+   */
+  debtOnSchedule: boolean;
 }
 
 function amountOrUndefined(value: unknown): number | undefined {
@@ -186,6 +234,13 @@ export function normalizeOnboardingAnswers(value: unknown): OnboardingAnswers | 
   if (goalName) answers.goalName = goalName;
   const goalAmount = amountOrUndefined(raw.goalAmount);
   if (goalAmount !== undefined && goalAmount > 0) answers.goalAmount = goalAmount;
+  if (isDebtKind(raw.debtKind)) answers.debtKind = raw.debtKind;
+  if (typeof raw.debtRate === "number" && Number.isFinite(raw.debtRate) && raw.debtRate > 0 && raw.debtRate < 1) answers.debtRate = raw.debtRate;
+  if (typeof raw.debtRateFlat === "boolean") answers.debtRateFlat = raw.debtRateFlat;
+  if (typeof raw.debtMonthsLeft === "number" && Number.isInteger(raw.debtMonthsLeft) && raw.debtMonthsLeft >= 1 && raw.debtMonthsLeft <= MAX_MONTHS_LEFT) {
+    answers.debtMonthsLeft = raw.debtMonthsLeft;
+  }
+  if (typeof raw.debtPaidInFull === "boolean") answers.debtPaidInFull = raw.debtPaidInFull;
   return answers;
 }
 
@@ -202,23 +257,37 @@ export function buildOnboardingPlan(answers: OnboardingAnswers): OnboardingPlan 
   // Unknown cash is treated as nothing saved yet: the plan then puts the buffer first.
   const bufferFull = bufferTarget !== null && bufferTarget > 0 && (cash ?? 0) >= bufferTarget;
 
+  const debtGoal = answers.primaryGoal === "debt" && hasGoal(answers);
+  const rate = answeredDebtRate(answers);
+  const paidInFull = answers.debtPaidInFull === true;
+  const debtFirst = debtGoal && !paidInFull && debtComesFirst(rate, true);
+  const starterTarget = debtFirst ? starterBufferTarget(spending) : 0;
+  // A cheap debt, or a card that costs nothing, is paid on its schedule: no extra share for it.
+  const cheapDebt = debtGoal && (paidInFull || debtTier(rate) === "low");
+
   const split: MonthlySplit = { buffer: 0, goal: 0, invest: 0 };
   if (leftover !== null && leftover > 0) {
-    const shares = bufferFull || bufferTarget === null || bufferTarget === 0 ? SPLIT_ONCE_BUFFER_FULL : SPLIT_WHILE_BUFFER_SHORT;
+    const bufferDone = bufferFull || bufferTarget === null || bufferTarget === 0;
+    const shares = debtFirst
+      ? ((cash ?? 0) >= starterTarget ? SPLIT_DEBT_STARTER_FULL : SPLIT_DEBT_STARTER_SHORT)
+      : bufferDone
+        ? (debtGoal && debtTier(rate) === "medium" ? SPLIT_MEDIUM_DEBT_BUFFER_FULL : SPLIT_ONCE_BUFFER_FULL)
+        : SPLIT_WHILE_BUFFER_SHORT;
     split.buffer = Math.round(leftover * shares.buffer);
     // Without a goal its share is invested, so every ringgit still has a place.
-    split.goal = hasGoal(answers) ? Math.round(leftover * shares.goal) : 0;
+    split.goal = hasGoal(answers) && !cheapDebt ? Math.round(leftover * shares.goal) : 0;
     split.invest = Math.round(leftover) - split.buffer - split.goal;
   }
 
   let monthsToBufferFull: number | null = null;
   if (bufferFull) monthsToBufferFull = 0;
+  else if (debtFirst) monthsToBufferFull = null;
   else if (bufferTarget !== null && bufferTarget > 0 && split.buffer > 0) {
     monthsToBufferFull = Math.ceil((bufferTarget - (cash ?? 0)) / split.buffer);
   }
   const monthsToGoal = hasGoal(answers) && split.goal > 0 ? Math.ceil((answers.goalAmount ?? 0) / split.goal) : null;
 
-  return { leftover, bufferTarget, monthsCovered, bufferFull, split, monthsToBufferFull, monthsToGoal };
+  return { leftover, bufferTarget, monthsCovered, bufferFull, split, monthsToBufferFull, monthsToGoal, debtFirst, starterTarget, debtOnSchedule: cheapDebt };
 }
 
 /** One line for the Overview's goal sentence, from the goal question; "" when there is nothing to say. */
@@ -232,7 +301,7 @@ export function goalSentence(answers: OnboardingAnswers, plan: OnboardingPlan = 
 }
 
 export interface ApplyOptions {
-  /** Id for the goal the answers create; the caller owns id generation. */
+  /** Id for the goal the answers create; the caller owns id generation. The debt they record gets `<goalId>-debt`. */
   goalId: string;
   /** Stamped as `answeredAt`. */
   today: string;
@@ -309,6 +378,12 @@ export function applyOnboardingAnswers(state: WealthState, input: Omit<Onboardin
     if (!next.overviewGoalId) next.overviewGoalId = options.goalId;
   }
 
+  // v29: a debt with its amount → one liability, rate and term included, so
+  // the stage reads it straight away. Only into an empty list: applying twice,
+  // or to an account that already keeps its debts, adds nothing.
+  const liability = answeredLiability(answers, `${options.goalId}-debt`, options.today);
+  if (liability && state.liabilities.length === 0) next.liabilities = [liability];
+
   // Q1 + Q6 → the one-line goal on the Overview, only if the user has none.
   const sentence = goalSentence(answers, plan);
   if (sentence && !state.financialGoal) next.financialGoal = sentence;
@@ -316,6 +391,30 @@ export function applyOnboardingAnswers(state: WealthState, input: Omit<Onboardin
   if (kinds.length > 0) next.financialRules = syncPlanningRules(next, kinds);
   if (next.goals !== state.goals) next.financialRules = syncGoalContributionRules(next);
   return next;
+}
+
+/** The debt the answers describe, as a liability; null without a pay-off goal and its amount. */
+export function answeredLiability(answers: OnboardingAnswers, id: string, today: string): Liability | null {
+  if (answers.primaryGoal !== "debt" || !answers.goalAmount) return null;
+  const kind = answers.debtKind;
+  const info = kind ? DEBT_KINDS[kind] : null;
+  const balance = answers.goalAmount;
+  const annualRate = answeredDebtRate(answers);
+  const months = info?.hasTerm ? answers.debtMonthsLeft : undefined;
+  // What has to go out each month anyway: a card's minimum, or the instalment.
+  const minimumPayment = kind === "credit-card" ? cardMinimumPayment(balance)
+    : months ? monthlyInstalment(balance, annualRate, months) : 0;
+  const liability: Liability = {
+    id,
+    name: answers.goalName || info?.label || "Debt",
+    balance,
+    annualRate,
+    minimumPayment: Math.round(minimumPayment * 100) / 100,
+  };
+  if (kind) liability.kind = kind;
+  if (months) liability.endMonth = addMonths(today, months);
+  if (kind === "credit-card" && answers.debtPaidInFull !== undefined) liability.paidInFull = answers.debtPaidInFull;
+  return liability;
 }
 
 /** "I'll set up myself": the quiz is done, nothing was answered. */
