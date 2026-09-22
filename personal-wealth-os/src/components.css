@@ -517,31 +517,6 @@
     font-size: 1.25rem;
     line-height: 1;
   }
-  .more-account {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    background: var(--surface);
-  }
-  .more-account__avatar {
-    flex: none;
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius-sm);
-    object-fit: cover;
-    background: var(--surface-hover);
-  }
-  .more-account__name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--text);
-  }
 
   /* ---- Settings: the emergency-target suggestion ------------------------ */
   .settings-suggest {
@@ -2383,6 +2358,103 @@
   @media (min-width: 901px) {
     .wu-set__item--phone {
       display: none;
+    }
+  }
+
+  /* ---- me page ---------------------------------------------------------- */
+  /* The account card, then two columns that each end where their lists end:
+     Profile over Money in & out on the left, Plan on the right. A phone stacks
+     them in that order. */
+  .wu-me-card {
+    display: grid;
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+  }
+  .wu-me-card__id {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-width: 0;
+  }
+  .wu-me-card__avatar {
+    position: relative;
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+  }
+  .wu-me-card__initials {
+    font: var(--weight-semibold) var(--text-heading) / 1 var(--font-sans);
+    color: var(--accent);
+  }
+  .wu-me-card__avatar img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .wu-me-card__who {
+    flex: 1;
+    min-width: 0;
+  }
+  .wu-me-card__name,
+  .wu-me-card__email {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .wu-me-card__signout {
+    flex: none;
+  }
+  .wu-me-card__facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .wu-me-card__facts .wu-badge {
+    white-space: normal;
+  }
+  .wu-me-card__note {
+    margin: 0;
+  }
+  /* the columns sit outside .wu-dash, which is where the shared row height and
+     value column are defined */
+  .wu-me-cols {
+    --row-h: 52px;
+    --row-value-w: 84px;
+    display: grid;
+    gap: var(--space-4);
+    align-items: start;
+  }
+  .wu-me-col {
+    display: grid;
+    gap: var(--space-4);
+    min-width: 0;
+  }
+  @media (min-width: 901px) {
+    .wu-me-cols {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 900px) {
+    /* the page's groups drop their card on a phone (.wu-set.wu-card); the
+       account card keeps its own */
+    .wu-me-card {
+      margin-bottom: var(--space-5);
+    }
+    .wu-me-cols,
+    .wu-me-col {
+      gap: var(--space-5);
     }
   }
 

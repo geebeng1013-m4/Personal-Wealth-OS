@@ -68,7 +68,7 @@ const GUIDES: Record<GuideId, GuideSpec> = {
     tipAfter: ".wu-page-header",
   },
   "safety-buffer": {
-    page: "settings",
+    page: "me",
     reveal: '[data-edit="emergency"]',
     target: 'form[data-form="emergency"] input[name="target"]',
     tip: "Enter how much you want set aside for emergencies, then save.",

@@ -70,8 +70,8 @@ export function buildOnboardingChecklist(state: WealthState): OnboardingChecklis
     {
       id: "safety-buffer",
       title: "Set your safety buffer target",
-      hint: "In Settings, enter your emergency fund target.",
-      page: "settings",
+      hint: "In Me, enter your emergency fund target.",
+      page: "me",
       done: state.emergency.target > 0,
       optional: false,
     },

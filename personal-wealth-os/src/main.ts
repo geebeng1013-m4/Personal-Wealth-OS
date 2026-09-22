@@ -141,6 +141,7 @@ const appPages = new Set([
   "advisor",
   "rules",
   "review",
+  "me",
   "settings",
   "money-leaks",
   "more",
