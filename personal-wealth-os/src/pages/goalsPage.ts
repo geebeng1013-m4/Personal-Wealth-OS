@@ -20,6 +20,7 @@ import { accountBalances } from "../ledger";
 import { pageHeader } from "../components/pageHeader";
 import { getGoalsSnapshot, type GoalSnapshot } from "../goalSummary";
 import { syncGoalContributionRules } from "../financialRules";
+import { isoDate } from "../checkins";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
 /**
@@ -62,6 +63,14 @@ function financialGoalBlock(state: WealthState): string {
   </section>`;
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2026-09-22" → "22 Sep 2026". Spelled out so every browser shows the same. */
+function spentDate(day: string): string {
+  const [year, month, date] = day.split("-").map(Number);
+  return `${date} ${MONTHS[month - 1] ?? ""} ${year}`;
+}
+
 /** What the linked account puts in the Current slot, e.g. "28 · from MAE wallet". */
 function linkedCurrentText(balance: number, accountName: string): string {
   return `${escapeHtml(amountOf(balance))} · from ${escapeHtml(accountName)}`;
@@ -91,7 +100,7 @@ function goalEditor(state: WealthState, snapshot: GoalSnapshot, featured: boolea
       </div>
       <p class="wu-field-row__error goal-form-error" role="alert" hidden></p>
       <div class="wu-row wu-row--tight wu-goal-editor__actions">
-        ${featured ? "" : `<button class="wu-btn wu-btn--secondary wu-btn--sm feature-goal" data-goal-id="${escapeHtml(goal.id)}" type="button">Show on Dashboard</button>`}
+        ${featured || snapshot.isSpent ? "" : `<button class="wu-btn wu-btn--secondary wu-btn--sm feature-goal" data-goal-id="${escapeHtml(goal.id)}" type="button">Show on Dashboard</button>`}
         <button class="wu-btn wu-btn--ghost wu-btn--sm wu-goal-danger delete-goal" data-index="${index}" type="button">Delete</button>
         <span class="wu-goal-editor__grow"></span>
         <button class="wu-btn wu-btn--ghost wu-btn--sm wu-goal-editor__cancel cancel-goal-edit" type="button">Cancel</button>
@@ -117,10 +126,23 @@ function timeToGoal(snapshot: GoalSnapshot): string {
  */
 function goalDetails(snapshot: GoalSnapshot): string {
   const note = snapshot.note.trim();
+  // A reached goal can be marked spent, so buying the thing it was for does
+  // not send it back to 0% when the account empties.
+  const status = snapshot.isSpent && snapshot.spentAt
+    ? `<p class="wu-goal-detail__eta">Spent <strong>${spentDate(snapshot.spentAt)}</strong></p>`
+    : `<p class="wu-goal-detail__eta">${timeToGoal(snapshot)}</p>`;
+  const spendButton = snapshot.isSpent
+    ? `<button class="wu-btn wu-btn--ghost wu-btn--sm undo-goal-spent" data-index="${snapshot.index}" type="button">Undo spent</button>`
+    : snapshot.isComplete
+      ? `<button class="wu-btn wu-btn--secondary wu-btn--sm mark-goal-spent" data-index="${snapshot.index}" type="button">Mark as spent</button>`
+      : "";
   return `<div class="wu-goal-detail">
       ${note ? `<p class="wu-goal-detail__note">${escapeHtml(note)}</p>` : `<p class="wu-goal-detail__note wu-goal-detail__note--empty">No note yet</p>`}
-      <p class="wu-goal-detail__eta">${timeToGoal(snapshot)}</p>
-      <button class="wu-btn wu-btn--secondary wu-btn--sm edit-goal" type="button">Edit</button>
+      ${status}
+      <div class="wu-goal-detail__actions">
+        <button class="wu-btn wu-btn--secondary wu-btn--sm edit-goal" type="button">Edit</button>
+        ${spendButton}
+      </div>
     </div>`;
 }
 
@@ -128,20 +150,25 @@ function goalRow(state: WealthState, snapshot: GoalSnapshot, featuredId: string)
   const open = openGoalIndex === snapshot.index;
   const featured = snapshot.id === featuredId;
   const ratio = snapshot.progress;
-  const pace = snapshot.isComplete
+  const spentLabel = snapshot.isSpent && snapshot.spentAt ? `Spent ${spentDate(snapshot.spentAt)}` : "";
+  const pace = spentLabel
+    ? spentLabel
+    : snapshot.isComplete
     ? "Done"
     : snapshot.estimatedMonthsToTarget
       ? `${snapshot.estimatedMonthsToTarget} months left`
       : snapshot.targetAmount <= 0 ? "No target yet" : "Nothing put in each month";
-  const monthly = snapshot.isComplete
+  const monthly = snapshot.isSpent
+    ? `<span class="t-positive">Spent</span>`
+    : snapshot.isComplete
     ? `<span class="t-positive">Done</span>`
     : snapshot.monthlyContribution > 0 ? `+${amountOf(snapshot.monthlyContribution)}` : `<span class="t-faint">0</span>`;
   return `<li class="wu-goal${open ? " is-open" : ""}${snapshot.isComplete ? " is-done" : ""}">
       <button class="wu-goal__row goal-row" type="button" data-index="${snapshot.index}" aria-expanded="${open}">
-        <span class="wu-goal__title">${escapeHtml(snapshot.label || snapshot.name)}${featured ? ` <span class="wu-chip wu-chip--muted wu-goal__pin">On Dashboard</span>` : ""}<small>${snapshot.isComplete ? "Complete" : `+${amountOf(snapshot.monthlyContribution)} / mo`} · ${escapeHtml(pace)}</small></span>
+        <span class="wu-goal__title">${escapeHtml(snapshot.label || snapshot.name)}${featured ? ` <span class="wu-chip wu-chip--muted wu-goal__pin">On Dashboard</span>` : ""}<small>${spentLabel ? escapeHtml(spentLabel) : `${snapshot.isComplete ? "Complete" : `+${amountOf(snapshot.monthlyContribution)} / mo`} · ${escapeHtml(pace)}`}</small></span>
         <span class="wu-goal__monthly">${monthly}</span>
         <span class="wu-goal__bar"><span class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(ratio * 100)}%"></span></span></span>
-        <span class="wu-goal__pct">${snapshot.isComplete ? `<span class="wu-chip">Done</span>` : percent(ratio)}</span>
+        <span class="wu-goal__pct">${snapshot.isSpent ? `<span class="wu-chip">Spent</span>` : snapshot.isComplete ? `<span class="wu-chip">Done</span>` : percent(ratio)}</span>
         <span class="wu-goal__amount">${amountOf(snapshot.currentAmount)} / ${amountOf(snapshot.targetAmount)}</span>
         <span class="wu-goal__chev" aria-hidden="true">›</span>
       </button>
@@ -181,7 +208,7 @@ export function goalsTemplate(state: WealthState): string {
           <section class="wu-card wu-dash__tile" aria-labelledby="goalsTargetLabel">
             <div class="wu-tc__top"><span class="wu-label" id="goalsTargetLabel">All targets</span></div>
             <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(goals.totalTarget)}</span></p>
-            <p class="wu-dash__note">Across ${state.goals.length} ${state.goals.length === 1 ? "goal" : "goals"}</p>
+            <p class="wu-dash__note">Across ${goals.savingCount} ${goals.savingCount === 1 ? "goal" : "goals"}${goals.savingCount < state.goals.length ? ` · ${state.goals.length - goals.savingCount} spent` : ""}</p>
           </section>
           <section class="wu-card wu-dash__tile" aria-labelledby="goalsMonthLabel">
             <div class="wu-tc__top"><span class="wu-label" id="goalsMonthLabel">Each month</span></div>
@@ -280,6 +307,24 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
     if (!state.goals.some((goal) => goal.id === overviewGoalId)) return;
     repaint({ ...state, overviewGoalId }, "Changed featured Overview goal");
   }));
+
+  // Mark a reached goal as spent, or undo it. Marking records today and the
+  // target, so the goal stays complete after the purchase empties its account.
+  const setSpent = (button: HTMLButtonElement, spent: boolean): void => {
+    const index = Number(button.dataset.index);
+    const goal = state.goals[index];
+    // Only a reached goal is marked, and only a marked one is undone.
+    if (!goal || (spent ? !(goal.target > 0) || typeof goal.spentAt === "string" : typeof goal.spentAt !== "string")) return;
+    const { spentAt: _spentAt, spentAmount: _spentAmount, ...unspent } = goal;
+    const goals = [...state.goals];
+    goals[index] = spent ? { ...unspent, spentAt: isoDate(new Date()), spentAmount: goal.target } : unspent;
+    const next = { ...state, goals };
+    // A spent goal takes no more money each month; undo brings its rule back.
+    next.financialRules = syncGoalContributionRules(next);
+    repaint(next, spent ? "Marked goal as spent" : "Undid spent goal");
+  };
+  root.querySelectorAll<HTMLButtonElement>(".mark-goal-spent").forEach((button) => button.addEventListener("click", () => setSpent(button, true)));
+  root.querySelectorAll<HTMLButtonElement>(".undo-goal-spent").forEach((button) => button.addEventListener("click", () => setSpent(button, false)));
 
   // Save explicitly on click so the action remains reliable across browsers/PWA shells.
   root.querySelectorAll<HTMLFormElement>(".goalForm").forEach((form) => {

@@ -216,6 +216,8 @@ export function getDefaultFinancialRules(state: Pick<WealthState, "emergency" | 
 
   for (const goal of state.goals ?? []) {
     if (!goal || typeof goal.id !== "string" || !goal.id.trim()) continue;
+    // A spent goal takes no more money; undoing the spend brings its rule back.
+    if (typeof goal.spentAt === "string") continue;
     const monthlyAmount = safeAmount(goal.monthlyContribution);
     if (monthlyAmount === null || monthlyAmount <= 0) continue;
     if (rules.length >= MAX_GOAL_CONTRIBUTION_RULES) break;
@@ -362,6 +364,8 @@ export function syncGoalContributionRules(state: RulePlanningSource): FinancialR
   const goalRules: FinancialRule[] = [];
   for (const goal of state.goals ?? []) {
     if (!goal || typeof goal.id !== "string" || !goal.id.trim()) continue;
+    // A spent goal takes no more money; undoing the spend brings its rule back.
+    if (typeof goal.spentAt === "string") continue;
     const monthlyAmount = safeAmount(goal.monthlyContribution);
     if (monthlyAmount === null || monthlyAmount <= 0) continue;
     const candidate: FinancialRule = {

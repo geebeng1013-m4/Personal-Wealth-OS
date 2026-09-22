@@ -31,7 +31,7 @@
  * Runtime read model: never persisted to WealthState.
  */
 import type { Goal, WealthState } from "./models";
-import { linkedGoalCurrent } from "./financialHealth";
+import { isGoalSpent, linkedGoalCurrent } from "./financialHealth";
 
 export type GoalStatus = "complete" | "funding" | "stalled" | "no-target";
 
@@ -70,6 +70,15 @@ export interface GoalSnapshot {
   /** Name of the linked account, or null when the link is broken. */
   linkedAccountName: string | null;
 
+  /**
+   * The money was used for what it was saved for. A spent goal is complete at
+   * its spent amount, puts nothing in each month, and is left out of the
+   * Saved and target totals — that money is no longer set aside.
+   */
+  isSpent: boolean;
+  /** "2026-09-22" when spent, otherwise null. */
+  spentAt: string | null;
+
   /** Complete by the canonical currentAmount. The single completion flag. */
   isComplete: boolean;
   status: GoalStatus;
@@ -80,6 +89,9 @@ export interface GoalsSnapshot {
   goals: GoalSnapshot[];
   /** Incomplete first, matching the existing Goals page ordering. */
   ordered: GoalSnapshot[];
+  /** Goals not yet spent — the ones the totals below cover. */
+  savingCount: number;
+  /** Targets of the goals not yet spent. */
   totalTarget: number;
   /**
    * Money actually set aside across all goals. A ledger account linked to
@@ -112,17 +124,20 @@ function statusOf(goal: Goal, isComplete: boolean): GoalStatus {
 
 /** One goal's facts. Composes the existing display formulas exactly. */
 export function buildGoalSnapshot(goal: Goal, index: number, state: WealthState): GoalSnapshot {
+  const isSpent = isGoalSpent(goal);
   const currentAmount = linkedGoalCurrent(goal, state);
   const recordedAmount = goal.current;
   const progress = goal.target > 0 ? Math.min(currentAmount / goal.target, 1) : 0;
   const remainingAmount = Math.max(goal.target - currentAmount, 0);
-  const estimatedMonthsToTarget = goal.monthlyContribution > 0
-    ? Math.ceil(remainingAmount / goal.monthlyContribution)
+  const monthlyContribution = isSpent ? 0 : goal.monthlyContribution;
+  const estimatedMonthsToTarget = monthlyContribution > 0
+    ? Math.ceil(remainingAmount / monthlyContribution)
     : null;
   const linkedAccount = goal.accountId
     ? state.ledgerAccounts.find((account) => account.id === goal.accountId)
     : undefined;
-  const isComplete = goal.target > 0 && currentAmount >= goal.target;
+  // Spent means it was reached and used, even if the target was edited since.
+  const isComplete = isSpent || (goal.target > 0 && currentAmount >= goal.target);
 
   return {
     id: goal.id,
@@ -135,7 +150,7 @@ export function buildGoalSnapshot(goal: Goal, index: number, state: WealthState)
     recordedAmount,
     remainingAmount,
     progress,
-    monthlyContribution: goal.monthlyContribution,
+    monthlyContribution,
     estimatedMonthsToTarget,
     estimatedYearsToTarget: estimatedMonthsToTarget === null
       ? null
@@ -143,6 +158,8 @@ export function buildGoalSnapshot(goal: Goal, index: number, state: WealthState)
     isAccountLinked: Boolean(goal.accountId),
     ...(goal.accountId ? { accountId: goal.accountId } : {}),
     linkedAccountName: linkedAccount?.name ?? null,
+    isSpent,
+    spentAt: isSpent ? goal.spentAt ?? null : null,
     isComplete,
     status: statusOf(goal, isComplete),
   };
@@ -205,18 +222,24 @@ export function getGoalsSnapshot(state: WealthState, _now = new Date()): GoalsSn
   // Featured goal: the configured one, else the first incomplete goal in the
   // ordered list, else the first goal. Completion here matches what the Goals
   // cards show, so the two can never disagree.
-  const configured = goals.find((goal) => goal.id === state.overviewGoalId);
+  // A spent goal has nothing left to watch, so the Dashboard moves on; the
+  // choice itself is kept, and comes back if the spend is undone.
+  const configured = goals.find((goal) => goal.id === state.overviewGoalId && !goal.isSpent);
   const firstIncomplete = ordered.find((goal) => goal.targetAmount > 0 && !goal.isComplete);
   const featured = configured ?? firstIncomplete ?? goals[0] ?? null;
+
+  // Totals cover money still set aside; a spent goal counts only as done.
+  const saving = goals.filter((goal) => !goal.isSpent);
 
   return {
     goals,
     ordered,
-    totalTarget: goals.reduce((sum, goal) => sum + goal.targetAmount, 0),
-    totalCurrent: uniqueCurrentTotal(goals),
-    totalFunded: fundedTotal(goals),
-    totalRemaining: goals.reduce((sum, goal) => sum + goal.remainingAmount, 0),
-    totalMonthlyContribution: goals.reduce((sum, goal) => sum + goal.monthlyContribution, 0),
+    savingCount: saving.length,
+    totalTarget: saving.reduce((sum, goal) => sum + goal.targetAmount, 0),
+    totalCurrent: uniqueCurrentTotal(saving),
+    totalFunded: fundedTotal(saving),
+    totalRemaining: saving.reduce((sum, goal) => sum + goal.remainingAmount, 0),
+    totalMonthlyContribution: saving.reduce((sum, goal) => sum + goal.monthlyContribution, 0),
     completedCount: goals.filter((goal) => goal.isComplete).length,
     activeCount: goals.filter((goal) => !goal.isComplete && goal.targetAmount > 0).length,
     featuredGoalId: featured?.id ?? "",

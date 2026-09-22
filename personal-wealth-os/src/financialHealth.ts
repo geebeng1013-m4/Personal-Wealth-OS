@@ -173,7 +173,15 @@ export function netWorth(transactions: LedgerTransaction[], accounts: LedgerAcco
   return { assets, liabilities: debt, net: assets - debt };
 }
 
+/** True once the goal's money has been used for what it was saved for. */
+export function isGoalSpent(goal: Pick<Goal, "spentAt" | "spentAmount">): boolean {
+  return typeof goal.spentAt === "string" && typeof goal.spentAmount === "number";
+}
+
 export function linkedGoalCurrent(goal: Goal, state: WealthState): number {
+  // A spent goal is frozen at what was spent: the purchase emptied the
+  // account, and reading it now would show the goal as never saved.
+  if (isGoalSpent(goal)) return goal.spentAmount ?? 0;
   if (!goal.accountId) return goal.current;
   return accountBalances(state.ledgerTransactions, state.ledgerAccounts).find((item) => item.account.id === goal.accountId)?.balance ?? goal.current;
 }

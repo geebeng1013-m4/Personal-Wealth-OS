@@ -111,6 +111,14 @@ export interface Goal {
   monthlyContribution: number;
   note: string;
   accountId?: string;
+  /**
+   * v30: the goal's money was used for what it was saved for. Set together,
+   * or not at all. Once spent the goal stays complete at spentAmount (its
+   * target when marked) and no longer reads the linked account, whose balance
+   * has usually fallen by that purchase.
+   */
+  spentAt?: string;
+  spentAmount?: number;
 }
 
 export interface Trade {
