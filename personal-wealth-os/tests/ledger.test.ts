@@ -7,6 +7,7 @@ import {
   accountBalances,
   investmentAssetShare,
   normalizeLedgerAmount,
+  buildLedgerTransaction,
   type LedgerFilters,
 } from "../src/ledger";
 import type { LedgerAccount, LedgerTransaction } from "../src/models";
@@ -125,4 +126,49 @@ test("normalizeLedgerAmount: rejects zero/negative/non-finite, rounds to cents",
   assert.equal(normalizeLedgerAmount("abc"), null);
   assert.equal(normalizeLedgerAmount(10.005), 10.01);
   assert.equal(normalizeLedgerAmount("42.999"), 43);
+});
+
+// --- buildLedgerTransaction: the Ledger form's and the Overview sheet's one set of rules (Q-1) ---
+
+const entryAccounts = [
+  { id: "account-bank", name: "Bank", type: "bank", openingBalance: 0 },
+  { id: "account-wallet", name: "Wallet", type: "wallet", openingBalance: 0 },
+] as LedgerAccount[];
+const entryCategories = [
+  { id: "income-salary", label: "Salary", type: "income" },
+  { id: "food", label: "Food", type: "expense" },
+] as Parameters<typeof buildLedgerTransaction>[2];
+const entry = (overrides: Partial<Parameters<typeof buildLedgerTransaction>[0]> = {}) => buildLedgerTransaction({
+  id: "ledger-1", type: "income", amount: "4500", categoryId: "income-salary", accountId: "account-bank",
+  fromAccountId: "", toAccountId: "", date: "2026-09-22", note: "  Pay  ", sponsored: false, ...overrides,
+}, entryAccounts, entryCategories);
+
+test("buildLedgerTransaction: a valid pay entry lands at local midnight, note trimmed", () => {
+  const result = entry();
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.transaction.amount, 4500);
+  assert.equal(result.transaction.note, "Pay");
+  assert.equal(result.transaction.date, new Date("2026-09-22T00:00:00").toISOString());
+  assert.equal(result.transaction.fundingSource, undefined);
+});
+
+test("buildLedgerTransaction: rejects empty, zero, negative and non-numeric amounts", () => {
+  for (const amount of ["", "0", "-5", "abc", "Infinity"]) {
+    assert.equal(entry({ amount }).ok, false, `amount ${JSON.stringify(amount)} should be rejected`);
+  }
+});
+
+test("buildLedgerTransaction: a category of the wrong type, an unknown account or a bad date is rejected", () => {
+  assert.equal(entry({ categoryId: "food" }).ok, false);
+  assert.equal(entry({ accountId: "account-gone" }).ok, false);
+  assert.equal(entry({ date: "2026-02-31x" }).ok, false);
+});
+
+test("buildLedgerTransaction: transfers need two different accounts, and say so", () => {
+  const same = entry({ type: "transfer", fromAccountId: "account-bank", toAccountId: "account-bank" });
+  assert.deepEqual(same, { ok: false, error: "Choose two different accounts for a transfer." });
+  const ok = entry({ type: "transfer", fromAccountId: "account-bank", toAccountId: "account-wallet", sponsored: true });
+  assert.equal(ok.ok, true);
+  if (ok.ok) assert.equal(ok.transaction.fundingSource, undefined, "a transfer is never sponsored");
 });

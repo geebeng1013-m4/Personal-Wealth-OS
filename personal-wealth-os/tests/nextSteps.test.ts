@@ -39,7 +39,7 @@ test("nextSteps: the plan strip marks figures that still rest on answers", () =>
   const plan = buildNextSteps(answered()).plan;
   assert.deepEqual(plan, {
     bufferCurrent: 3000, bufferTarget: 8400, bufferEstimate: true,
-    goalName: "Japan trip", goalMonths: 12, goalEstimate: true,
+    goalName: "Japan trip", goalKind: "save", goalCurrent: 0, goalTarget: 6000, goalMonths: 12, goalEstimate: true,
   });
 });
 

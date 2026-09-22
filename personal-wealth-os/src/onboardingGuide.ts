@@ -15,8 +15,13 @@
 
 import type { NextStepId, OnboardingStepId } from "./onboarding";
 
-/** Every step that leads to a field: the F-7 checklist's and the O-3 next steps' ("move-to-buffer" is ticked on the card). */
-export type GuideId = OnboardingStepId | Exclude<NextStepId, "move-to-buffer">;
+/**
+ * Every step that leads to a field: the F-7 checklist's and the O-3 next
+ * steps'. The rest are done on the Overview itself — ticked on the card
+ * ("move-to-buffer", "debt-pay"), filled in a bottom sheet ("debt-add",
+ * "invest-monthly"), or a page to look through rather than a field ("cut-cost").
+ */
+export type GuideId = OnboardingStepId | Exclude<NextStepId, "move-to-buffer" | "debt-pay" | "debt-add" | "invest-monthly" | "cut-cost">;
 
 interface GuideSpec {
   page: string;

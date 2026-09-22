@@ -22,15 +22,77 @@ import { syncGoalContributionRules, syncPlanningRules } from "./financialRules";
 export type PrimaryGoal = "buffer" | "invest" | "save" | "debt";
 export const PRIMARY_GOALS: readonly PrimaryGoal[] = ["buffer", "invest", "save", "debt"];
 
-/** What the user answered. `undefined` = skipped. (Schema v26) */
+// --- Q-3: the sentence-style answers (Schema v28) ------------------------------
+
+export type LifeStage = "student" | "working" | "self-employed" | "between-jobs" | "retired";
+export const LIFE_STAGES: readonly LifeStage[] = ["student", "working", "self-employed", "between-jobs", "retired"];
+
+/**
+ * Income as a band rather than a figure: easier to answer, and less to hand
+ * over. The plan uses the band's `estimate` (labelled as one); a student's
+ * bands are an allowance's size.
+ */
+export interface IncomeRange {
+  id: string;
+  label: string;
+  estimate: number;
+}
+export const STUDENT_INCOME_RANGES: readonly IncomeRange[] = [
+  { id: "under-500", label: "under RM500", estimate: 400 },
+  { id: "500-1000", label: "RM500–1,000", estimate: 750 },
+  { id: "1000-2500", label: "RM1,000–2,500", estimate: 1750 },
+  { id: "over-2500", label: "over RM2,500", estimate: 3000 },
+];
+export const INCOME_RANGES: readonly IncomeRange[] = [
+  { id: "under-2500", label: "under RM2,500", estimate: 2000 },
+  { id: "2500-4000", label: "RM2,500–4,000", estimate: 3250 },
+  { id: "4000-6000", label: "RM4,000–6,000", estimate: 5000 },
+  { id: "6000-9000", label: "RM6,000–9,000", estimate: 7500 },
+  { id: "over-9000", label: "over RM9,000", estimate: 10000 },
+];
+const ALL_INCOME_RANGE_IDS = new Set([...STUDENT_INCOME_RANGES, ...INCOME_RANGES].map((range) => range.id));
+
+/** The bands a person at this life stage picks from. */
+export function incomeRangesFor(lifeStage: LifeStage | undefined): readonly IncomeRange[] {
+  return lifeStage === "student" ? STUDENT_INCOME_RANGES : INCOME_RANGES;
+}
+
+/** "I have [1–2 months] saved": how many months of spending the savings cover, as a band. */
+export type BufferBand = "none" | "under-1" | "1-2" | "3-5" | "6-plus";
+export const BUFFER_BANDS: Readonly<Record<BufferBand, { label: string; months: number }>> = {
+  none: { label: "no months yet", months: 0 },
+  "under-1": { label: "less than 1 month", months: 0.5 },
+  "1-2": { label: "1–2 months", months: 1.5 },
+  "3-5": { label: "3–5 months", months: 4 },
+  "6-plus": { label: "6+ months", months: 6 },
+};
+
+/** "…mostly in [a money market fund]". */
+export type CashKeptIn = "savings" | "fixed-deposit" | "money-market" | "asb" | "e-wallet" | "cash";
+export const CASH_KEPT_IN: readonly CashKeptIn[] = ["savings", "fixed-deposit", "money-market", "asb", "e-wallet", "cash"];
+
+export type LongTermGoal = "retirement" | "home" | "kids-education" | "self-education" | "travel" | "not-sure";
+export const LONG_TERM_GOALS: readonly LongTermGoal[] = ["retirement", "home", "kids-education", "self-education", "travel", "not-sure"];
+
+/** What the user answered. `undefined` = skipped. (Schema v26; the Q-3 fields v28) */
 export interface OnboardingAnswers {
   primaryGoal?: PrimaryGoal;
+  /** v28. */
+  lifeStage?: LifeStage;
+  /** v28: the band picked, when the income was not typed as a figure. `monthlyIncome` then holds its estimate. */
+  incomeRange?: string;
   /** Take-home pay per month, base currency. */
   monthlyIncome?: number;
   /** Everything that goes out in a month, base currency. */
   monthlySpending?: number;
-  /** Savings and current accounts together, not investments. */
+  /** Savings and current accounts together, not investments. A typed figure, from the v26 quiz. */
   cashInBank?: number;
+  /** v28: savings as months of spending, when no figure was typed. */
+  bufferMonthsHave?: BufferBand;
+  /** v28: where those savings mostly sit. */
+  cashKeptIn?: CashKeptIn;
+  /** v28: what matters in the long run; any number of them. */
+  longTermGoals?: LongTermGoal[];
   invests?: boolean;
   goalName?: string;
   goalAmount?: number;
@@ -40,6 +102,23 @@ export interface OnboardingAnswers {
 
 /** The safety buffer the plan aims for, in months of spending. */
 export const BUFFER_MONTHS = 3;
+/** For income that moves month to month: a longer stretch without pay to cover. */
+export const SELF_EMPLOYED_BUFFER_MONTHS = 6;
+
+/** How many months of spending this person's buffer should hold. */
+export function bufferMonthsFor(answers: Pick<OnboardingAnswers, "lifeStage"> | null | undefined): number {
+  return answers?.lifeStage === "self-employed" ? SELF_EMPLOYED_BUFFER_MONTHS : BUFFER_MONTHS;
+}
+
+/**
+ * The savings the answers describe: the typed figure, else the months band
+ * times the spending. Null when neither says.
+ */
+export function answeredCash(answers: Pick<OnboardingAnswers, "cashInBank" | "bufferMonthsHave" | "monthlySpending">): number | null {
+  if (answers.cashInBank !== undefined) return answers.cashInBank;
+  if (answers.bufferMonthsHave === undefined || answers.monthlySpending === undefined) return null;
+  return Math.round(BUFFER_BANDS[answers.bufferMonthsHave].months * answers.monthlySpending);
+}
 const MAX_AMOUNT = 1_000_000_000;
 const MAX_GOAL_NAME = 60;
 
@@ -93,6 +172,16 @@ export function normalizeOnboardingAnswers(value: unknown): OnboardingAnswers | 
   const cash = amountOrUndefined(raw.cashInBank);
   if (cash !== undefined) answers.cashInBank = cash;
   if (typeof raw.invests === "boolean") answers.invests = raw.invests;
+  if (LIFE_STAGES.includes(raw.lifeStage as LifeStage)) answers.lifeStage = raw.lifeStage as LifeStage;
+  if (typeof raw.incomeRange === "string" && ALL_INCOME_RANGE_IDS.has(raw.incomeRange)) answers.incomeRange = raw.incomeRange;
+  if (typeof raw.bufferMonthsHave === "string" && Object.hasOwn(BUFFER_BANDS, raw.bufferMonthsHave)) answers.bufferMonthsHave = raw.bufferMonthsHave as BufferBand;
+  if (CASH_KEPT_IN.includes(raw.cashKeptIn as CashKeptIn)) answers.cashKeptIn = raw.cashKeptIn as CashKeptIn;
+  if (Array.isArray(raw.longTermGoals)) {
+    const goals = [...new Set(raw.longTermGoals.filter((goal): goal is LongTermGoal => LONG_TERM_GOALS.includes(goal as LongTermGoal)))];
+    // "Not sure yet" means none of the others.
+    const tidy: LongTermGoal[] = goals.includes("not-sure") ? ["not-sure"] : goals;
+    if (tidy.length) answers.longTermGoals = tidy;
+  }
   const goalName = typeof raw.goalName === "string" ? raw.goalName.trim().slice(0, MAX_GOAL_NAME) : "";
   if (goalName) answers.goalName = goalName;
   const goalAmount = amountOrUndefined(raw.goalAmount);
@@ -105,9 +194,10 @@ function hasGoal(answers: OnboardingAnswers): boolean {
 }
 
 export function buildOnboardingPlan(answers: OnboardingAnswers): OnboardingPlan {
-  const { monthlyIncome: income, monthlySpending: spending, cashInBank: cash } = answers;
+  const { monthlyIncome: income, monthlySpending: spending } = answers;
+  const cash = answeredCash(answers) ?? undefined;
   const leftover = income !== undefined && spending !== undefined ? income - spending : null;
-  const bufferTarget = spending !== undefined ? spending * BUFFER_MONTHS : null;
+  const bufferTarget = spending !== undefined ? spending * bufferMonthsFor(answers) : null;
   const monthsCovered = cash !== undefined && spending !== undefined && spending > 0 ? cash / spending : null;
   // Unknown cash is treated as nothing saved yet: the plan then puts the buffer first.
   const bufferFull = bufferTarget !== null && bufferTarget > 0 && (cash ?? 0) >= bufferTarget;
@@ -136,7 +226,7 @@ export function goalSentence(answers: OnboardingAnswers, plan: OnboardingPlan = 
   const money = (value: number) => `RM${Math.round(value).toLocaleString("en-MY")}`;
   if (answers.primaryGoal === "debt" && hasGoal(answers)) return `Clear ${money(answers.goalAmount ?? 0)} of ${answers.goalName}.`;
   if (hasGoal(answers)) return `${money(answers.goalAmount ?? 0)} for ${answers.goalName}.`;
-  if (answers.primaryGoal === "buffer" && plan.bufferTarget) return `A ${BUFFER_MONTHS}-month safety buffer of ${money(plan.bufferTarget)}.`;
+  if (answers.primaryGoal === "buffer" && plan.bufferTarget) return `A ${bufferMonthsFor(answers)}-month safety buffer of ${money(plan.bufferTarget)}.`;
   if (answers.primaryGoal === "invest") return "Invest every month, once the safety buffer is in place.";
   return "";
 }
@@ -197,6 +287,12 @@ export function applyOnboardingAnswers(state: WealthState, input: Omit<Onboardin
         account.id === bank.id ? { ...account, openingBalance: answers.cashInBank ?? 0 } : account);
     }
     if (next.emergency.current === 0) next.emergency.current = answers.cashInBank;
+  } else {
+    // v28: savings given as months of spending. An estimate, so it only sets
+    // what the buffer holds; no account balance is made up from it — the
+    // money may sit in a fund or an FD, and the balances step still asks.
+    const estimated = answeredCash(answers);
+    if (estimated !== null && estimated > 0 && next.emergency.current === 0) next.emergency.current = estimated;
   }
 
   // Q6 → the first goal, contributing its share of the monthly split.

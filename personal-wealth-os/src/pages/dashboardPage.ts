@@ -10,12 +10,17 @@
 
 import type { WealthState } from "../models";
 import { createId } from "../state";
-import { money, percent } from "../rules";
+import { money, percent, suggestedEmergencyTarget } from "../rules";
 import { escapeHtml } from "../html";
 import { buildOverviewModel } from "../overview";
 import { buildNextSteps, type NextStep, type NextStepId, type NextSteps } from "../onboarding";
 import { queueGuide, type GuideId } from "../onboardingGuide";
-import { applyLedgerDraft } from "./ledgerPage";
+import { buildLedgerTransaction } from "../ledger";
+import { syncPlanningRules } from "../financialRules";
+import { bufferMonthsFor } from "../onboardingQuiz";
+import { openBottomSheet } from "../components/bottomSheet";
+import { showNotice } from "../components/toast";
+import { classifyStage, STAGE_COUNT, type MoneyStage } from "../moneyStage";
 import { buildCheckins } from "../checkins";
 import type { PortfolioSnapshot } from "../portfolioSummary";
 import { assetDrawdownBelow } from "../drawdowns";
@@ -64,6 +69,7 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
   // Findings and recurring forecasts are read straight from their own canonical
   // sources; the Dashboard only renders them.
   const leakSummary = detectMoneyLeaks(state);
+  const nextSteps = buildNextSteps(state);
 
   const statusTone = (s: string): string => s === "healthy" || s === "positive" ? "positive" : s === "watch" ? "warning" : "negative";
 
@@ -95,16 +101,19 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
     ${pageHeader({
       eyebrow: `Good ${getGreeting()}, ${greetingName(state.profile.name, signedInName)}`,
       title: "Overview",
-      sub: overview.headline,
     })}
+    ${stageLine(classifyStage(state))}
 
     <!-- The user's own goal sentence, in view every visit. Display only: it is
-         written on the Goals page, so this stays a line, not a form. -->
-    ${state.financialGoal
+         written on the Goals page, so this stays a line, not a form. While a
+         beginner's plan card is up it says the same thing (Q-1), so the
+         sentence waits until that card retires rather than say it twice. -->
+    ${planCardShown(nextSteps) ? "" : state.financialGoal
       ? `<button class="wu-goal-line dashboard-nav" data-page="goals" type="button" aria-label="My financial goal: ${escapeHtml(state.financialGoal)}. Edit on the Goals page"><span class="wu-goal-line__label">Financial goal</span><span class="wu-goal-line__text">${escapeHtml(state.financialGoal)}</span></button>`
       : `<button class="wu-goal-line wu-goal-line--empty dashboard-nav" data-page="goals" type="button"><span class="wu-goal-line__text">Write down your financial goal</span><span aria-hidden="true">→</span></button>`}
 
-    ${nextStepCard(buildNextSteps(state))}
+    ${planCard(nextSteps)}
+    ${nextStepCard(nextSteps)}
 
     ${checkinsLine(buildCheckins(state).dueCount)}
 
@@ -216,20 +225,30 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
 }
 
 /*
- * "Your next step" (O-3, replacing F-7's Get started list). One step at a
- * time, each with the answer it comes from, until the required ones are done
- * or the user hides the card. "Later" moves a step to the back of the queue
- * for this session only.
+ * "Your plan" + "Your next step" (O-3, tidied in Q-1). The plan card says
+ * where things stand — the buffer and the goal, each once. The step card
+ * holds one thing to do, its reason, and the rest of the list folded away.
+ * Steps that are a single form open in a bottom sheet over the Overview;
+ * everything else still goes to its page. "Later" moves a step to the back of
+ * the queue for this session only.
  */
 const laterSteps = new Set<NextStepId>();
-/** Steps done at the last render, to spot one finished since. */
+/** Steps done at the last bind, to spot one finished since and say so once. */
 let previouslyDone: Set<NextStepId> | null = null;
-/**
- * The step most recently finished. Its line stays until the next one is done:
- * the Overview can render more than once on the way back from another page,
- * and a one-render message would be gone before anyone read it.
+/** A step just saved from the sheet, and the page its "View" opens. */
+let savedFromSheet: { id: NextStepId; page: string } | null = null;
+
+/*
+ * Where the user is on the road to investing (Q-2), in the header's place for
+ * a sentence. It replaced "Safety buffer: 0% funded", which the Health card
+ * still shows. Four segments, the words say it too.
  */
-let lastFinished: NextStepId | null = null;
+function stageLine(stage: MoneyStage): string {
+  const label = stage.step === null ? "Debt first" : `Stage ${stage.step} of ${STAGE_COUNT}`;
+  const segments = stage.step === null ? "" : `<span class="wu-stage__steps" aria-hidden="true">${Array.from({ length: STAGE_COUNT }, (_, index) =>
+    `<i class="${index < (stage.step ?? 0) ? "is-on" : ""}"></i>`).join("")}</span>`;
+  return `<p class="wu-stage">${segments}<span class="wu-stage__text"><strong>${label} · ${escapeHtml(stage.title)}</strong> <span class="wu-stage__why">${escapeHtml(stage.reason)}</span></span></p>`;
+}
 
 /* One line of status (P-6a): the check-ins themselves live on Review. */
 function checkinsLine(due: number): string {
@@ -249,14 +268,88 @@ function currentStep(next: NextSteps): NextStep | undefined {
   return open.find((step) => !laterSteps.has(step.id)) ?? open[0];
 }
 
-function justDoneLine(next: NextSteps): string {
-  const before = previouslyDone;
-  previouslyDone = new Set(next.steps.filter((step) => step.done).map((step) => step.id));
-  const fresh = before ? next.steps.filter((step) => step.done && !before.has(step.id)) : [];
-  if (fresh.length) lastFinished = fresh[fresh.length - 1].id;
-  const step = next.steps.find((item) => item.id === lastFinished && item.done);
-  if (!step) return "";
+/**
+ * The plan card is up. The Q&A writes the goal sentence from the same answers
+ * the card shows (a goal, or the buffer itself), so the sentence waits.
+ */
+function planCardShown(next: NextSteps): boolean {
   const plan = next.plan;
+  return next.visible && plan !== null && (plan.bufferTarget > 0 || Boolean(plan.goalName));
+}
+
+const plainAmount = (value: number): string => money(value, "").trim();
+
+function planCard(next: NextSteps): string {
+  const plan = next.plan;
+  if (!next.visible || !plan) return "";
+  const rows: string[] = [];
+  if (plan.bufferTarget > 0) {
+    const pct = Math.min(100, Math.round((plan.bufferCurrent / plan.bufferTarget) * 100));
+    rows.push(`<div class="wu-plan__row">
+      <span class="wu-plan__name">Safety buffer</span>
+      <span class="wu-plan__value">${plainAmount(Math.min(plan.bufferCurrent, plan.bufferTarget))} <small>/ ${plainAmount(plan.bufferTarget)}</small></span>
+      <span class="wu-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Safety buffer ${pct}% funded"><span class="wu-bar__fill wu-bar__fill--warning" style="width:${pct}%"></span></span>
+    </div>`);
+  }
+  if (plan.goalName) {
+    const pct = plan.goalTarget > 0 ? Math.min(100, Math.round((plan.goalCurrent / plan.goalTarget) * 100)) : 0;
+    const debt = plan.goalKind === "debt";
+    // A debt reads as what is left to pay; the bar still fills as it is paid off.
+    const value = debt
+      ? `${plainAmount(Math.max(0, plan.goalTarget - plan.goalCurrent))} left <small>of ${plainAmount(plan.goalTarget)}</small>`
+      : `${plainAmount(plan.goalCurrent)} <small>/ ${plainAmount(plan.goalTarget)}</small>`;
+    rows.push(`<div class="wu-plan__row">
+      <span class="wu-plan__name">${escapeHtml(plan.goalName)}</span>
+      <span class="wu-plan__value">${value}</span>
+      <span class="wu-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(plan.goalName)} ${pct}% ${debt ? "paid off" : "saved"}"><span class="wu-bar__fill" style="width:${pct}%"></span></span>
+      ${plan.goalMonths !== null
+        ? `<span class="wu-plan__note">${debt ? "Cleared around" : "Around"} <strong>${monthsFromNow(plan.goalMonths)}</strong></span>`
+        // Without a monthly amount there is no date to give; say how to get one.
+        : `<button class="wu-plan__link dashboard-nav" data-page="goals" type="button">Give it a monthly amount to get a date <span aria-hidden="true">→</span></button>`}
+    </div>`);
+  }
+  if (!rows.length) return "";
+  const estimate = plan.bufferEstimate || plan.goalEstimate;
+  return `<section class="wu-card wu-plan wu-stack wu-stack--sm" aria-labelledby="ovPlanTitle">
+      <div class="wu-tc__top"><span class="wu-label" id="ovPlanTitle">Your plan</span>${estimate ? `<span class="wu-next__est" title="Still based on your rough answers">estimate</span>` : ""}</div>
+      ${rows.join("")}
+    </section>`;
+}
+
+function nextStepCard(next: NextSteps): string {
+  if (!next.visible) return "";
+  const step = currentStep(next);
+  if (!step) return "";
+  const position = next.steps.indexOf(step) + 1;
+  const openCount = next.steps.filter((item) => !item.done).length;
+  const dots = next.steps.map((item) => `<i class="${item.done ? "is-done" : item === step ? "is-now" : ""}"></i>`).join("");
+  return `<section class="wu-card wu-onboard wu-next wu-stack wu-stack--sm" aria-labelledby="ovNextTitle">
+      <div class="wu-tc__top"><span class="wu-label" id="ovNextTitle">Your next step</span>
+        <span class="wu-next__dots" role="img" aria-label="Step ${position} of ${next.steps.length}, ${next.doneCount} done">${dots}<span aria-hidden="true">${position} of ${next.steps.length}</span></span></div>
+      <div class="wu-next__step">
+        <h3 class="wu-next__title">${escapeHtml(step.title)}${step.optional ? ` <small class="wu-onboard__optional">Optional</small>` : ""}</h3>
+        <p class="wu-next__because"><span class="visually-hidden">Because: </span>${escapeHtml(step.because)}</p>
+        ${step.detail ? `<p class="t-body-sm t-muted">${escapeHtml(step.detail)}</p>` : ""}
+        <div class="wu-row wu-dash__actions">
+          <button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-next-step="${step.id}">${escapeHtml(step.cta)}</button>
+          ${openCount > 1 ? `<button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-next-later="${step.id}">Later</button>` : ""}
+        </div>
+      </div>
+      <details class="wu-next__all">
+        <summary>All steps (${next.steps.length})</summary>
+        <ol class="wu-next__path">
+          ${next.steps.map((item) => `<li class="${item.done ? "is-done" : item === step ? "is-now" : ""}">
+            <span class="wu-onboard__check" aria-hidden="true">${item.done ? "✓" : ""}</span>
+            <span>${escapeHtml(item.title)}${item.optional ? " (optional)" : ""}</span>
+            <span class="visually-hidden">${item.done ? "Done" : "Not done yet"}</span></li>`).join("")}
+        </ol>
+        <button class="wu-btn wu-btn--ghost wu-btn--sm" id="onboardHide" type="button">Hide this for good</button>
+      </details>
+    </section>`;
+}
+
+/** What the notice says once a step is done, wherever it was done. */
+function finishedText(id: NextStepId, plan: NextSteps["plan"]): string {
   const text: Record<NextStepId, string> = {
     "record-pay": "Pay recorded. The Budget page now shows how your plan splits it.",
     balances: "Balances set. Your net worth now starts from real numbers.",
@@ -265,52 +358,225 @@ function justDoneLine(next: NextSteps): string {
     "log-spending": "Spending recorded. Your Overview now measures it against your plan.",
     goal: "Goal added. Your plan now has a date to aim for.",
     investment: "Trade recorded. Your real return starts counting from here.",
+    "debt-add": "Debt written down. Your net worth now counts it.",
+    "debt-pay": "Payment noted. The debt is smaller, and its end date closer.",
+    "cut-cost": "Nice. One cost less each month.",
+    "invest-monthly": "Monthly amount set. The Health card now tracks it as your monthly plan.",
   };
-  return `<p class="wu-next__done" role="status"><span aria-hidden="true">✓</span> ${escapeHtml(text[step.id])}</p>`;
+  return text[id];
 }
 
-function nextStepCard(next: NextSteps): string {
-  if (!next.visible) {
-    previouslyDone = null;
-    lastFinished = null;
-    return "";
+// --- the bottom sheet for single-form steps -----------------------------------
+
+/**
+ * The state the open sheet saves against. A cloud update can re-render the
+ * Overview underneath an open sheet; each bind refreshes this, so Save builds
+ * on the newest state instead of the one the sheet was opened from.
+ */
+let live: { state: WealthState; setState: Setter; refresh: (next: WealthState) => void } | null = null;
+
+/**
+ * Save through the shell and report whether this device kept it. Only a
+ * failed local write counts: offline is fine (the cloud copy follows later),
+ * and the shell's own toast already reports any sync trouble.
+ */
+function saveOrExplain(setState: Setter, next: WealthState, label: string): string | null {
+  let failed = false;
+  const onError = (event: Event): void => {
+    if ((event as CustomEvent<{ kind?: string }>).detail?.kind === "local-write") failed = true;
+  };
+  window.addEventListener("pwo-save-error", onError);
+  try {
+    setState(next, label);
+  } finally {
+    window.removeEventListener("pwo-save-error", onError);
   }
-  const step = currentStep(next);
-  const acknowledged = justDoneLine(next);
-  const plan = next.plan;
-  const estimate = `<span class="wu-next__est">estimate</span>`;
-  const bufferCell = plan && plan.bufferTarget > 0
-    ? `<div><span class="wu-next__k">Safety buffer ${plan.bufferEstimate ? estimate : ""}</span>
-        <span class="wu-next__v">${money(Math.min(plan.bufferCurrent, plan.bufferTarget))} <small>/ ${money(plan.bufferTarget)}</small></span>
-        <span class="wu-bar" aria-hidden="true"><span class="wu-bar__fill" style="width:${Math.min(100, Math.round((plan.bufferCurrent / plan.bufferTarget) * 100))}%"></span></span></div>`
-    : "";
-  const goalCell = plan && plan.goalName
-    ? `<div><span class="wu-next__k">${escapeHtml(plan.goalName)} ${plan.goalEstimate ? estimate : ""}</span>
-        <span class="wu-next__v wu-next__v--text">${plan.goalMonths !== null ? `Around ${monthsFromNow(plan.goalMonths)}` : "No date yet"}</span></div>`
-    : "";
-  const planStrip = bufferCell || goalCell ? `<div class="wu-next__plan">${bufferCell}${goalCell}</div>` : "";
-  const openCount = next.steps.filter((item) => !item.done).length;
-  return `<section class="wu-card wu-onboard wu-next wu-stack wu-stack--sm" aria-labelledby="ovNextTitle">
-      <div class="wu-tc__top"><span class="wu-label" id="ovNextTitle">Your next step</span><span class="wu-chip">${next.doneCount} of ${next.steps.length} done</span></div>
-      ${planStrip}
-      ${acknowledged}
-      ${step ? `<div class="wu-next__step">
-        <h3 class="wu-next__title">${escapeHtml(step.title)}${step.optional ? ` <small class="wu-onboard__optional">Optional</small>` : ""}</h3>
-        <p class="wu-next__because"><strong>Because:</strong> ${escapeHtml(step.because)}</p>
-        ${step.detail ? `<p class="t-body-sm t-muted">${escapeHtml(step.detail)}</p>` : ""}
-        <div class="wu-row wu-dash__actions">
-          <button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-next-step="${step.id}">${escapeHtml(step.cta)}</button>
-          ${openCount > 1 ? `<button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-next-later="${step.id}">Later</button>` : ""}
-        </div>
+  return failed ? "This device couldn't save it (its storage is full or blocked). Your entry is still here; try again." : null;
+}
+
+const today = (): string => new Date().toLocaleDateString("en-CA");
+const cleanNumber = (raw: string): string => raw.replace(/[\s,]/g, "").replace(/^(MYR|RM)/i, "");
+
+function option(value: string, label: string, selected: boolean): string {
+  return `<option value="${escapeHtml(value)}"${selected ? " selected" : ""}>${escapeHtml(label)}</option>`;
+}
+
+function amountField(label: string, value: number | ""): string {
+  return `<label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">${label}</span>
+      <span class="wu-affix"><span>MYR</span><input class="wu-field" name="amount" inputmode="decimal" autocomplete="off" placeholder="0.00" value="${value === "" ? "" : escapeHtml(String(value))}" required></span></label>`;
+}
+
+function openLedgerSheet(stepId: "record-pay" | "log-spending", state: WealthState): void {
+  const income = stepId === "record-pay";
+  const type = income ? "income" : "expense";
+  const categories = state.ledgerCategories.filter((category) => category.type === type);
+  const defaultCategory = income ? categories.find((category) => category.id === "income-salary") ?? categories[0] : undefined;
+  const bank = state.ledgerAccounts.find((account) => account.id === "account-bank") ?? state.ledgerAccounts.find((account) => account.type === "bank");
+  const answers = state.onboardingAnswers;
+  // One id per opening, so trying again after a failed save replaces the entry instead of adding a second.
+  const id = createId("ledger");
+  openBottomSheet({
+    title: income ? "Record this month's pay" : "Add something you spent",
+    destination: "Ledger",
+    intro: income && answers?.monthlyIncome
+      ? `Filled in from your answer (about ${money(answers.monthlyIncome)} a month). Change it to what actually came in.`
+      : !income && answers?.monthlySpending ? `You estimated about ${money(answers.monthlySpending)} a month. One real entry shows how close that is.` : undefined,
+    body: `<div class="wu-grid wu-grid--2 wu-sheet__grid">
+        ${amountField("Amount", income ? answers?.monthlyIncome ?? "" : "")}
+        <label class="wu-field-row"><span class="wu-field-row__label">Category</span>
+          <select class="wu-field" name="categoryId">${income ? "" : option("", "Choose…", true)}${categories.map((category) => option(category.id, category.label, category.id === defaultCategory?.id)).join("")}</select></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Account</span>
+          <select class="wu-field" name="accountId">${state.ledgerAccounts.map((account) => option(account.id, account.name, account.id === bank?.id)).join("")}</select></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Date</span>
+          <input class="wu-field" name="date" type="date" value="${today()}"></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Note${income ? "" : " (optional)"}</span>
+          <input class="wu-field" name="note" maxlength="500" autocomplete="off" value="${income ? "Pay" : ""}"></label>
+      </div>`,
+    onSave: (form) => {
+      if (!live) return "The Overview has closed. Open it again to save.";
+      const data = new FormData(form);
+      const field = (name: string): string => String(data.get(name) ?? "");
+      if (!field("amount").trim()) return "Enter an amount.";
+      if (!income && !field("categoryId")) return "Choose a category.";
+      const result = buildLedgerTransaction({
+        id, type, amount: cleanNumber(field("amount")), categoryId: field("categoryId"), accountId: field("accountId"),
+        fromAccountId: "", toAccountId: "", date: field("date"), note: field("note"), sponsored: false,
+      }, live.state.ledgerAccounts, live.state.ledgerCategories);
+      if (!result.ok) return result.error;
+      const { state: current, setState, refresh } = live;
+      const next: WealthState = { ...current, ledgerTransactions: [...current.ledgerTransactions.filter((item) => item.id !== id), result.transaction] };
+      const failed = saveOrExplain(setState, next, "Add ledger transaction");
+      if (failed) return failed;
+      savedFromSheet = { id: stepId, page: "ledger" };
+      refresh(next);
+      return null;
+    },
+  });
+}
+
+/** Same checks as the Settings liability form, plus: something must be owed. */
+function openDebtSheet(state: WealthState): void {
+  const answers = state.onboardingAnswers;
+  openBottomSheet({
+    title: "Write down what you owe",
+    destination: "Settings · liabilities",
+    intro: answers?.goalName && answers.goalAmount
+      ? `Filled in from your answer (${answers.goalName}, about ${money(answers.goalAmount)}). Change it to what your statement says.`
+      : "What your latest statement says you still owe.",
+    body: `<div class="wu-grid wu-grid--2 wu-sheet__grid">
+        <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">What it is</span>
+          <input class="wu-field" name="name" maxlength="60" autocomplete="off" placeholder="Credit card" value="${escapeHtml(answers?.primaryGoal === "debt" ? answers.goalName ?? "" : "")}"></label>
+        ${amountField("Still owed", answers?.primaryGoal === "debt" ? answers.goalAmount ?? "" : "")}
+        <label class="wu-field-row"><span class="wu-field-row__label">Interest a year (%, optional)</span>
+          <input class="wu-field" name="annualRate" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Minimum payment (optional)</span>
+          <span class="wu-affix"><span>MYR</span><input class="wu-field" name="minimumPayment" inputmode="decimal" autocomplete="off" placeholder="0"></span></label>
+      </div>`,
+    onSave: (form) => {
+      if (!live) return "The Overview has closed. Open it again to save.";
+      const data = new FormData(form);
+      const name = String(data.get("name") ?? "").trim().slice(0, 60);
+      const number = (key: string): number => {
+        const raw = cleanNumber(String(data.get(key) ?? ""));
+        return raw === "" ? 0 : Number(raw);
+      };
+      const balance = number("amount");
+      const annualRate = number("annualRate");
+      const minimumPayment = number("minimumPayment");
+      if (!name) return "Give it a name, like Credit card.";
+      if (!Number.isFinite(balance) || balance <= 0) return "Enter how much is still owed, above 0.";
+      if (![annualRate, minimumPayment].every((value) => Number.isFinite(value) && value >= 0)) return "Interest and minimum payment can't be negative.";
+      const { state: current, setState, refresh } = live;
+      const next: WealthState = { ...current, liabilities: [...current.liabilities, { id: createId("liability"), name, balance, annualRate, minimumPayment }] };
+      const failed = saveOrExplain(setState, next, "Add liability");
+      if (failed) return failed;
+      savedFromSheet = { id: "debt-add", page: "settings" };
+      refresh(next);
+      return null;
+    },
+  });
+}
+
+/** The Settings "Monthly DCA" amount, and the rule that follows it. */
+function openInvestSheet(state: WealthState): void {
+  const answers = state.onboardingAnswers;
+  const leftover = answers?.monthlyIncome !== undefined && answers.monthlySpending !== undefined ? answers.monthlyIncome - answers.monthlySpending : 0;
+  // What went into the buffer each month is free now; without a top-up, the
+  // invest share of the Q&A's split (40% once the buffer is full).
+  const freedTopUp = state.emergency.monthlyTopUp;
+  const suggested = freedTopUp > 0 ? freedTopUp : leftover > 0 ? Math.round(leftover * 0.4) : 0;
+  openBottomSheet({
+    title: "Decide a monthly amount to invest",
+    destination: "Settings · Monthly DCA",
+    intro: freedTopUp > 0
+      ? `Your buffer is full, so the ${money(freedTopUp)} a month that went into it is free. Start with any amount you are comfortable leaving for years.`
+      : suggested > 0
+        ? `Your plan has about ${money(suggested)} a month for investing. Start with any amount you are comfortable leaving for years.`
+        : "Start with any amount you are comfortable leaving for years. You can change it any time.",
+    body: `<div class="wu-grid wu-grid--2 wu-sheet__grid">${amountField("Each month", suggested > 0 ? suggested : "")}</div>
+      <p class="t-caption t-muted">For guidance only, not financial advice.</p>`,
+    onSave: (form) => {
+      if (!live) return "The Overview has closed. Open it again to save.";
+      const raw = cleanNumber(String(new FormData(form).get("amount") ?? ""));
+      if (!raw) return "Enter an amount.";
+      const monthly = Number(raw);
+      if (!Number.isFinite(monthly) || monthly <= 0) return "Enter an amount above 0.";
+      const { state: current, setState, refresh } = live;
+      const next: WealthState = { ...current, dca: { ...current.dca, monthly: Math.round(monthly * 100) / 100 } };
+      next.financialRules = syncPlanningRules(next, ["dca-monthly-amount"]);
+      const failed = saveOrExplain(setState, next, "Set monthly investment");
+      if (failed) return failed;
+      savedFromSheet = { id: "invest-monthly", page: "settings" };
+      refresh(next);
+      return null;
+    },
+  });
+}
+
+function openBufferSheet(state: WealthState): void {
+  const three = suggestedEmergencyTarget(state, 3);
+  const six = suggestedEmergencyTarget(state, 6);
+  // Self-employed: income that moves around starts on 6 months (Q-3).
+  const sixFirst = bufferMonthsFor(state.onboardingAnswers) === 6;
+  const suggested = sixFirst ? six : three;
+  openBottomSheet({
+    title: "Set your safety buffer target",
+    destination: "Settings",
+    intro: three && six
+      ? sixFirst
+        ? `6 months of your ${money(six.monthlyEssential)} monthly spending is ${money(six.target)}: with income that moves around, a longer buffer is safer.`
+        : `3 months of your ${money(three.monthlyEssential)} monthly spending is ${money(three.target)}. If your income moves around, 6 months is safer.`
+      : "How much do you want set aside for surprises? A common rule is 3 to 6 months of what you spend.",
+    body: `${three && six ? `<div class="wu-sheet__presets" role="group" aria-label="Months of spending">
+        <button class="wu-btn wu-btn--secondary wu-btn--sm" type="button" data-preset="${three.target}" aria-pressed="${!sixFirst}">3 months</button>
+        <button class="wu-btn wu-btn--secondary wu-btn--sm" type="button" data-preset="${six.target}" aria-pressed="${sixFirst}">6 months</button>
       </div>` : ""}
-      <ol class="wu-next__path" aria-label="All steps">
-        ${next.steps.map((item) => `<li class="${item.done ? "is-done" : item === step ? "is-now" : ""}">
-          <span class="wu-onboard__check" aria-hidden="true">${item.done ? "✓" : ""}</span>
-          <span>${escapeHtml(item.title)}${item.optional ? " (optional)" : ""}</span>
-          <span class="visually-hidden">${item.done ? "Done" : "Not done yet"}</span></li>`).join("")}
-      </ol>
-      <div class="wu-row wu-dash__actions"><button class="wu-btn wu-btn--ghost wu-btn--sm" id="onboardHide" type="button">Hide this for good</button></div>
-    </section>`;
+      <div class="wu-grid wu-grid--2 wu-sheet__grid">${amountField("Target", suggested?.target ?? "")}</div>`,
+    onOpen: (sheet) => {
+      const input = sheet.querySelector<HTMLInputElement>('input[name="amount"]');
+      sheet.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((button) => button.addEventListener("click", () => {
+        sheet.querySelectorAll("[data-preset]").forEach((other) => other.setAttribute("aria-pressed", String(other === button)));
+        if (input) input.value = button.dataset.preset ?? input.value;
+        input?.focus();
+      }));
+    },
+    onSave: (form) => {
+      if (!live) return "The Overview has closed. Open it again to save.";
+      const raw = cleanNumber(String(new FormData(form).get("amount") ?? ""));
+      if (!raw) return "Enter a target.";
+      const target = Number(raw);
+      if (!Number.isFinite(target) || target <= 0) return "Enter a target above 0.";
+      const { state: current, setState, refresh } = live;
+      // The same write as the Settings editor: the target, then the rule that follows it.
+      const next: WealthState = { ...current, emergency: { ...current.emergency, target: Math.round(target * 100) / 100 } };
+      next.financialRules = syncPlanningRules(next, ["emergency-fund-minimum"]);
+      const failed = saveOrExplain(setState, next, "Set safety buffer target");
+      if (failed) return failed;
+      savedFromSheet = { id: "safety-buffer", page: "settings" };
+      refresh(next);
+      return null;
+    },
+  });
 }
 
 /*
@@ -353,6 +619,22 @@ export function bindDashboard(
     if (navigate) navigate(page);
     else rerender(root, next, setState, page);
   };
+  live = { state, setState, refresh: (next) => go("dashboard", next) };
+
+  // A step finished since the last visit — on the sheet, on its page, or by
+  // tapping "I've moved it" — is said once, as a notice that does not take a
+  // place on the page. Also when it was the last one and the card has retired.
+  const doneNow = new Set(nextSteps.steps.filter((step) => step.done).map((step) => step.id));
+  const before = previouslyDone;
+  previouslyDone = nextSteps.visible || nextSteps.complete ? doneNow : null;
+  const fresh = before ? nextSteps.steps.filter((step) => step.done && !before.has(step.id)) : [];
+  const finished = fresh[fresh.length - 1];
+  if (finished) {
+    const view = savedFromSheet?.id === finished.id ? savedFromSheet.page : null;
+    showNotice(finishedText(finished.id, nextSteps.plan), view ? { label: "View", onClick: () => go(view) } : undefined);
+  }
+  savedFromSheet = null;
+
   root.querySelectorAll<HTMLButtonElement>("[data-next-step]").forEach((button) => button.addEventListener("click", () => {
     const step = nextSteps.steps.find((item) => item.id === button.dataset.nextStep);
     if (!step) return;
@@ -363,26 +645,34 @@ export function bindDashboard(
       go("dashboard", next);
       return;
     }
-    if (step.id === "record-pay" || step.id === "log-spending") {
-      // Open the entry form already filled from the user's answer; Save stays theirs.
-      const income = step.id === "record-pay";
-      const category = income
-        ? state.ledgerCategories.find((item) => item.id === "income-salary") ?? state.ledgerCategories.find((item) => item.type === "income")
-        : undefined;
-      const account = state.ledgerAccounts.find((item) => item.id === "account-bank")
-        ?? state.ledgerAccounts.find((item) => item.type === "bank");
-      applyLedgerDraft({
-        kind: "ledger",
-        type: income ? "income" : "expense",
-        amount: income ? state.onboardingAnswers?.monthlyIncome ?? 0 : 0,
-        categoryId: category?.id,
-        accountId: account?.id,
-        date: new Date().toLocaleDateString("en-CA"),
-        note: income ? "Pay" : "",
-        unresolved: [],
-        dropped: [],
-      });
+    if (step.id === "debt-pay") {
+      // Paid in the bank or card app; the user's tap is the record. It comes
+      // off the largest debt, never below zero.
+      const largest = [...state.liabilities].sort((a, b) => b.balance - a.balance)[0];
+      if (!largest) return;
+      const paid = Math.min(largest.balance, step.amount ?? 0);
+      // The Q&A's pay-off goal moves with it, so Goals and the Next goal tile
+      // show the same progress as the plan card.
+      const debtGoalName = state.onboardingAnswers?.goalName;
+      const next: WealthState = {
+        ...state,
+        liabilities: state.liabilities.map((item) => item.id === largest.id ? { ...item, balance: Math.round((item.balance - paid) * 100) / 100 } : item),
+        goals: state.goals.map((goal) => goal.name === debtGoalName
+          ? { ...goal, current: Math.min(goal.target, Math.round((goal.current + paid) * 100) / 100) }
+          : goal),
+      };
+      setState(next, "Paid down a debt");
+      go("dashboard", next);
+      return;
     }
+    // A single form: fill it in here, over the Overview (Q-1).
+    if (step.id === "record-pay" || step.id === "log-spending") return openLedgerSheet(step.id, state);
+    if (step.id === "safety-buffer") return openBufferSheet(state);
+    if (step.id === "debt-add") return openDebtSheet(state);
+    if (step.id === "invest-monthly") return openInvestSheet(state);
+    // Something to look through, not a field to fill.
+    if (step.id === "cut-cost") return go("money-leaks");
+    // More than one form's worth (balances, a goal, a trade): its own page.
     go(queueGuide(step.id as GuideId));
   }));
   root.querySelectorAll<HTMLButtonElement>("[data-next-later]").forEach((button) => button.addEventListener("click", () => {

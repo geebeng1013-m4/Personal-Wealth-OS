@@ -11,6 +11,9 @@
  */
 
 import type { WealthState } from "./models";
+import { answeredCash } from "./onboardingQuiz";
+import { classifyStage, type MoneyStageId } from "./moneyStage";
+import { totalLiabilities } from "./financialHealth";
 
 export type OnboardingStepId = "balances" | "first-entry" | "goal" | "safety-buffer" | "investment";
 
@@ -105,8 +108,23 @@ export function buildOnboardingChecklist(state: WealthState): OnboardingChecklis
 // Steps the quiz already covered never appear; a question that was skipped
 // comes back here as its step. Accounts that never took the quiz get the same
 // steps with a general reason.
+//
+// Q-5: the order follows the user's stage (moneyStage.ts), and each stage
+// brings its own step — clearing debt, finding a cost to cut, deciding a
+// monthly amount to invest.
 
-export type NextStepId = "record-pay" | "balances" | "safety-buffer" | "move-to-buffer" | "log-spending" | "goal" | "investment";
+export type NextStepId =
+  | "record-pay" | "balances" | "safety-buffer" | "move-to-buffer" | "log-spending" | "goal" | "investment"
+  | "debt-add" | "debt-pay" | "cut-cost" | "invest-monthly";
+
+/** Which steps come first at each stage. Anything not listed follows, in the order it was built. */
+const STAGE_ORDER: Record<MoneyStageId, readonly NextStepId[]> = {
+  debt: ["record-pay", "debt-add", "debt-pay", "log-spending"],
+  base: ["record-pay", "log-spending", "cut-cost", "safety-buffer"],
+  buffer: ["record-pay", "safety-buffer", "move-to-buffer", "log-spending"],
+  ready: ["record-pay", "log-spending", "invest-monthly", "investment"],
+  growing: ["record-pay", "investment", "log-spending"],
+};
 
 export interface NextStep {
   id: NextStepId;
@@ -119,7 +137,7 @@ export interface NextStep {
   cta: string;
   /** For "confirm" steps: what doing it outside the app looks like. */
   detail?: string;
-  /** For "move-to-buffer": the amount the plan moves each month. */
+  /** For "move-to-buffer" and "debt-pay": the amount the plan moves each month. */
   amount?: number;
   done: boolean;
   optional: boolean;
@@ -131,6 +149,14 @@ export interface NextStepPlan {
   /** The buffer figure still rests on a quiz answer, not on anything confirmed. */
   bufferEstimate: boolean;
   goalName: string;
+  /**
+   * "debt": the Q&A's pay-off goal. Its progress is what has been paid off,
+   * read from the debts recorded, and the date is when it is cleared.
+   */
+  goalKind: "save" | "debt";
+  /** The Overview goal's saved (for a debt: paid off) and target amounts; both 0 without a goal. */
+  goalCurrent: number;
+  goalTarget: number;
   /** Months to the Overview goal at its monthly contribution; null when it has none. */
   goalMonths: number | null;
   /** The goal date still rests on estimated income: no real pay recorded yet. */
@@ -156,8 +182,10 @@ export function buildNextSteps(state: WealthState): NextSteps {
   const expense = state.ledgerTransactions.some((tx) => tx.type === "expense");
   const hasBalances = state.ledgerAccounts.some((account) => account.openingBalance !== 0);
   const { current: bufferCurrent, target: bufferTarget, monthlyTopUp } = state.emergency;
+  // What the quiz said is saved: a typed figure, or months of spending (v28).
+  const answeredSavings = answers ? answeredCash(answers) ?? 0 : 0;
   // The buffer grew past what the quiz recorded, or is simply full.
-  const bufferMoved = bufferTarget > 0 && (bufferCurrent >= bufferTarget || bufferCurrent > (answers?.cashInBank ?? 0));
+  const bufferMoved = bufferTarget > 0 && (bufferCurrent >= bufferTarget || bufferCurrent > answeredSavings);
 
   const steps: NextStep[] = [{
     id: "record-pay",
@@ -190,11 +218,11 @@ export function buildNextSteps(state: WealthState): NextSteps {
       optional: false,
     });
   }
-  if (answers && bufferTarget > 0 && monthlyTopUp > 0 && (answers.cashInBank ?? 0) < bufferTarget) {
+  if (answers && bufferTarget > 0 && monthlyTopUp > 0 && answeredSavings < bufferTarget) {
     steps.push({
       id: "move-to-buffer",
       title: `Move ${rm(monthlyTopUp)} into your safety buffer`,
-      because: `Your buffer is ${rm(Math.max(0, bufferTarget - (answers.cashInBank ?? 0)))} short of ${rm(bufferTarget)}.`,
+      because: `Your buffer is ${rm(Math.max(0, bufferTarget - answeredSavings))} short of ${rm(bufferTarget)}.`,
       action: "confirm",
       cta: `I've moved ${rm(monthlyTopUp)}`,
       detail: "Transfer it in your bank app, from your current account to your savings. WealthUp never moves money; it keeps score.",
@@ -223,7 +251,10 @@ export function buildNextSteps(state: WealthState): NextSteps {
       optional: false,
     });
   }
-  if (!answers || answers.invests === true) {
+  const stage = classifyStage(state);
+  const goal = state.goals.find((item) => item.id === state.overviewGoalId) ?? state.goals[0];
+
+  if (!answers || answers.invests === true || stage.id === "ready") {
     steps.push({
       id: "investment",
       title: "Log your first investment",
@@ -235,10 +266,85 @@ export function buildNextSteps(state: WealthState): NextSteps {
     });
   }
 
+  // Debt first: write down what is owed, then pay a fixed amount against it.
+  if (stage.id === "debt") {
+    const owed = totalLiabilities(state.liabilities);
+    steps.push({
+      id: "debt-add",
+      title: "Write down what you owe",
+      because: answers?.goalName && answers.goalAmount
+        ? `You said ${answers.goalName} is about ${rm(answers.goalAmount)}. Written down, your net worth counts it.`
+        : "Written down, your net worth counts it, and you can see it shrink.",
+      action: "guide",
+      cta: "Add it",
+      done: state.liabilities.length > 0,
+      optional: false,
+    });
+    // The quiz set a monthly amount for the debt; from the first recorded
+    // figure on, any drop below what was said counts as paying it down.
+    const payment = goal?.monthlyContribution ?? 0;
+    const startedAt = answers?.goalAmount ?? 0;
+    if (payment > 0 && startedAt > 0) {
+      steps.push({
+        id: "debt-pay",
+        title: `Pay ${rm(payment)} against it this month`,
+        because: "A fixed amount every month is what gives a debt an end date.",
+        action: "confirm",
+        cta: `I've paid ${rm(payment)}`,
+        detail: "Pay it in your bank or card app. WealthUp never moves money; it keeps score.",
+        amount: payment,
+        done: state.liabilities.length > 0 && owed < startedAt,
+        optional: false,
+      });
+    }
+  }
+
+  // Spending at or above income: look for something to cut. There is no
+  // record of having looked, so it never holds the card open.
+  if (stage.basis === "overspending") {
+    steps.push({
+      id: "cut-cost",
+      title: "Find one cost to cut",
+      because: "Spending is at or above income. Money leaks lists the repeat costs worth a second look.",
+      action: "guide",
+      cta: "Open Money leaks",
+      done: false,
+      optional: true,
+    });
+  }
+
+  // Buffer full: the next decision is how much to invest each month.
+  if (stage.id === "ready") {
+    steps.push({
+      id: "invest-monthly",
+      title: "Decide a monthly amount to invest",
+      because: "Your safety buffer is full, so the money that went into it can start growing.",
+      action: "guide",
+      cta: "Set an amount",
+      done: state.dca.monthly > 0,
+      optional: false,
+    });
+  }
+
+  // The stage decides what comes first; the rest keep the order they were
+  // built in. A stage with nothing measured yet has no order to impose.
+  const order = stage.basis === "unmeasured" ? [] : STAGE_ORDER[stage.id];
+  const rank = (id: NextStepId) => {
+    const index = order.indexOf(id);
+    return index === -1 ? order.length : index;
+  };
+  steps.sort((a, b) => rank(a.id) - rank(b.id));
+
   const complete = steps.every((step) => step.done || step.optional);
-  const goal = state.goals.find((item) => item.id === state.overviewGoalId) ?? state.goals[0];
-  const goalMonths = goal && goal.monthlyContribution > 0 && goal.target > goal.current
-    ? Math.ceil((goal.target - goal.current) / goal.monthlyContribution)
+  // The Q&A writes a pay-off goal the way it writes a savings goal. Its real
+  // progress is the debt going down: once a debt is recorded, paid off =
+  // what was said minus what is still owed (the goal's own figure otherwise).
+  const debtGoal = Boolean(goal) && answers?.primaryGoal === "debt" && goal?.name === answers.goalName;
+  const goalCurrent = !goal ? 0 : debtGoal && state.liabilities.length > 0
+    ? Math.min(goal.target, Math.max(0, goal.target - totalLiabilities(state.liabilities)))
+    : goal.current;
+  const goalMonths = goal && goal.monthlyContribution > 0 && goal.target > goalCurrent
+    ? Math.ceil((goal.target - goalCurrent) / goal.monthlyContribution)
     : null;
 
   return {
@@ -251,6 +357,9 @@ export function buildNextSteps(state: WealthState): NextSteps {
       bufferTarget,
       bufferEstimate: !bufferMoved,
       goalName: goal?.name ?? "",
+      goalKind: debtGoal ? "debt" : "save",
+      goalCurrent,
+      goalTarget: goal?.target ?? 0,
       goalMonths,
       goalEstimate: !income,
     } : null,

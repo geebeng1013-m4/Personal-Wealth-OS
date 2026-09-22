@@ -212,3 +212,55 @@ export function normalizeLedgerAmount(value: string | number): number | null {
   if (!Number.isFinite(amount) || amount <= 0) return null;
   return Math.round((amount + Number.EPSILON) * 100) / 100;
 }
+
+/** An entry as a form hands it over: every value still the string the user typed or picked. */
+export interface LedgerEntryInput {
+  id: string;
+  type: string;
+  amount: string;
+  categoryId: string;
+  accountId: string;
+  fromAccountId: string;
+  toAccountId: string;
+  /** YYYY-MM-DD, the user's own calendar day. */
+  date: string;
+  note: string;
+  sponsored: boolean;
+}
+
+export type LedgerEntryResult = { ok: true; transaction: LedgerTransaction } | { ok: false; error: string };
+
+/**
+ * One validated transaction from a form — the Ledger's entry form and the
+ * Overview's bottom sheet (Q-1) both go through here, so an entry made from
+ * either place obeys the same rules.
+ */
+export function buildLedgerTransaction(
+  input: LedgerEntryInput,
+  accounts: readonly LedgerAccount[],
+  categories: readonly LedgerCategory[],
+): LedgerEntryResult {
+  const amount = normalizeLedgerAmount(input.amount);
+  const type = input.type as LedgerTransactionType;
+  const date = new Date(`${input.date}T00:00:00`);
+  const accountIds = new Set(accounts.map((account) => account.id));
+  const isType = type === "income" || type === "expense" || type === "transfer";
+  const categoryValid = type === "transfer" || categories.some((category) => category.id === input.categoryId && category.type === type);
+  const accountValid = type === "transfer"
+    ? accountIds.has(input.fromAccountId) && accountIds.has(input.toAccountId) && input.fromAccountId !== input.toAccountId
+    : accountIds.has(input.accountId);
+  if (!amount || !isType || !categoryValid || !accountValid || !Number.isFinite(date.getTime())) {
+    const error = type === "transfer" && accounts.length < 2
+      ? "Add at least two accounts before recording a transfer."
+      : type === "transfer" && input.fromAccountId === input.toAccountId
+        ? "Choose two different accounts for a transfer."
+        : "Enter a positive amount, valid date, and valid account details.";
+    return { ok: false, error };
+  }
+  const note = input.note.trim().slice(0, 500);
+  const sponsored = type !== "transfer" && input.sponsored;
+  const transaction: LedgerTransaction = type === "transfer"
+    ? { id: input.id, amount, type, fromAccountId: input.fromAccountId, toAccountId: input.toAccountId, date: date.toISOString(), ...(note ? { note } : {}) }
+    : { id: input.id, amount, type, categoryId: input.categoryId, accountId: input.accountId, date: date.toISOString(), ...(note ? { note } : {}), ...(sponsored ? { fundingSource: "sponsored" as const } : {}) };
+  return { ok: true, transaction };
+}

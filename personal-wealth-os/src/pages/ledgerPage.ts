@@ -21,11 +21,11 @@ import { escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import { incomeRoutingHint } from "../components/incomeRoutingHint";
 import {
+  buildLedgerTransaction,
   categoryTotals,
   filterLedgerTransactions,
   ledgerTotals,
   monthlyLedgerTotals,
-  normalizeLedgerAmount,
   openingFunds,
   type AccountBalance,
   type LedgerFilters,
@@ -527,34 +527,26 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
   root.querySelector<HTMLFormElement>("#ledgerForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget as HTMLFormElement);
-    const amount = normalizeLedgerAmount(String(data.get("amount") ?? ""));
-    const type = String(data.get("type")) as LedgerTransactionType;
-    const categoryId = String(data.get("categoryId") ?? "");
-    const accountId = String(data.get("accountId") ?? "");
-    const fromAccountId = String(data.get("fromAccountId") ?? "");
-    const toAccountId = String(data.get("toAccountId") ?? "");
-    const dateValue = String(data.get("date") ?? "");
-    const date = new Date(`${dateValue}T00:00:00`);
-    const error = root.querySelector<HTMLElement>("#ledgerFormError");
-    const accountIds = new Set(state.ledgerAccounts.map((account) => account.id));
-    const categoryValid = type === "transfer" || state.ledgerCategories.some((category) => category.id === categoryId && category.type === type);
-    const accountValid = type === "transfer" ? accountIds.has(fromAccountId) && accountIds.has(toAccountId) && fromAccountId !== toAccountId : accountIds.has(accountId);
-    if (!amount || !["income", "expense", "transfer"].includes(type) || !categoryValid || !accountValid || !Number.isFinite(date.getTime())) {
-      if (error) {
-        error.textContent = type === "transfer" && state.ledgerAccounts.length < 2
-          ? "Add at least two accounts before recording a transfer."
-          : type === "transfer" && fromAccountId === toAccountId
-            ? "Choose two different accounts for a transfer."
-            : "Enter a positive amount, valid date, and valid account details.";
-      }
+    const field = (name: string): string => String(data.get(name) ?? "");
+    const result = buildLedgerTransaction({
+      id: field("id") || createId("ledger"),
+      type: field("type"),
+      amount: field("amount"),
+      categoryId: field("categoryId"),
+      accountId: field("accountId"),
+      fromAccountId: field("fromAccountId"),
+      toAccountId: field("toAccountId"),
+      date: field("date"),
+      note: field("note"),
+      sponsored: data.get("fundingSource") === "sponsored",
+    }, state.ledgerAccounts, state.ledgerCategories);
+    if (!result.ok) {
+      const error = root.querySelector<HTMLElement>("#ledgerFormError");
+      if (error) error.textContent = result.error;
       return;
     }
-    const id = String(data.get("id") || createId("ledger"));
-    const note = String(data.get("note") ?? "").trim().slice(0, 500);
-    const fundingSource: LedgerFundingSource | undefined = type !== "transfer" && data.get("fundingSource") === "sponsored" ? "sponsored" : undefined;
-    const transaction: LedgerTransaction = type === "transfer"
-      ? { id, amount, type, fromAccountId, toAccountId, date: date.toISOString(), ...(note ? { note } : {}) }
-      : { id, amount, type, categoryId, accountId, date: date.toISOString(), ...(note ? { note } : {}), ...(fundingSource ? { fundingSource } : {}) };
+    const { transaction } = result;
+    const id = transaction.id;
     const exists = state.ledgerTransactions.some((item) => item.id === id);
     const ledgerTransactions = exists ? state.ledgerTransactions.map((item) => item.id === id ? transaction : item) : [...state.ledgerTransactions, transaction];
     resetLedgerEntry();
