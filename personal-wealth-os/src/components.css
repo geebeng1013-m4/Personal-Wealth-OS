@@ -3628,14 +3628,17 @@
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
   }
-  /* An open goal before editing: its note, then four facts in a row. */
+  /* An open goal before editing: its note, and Edit beside it. */
   .wu-goal-detail {
-    display: grid;
+    display: flex;
+    align-items: center;
     gap: var(--space-3);
-    padding: 0 0 var(--space-4);
+    padding: 0 0 var(--space-3);
     min-width: 0;
   }
   .wu-goal-detail__note {
+    flex: 1;
+    min-width: 0;
     margin: 0;
     padding-left: var(--space-3);
     border-left: 2px solid var(--accent);
@@ -3644,29 +3647,9 @@
     overflow-wrap: anywhere;
     white-space: pre-line;
   }
-  .wu-goal-detail__facts {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--space-3);
-    margin: 0;
-  }
-  .wu-goal-detail__fact {
-    display: grid;
-    gap: 2px;
-    min-width: 0;
-  }
-  .wu-goal-detail__fact dt {
-    font: var(--weight-medium) var(--text-caption) / 1.3 var(--font-sans);
-    color: var(--text-muted);
-  }
-  .wu-goal-detail__fact dd {
-    margin: 0;
-    font: var(--weight-semibold) var(--text-body) / 1.35 var(--font-sans);
-    font-variant-numeric: tabular-nums;
-    overflow-wrap: anywhere;
-  }
-  .wu-goal-detail__actions {
-    flex-wrap: wrap;
+  .wu-goal-detail__note--empty {
+    border-left-color: var(--border);
+    color: var(--text-faint);
   }
   .wu-goal-editor__grow {
     flex: 1;
@@ -3674,8 +3657,9 @@
   .wu-goal-danger {
     color: var(--negative);
   }
-  /* Phone: Target and Monthly are short numbers, so they share a line, and a
-     goal's four facts sit two by two. */
+  /* Phone: Target and Monthly are short numbers, so they share a line, and
+     Cancel/Save stay together on their own line rather than Save wrapping
+     alone. */
   @media (max-width: 900px) {
     .wu-goal-editor .wu-grid--2 {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3684,8 +3668,11 @@
     .wu-goal-editor__current {
       grid-column: 1 / -1;
     }
-    .wu-goal-detail__facts {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    .wu-goal-editor__grow {
+      flex-basis: 100%;
+    }
+    .wu-goal-editor__cancel {
+      margin-left: auto;
     }
   }
   @media (max-width: 900px) {

@@ -67,7 +67,7 @@ function linkedCurrentText(balance: number, accountName: string): string {
   return `${escapeHtml(amountOf(balance))} · from ${escapeHtml(accountName)}`;
 }
 
-function goalEditor(state: WealthState, snapshot: GoalSnapshot): string {
+function goalEditor(state: WealthState, snapshot: GoalSnapshot, featured: boolean): string {
   const goal = state.goals[snapshot.index];
   const index = snapshot.index;
   const balances = new Map(accountBalances(state.ledgerTransactions, state.ledgerAccounts).map((item) => [item.account.id, item.balance]));
@@ -91,52 +91,25 @@ function goalEditor(state: WealthState, snapshot: GoalSnapshot): string {
       </div>
       <p class="wu-field-row__error goal-form-error" role="alert" hidden></p>
       <div class="wu-row wu-row--tight wu-goal-editor__actions">
+        ${featured ? "" : `<button class="wu-btn wu-btn--secondary wu-btn--sm feature-goal" data-goal-id="${escapeHtml(goal.id)}" type="button">Show on Dashboard</button>`}
         <button class="wu-btn wu-btn--ghost wu-btn--sm wu-goal-danger delete-goal" data-index="${index}" type="button">Delete</button>
         <span class="wu-goal-editor__grow"></span>
-        <button class="wu-btn wu-btn--ghost wu-btn--sm cancel-goal-edit" type="button">Cancel</button>
+        <button class="wu-btn wu-btn--ghost wu-btn--sm wu-goal-editor__cancel cancel-goal-edit" type="button">Cancel</button>
         <button class="wu-btn wu-btn--primary wu-btn--sm save-goal" type="button">Save</button>
       </div>
     </form>`;
 }
 
-/** "199 months", with the years beside it once it runs past a year. */
-function monthsText(months: number, years: number | null): string {
-  const unit = months === 1 ? "month" : "months";
-  return years !== null && months >= 12 ? `${months} ${unit} (about ${years} years)` : `${months} ${unit}`;
-}
-
 /**
- * What an open goal shows before any editing: its note, and the facts the row
- * has no room for. The form only appears behind Edit, so reading a goal does
- * not mean facing a wall of inputs.
+ * What an open goal shows before any editing: its note and an Edit button.
+ * The row above already carries the figures, so nothing is repeated here, and
+ * the form only appears behind Edit.
  */
-function goalDetails(state: WealthState, snapshot: GoalSnapshot, featured: boolean): string {
-  const goal = state.goals[snapshot.index];
+function goalDetails(snapshot: GoalSnapshot): string {
   const note = snapshot.note.trim();
-  const reach = snapshot.isComplete
-    ? "Reached"
-    : snapshot.targetAmount <= 0
-      ? "Set a target first"
-      : snapshot.estimatedMonthsToTarget !== null
-        ? `In ${monthsText(snapshot.estimatedMonthsToTarget, snapshot.estimatedYearsToTarget)}`
-        : "Not while nothing goes in each month";
-  const source = snapshot.linkedAccountName
-    ? escapeHtml(snapshot.linkedAccountName)
-    : snapshot.isAccountLinked ? "Linked account unavailable" : "Typed in by hand";
-  const fact = (label: string, value: string) => `<div class="wu-goal-detail__fact"><dt>${label}</dt><dd>${value}</dd></div>`;
   return `<div class="wu-goal-detail">
-      ${note ? `<p class="wu-goal-detail__note">${escapeHtml(note)}</p>` : ""}
-      <dl class="wu-goal-detail__facts">
-        ${fact("Still to go", `MYR ${amountOf(snapshot.remainingAmount)}`)}
-        ${fact("Each month", `MYR ${amountOf(snapshot.monthlyContribution)}`)}
-        ${fact("Reaches target", reach)}
-        ${fact("Progress from", source)}
-      </dl>
-      <div class="wu-row wu-row--tight wu-goal-detail__actions">
-        ${featured ? "" : `<button class="wu-btn wu-btn--ghost wu-btn--sm feature-goal" data-goal-id="${escapeHtml(goal.id)}" type="button">Show on Dashboard</button>`}
-        <span class="wu-goal-editor__grow"></span>
-        <button class="wu-btn wu-btn--secondary wu-btn--sm edit-goal" type="button">${note ? "Edit" : "Edit or add a note"}</button>
-      </div>
+      ${note ? `<p class="wu-goal-detail__note">${escapeHtml(note)}</p>` : `<p class="wu-goal-detail__note wu-goal-detail__note--empty">No note yet</p>`}
+      <button class="wu-btn wu-btn--secondary wu-btn--sm edit-goal" type="button">Edit</button>
     </div>`;
 }
 
@@ -161,7 +134,7 @@ function goalRow(state: WealthState, snapshot: GoalSnapshot, featuredId: string)
         <span class="wu-goal__amount">${amountOf(snapshot.currentAmount)} / ${amountOf(snapshot.targetAmount)}</span>
         <span class="wu-goal__chev" aria-hidden="true">›</span>
       </button>
-      ${open ? (editingGoal ? goalEditor(state, snapshot) : goalDetails(state, snapshot, featured)) : ""}
+      ${open ? (editingGoal ? goalEditor(state, snapshot, featured) : goalDetails(snapshot)) : ""}
     </li>`;
 }
 
