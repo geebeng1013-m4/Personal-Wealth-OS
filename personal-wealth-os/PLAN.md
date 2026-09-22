@@ -16,6 +16,22 @@
 
 ---
 
+## 用户资料独立成 Me 页  `[x]`（2026-09-22，PR #107 已合并上线，`main` = `c70232b`）
+
+用户要求：Settings 把「你是谁」「你的钱」「App 设定」混在一页，关于用户的资料另开一类放。
+
+- 决定：新页叫 **Me**，放在侧边栏 System 分组、Settings 前面。关于用户的都进 Me：
+  Profile、Money in & out（固定收支、负债、每月现金流）、Plan（每月 DCA、DCA 比例、
+  紧急基金、Opportunity reserve、Dip-buy tranches）、账号（头像、名字、email、Sign Out）。
+- Settings 只留 Privacy、Data、Danger zone。
+- 侧边栏底部和手机 More 页不再显示账号；侧边栏 Wealth Mandate 小卡片点了进 Me。
+- 不改数据结构（没有 Schema 变更）。
+
+### Me-1 — 新 Me 页 + 搬 Profile  `[x]`
+### Me-2 — 搬 Money in & out 和 Plan，所有指向这些表单的链接改指 Me  `[x]`
+### Me-3 — 账号搬进 Me + 页面设计（账号卡、两栏）  `[x]`
+### Me-4 — PR → 用户检查（含 5174 真实账号 Sign Out）→ 用户合并 → 上线  `[x]`（PR #107）
+
 ## 还债按利率分级（L 系列）  `[x]`（2026-09-22 全部完成：L-1..L-4 PR #103，L-5 #104，L-6 #105，L-7 #106；`main` = `e6cdccd`，Schema v29）
 
 问题：Q-2 / Q-5 的「还债支线」只看问答选没选「还债」，不看利率。结果 PTPTN（约 1%）的人也被推去先还债，而信用卡（15–18%）的人如果没选还债，会被建议先存满安全垫、再投资——每月多付的利息比存款或投资赚的还多。

@@ -9,8 +9,20 @@
 
 - **阶段**：V1 完成（2026-09-09）。核心正确性的洞都补上了。之后：**产品打磨** —— 手机比例这轮
   已收尾（M-1..M-6，见下）。App / 订阅方向因预算暂停（见下），先把产品本身做好。
-- **`main`**：`e6cdccd`（2026-09-22，PR #106 L-7 已合并上线；L 系列完成）。
+- **`main`**：`c70232b`（2026-09-22，PR #107 Me 页已合并上线）。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
+
+## 用户资料独立成 Me 页（已上线）
+
+- **2026-09-22 你要求**：关于用户的资料不要放在 Settings，另开一类。计划见 `PLAN.md`。
+- **已上线（PR #107，`main` = `c70232b`）**：侧边栏 System 分组多了 **Me**（在 Settings 前面）。
+  - Me：最上面是账号卡（头像或名字缩写、名字、email、Sign Out、资料小标签），下面两栏：
+    Profile + Money in & out ｜ Plan。手机上一栏：账号 → Profile → Money in & out → Plan。
+  - Settings 只剩 Privacy、Data、Danger zone。
+  - 侧边栏和手机 More 页不再有账号；Wealth Mandate 小卡片点了进 Me。
+  - Overview 下一步面板、Money Leaks、onboarding 引导、Rules 入门指南都改指 Me。
+- 验证：typecheck、1347 测试、build 全绿；5199 demo 上每个表单都存过；你在 5174 用真实账号试过 Sign Out，可以。
+  线上 wealthup.cc 已确认是新版本。
 
 ## 问答后的 Overview 整理 + 填空式问答 + 分阶段（Q 系列，已上线）
 
