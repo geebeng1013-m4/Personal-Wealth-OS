@@ -227,10 +227,10 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 | PR | 内容 | 状态 |
 | --- | --- | --- |
 | #36–#39 | R-1 原则 + 安全网 · 额度用光提示 · R-2 发送用户规则 · R-3 财务目标 | 待 merge（按顺序） |
-| #40 | BUG：Settings 保存后规则不跟着变 | 待 merge |
-| #41 | Import 前先存 Version History | 待 merge |
-| #42 | R-4：工具移到 Settings · Reset 真空白 · 紧急资金 6 个月建议 · 修 Version History 真实账号永远空 · Restore 先备份 | 待 merge |
-| #43 | R-5：原则正式文件 `docs/assistant-principles.md` + 文件与提示词同步测试 | 待 merge |
+| #40 | BUG：Settings 保存后规则不跟着变 | 已在 main（PR 于 2026-09-22 关闭，未合并）|
+| #41 | Import 前先存 Version History | 已在 main（PR 于 2026-09-22 关闭，未合并）|
+| #42 | R-4：工具移到 Settings · Reset 真空白 · 紧急资金 6 个月建议 · 修 Version History 真实账号永远空 · Restore 先备份 | 已在 main（PR 于 2026-09-22 关闭，未合并）|
+| #43 | R-5：原则正式文件 `docs/assistant-principles.md` + 文件与提示词同步测试 | 已在 main（PR 于 2026-09-22 关闭，未合并）|
 | #44 | Overview「FINANCIAL GOAL」：卡片（和其他卡片同色）：标签在上、目标居中、Lato Regular 加大 | 待 merge |
 
 ## App / 订阅方向（暂停）
