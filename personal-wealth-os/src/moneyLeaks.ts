@@ -277,7 +277,7 @@ function detectGoalDrift(state: WealthState): MoneyLeakObservation[] {
     if (!urgency) return [];
     return [{
       id: `goal-${goal.id}`,
-      title: `${goal.name} has no active contribution`,
+      title: `${goal.label || goal.name} has no active contribution`,
       category: "goal" as const,
       severity: severityForMonthlyImpact(urgency.shortfall),
       monthlyImpact: urgency.shortfall,

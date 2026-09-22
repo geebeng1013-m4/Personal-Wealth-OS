@@ -16,13 +16,18 @@ import type { WealthState } from "../models";
 import { MAX_FINANCIAL_GOAL_CHARS, createId, normalizeFinancialGoal } from "../state";
 import { money, percent } from "../rules";
 import { escapeHtml } from "../html";
+import { accountBalances } from "../ledger";
 import { pageHeader } from "../components/pageHeader";
 import { getGoalsSnapshot, type GoalSnapshot } from "../goalSummary";
 import { syncGoalContributionRules } from "../financialRules";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
-/** The open goal row (by state.goals index) and whether the goal sentence is being edited. */
+/**
+ * The open goal row (by state.goals index), whether that goal shows its form
+ * instead of its details, and whether the goal sentence is being edited.
+ */
 let openGoalIndex: number | null = null;
+let editingGoal = false;
 let editingFinancialGoal = false;
 
 /** A figure without its currency prefix. */
@@ -57,36 +62,66 @@ function financialGoalBlock(state: WealthState): string {
   </section>`;
 }
 
+/** What the linked account puts in the Current slot, e.g. "28 · from MAE wallet". */
+function linkedCurrentText(balance: number, accountName: string): string {
+  return `${escapeHtml(amountOf(balance))} · from ${escapeHtml(accountName)}`;
+}
+
 function goalEditor(state: WealthState, snapshot: GoalSnapshot, featured: boolean): string {
   const goal = state.goals[snapshot.index];
   const index = snapshot.index;
-  const accountLine = snapshot.linkedAccountName
-    ? `Progress follows ${escapeHtml(snapshot.linkedAccountName)}`
-    : snapshot.isAccountLinked
-      ? "Linked account unavailable"
-      : "Progress is entered by hand";
+  const balances = new Map(accountBalances(state.ledgerTransactions, state.ledgerAccounts).map((item) => [item.account.id, item.balance]));
+  // A linked goal's progress is the account balance, so the typed Current
+  // number would be ignored; it is only asked for on a manual goal. The input
+  // stays in the form (hidden) so saving keeps the stored figure unchanged.
+  const linked = Boolean(snapshot.linkedAccountName);
+  const accountLine = snapshot.isAccountLinked && !snapshot.linkedAccountName
+    ? `<p class="wu-dash__note">Linked account unavailable — progress uses the Current amount below.</p>`
+    : "";
   return `<form class="wu-stack wu-stack--sm goalForm wu-goal-editor" data-index="${index}">
-      <p class="wu-dash__note">${accountLine}</p>
+      ${accountLine}
       <div class="wu-grid wu-grid--2">
-        <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="label" type="text" value="${escapeHtml(goal.label)}"></label>
-        <label class="wu-field-row"><span class="wu-field-row__label">Short name</span><input class="wu-field" name="name" type="text" value="${escapeHtml(goal.name)}"></label>
-        <label class="wu-field-row"><span class="wu-field-row__label">Current MYR</span><input class="wu-field" name="current" type="number" min="0" step="1" value="${goal.current}"></label>
+        <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Name</span><input class="wu-field" name="label" type="text" value="${escapeHtml(goal.label)}"></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Progress comes from</span><select class="wu-field goal-account" name="accountId"><option value="">Manual — I type it in</option>${state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}" data-balance="${balances.get(account.id) ?? 0}"${account.id === goal.accountId ? " selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}</select></label>
+        <label class="wu-field-row wu-goal-editor__current goal-current-manual"${linked ? " hidden" : ""}><span class="wu-field-row__label">Current MYR</span><input class="wu-field" name="current" type="number" min="0" step="1" value="${goal.current}"></label>
+        <div class="wu-field-row wu-goal-editor__current goal-current-linked"${linked ? "" : " hidden"}><span class="wu-field-row__label">Current MYR</span><p class="wu-goal-editor__linked">${linked ? linkedCurrentText(snapshot.currentAmount, snapshot.linkedAccountName ?? "") : ""}</p></div>
         <label class="wu-field-row"><span class="wu-field-row__label">Target MYR</span><input class="wu-field" name="target" type="number" min="0" step="1" value="${goal.target}"></label>
         <label class="wu-field-row"><span class="wu-field-row__label">Monthly MYR</span><input class="wu-field" name="monthlyContribution" type="number" min="0" step="1" value="${goal.monthlyContribution}"></label>
-        <label class="wu-field-row"><span class="wu-field-row__label">Linked account</span><select class="wu-field" name="accountId"><option value="">Manual progress</option>${state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}"${account.id === goal.accountId ? " selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}</select></label>
-        <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Note</span><textarea class="wu-field" name="note" rows="2">${escapeHtml(goal.note)}</textarea></label>
+        <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Note</span><textarea class="wu-field" name="note" rows="2" placeholder="Why this goal matters, or anything to remember">${escapeHtml(goal.note)}</textarea></label>
       </div>
       <p class="wu-field-row__error goal-form-error" role="alert" hidden></p>
       <div class="wu-row wu-row--tight wu-goal-editor__actions">
-        ${featured
-          ? `<span class="wu-chip">On Dashboard</span>`
-          : `<button class="wu-btn wu-btn--secondary wu-btn--sm feature-goal" data-goal-id="${escapeHtml(goal.id)}" type="button">Show on Dashboard</button>`}
+        ${featured ? "" : `<button class="wu-btn wu-btn--secondary wu-btn--sm feature-goal" data-goal-id="${escapeHtml(goal.id)}" type="button">Show on Dashboard</button>`}
         <button class="wu-btn wu-btn--ghost wu-btn--sm wu-goal-danger delete-goal" data-index="${index}" type="button">Delete</button>
         <span class="wu-goal-editor__grow"></span>
-        <button class="wu-btn wu-btn--ghost wu-btn--sm cancel-goal-edit" type="button">Cancel</button>
+        <button class="wu-btn wu-btn--ghost wu-btn--sm wu-goal-editor__cancel cancel-goal-edit" type="button">Cancel</button>
         <button class="wu-btn wu-btn--primary wu-btn--sm save-goal" type="button">Save</button>
       </div>
     </form>`;
+}
+
+/** How long until the goal is reached at its monthly amount, in words. */
+function timeToGoal(snapshot: GoalSnapshot): string {
+  if (snapshot.isComplete) return "Reached";
+  if (snapshot.targetAmount <= 0) return "Set a target to see when";
+  const months = snapshot.estimatedMonthsToTarget;
+  if (months === null) return "Add a monthly amount to see when";
+  if (months < 12) return `Reach it in <strong>${months} ${months === 1 ? "month" : "months"}</strong>`;
+  return `Reach it in <strong>about ${snapshot.estimatedYearsToTarget} years</strong>`;
+}
+
+/**
+ * What an open goal shows before any editing: its note, how long until it is
+ * reached, and an Edit button. The row above already carries the figures, so
+ * they are not repeated, and the form only appears behind Edit.
+ */
+function goalDetails(snapshot: GoalSnapshot): string {
+  const note = snapshot.note.trim();
+  return `<div class="wu-goal-detail">
+      ${note ? `<p class="wu-goal-detail__note">${escapeHtml(note)}</p>` : `<p class="wu-goal-detail__note wu-goal-detail__note--empty">No note yet</p>`}
+      <p class="wu-goal-detail__eta">${timeToGoal(snapshot)}</p>
+      <button class="wu-btn wu-btn--secondary wu-btn--sm edit-goal" type="button">Edit</button>
+    </div>`;
 }
 
 function goalRow(state: WealthState, snapshot: GoalSnapshot, featuredId: string): string {
@@ -110,7 +145,7 @@ function goalRow(state: WealthState, snapshot: GoalSnapshot, featuredId: string)
         <span class="wu-goal__amount">${amountOf(snapshot.currentAmount)} / ${amountOf(snapshot.targetAmount)}</span>
         <span class="wu-goal__chev" aria-hidden="true">›</span>
       </button>
-      ${open ? goalEditor(state, snapshot, featured) : ""}
+      ${open ? (editingGoal ? goalEditor(state, snapshot, featured) : goalDetails(snapshot)) : ""}
     </li>`;
 }
 
@@ -170,7 +205,7 @@ export function goalsTemplate(state: WealthState): string {
 
         <!-- GOALS — a table on a desktop, rows with a bar on a phone -->
         <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-goals-list" aria-labelledby="goalsListLabel">
-          <div class="wu-tc__top"><span class="wu-label" id="goalsListLabel">Goals · tap one to edit</span></div>
+          <div class="wu-tc__top"><span class="wu-label" id="goalsListLabel">Goals · tap one to open</span></div>
           <div class="wu-goal__row wu-goal__head" aria-hidden="true"><span>Goal</span><span>Monthly</span><span>Progress</span><span>%</span><span>Saved</span><span></span></div>
           <ul class="wu-goal-list">${rows}</ul>
           ${addButton(" wu-btn--block wu-goals-add-phone")}
@@ -226,10 +261,16 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
   root.querySelectorAll<HTMLButtonElement>(".goal-row").forEach((button) => button.addEventListener("click", () => {
     const index = Number(button.dataset.index);
     openGoalIndex = openGoalIndex === index ? null : index;
+    editingGoal = false;
     repaint();
   }));
+  root.querySelectorAll<HTMLButtonElement>(".edit-goal").forEach((button) => button.addEventListener("click", () => {
+    editingGoal = true;
+    repaint(undefined, undefined, `.goalForm[data-index="${openGoalIndex}"] input[name="label"]`);
+  }));
+  // Cancel steps back to the goal's details rather than closing it.
   root.querySelectorAll<HTMLButtonElement>(".cancel-goal-edit").forEach((button) => button.addEventListener("click", () => {
-    openGoalIndex = null;
+    editingGoal = false;
     repaint();
   }));
 
@@ -255,13 +296,12 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
         return;
       }
       const data = new FormData(form);
-      const name = String(data.get("name") ?? "").trim();
       const label = String(data.get("label") ?? "").trim();
       const current = Number(data.get("current"));
       const target = Number(data.get("target"));
       const monthlyContribution = Number(data.get("monthlyContribution"));
-      if (!name || !label) {
-        showError("Name and short name are required.");
+      if (!label) {
+        showError("Give the goal a name.");
         return;
       }
       if (![current, target, monthlyContribution].every((value) => Number.isFinite(value) && value >= 0)) {
@@ -270,8 +310,9 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
       }
       const goals = [...state.goals];
       goals[index] = {
+        // goal.name is no longer edited here: it stays as stored, because
+        // onboarding recognises its debt goal by that name.
         ...goals[index],
-        name,
         label,
         current,
         target,
@@ -282,9 +323,22 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
       const next = { ...state, goals };
       // Each contributing goal has a goal-contribution rule the Advisor reads.
       next.financialRules = syncGoalContributionRules(next);
-      openGoalIndex = null;
+      // Back to the details, so the saved figures are read straight away.
+      editingGoal = false;
       repaint(next, "Updated goal");
     };
+    // Switching between manual and an account swaps the Current slot in place.
+    const accountSelect = form.querySelector<HTMLSelectElement>(".goal-account");
+    accountSelect?.addEventListener("change", () => {
+      const option = accountSelect.selectedOptions[0];
+      const linked = Boolean(accountSelect.value);
+      const manualRow = form.querySelector<HTMLElement>(".goal-current-manual");
+      const linkedRow = form.querySelector<HTMLElement>(".goal-current-linked");
+      const linkedText = form.querySelector<HTMLElement>(".wu-goal-editor__linked");
+      if (manualRow) manualRow.hidden = linked;
+      if (linkedRow) linkedRow.hidden = !linked;
+      if (linkedText) linkedText.innerHTML = linked ? linkedCurrentText(Number(option?.dataset.balance ?? 0), option?.text ?? "") : "";
+    });
     form.querySelector<HTMLButtonElement>(".save-goal")?.addEventListener("click", saveGoal);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -306,6 +360,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
       const next = { ...state, goals, overviewGoalId };
       next.financialRules = syncGoalContributionRules(next);
       openGoalIndex = null;
+      editingGoal = false;
       repaint(next);
     });
   });
@@ -324,6 +379,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
     const next = { ...state, goals };
     next.financialRules = syncGoalContributionRules(next);
     openGoalIndex = goals.length - 1;
+    editingGoal = true;
     repaint(next, undefined, `.goalForm[data-index="${goals.length - 1}"] input[name="label"]`);
   }));
 }

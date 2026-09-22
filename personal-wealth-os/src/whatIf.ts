@@ -86,7 +86,7 @@ function goalImpact(state: WealthState, goal: GoalSnapshot, amount: number, mode
   // status === "funding" guarantees monthlyContribution > 0, so
   // estimatedMonthsToTarget is a number, never null, here.
   const monthsToTargetNow = goal.estimatedMonthsToTarget ?? 0;
-  const base = { id: goal.id, name: goal.name, monthsToTargetNow };
+  const base = { id: goal.id, name: goal.label || goal.name, monthsToTargetNow };
   if (amount <= 0) return { ...base, monthsToTargetAfter: monthsToTargetNow, newMonthlyRate: null };
 
   if (mode === "once") {
