@@ -5,12 +5,13 @@ import { emptyState } from "../src/state";
 import { buildNextSteps } from "../src/onboarding";
 import { classifyStage } from "../src/moneyStage";
 import { applyOnboardingAnswers, type OnboardingAnswers } from "../src/onboardingQuiz";
+import { monthsToClear } from "../src/debtPriority";
 
 const quiz = (answers: Omit<OnboardingAnswers, "answeredAt">): WealthState =>
   applyOnboardingAnswers(emptyState(), answers, { goalId: "goal-quiz", today: "2026-09-22" });
 const ids = (state: WealthState) => buildNextSteps(state).steps.map((step) => step.id);
 const step = (state: WealthState, id: string) => buildNextSteps(state).steps.find((item) => item.id === id);
-const card = { id: "l1", name: "Card", balance: 3000, annualRate: 18, minimumPayment: 100 };
+const card = { id: "l1", name: "Card", balance: 3000, annualRate: 0.18, minimumPayment: 100 };
 
 test("steps by stage: building the buffer puts moving money in it right after pay", () => {
   const state = quiz({ primaryGoal: "save", monthlyIncome: 4500, monthlySpending: 2800, cashInBank: 3000, goalName: "Japan trip", goalAmount: 6000 });
@@ -44,7 +45,8 @@ test("steps by stage: a full buffer asks for a monthly amount to invest, done on
 test("steps by stage: debt first — write it down, then pay a fixed amount", () => {
   const state = quiz({ primaryGoal: "debt", monthlyIncome: 4000, monthlySpending: 2500, cashInBank: 1000, goalName: "Card", goalAmount: 3000 });
   assert.equal(classifyStage(state).id, "debt");
-  assert.deepEqual(ids(state).slice(0, 4), ["record-pay", "debt-add", "debt-pay", "log-spending"]);
+  // L-3: a month's spending is set aside before the debt is paid down.
+  assert.deepEqual(ids(state).slice(0, 4), ["record-pay", "debt-add", "move-to-buffer", "debt-pay"]);
   const add = step(state, "debt-add");
   // v29: "Start my plan" records the debt, so this step is already ticked.
   assert.equal(add?.done, true);
@@ -88,9 +90,10 @@ test("debt progress: the plan shows what is paid off, read from the debts record
   const owing = buildNextSteps({ ...state, liabilities: [{ ...card, balance: 2250 }] }).plan;
   assert.equal(owing?.goalCurrent, 750);
   assert.equal(owing?.goalTarget, 3000);
-  // 2,250 left at the quiz's monthly amount for it.
-  const monthly = state.goals[0].monthlyContribution;
-  assert.equal(owing?.goalMonths, Math.ceil(2250 / monthly));
+  // L-3: 2,250 left at this month's payment (half of the 1,500 left over while
+  // a month's spending is set aside), interest counted.
+  assert.equal(owing?.goalMonths, monthsToClear(2250, 0.18, 750));
+  assert.equal(owing?.debtInterest, 34, "2,250 at 18% is about 34 a month");
   // Owing more than was said never shows negative progress.
   assert.equal(buildNextSteps({ ...state, liabilities: [{ ...card, balance: 3600 }] }).plan?.goalCurrent, 0);
 });

@@ -204,3 +204,16 @@ export function buildLiability(id: string, input: LiabilityInput, today: string)
   if (input.kind === "credit-card") liability.paidInFull = input.paidInFull;
   return { ok: true, liability };
 }
+
+/**
+ * Months to clear `balance` paying `payment` a month at this effective rate;
+ * null when the payment does not even cover the interest.
+ */
+export function monthsToClear(balance: number, annualRate: number, payment: number): number | null {
+  if (!Number.isFinite(balance) || balance <= 0) return 0;
+  if (!Number.isFinite(payment) || payment <= 0) return null;
+  const rate = Number.isFinite(annualRate) && annualRate > 0 ? annualRate / 12 : 0;
+  if (rate === 0) return Math.ceil(balance / payment);
+  if (payment <= balance * rate) return null;
+  return Math.ceil(-Math.log(1 - (rate * balance) / payment) / Math.log(1 + rate));
+}

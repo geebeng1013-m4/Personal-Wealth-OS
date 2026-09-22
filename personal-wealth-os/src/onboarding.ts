@@ -12,8 +12,9 @@
 
 import type { WealthState } from "./models";
 import { answeredCash } from "./onboardingQuiz";
-import { classifyStage, type MoneyStageId } from "./moneyStage";
+import { classifyStage, type MoneyStage, type MoneyStageId } from "./moneyStage";
 import { totalLiabilities } from "./financialHealth";
+import { debtTier, monthlyInterest, monthsToClear, monthsUntil } from "./debtPriority";
 
 export type OnboardingStepId = "balances" | "first-entry" | "goal" | "safety-buffer" | "investment";
 
@@ -119,7 +120,7 @@ export type NextStepId =
 
 /** Which steps come first at each stage. Anything not listed follows, in the order it was built. */
 const STAGE_ORDER: Record<MoneyStageId, readonly NextStepId[]> = {
-  debt: ["record-pay", "debt-add", "debt-pay", "log-spending"],
+  debt: ["record-pay", "debt-add", "move-to-buffer", "debt-pay", "log-spending"],
   base: ["record-pay", "log-spending", "cut-cost", "safety-buffer"],
   buffer: ["record-pay", "safety-buffer", "move-to-buffer", "log-spending"],
   ready: ["record-pay", "log-spending", "invest-monthly", "investment"],
@@ -161,6 +162,10 @@ export interface NextStepPlan {
   goalMonths: number | null;
   /** The goal date still rests on estimated income: no real pay recorded yet. */
   goalEstimate: boolean;
+  /** A pay-off goal: interest the debts still owed cost a month (rounded); null otherwise. */
+  debtInterest: number | null;
+  /** On the debt track: the buffer only fills to this (a month's spending) until the debt is cleared; null otherwise. */
+  bufferHold: number | null;
 }
 
 export interface NextSteps {
@@ -175,6 +180,30 @@ export interface NextSteps {
 
 // The app's own way of writing an amount (see money() in rules.ts), so the card reads like the page it sits on.
 const rm = (value: number) => `MYR ${Math.round(value).toLocaleString("en-MY")}`;
+const ratePercent = (annualRate: number) => `${Math.round(annualRate * 1000) / 10}%`;
+
+/** Income minus planned spending: Settings' figures, else the Q&A's; null when neither is known. */
+function monthlyLeftover(state: WealthState): number | null {
+  const planned = state.cashflow.transport + state.cashflow.food + state.cashflow.otherFixed;
+  if (state.cashflow.allowance > 0 && planned > 0) return state.cashflow.allowance - planned;
+  const answers = state.onboardingAnswers;
+  if (answers?.monthlyIncome !== undefined && answers.monthlySpending !== undefined) return answers.monthlyIncome - answers.monthlySpending;
+  return null;
+}
+
+/**
+ * What to pay against the first debt this month, on top of the minimums
+ * (L-3): half the leftover while a month's spending is set aside, all of it
+ * after, the same split as the Q&A. 0 off the debt track or with nothing left over.
+ */
+export function debtPaymentThisMonth(state: WealthState, stage: MoneyStage = classifyStage(state)): number {
+  const debt = stage.debt;
+  if (!debt) return 0;
+  const leftover = monthlyLeftover(state);
+  if (leftover === null || leftover <= 0) return 0;
+  const payment = Math.round(leftover * (debt.phase === "starter" ? 0.5 : 1));
+  return debt.focus ? Math.min(payment, Math.ceil(debt.focus.balance)) : payment;
+}
 
 export function buildNextSteps(state: WealthState): NextSteps {
   const answers = state.onboardingAnswers;
@@ -186,6 +215,7 @@ export function buildNextSteps(state: WealthState): NextSteps {
   const answeredSavings = answers ? answeredCash(answers) ?? 0 : 0;
   // The buffer grew past what the quiz recorded, or is simply full.
   const bufferMoved = bufferTarget > 0 && (bufferCurrent >= bufferTarget || bufferCurrent > answeredSavings);
+  const stage = classifyStage(state);
 
   const steps: NextStep[] = [{
     id: "record-pay",
@@ -218,7 +248,26 @@ export function buildNextSteps(state: WealthState): NextSteps {
       optional: false,
     });
   }
-  if (answers && bufferTarget > 0 && monthlyTopUp > 0 && answeredSavings < bufferTarget) {
+  if (stage.debt) {
+    // Debt first (L-1): only a month's spending is set aside, so one surprise
+    // bill does not go back on the card; after that the buffer waits.
+    const { starterTarget, phase } = stage.debt;
+    const short = Math.max(0, starterTarget - bufferCurrent);
+    const amount = Math.min(short, monthlyTopUp > 0 ? monthlyTopUp : short);
+    steps.push({
+      id: "move-to-buffer",
+      title: `Keep ${rm(starterTarget)} aside for emergencies`,
+      because: phase === "payoff"
+        ? "A month of spending is set aside, so a surprise bill won't go back on the card."
+        : `Before paying the debt down: a month of spending, so a surprise bill won't go back on the card. ${rm(short)} to go.`,
+      action: "confirm",
+      cta: `I've set aside ${rm(amount)}`,
+      detail: "Transfer it in your bank app, from your current account to your savings. WealthUp never moves money; it keeps score.",
+      amount,
+      done: phase === "payoff",
+      optional: false,
+    });
+  } else if (answers && bufferTarget > 0 && monthlyTopUp > 0 && answeredSavings < bufferTarget) {
     steps.push({
       id: "move-to-buffer",
       title: `Move ${rm(monthlyTopUp)} into your safety buffer`,
@@ -251,7 +300,6 @@ export function buildNextSteps(state: WealthState): NextSteps {
       optional: false,
     });
   }
-  const stage = classifyStage(state);
   const goal = state.goals.find((item) => item.id === state.overviewGoalId) ?? state.goals[0];
 
   if (!answers || answers.invests === true || stage.id === "ready") {
@@ -280,21 +328,27 @@ export function buildNextSteps(state: WealthState): NextSteps {
       done: state.liabilities.length > 0,
       optional: false,
     });
-    // The quiz set a monthly amount for the debt; from the first recorded
-    // figure on, any drop below what was said counts as paying it down.
-    const payment = goal?.monthlyContribution ?? 0;
-    const startedAt = answers?.goalAmount ?? 0;
-    if (payment > 0 && startedAt > 0) {
+    // The highest rate first (L-3), with this month's amount. From the figure
+    // the quiz recorded on, any drop below it counts as paying it down; without
+    // one there is nothing to tick from, so the step does not hold the card.
+    const focus = stage.debt?.focus ?? null;
+    const payment = debtPaymentThisMonth(state, stage);
+    const startedAt = answers?.primaryGoal === "debt" ? answers.goalAmount ?? 0 : 0;
+    if (focus && payment > 0) {
+      const known = debtTier(focus.annualRate) !== "unknown";
+      const interest = monthlyInterest(focus.balance, focus.annualRate);
       steps.push({
         id: "debt-pay",
-        title: `Pay ${rm(payment)} against it this month`,
-        because: "A fixed amount every month is what gives a debt an end date.",
+        title: known ? `Highest rate first: ${focus.name} ${ratePercent(focus.annualRate)}` : `Pay ${rm(payment)} against ${focus.name}`,
+        because: known
+          ? `Pay ${rm(payment)} this month, on top of the minimum. It costs about ${rm(interest)} in interest a month.`
+          : "A fixed amount every month is what gives a debt an end date.",
         action: "confirm",
         cta: `I've paid ${rm(payment)}`,
         detail: "Pay it in your bank or card app. WealthUp never moves money; it keeps score.",
         amount: payment,
-        done: state.liabilities.length > 0 && owed < startedAt,
-        optional: false,
+        done: startedAt > 0 && owed < startedAt,
+        optional: startedAt === 0,
       });
     }
   }
@@ -343,9 +397,22 @@ export function buildNextSteps(state: WealthState): NextSteps {
   const goalCurrent = !goal ? 0 : debtGoal && state.liabilities.length > 0
     ? Math.min(goal.target, Math.max(0, goal.target - totalLiabilities(state.liabilities)))
     : goal.current;
-  const goalMonths = goal && goal.monthlyContribution > 0 && goal.target > goalCurrent
+  let goalMonths = goal && goal.monthlyContribution > 0 && goal.target > goalCurrent
     ? Math.ceil((goal.target - goalCurrent) / goal.monthlyContribution)
     : null;
+  // A pay-off goal (L-3): on the debt track, the date at this month's payment
+  // with interest counted; a cheaper debt is cleared on its own schedule.
+  const owing = debtGoal ? state.liabilities.filter((item) => item.balance > 0 && !item.paidInFull) : [];
+  if (debtGoal && goal && goal.target > goalCurrent) {
+    if (stage.debt) {
+      const payment = debtPaymentThisMonth(state, stage) || goal.monthlyContribution;
+      goalMonths = monthsToClear(goal.target - goalCurrent, stage.debt.focus?.annualRate ?? 0, payment);
+    } else {
+      const end = owing.map((item) => item.endMonth).filter((month): month is string => Boolean(month)).sort().pop();
+      if (end) goalMonths = monthsUntil(end, new Date().toLocaleDateString("en-CA")) || null;
+    }
+  }
+  const debtInterest = debtGoal ? Math.round(owing.reduce((sum, item) => sum + monthlyInterest(item.balance, item.annualRate), 0)) : null;
 
   return {
     steps,
@@ -362,6 +429,8 @@ export function buildNextSteps(state: WealthState): NextSteps {
       goalTarget: goal?.target ?? 0,
       goalMonths,
       goalEstimate: !income,
+      debtInterest,
+      bufferHold: stage.debt?.starterTarget ?? null,
     } : null,
   };
 }

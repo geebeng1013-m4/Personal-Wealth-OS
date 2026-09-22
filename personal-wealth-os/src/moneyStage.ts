@@ -52,6 +52,11 @@ export interface DebtFocus {
   starterTarget: number;
   /** The debt to pay first; null when the user said there is one but none is recorded yet. */
   focus: Liability | null;
+  /**
+   * Spending is at or above income, so nothing is left to pay it down with.
+   * The Overview then points to AKPK, Bank Negara's free debt counselling (L-3).
+   */
+  tight: boolean;
 }
 
 export const STAGE_COUNT = 4;
@@ -96,7 +101,7 @@ function ratePercent(annualRate: number): string {
  * The debt track, or null when no debt comes before the buffer. It holds until
  * those debts are paid off; then the stage falls back to the main road.
  */
-function debtStage(state: WealthState, monthly: number | null): MoneyStage | null {
+function debtStage(state: WealthState, monthly: number | null, now: Date): MoneyStage | null {
   const saidDebtFirst = state.onboardingAnswers?.primaryGoal === "debt";
   const debts = priorityDebts(state.liabilities, saidDebtFirst);
   // Nothing recorded yet still counts: the user said it is there.
@@ -106,7 +111,7 @@ function debtStage(state: WealthState, monthly: number | null): MoneyStage | nul
   const starterTarget = starterBufferTarget(monthly);
   const focus = debts[0] ?? null;
   const phase = state.emergency.current >= starterTarget ? "payoff" : "starter";
-  const debt: DebtFocus = { phase, starterTarget, focus };
+  const debt: DebtFocus = { phase, starterTarget, focus, tight: spendingAboveIncome(state, monthly, now) };
   const make = (reason: string): MoneyStage => ({ ...stage("debt", reason, "debt"), debt });
 
   if (!focus) return make("You said paying off debt comes first.");
@@ -124,7 +129,7 @@ export function classifyStage(state: WealthState, now = new Date()): MoneyStage 
   // Planned monthly spending: the same figure the buffer suggestion and the
   // Q&A use (Settings' fixed costs, which the Q&A fills in).
   const monthly = suggestedEmergencyTarget(state, 1)?.monthlyEssential ?? null;
-  const debt = debtStage(state, monthly);
+  const debt = debtStage(state, monthly, now);
   if (debt) return debt;
 
   const road = mainRoad(state, monthly, now);

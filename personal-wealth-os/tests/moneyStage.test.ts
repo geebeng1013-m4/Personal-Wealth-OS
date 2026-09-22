@@ -126,7 +126,7 @@ test("stage (L-1): once a month's spending is aside, everything goes to the debt
 test("stage (L-1): without a spending figure the starter money is RM1,000", () => {
   const base = emptyState();
   const state = { ...base, emergency: { ...base.emergency, current: 1000 }, liabilities: [liability("Card", 3000, 0.18)] };
-  assert.deepEqual(classifyStage(state, NOW).debt, { phase: "payoff", starterTarget: 1000, focus: state.liabilities[0] });
+  assert.deepEqual(classifyStage(state, NOW).debt, { phase: "payoff", starterTarget: 1000, focus: state.liabilities[0], tight: false });
   assert.equal(classifyStage({ ...state, emergency: { ...state.emergency, current: 999 } }, NOW).debt?.phase, "starter");
 });
 
@@ -164,5 +164,5 @@ test("stage (L-1): a debt with no rate comes first only when the Q&A put debt fi
   assert.equal(stage.id, "debt");
   assert.equal(stage.reason, "MYR 3,000 still owed. Add its interest rate to see whether it should come first.");
   // Nothing recorded yet: the user's word is enough.
-  assert.deepEqual(classifyStage(quiz, NOW).debt, { phase: "starter", starterTarget: 2000, focus: null });
+  assert.deepEqual(classifyStage(quiz, NOW).debt, { phase: "starter", starterTarget: 2000, focus: null, tight: false });
 });
