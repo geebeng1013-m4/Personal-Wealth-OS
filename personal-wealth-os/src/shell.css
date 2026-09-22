@@ -1157,10 +1157,17 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* Opaque on purpose: Chrome paints the open option list in the select's own
+   background colour, and a see-through tint lands on white — light text on a
+   near-white list. The mix looks the same as --accent-soft on the page. */
 .onb-pill.is-set {
   border-style: solid;
   border-color: var(--accent-line);
-  background-color: var(--accent-soft);
+  background-color: color-mix(in srgb, var(--accent) 14%, var(--surface-bg));
+  color: var(--text);
+}
+.onb-pill option {
+  background-color: var(--surface-raised);
   color: var(--text);
 }
 .onb-pill--text {
