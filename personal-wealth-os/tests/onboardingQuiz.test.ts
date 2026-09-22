@@ -3,7 +3,7 @@ import { test } from "./testHarness";
 import type { WealthState } from "../src/models";
 import { CURRENT_VERSION, emptyState, migrateState } from "../src/state";
 import { getFinancialRule, getFinancialRulesOfKind } from "../src/financialRules";
-import { buildOnboardingChecklist } from "../src/onboarding";
+import { buildNextSteps, buildOnboardingChecklist } from "../src/onboarding";
 import { classifyStage } from "../src/moneyStage";
 import {
   answeredDebtRate,
@@ -310,4 +310,35 @@ test("plan (v29): a flat car loan is judged by its real rate (medium), not the 3
   const plan = buildOnboardingPlan({ ...DEBT, goalName: "Car loan", goalAmount: 30000, debtKind: "car-loan", debtRate: 0.03, debtRateFlat: true, debtMonthsLeft: 84, cashInBank: 20000 });
   assert.equal(plan.debtFirst, false);
   assert.deepEqual(plan.split, { buffer: 0, goal: 1000, invest: 1000 }, "buffer full: 50/50 paying early and investing");
+});
+
+// --- the Overview plan card reads the goal the way the Goals page does -------
+
+test("onboardingQuiz: the plan card's goal uses its linked account balance and its Name", () => {
+  const answered = applyOnboardingAnswers(emptyState(), ANSWERS, OPTIONS);
+  const quizGoal = answered.goals.find((goal) => goal.id === OPTIONS.goalId)!;
+  const next: WealthState = {
+    ...answered,
+    overviewGoalId: quizGoal.id,
+    ledgerAccounts: [...answered.ledgerAccounts, { id: "acc-trip", name: "Trip pot", type: "wallet", openingBalance: 1200 }],
+    // Renamed on the Goals page (label), typed Current left at 0, linked to the pot.
+    goals: answered.goals.map((goal) => goal.id === quizGoal.id ? { ...goal, label: "Tokyo 2027", current: 0, accountId: "acc-trip" } : goal),
+  };
+  const plan = buildNextSteps(next).plan!;
+  assert.equal(plan.goalCurrent, 1200, "the pot's balance, not the typed 0");
+  assert.equal(plan.goalMonths, Math.ceil((6000 - 1200) / quizGoal.monthlyContribution));
+  assert.equal(plan.goalName, "Tokyo 2027", "the Name the Goals page edits");
+});
+
+test("migrateState: with no featured goal saved, a goal its account already funds is not picked", () => {
+  const state = migrateState({
+    deviceId: "device-featured",
+    ledgerAccounts: [{ id: "acc-pot", name: "Pot", type: "wallet", openingBalance: 500 }],
+    ledgerTransactions: [],
+    goals: [
+      { id: "funded", name: "Funded", label: "Funded", current: 0, target: 400, monthlyContribution: 10, note: "", accountId: "acc-pot" },
+      { id: "open", name: "Open", label: "Open", current: 50, target: 400, monthlyContribution: 10, note: "" },
+    ],
+  });
+  assert.equal(state.overviewGoalId, "open");
 });

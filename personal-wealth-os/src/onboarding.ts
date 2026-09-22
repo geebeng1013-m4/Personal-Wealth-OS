@@ -13,7 +13,7 @@
 import type { Liability, WealthState } from "./models";
 import { answeredCash } from "./onboardingQuiz";
 import { classifyStage, type MoneyStage, type MoneyStageId } from "./moneyStage";
-import { totalLiabilities } from "./financialHealth";
+import { linkedGoalCurrent, totalLiabilities } from "./financialHealth";
 import { debtTier, monthlyInterest, monthsToClear, monthsUntil } from "./debtPriority";
 
 export type OnboardingStepId = "balances" | "first-entry" | "goal" | "safety-buffer" | "investment";
@@ -433,11 +433,12 @@ export function buildNextSteps(state: WealthState): NextSteps {
   const complete = steps.every((step) => step.done || step.optional);
   // The Q&A writes a pay-off goal the way it writes a savings goal. Its real
   // progress is the debt going down: once a debt is recorded, paid off =
-  // what was said minus what is still owed (the goal's own figure otherwise).
+  // what was said minus what is still owed (the goal's own figure otherwise —
+  // the linked account's balance when it has one, as on the Goals page).
   const debtGoal = Boolean(goal) && answers?.primaryGoal === "debt" && goal?.name === answers.goalName;
   const goalCurrent = !goal ? 0 : debtGoal && state.liabilities.length > 0
     ? Math.min(goal.target, Math.max(0, goal.target - totalLiabilities(state.liabilities)))
-    : goal.current;
+    : linkedGoalCurrent(goal, state);
   let goalMonths = goal && goal.monthlyContribution > 0 && goal.target > goalCurrent
     ? Math.ceil((goal.target - goalCurrent) / goal.monthlyContribution)
     : null;
@@ -464,7 +465,8 @@ export function buildNextSteps(state: WealthState): NextSteps {
       bufferCurrent,
       bufferTarget,
       bufferEstimate: !bufferMoved,
-      goalName: goal?.name ?? "",
+      // The Name the Goals page edits; the short name is no longer editable.
+      goalName: goal ? goal.label || goal.name : "",
       goalKind: debtGoal ? "debt" : "save",
       goalCurrent,
       goalTarget: goal?.target ?? 0,
