@@ -81,7 +81,15 @@
 - `onboardingAnswers` 加 `lifeStage`、`incomeRange`、`bufferMonthsHave`、`cashKeptIn`、`longTermGoals`（现在是 v27，所以升到 v28）。`migrateState` 迁移旧答案，缺的字段当作没回答，不重置任何数据；导入导出、云端兼容。
 - `applyOnboardingAnswers`：存款月数 × 开销 → 安全垫现有金额；自雇 → 目标 6 个月。只填空着的值（跟 O-1 一样）。
 
-### Q-4 — 填空式问答画面  `[ ]`
+### Q-4 — 填空式问答画面  `[x]`（2026-09-22，分支 `q-overview-tidy`）
+- 已做：`onboardingPage.ts` 重写。开场页 → 一页 8 句填空（身份 / 收入 / 开销 / 存了几个月 + 放在哪 / 最想做什么 / 短期目标 / 长期在乎 / 有没有投资）→ 你的计划 → Start my plan。答完（或按「Rather not say」跳过）一句才出现下一句，新句子自动滚到中间、焦点移过去；每句下面是 W 头像的回话（算出来的余钱和比例、安全垫建议、存款进度、钱放在 e-wallet / 家里会温和提醒、目标日期）。
+- 收入：学生看零用钱范围，其他人看一般范围，也可以「Type an amount…」自己打。开销、目标金额同样有常用金额 + 自己打。打字停 0.7 秒或按 Enter 才更新（页面不会一边打一边跳），光标位置保留。
+- 目标那句：选「存钱」或「还债」时必须填或按「Rather not say」；其他选择时按钮叫「Nothing yet」。长期目标可多选，「Not sure yet」会取消其他。
+- 结果页最上面是阶段卡（4 格路线 + Because），用的是**跟 Overview 同一个** `classifyStage`，在这些答案会产生的 state 上算，所以两边一定一致。自雇显示「Safety buffer · 6 months」。
+- 旧的每题一页样式（`.onb-option`、`.onb-reply`、`.onb-field` 等）已删除。
+- 实测（5199 `?fresh`，独立无头 Edge）：手机深色走完整流程（自雇 + 收入范围 + 自己打开销「2,000」+ 1–2 个月放 e-wallet + Japan trip RM5,000 + 长期目标），结果页 Stage 2、RM3,000 / RM12,000，进 Overview 阶段一行一致，存下的答案和安全垫都对；学生全部跳过也能走完，「Change an answer」回去答案还在；电脑浅色排版正常。无报错。1273 测试全绿，typecheck / build 通过。
+
+### Q-4（原计划）
 - `onboardingPage.ts` 改成一页填空造句：答完一句才出现下一句，每句下面马上回一句话（W 当头像）；学生用零用钱的范围；结果页加「你在第几阶段、为什么」。
 - 键盘能完成；手机上下拉选单不溢出。
 
