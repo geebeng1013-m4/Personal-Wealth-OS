@@ -16,6 +16,7 @@ import type { WealthState } from "../models";
 import { MAX_FINANCIAL_GOAL_CHARS, createId, normalizeFinancialGoal } from "../state";
 import { money, percent } from "../rules";
 import { escapeHtml } from "../html";
+import { accountBalances } from "../ledger";
 import { pageHeader } from "../components/pageHeader";
 import { getGoalsSnapshot, type GoalSnapshot } from "../goalSummary";
 import { syncGoalContributionRules } from "../financialRules";
@@ -57,23 +58,32 @@ function financialGoalBlock(state: WealthState): string {
   </section>`;
 }
 
+/** What the linked account puts in the Current slot, e.g. "28 · from MAE wallet". */
+function linkedCurrentText(balance: number, accountName: string): string {
+  return `${escapeHtml(amountOf(balance))} · from ${escapeHtml(accountName)}`;
+}
+
 function goalEditor(state: WealthState, snapshot: GoalSnapshot, featured: boolean): string {
   const goal = state.goals[snapshot.index];
   const index = snapshot.index;
-  const accountLine = snapshot.linkedAccountName
-    ? `Progress follows ${escapeHtml(snapshot.linkedAccountName)}`
-    : snapshot.isAccountLinked
-      ? "Linked account unavailable"
-      : "Progress is entered by hand";
+  const balances = new Map(accountBalances(state.ledgerTransactions, state.ledgerAccounts).map((item) => [item.account.id, item.balance]));
+  // A linked goal's progress is the account balance, so the typed Current
+  // number would be ignored; it is only asked for on a manual goal. The input
+  // stays in the form (hidden) so saving keeps the stored figure unchanged.
+  const linked = Boolean(snapshot.linkedAccountName);
+  const accountLine = snapshot.isAccountLinked && !snapshot.linkedAccountName
+    ? `<p class="wu-dash__note">Linked account unavailable — progress uses the Current amount below.</p>`
+    : "";
   return `<form class="wu-stack wu-stack--sm goalForm wu-goal-editor" data-index="${index}">
-      <p class="wu-dash__note">${accountLine}</p>
+      ${accountLine}
       <div class="wu-grid wu-grid--2">
         <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="label" type="text" value="${escapeHtml(goal.label)}"></label>
         <label class="wu-field-row"><span class="wu-field-row__label">Short name</span><input class="wu-field" name="name" type="text" value="${escapeHtml(goal.name)}"></label>
-        <label class="wu-field-row"><span class="wu-field-row__label">Current MYR</span><input class="wu-field" name="current" type="number" min="0" step="1" value="${goal.current}"></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Progress comes from</span><select class="wu-field goal-account" name="accountId"><option value="">Manual — I type it in</option>${state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}" data-balance="${balances.get(account.id) ?? 0}"${account.id === goal.accountId ? " selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}</select></label>
+        <label class="wu-field-row goal-current-manual"${linked ? " hidden" : ""}><span class="wu-field-row__label">Current MYR</span><input class="wu-field" name="current" type="number" min="0" step="1" value="${goal.current}"></label>
+        <div class="wu-field-row goal-current-linked"${linked ? "" : " hidden"}><span class="wu-field-row__label">Current MYR</span><p class="wu-goal-editor__linked">${linked ? linkedCurrentText(snapshot.currentAmount, snapshot.linkedAccountName ?? "") : ""}</p></div>
         <label class="wu-field-row"><span class="wu-field-row__label">Target MYR</span><input class="wu-field" name="target" type="number" min="0" step="1" value="${goal.target}"></label>
         <label class="wu-field-row"><span class="wu-field-row__label">Monthly MYR</span><input class="wu-field" name="monthlyContribution" type="number" min="0" step="1" value="${goal.monthlyContribution}"></label>
-        <label class="wu-field-row"><span class="wu-field-row__label">Linked account</span><select class="wu-field" name="accountId"><option value="">Manual progress</option>${state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}"${account.id === goal.accountId ? " selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}</select></label>
         <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Note</span><textarea class="wu-field" name="note" rows="2">${escapeHtml(goal.note)}</textarea></label>
       </div>
       <p class="wu-field-row__error goal-form-error" role="alert" hidden></p>
@@ -285,6 +295,18 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
       openGoalIndex = null;
       repaint(next, "Updated goal");
     };
+    // Switching between manual and an account swaps the Current slot in place.
+    const accountSelect = form.querySelector<HTMLSelectElement>(".goal-account");
+    accountSelect?.addEventListener("change", () => {
+      const option = accountSelect.selectedOptions[0];
+      const linked = Boolean(accountSelect.value);
+      const manualRow = form.querySelector<HTMLElement>(".goal-current-manual");
+      const linkedRow = form.querySelector<HTMLElement>(".goal-current-linked");
+      const linkedText = form.querySelector<HTMLElement>(".wu-goal-editor__linked");
+      if (manualRow) manualRow.hidden = linked;
+      if (linkedRow) linkedRow.hidden = !linked;
+      if (linkedText) linkedText.innerHTML = linked ? linkedCurrentText(Number(option?.dataset.balance ?? 0), option?.text ?? "") : "";
+    });
     form.querySelector<HTMLButtonElement>(".save-goal")?.addEventListener("click", saveGoal);
     form.addEventListener("submit", (event) => {
       event.preventDefault();

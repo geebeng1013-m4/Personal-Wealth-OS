@@ -3617,6 +3617,17 @@
   .wu-goal-editor__actions {
     flex-wrap: wrap;
   }
+  /* A linked goal's Current, read from the account instead of typed in. */
+  .wu-goal-editor__linked {
+    margin: 0;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    color: var(--text);
+    font: var(--weight-regular) 0.8125rem / 1.4 var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
   .wu-goal-editor__grow {
     flex: 1;
   }
