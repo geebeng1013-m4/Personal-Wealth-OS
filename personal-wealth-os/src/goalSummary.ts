@@ -31,7 +31,7 @@
  * Runtime read model: never persisted to WealthState.
  */
 import type { Goal, WealthState } from "./models";
-import { linkedGoalCurrent } from "./financialHealth";
+import { heldGoalAmount, isGoalSpent, linkedGoalCurrent } from "./financialHealth";
 
 export type GoalStatus = "complete" | "funding" | "stalled" | "no-target";
 
@@ -49,6 +49,12 @@ export interface GoalSnapshot {
    * goal.current. Drives progress, completion, sorting and featured selection.
    */
   currentAmount: number;
+  /**
+   * Money the goal holds right now: the linked account's balance, or the typed
+   * figure. Equals currentAmount unless the goal is marked done, when it can
+   * fall (the money was used) or stay (a buffer kept). Drives Saved.
+   */
+  heldAmount: number;
   /**
    * Raw goal.current as stored. Historical record only — never used for
    * completion, sorting or featured selection.
@@ -70,6 +76,15 @@ export interface GoalSnapshot {
   /** Name of the linked account, or null when the link is broken. */
   linkedAccountName: string | null;
 
+  /**
+   * Marked done. The goal stays complete at its target however its account
+   * moves afterwards, and puts nothing in each month. Saved still counts the
+   * money it holds: a buffer marked done keeps its money, a purchase does not.
+   */
+  isSpent: boolean;
+  /** "2026-09-22" when marked done, otherwise null. */
+  spentAt: string | null;
+
   /** Complete by the canonical currentAmount. The single completion flag. */
   isComplete: boolean;
   status: GoalStatus;
@@ -80,9 +95,22 @@ export interface GoalsSnapshot {
   goals: GoalSnapshot[];
   /** Incomplete first, matching the existing Goals page ordering. */
   ordered: GoalSnapshot[];
+  /** Goals marked done. */
+  doneCount: number;
   totalTarget: number;
-  /** Sum of displayed current amounts. */
+  /**
+   * Money actually set aside across all goals, done or not (heldAmount). A
+   * ledger account linked to several goals is counted once — each of those
+   * goals shows the account's full balance, so summing them counts it twice.
+   */
   totalCurrent: number;
+  /**
+   * How much of the targets is achieved: each goal capped at its own target,
+   * so one overfunded goal cannot fill another; a goal marked done counts in
+   * full. An account shared by several goals is split in list order and never
+   * counted past its balance.
+   */
+  totalFunded: number;
   totalRemaining: number;
   totalMonthlyContribution: number;
   completedCount: number;
@@ -102,17 +130,20 @@ function statusOf(goal: Goal, isComplete: boolean): GoalStatus {
 
 /** One goal's facts. Composes the existing display formulas exactly. */
 export function buildGoalSnapshot(goal: Goal, index: number, state: WealthState): GoalSnapshot {
+  const isSpent = isGoalSpent(goal);
   const currentAmount = linkedGoalCurrent(goal, state);
   const recordedAmount = goal.current;
   const progress = goal.target > 0 ? Math.min(currentAmount / goal.target, 1) : 0;
   const remainingAmount = Math.max(goal.target - currentAmount, 0);
-  const estimatedMonthsToTarget = goal.monthlyContribution > 0
-    ? Math.ceil(remainingAmount / goal.monthlyContribution)
+  const monthlyContribution = isSpent ? 0 : goal.monthlyContribution;
+  const estimatedMonthsToTarget = monthlyContribution > 0
+    ? Math.ceil(remainingAmount / monthlyContribution)
     : null;
   const linkedAccount = goal.accountId
     ? state.ledgerAccounts.find((account) => account.id === goal.accountId)
     : undefined;
-  const isComplete = goal.target > 0 && currentAmount >= goal.target;
+  // Spent means it was reached and used, even if the target was edited since.
+  const isComplete = isSpent || (goal.target > 0 && currentAmount >= goal.target);
 
   return {
     id: goal.id,
@@ -122,10 +153,11 @@ export function buildGoalSnapshot(goal: Goal, index: number, state: WealthState)
     index,
     targetAmount: goal.target,
     currentAmount,
+    heldAmount: isSpent ? heldGoalAmount(goal, state) : currentAmount,
     recordedAmount,
     remainingAmount,
     progress,
-    monthlyContribution: goal.monthlyContribution,
+    monthlyContribution,
     estimatedMonthsToTarget,
     estimatedYearsToTarget: estimatedMonthsToTarget === null
       ? null
@@ -133,9 +165,48 @@ export function buildGoalSnapshot(goal: Goal, index: number, state: WealthState)
     isAccountLinked: Boolean(goal.accountId),
     ...(goal.accountId ? { accountId: goal.accountId } : {}),
     linkedAccountName: linkedAccount?.name ?? null,
+    isSpent,
+    spentAt: isSpent ? goal.spentAt ?? null : null,
     isComplete,
     status: statusOf(goal, isComplete),
   };
+}
+
+/**
+ * Sum current amounts, counting each linked account's balance once. A goal
+ * whose link is broken falls back to its own recorded amount, so it counts as
+ * its own money rather than the missing account's.
+ */
+function uniqueCurrentTotal(goals: GoalSnapshot[]): number {
+  const counted = new Set<string>();
+  let total = 0;
+  for (const goal of goals) {
+    const key = goal.accountId && goal.linkedAccountName !== null ? `account:${goal.accountId}` : `goal:${goal.id}`;
+    if (counted.has(key)) continue;
+    counted.add(key);
+    total += goal.heldAmount;
+  }
+  return total;
+}
+
+function fundedTotal(goals: GoalSnapshot[]): number {
+  const accountLeft = new Map<string, number>();
+  let total = 0;
+  for (const goal of goals) {
+    const target = Math.max(goal.targetAmount, 0);
+    const shared = goal.accountId && goal.linkedAccountName !== null ? goal.accountId : null;
+    if (!shared) {
+      total += goal.isSpent ? target : Math.min(Math.max(goal.currentAmount, 0), target);
+      continue;
+    }
+    // A done goal still takes its share of the account (the money may be
+    // there), but counts in full whether or not it is.
+    const left = accountLeft.get(shared) ?? Math.max(goal.heldAmount, 0);
+    const funded = Math.min(left, target);
+    accountLeft.set(shared, left - funded);
+    total += goal.isSpent ? target : funded;
+  }
+  return total;
 }
 
 /**
@@ -160,15 +231,19 @@ export function getGoalsSnapshot(state: WealthState, _now = new Date()): GoalsSn
   // Featured goal: the configured one, else the first incomplete goal in the
   // ordered list, else the first goal. Completion here matches what the Goals
   // cards show, so the two can never disagree.
-  const configured = goals.find((goal) => goal.id === state.overviewGoalId);
+  // A spent goal has nothing left to watch, so the Dashboard moves on; the
+  // choice itself is kept, and comes back if the spend is undone.
+  const configured = goals.find((goal) => goal.id === state.overviewGoalId && !goal.isSpent);
   const firstIncomplete = ordered.find((goal) => goal.targetAmount > 0 && !goal.isComplete);
   const featured = configured ?? firstIncomplete ?? goals[0] ?? null;
 
   return {
     goals,
     ordered,
+    doneCount: goals.filter((goal) => goal.isSpent).length,
     totalTarget: goals.reduce((sum, goal) => sum + goal.targetAmount, 0),
-    totalCurrent: goals.reduce((sum, goal) => sum + goal.currentAmount, 0),
+    totalCurrent: uniqueCurrentTotal(goals),
+    totalFunded: fundedTotal(goals),
     totalRemaining: goals.reduce((sum, goal) => sum + goal.remainingAmount, 0),
     totalMonthlyContribution: goals.reduce((sum, goal) => sum + goal.monthlyContribution, 0),
     completedCount: goals.filter((goal) => goal.isComplete).length,

@@ -1,4 +1,4 @@
-import type { AllocationPlan, AllocationStep, Bucket, LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, Liability, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
+import type { AllocationPlan, AllocationStep, Bucket, Goal, LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, Liability, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
 import { isDebtKind, isMonth } from "./debtPriority";
 import { buildOnboardingChecklist } from "./onboarding";
 import { linkedGoalCurrent } from "./financialHealth";
@@ -16,7 +16,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 29;
+export const CURRENT_VERSION = 30;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -548,6 +548,20 @@ function migrateLiability(item: Liability, version: number): Liability {
   return liability;
 }
 
+const DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/**
+ * v30: spentAt and spentAmount travel together. A pair that is missing half,
+ * has an unreadable date or a negative or non-finite amount is dropped, which
+ * leaves the goal as it was before it was marked — never the goal itself.
+ */
+function migrateGoalSpent(goal: Goal): Goal {
+  const { spentAt, spentAmount, ...rest } = goal;
+  const validDate = typeof spentAt === "string" && DAY.test(spentAt) && Number.isFinite(Date.parse(spentAt));
+  const validAmount = typeof spentAmount === "number" && Number.isFinite(spentAmount) && spentAmount >= 0;
+  return validDate && validAmount ? { ...rest, spentAt, spentAmount } : rest;
+}
+
 export function migrateState(input: Partial<WealthState>): WealthState {
   const candidate = input as Partial<WealthState> & Record<string, unknown>;
   const merged = {
@@ -614,7 +628,7 @@ export function migrateState(input: Partial<WealthState>): WealthState {
     const existingTradeIds = new Set(merged.trades.map((trade) => trade.id));
     merged.trades.push(...defaultState.trades.filter((trade) => !existingTradeIds.has(trade.id)).map((trade) => structuredClone(trade)));
   }
-  merged.goals = Array.isArray(input.goals) ? input.goals.map((goal) => ({
+  merged.goals = Array.isArray(input.goals) ? input.goals.map((goal) => migrateGoalSpent({
     ...goal,
     ...(typeof goal.accountId === "string" && ledgerAccounts.some((account) => account.id === goal.accountId) ? { accountId: goal.accountId } : {}),
   })) : [];

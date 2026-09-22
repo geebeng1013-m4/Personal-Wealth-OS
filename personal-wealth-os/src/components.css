@@ -3657,6 +3657,12 @@
     color: var(--text);
     font-weight: var(--weight-semibold);
   }
+  .wu-goal-detail__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-2);
+  }
   .wu-goal-detail__note--empty {
     border-left-color: var(--border);
     color: var(--text-faint);
