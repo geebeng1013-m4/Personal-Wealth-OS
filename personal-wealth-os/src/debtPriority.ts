@@ -201,7 +201,8 @@ export function buildLiability(id: string, input: LiabilityInput, today: string)
   const liability: Liability = { id, name, balance: input.balance, annualRate, minimumPayment: input.minimumPayment };
   if (input.kind) liability.kind = input.kind;
   if (input.endMonth) liability.endMonth = input.endMonth;
-  if (input.kind === "credit-card") liability.paidInFull = input.paidInFull;
+  // A card cleared every month, or BNPL paid on time, charges no interest (L-6 adds BNPL).
+  if (input.kind === "credit-card" || input.kind === "bnpl") liability.paidInFull = input.paidInFull;
   return { ok: true, liability };
 }
 

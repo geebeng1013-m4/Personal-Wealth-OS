@@ -19,7 +19,7 @@ import { buildLedgerTransaction } from "../ledger";
 import { syncPlanningRules } from "../financialRules";
 import { bufferMonthsFor } from "../onboardingQuiz";
 import { openBottomSheet } from "../components/bottomSheet";
-import { liabilityFields, readLiabilityForm } from "../components/liabilityForm";
+import { bindLiabilityForm, liabilityFields, readLiabilityForm } from "../components/liabilityForm";
 import { showNotice } from "../components/toast";
 import { classifyStage, STAGE_COUNT, type MoneyStage } from "../moneyStage";
 import { buildCheckins } from "../checkins";
@@ -477,8 +477,9 @@ function openDebtSheet(state: WealthState): void {
       ? `Filled in from your answer (${answers.goalName}, about ${money(answers.goalAmount)}). Change it to what your statement says.`
       : "What your latest statement says you still owe.",
     body: `<div class="wu-grid wu-grid--2 wu-sheet__grid">
-        ${liabilityFields({ name: fromQuiz ? answers.goalName ?? "" : "", balance: fromQuiz ? answers.goalAmount ?? "" : "" })}
+        ${liabilityFields(fromQuiz ? { kind: answers.debtKind, name: answers.goalName, balance: answers.goalAmount, paidInFull: answers.debtPaidInFull } : {})}
       </div>`,
+    onOpen: (form) => { if (form instanceof HTMLFormElement) bindLiabilityForm(form); },
     onSave: (form) => {
       if (!live) return "The Overview has closed. Open it again to save.";
       const result = readLiabilityForm(new FormData(form), createId("liability"), today());
