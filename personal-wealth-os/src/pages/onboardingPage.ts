@@ -411,7 +411,13 @@ function debtReply(): string {
     const lead = tier === "high"
       ? `At about ${num(pct(rate))} a year, that's roughly ${num(rm(monthlyInterest(owed, rate)))} of interest a month. Paying it off first is the surest return you can get.`
       : "Without a rate we'll treat it as costly and put it first. Add the rate later to check.";
-    return bubble(`${lead}${pace}${small}`, tier === "high" ? "warn" : "good");
+    // L-7: savings beyond a month's spending can go on a high-rate debt now.
+    const saved = answeredCash(a) ?? 0;
+    const spare = tier === "high" ? Math.min(Math.floor(saved - plan.starterTarget), owed) : 0;
+    const now = spare >= 50
+      ? `<br>You have about ${num(rm(saved))} saved. Keeping ${num(rm(plan.starterTarget))} and putting ${num(rm(spare))} on it now would save about ${num(rm(monthlyInterest(spare, rate)))} of interest a month.`
+      : "";
+    return bubble(`${lead}${now}${pace}${small}`, tier === "high" ? "warn" : "good");
   }
   // Under 8%: paid on its schedule, the buffer first.
   const months = info.hasTerm ? a.debtMonthsLeft : undefined;

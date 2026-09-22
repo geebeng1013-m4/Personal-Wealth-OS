@@ -10,7 +10,7 @@
  * is the Dashboard's call; this file just reports `complete`.
  */
 
-import type { WealthState } from "./models";
+import type { Liability, WealthState } from "./models";
 import { answeredCash } from "./onboardingQuiz";
 import { classifyStage, type MoneyStage, type MoneyStageId } from "./moneyStage";
 import { totalLiabilities } from "./financialHealth";
@@ -116,11 +116,11 @@ export function buildOnboardingChecklist(state: WealthState): OnboardingChecklis
 
 export type NextStepId =
   | "record-pay" | "balances" | "safety-buffer" | "move-to-buffer" | "log-spending" | "goal" | "investment"
-  | "debt-add" | "debt-pay" | "cut-cost" | "invest-monthly";
+  | "debt-add" | "debt-pay" | "use-savings" | "cut-cost" | "invest-monthly";
 
 /** Which steps come first at each stage. Anything not listed follows, in the order it was built. */
 const STAGE_ORDER: Record<MoneyStageId, readonly NextStepId[]> = {
-  debt: ["record-pay", "debt-add", "move-to-buffer", "debt-pay", "log-spending"],
+  debt: ["record-pay", "debt-add", "use-savings", "move-to-buffer", "debt-pay", "log-spending"],
   base: ["record-pay", "log-spending", "cut-cost", "safety-buffer"],
   buffer: ["record-pay", "safety-buffer", "move-to-buffer", "log-spending"],
   ready: ["record-pay", "log-spending", "invest-monthly", "investment"],
@@ -203,6 +203,32 @@ export function debtPaymentThisMonth(state: WealthState, stage: MoneyStage = cla
   if (leftover === null || leftover <= 0) return 0;
   const payment = Math.round(leftover * (debt.phase === "starter" ? 0.5 : 1));
   return debt.focus ? Math.min(payment, Math.ceil(debt.focus.balance)) : payment;
+}
+
+/** Below this, moving savings onto a debt is not worth a step. */
+const MIN_SAVINGS_TO_DEBT = 50;
+
+export interface SavingsToDebt {
+  /** What to move: savings above a month's spending, never more than the debt. */
+  amount: number;
+  focus: Liability;
+  /** Interest a month that stops, once it is paid. */
+  interestSaved: number;
+}
+
+/**
+ * On the debt track (L-7): savings beyond the month's spending kept aside earn
+ * about 3%, while the first debt charges 8% or more. Putting the difference on
+ * the debt now is a sure saving. Null when there is nothing worth moving, or
+ * the debt's rate is not known to be high.
+ */
+export function spareSavingsForDebt(state: WealthState, stage: MoneyStage = classifyStage(state)): SavingsToDebt | null {
+  const debt = stage.debt;
+  const focus = debt?.focus;
+  if (!debt || !focus || debtTier(focus.annualRate) !== "high") return null;
+  const amount = Math.min(Math.floor(state.emergency.current - debt.starterTarget), Math.ceil(focus.balance));
+  if (amount < MIN_SAVINGS_TO_DEBT) return null;
+  return { amount, focus, interestSaved: monthlyInterest(amount, focus.annualRate) };
 }
 
 export function buildNextSteps(state: WealthState): NextSteps {
@@ -328,6 +354,21 @@ export function buildNextSteps(state: WealthState): NextSteps {
       done: state.liabilities.length > 0,
       optional: false,
     });
+    // Savings beyond the month kept aside (L-7): a one-off, so it never holds the card open.
+    const spare = spareSavingsForDebt(state, stage);
+    if (spare && stage.debt) {
+      steps.push({
+        id: "use-savings",
+        title: `Put ${rm(spare.amount)} of your savings on ${spare.focus.name}`,
+        because: `You have ${rm(bufferCurrent)} saved, and ${rm(stage.debt.starterTarget)} (a month of spending) is enough to keep aside while you clear debt at ${ratePercent(spare.focus.annualRate)}. It saves about ${rm(spare.interestSaved)} of interest a month.`,
+        action: "confirm",
+        cta: `I've paid ${rm(spare.amount)}`,
+        detail: "Only money you haven't set aside for something else. Pay it from your savings in your bank app. WealthUp never moves money; it keeps score.",
+        amount: spare.amount,
+        done: false,
+        optional: true,
+      });
+    }
     // The highest rate first (L-3), with this month's amount. From the figure
     // the quiz recorded on, any drop below it counts as paying it down; without
     // one there is nothing to tick from, so the step does not hold the card.

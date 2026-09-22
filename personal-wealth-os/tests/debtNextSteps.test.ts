@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "./testHarness";
 import type { WealthState } from "../src/models";
 import { emptyState } from "../src/state";
-import { buildNextSteps, debtPaymentThisMonth } from "../src/onboarding";
+import { buildNextSteps, debtPaymentThisMonth, spareSavingsForDebt } from "../src/onboarding";
 import { classifyStage } from "../src/moneyStage";
 import { applyOnboardingAnswers, buildOnboardingPlan, type OnboardingAnswers } from "../src/onboardingQuiz";
 import { monthsToClear } from "../src/debtPriority";
@@ -114,4 +114,28 @@ test("L-5: no date when what goes to the debt only covers its interest", () => {
 test("L-5: a buffer already full is shown as it is, not as a month's emergency money", () => {
   assert.equal(buildNextSteps(quiz(WALKTHROUGH)).plan?.bufferHold, null);
   assert.equal(buildNextSteps(quiz(CARD)).plan?.bufferHold, 2500, "still short: a month's spending for now");
+});
+
+// --- L-7: savings beyond a month's spending can go on a high-rate debt --------------
+
+test("L-7: savings above the month kept aside are offered to the dearest debt", () => {
+  const state = quiz(WALKTHROUGH);
+  const spare = spareSavingsForDebt(state);
+  assert.equal(spare?.amount, 1328, "1,992 saved, 664 kept aside");
+  assert.equal(spare?.focus.name, "Credit card");
+  assert.ok(Math.abs((spare?.interestSaved ?? 0) - 19.92) < 0.01);
+  const step = buildNextSteps(state).steps.find((item) => item.id === "use-savings");
+  assert.equal(step?.title, "Put MYR 1,328 of your savings on Credit card");
+  assert.equal(step?.optional, true, "a one-off suggestion never holds the card open");
+  assert.equal(step?.amount, 1328);
+  const ids = buildNextSteps(state).steps.map((item) => item.id);
+  assert.ok(ids.indexOf("use-savings") < ids.indexOf("move-to-buffer"));
+});
+
+test("L-7: never more than the debt, nothing when there is no spare or the rate isn't high", () => {
+  assert.equal(spareSavingsForDebt(quiz({ ...WALKTHROUGH, cashInBank: 10000 }))?.amount, 3000);
+  assert.equal(spareSavingsForDebt(quiz(CARD)), null, "1,000 saved is under the 2,500 kept aside");
+  assert.equal(spareSavingsForDebt(quiz({ ...WALKTHROUGH, cashInBank: 700 })), null, "36 spare is not worth a step");
+  assert.equal(spareSavingsForDebt(quiz({ ...WALKTHROUGH, debtRate: undefined, debtKind: undefined, debtPaidInFull: undefined })), null, "rate unknown");
+  assert.equal(spareSavingsForDebt(quiz({ ...WALKTHROUGH, debtPaidInFull: true })), null, "a card cleared every month is not the debt track");
 });

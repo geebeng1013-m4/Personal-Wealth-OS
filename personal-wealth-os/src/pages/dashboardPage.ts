@@ -372,6 +372,7 @@ function finishedText(id: NextStepId, plan: NextSteps["plan"]): string {
     investment: "Trade recorded. Your real return starts counting from here.",
     "debt-add": "Debt written down. Your net worth now counts it.",
     "debt-pay": "Payment noted. The debt is smaller, and its end date closer.",
+    "use-savings": "Savings moved onto the debt. Less interest from next month.",
     "cut-cost": "Nice. One cost less each month.",
     "invest-monthly": "Monthly amount set. The Health card now tracks it as your monthly plan.",
   };
@@ -644,23 +645,26 @@ export function bindDashboard(
       go("dashboard", next);
       return;
     }
-    if (step.id === "debt-pay") {
+    if (step.id === "debt-pay" || step.id === "use-savings") {
       // Paid in the bank or card app; the user's tap is the record. It comes
       // off the debt the step names (the highest rate), never below zero.
+      // From savings (L-7), the buffer figure goes down by the same amount.
       const largest = classifyStage(state).debt?.focus ?? [...state.liabilities].sort((a, b) => b.balance - a.balance)[0];
       if (!largest) return;
       const paid = Math.min(largest.balance, step.amount ?? 0);
       // The Q&A's pay-off goal moves with it, so Goals and the Next goal tile
       // show the same progress as the plan card.
       const debtGoalName = state.onboardingAnswers?.goalName;
+      const fromSavings = step.id === "use-savings";
       const next: WealthState = {
         ...state,
+        emergency: fromSavings ? { ...state.emergency, current: Math.max(0, Math.round((state.emergency.current - paid) * 100) / 100) } : state.emergency,
         liabilities: state.liabilities.map((item) => item.id === largest.id ? { ...item, balance: Math.round((item.balance - paid) * 100) / 100 } : item),
         goals: state.goals.map((goal) => goal.name === debtGoalName
           ? { ...goal, current: Math.min(goal.target, Math.round((goal.current + paid) * 100) / 100) }
           : goal),
       };
-      setState(next, "Paid down a debt");
+      setState(next, fromSavings ? "Paid down a debt from savings" : "Paid down a debt");
       go("dashboard", next);
       return;
     }
