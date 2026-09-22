@@ -205,7 +205,7 @@ export function goalsTemplate(state: WealthState): string {
         <div class="wu-dash__full wu-dash__tiles wu-goals-tiles">
           <section class="wu-card wu-dash__tile" aria-labelledby="goalsSavedLabel">
             <div class="wu-tc__top"><span class="wu-label" id="goalsSavedLabel">Saved</span></div>
-            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(goals.totalCurrent)}</span></p>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(goals.totalFunded)}</span></p>
             <p class="wu-dash__note">${percent(overall)} of all targets</p>
             <div class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(overall * 100)}%"></span></div>
           </section>
@@ -229,7 +229,7 @@ export function goalsTemplate(state: WealthState): string {
         <!-- phone — overall progress in one card -->
         <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-goals-summary" aria-labelledby="goalsAllLabel">
           <div class="wu-tc__top"><span class="wu-label" id="goalsAllLabel">All goals</span>${doneCount ? `<span class="wu-chip">${doneCount} done</span>` : reachedCount ? `<span class="wu-chip">${reachedCount} reached</span>` : ""}</div>
-          <p class="wu-money"><span>${amountOf(goals.totalCurrent)}</span><span class="wu-money__of">of ${amountOf(goals.totalTarget)} MYR</span></p>
+          <p class="wu-money"><span>${amountOf(goals.totalFunded)}</span><span class="wu-money__of">of ${amountOf(goals.totalTarget)} MYR</span></p>
           <div class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(overall * 100)}%"></span></div>
           <p class="wu-dash__note">Putting away MYR ${amountOf(goals.totalMonthlyContribution)} a month across ${goals.activeCount} open ${goals.activeCount === 1 ? "goal" : "goals"}.</p>
         </section>

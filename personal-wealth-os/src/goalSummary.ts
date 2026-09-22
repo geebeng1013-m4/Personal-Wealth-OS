@@ -52,7 +52,8 @@ export interface GoalSnapshot {
   /**
    * Money the goal holds right now: the linked account's balance, or the typed
    * figure. Equals currentAmount unless the goal is marked done, when it can
-   * fall (the money was used) or stay (a buffer kept). Drives Saved.
+   * fall (the money was used) or stay (a buffer kept). What a done goal
+   * takes from an account it shares with others.
    */
   heldAmount: number;
   /**
@@ -99,16 +100,12 @@ export interface GoalsSnapshot {
   doneCount: number;
   totalTarget: number;
   /**
-   * Money actually set aside across all goals, done or not (heldAmount). A
-   * ledger account linked to several goals is counted once — each of those
-   * goals shows the account's full balance, so summing them counts it twice.
-   */
-  totalCurrent: number;
-  /**
-   * How much of the targets is achieved: each goal capped at its own target,
-   * so one overfunded goal cannot fill another; a goal marked done counts in
-   * full. An account shared by several goals is split in list order and never
-   * counted past its balance.
+   * How much of the targets is achieved — the Goals page's Saved: a goal
+   * marked done counts its target, however its account moves afterwards; any
+   * other goal counts what it holds, capped at its own target so one
+   * overfunded goal cannot fill another. An account shared by several goals
+   * is split in list order and never counted past its balance.
+   * totalFunded / totalTarget is the "% of all targets".
    */
   totalFunded: number;
   totalRemaining: number;
@@ -172,23 +169,6 @@ export function buildGoalSnapshot(goal: Goal, index: number, state: WealthState)
   };
 }
 
-/**
- * Sum current amounts, counting each linked account's balance once. A goal
- * whose link is broken falls back to its own recorded amount, so it counts as
- * its own money rather than the missing account's.
- */
-function uniqueCurrentTotal(goals: GoalSnapshot[]): number {
-  const counted = new Set<string>();
-  let total = 0;
-  for (const goal of goals) {
-    const key = goal.accountId && goal.linkedAccountName !== null ? `account:${goal.accountId}` : `goal:${goal.id}`;
-    if (counted.has(key)) continue;
-    counted.add(key);
-    total += goal.heldAmount;
-  }
-  return total;
-}
-
 function fundedTotal(goals: GoalSnapshot[]): number {
   const accountLeft = new Map<string, number>();
   let total = 0;
@@ -242,7 +222,6 @@ export function getGoalsSnapshot(state: WealthState, _now = new Date()): GoalsSn
     ordered,
     doneCount: goals.filter((goal) => goal.isSpent).length,
     totalTarget: goals.reduce((sum, goal) => sum + goal.targetAmount, 0),
-    totalCurrent: uniqueCurrentTotal(goals),
     totalFunded: fundedTotal(goals),
     totalRemaining: goals.reduce((sum, goal) => sum + goal.remainingAmount, 0),
     totalMonthlyContribution: goals.reduce((sum, goal) => sum + goal.monthlyContribution, 0),

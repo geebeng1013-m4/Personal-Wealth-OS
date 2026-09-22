@@ -26,7 +26,7 @@ test("goals: an empty goal list is safe", () => {
   assert.deepEqual(snapshot.goals, []);
   assert.deepEqual(snapshot.ordered, []);
   assert.equal(snapshot.totalTarget, 0);
-  assert.equal(snapshot.totalCurrent, 0);
+  assert.equal(snapshot.totalFunded, 0);
   assert.equal(snapshot.completedCount, 0);
   assert.equal(snapshot.activeCount, 0);
   assert.equal(snapshot.featured, null);
@@ -230,7 +230,7 @@ test("goals: totals aggregate across every goal", () => {
   });
   const snapshot = getGoalsSnapshot(state);
   assert.equal(snapshot.totalTarget, 1700);
-  assert.equal(snapshot.totalCurrent, 700);
+  assert.equal(snapshot.totalFunded, 700);
   assert.equal(snapshot.totalRemaining, 900 + 100 + 0);
   assert.equal(snapshot.totalMonthlyContribution, 100);
   assert.equal(snapshot.completedCount, 1);
@@ -253,7 +253,6 @@ test("goals: an account linked to two goals is counted once in the total", () =>
   const snapshot = getGoalsSnapshot(state);
   assert.equal(getGoal(snapshot, "buffer")!.currentAmount, 4556.93, "each row still shows the full balance");
   assert.equal(getGoal(snapshot, "bearish")!.currentAmount, 4556.93);
-  assert.equal(Math.round(snapshot.totalCurrent * 100), 458493, "28 + 4,556.93, not 9,141.86");
   assert.equal(snapshot.totalFunded, 28 + 4000 + 400, "each goal capped at its own target");
 });
 
@@ -265,7 +264,6 @@ test("goals: an overfunded goal does not fill another goal's target", () => {
     ],
   });
   const snapshot = getGoalsSnapshot(state);
-  assert.equal(snapshot.totalCurrent, 5000);
   assert.equal(snapshot.totalFunded, 1000, "50% of targets, not 100%");
 });
 
@@ -288,7 +286,7 @@ test("goals: a broken link counts the goal's own amount, not a shared key", () =
       goal({ id: "b", current: 200, target: 1000, accountId: "gone" }),
     ],
   });
-  assert.equal(getGoalsSnapshot(state).totalCurrent, 300);
+  assert.equal(getGoalsSnapshot(state).totalFunded, 300);
 });
 
 test("goals: buildGoalSnapshot agrees with getGoalsSnapshot for the same goal", () => {
@@ -322,7 +320,7 @@ test("goals: malformed and partial states do not crash", () => {
   const partial = migrateState({ deviceId: "d", goals: [] });
   for (const [label, state] of [["empty", emptyState()], ["partial", partial], ["default", cloneDefaultState()]] as const) {
     const snapshot = getGoalsSnapshot(state);
-    for (const value of [snapshot.totalTarget, snapshot.totalCurrent, snapshot.totalRemaining, snapshot.totalMonthlyContribution]) {
+    for (const value of [snapshot.totalTarget, snapshot.totalFunded, snapshot.totalRemaining, snapshot.totalMonthlyContribution]) {
       assert.ok(Number.isFinite(value), `${label} produced a non-finite total`);
     }
     for (const g of snapshot.goals) {
