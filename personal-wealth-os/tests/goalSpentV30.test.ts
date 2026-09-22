@@ -49,26 +49,24 @@ test("goals v30: a spent goal stays complete at its spent amount after the accou
   assert.equal(g.monthlyContribution, 0, "a spent goal takes nothing each month");
 });
 
-test("goals v30: Saved counts the money still held; % counts a done goal in full", () => {
+test("goals v30: Saved counts a done goal's target even after its money is used", () => {
   // The laptop was bought: MAE wallet is 0, the goal is marked done.
   const snapshot = getGoalsSnapshot(stateWith([spentLaptop, buffer, bearish]));
   assert.equal(snapshot.doneCount, 1);
   assert.equal(snapshot.totalTarget, 8900, "every goal's target, done or not");
-  assert.equal(snapshot.totalCurrent, 4556.93, "the laptop money is gone; the buffer money is not");
-  assert.equal(snapshot.totalFunded, 8900, "all three reached: 100%");
+  assert.equal(snapshot.totalFunded, 8900, "all three reached: Saved 8,900, 100%");
   assert.equal(snapshot.totalMonthlyContribution, 0);
   assert.equal(snapshot.completedCount, 3);
   assert.equal(snapshot.activeCount, 0);
 });
 
-test("goals v30: marking a kept buffer done does not take its money out of Saved", () => {
+test("goals v30: Saved is done targets plus what open goals hold", () => {
   // What the user pressed on 2026-09-22: Buffer and Bearish done, laptop still saving.
   const mae28: LedgerAccount[] = [accounts[0], { ...accounts[1], openingBalance: 28 }];
   const doneBuffer = { ...buffer, spentAt: "2026-09-22", spentAmount: 4000 };
   const doneBearish = { ...bearish, spentAt: "2026-09-22", spentAmount: 400 };
   const snapshot = getGoalsSnapshot(stateWith([laptop, doneBuffer, doneBearish], { ledgerAccounts: mae28 }));
-  assert.equal(Math.round(snapshot.totalCurrent * 100), 458493, "28 + 4,556.93, not 28");
-  assert.equal(snapshot.totalFunded, 28 + 4000 + 400, "50%, not 1%");
+  assert.equal(snapshot.totalFunded, 28 + 4000 + 400, "Saved 4,428, 50% — not 28, 1%");
   assert.equal(snapshot.totalTarget, 8900);
   assert.equal(getGoal(snapshot, "buffer")!.heldAmount, 4556.93);
   assert.equal(getGoal(snapshot, "buffer")!.currentAmount, 4000, "the row stays at its target");
@@ -128,4 +126,16 @@ test("goals v30: older data with no spent fields is unchanged", () => {
   const state = migrateState({ deviceId: "d", version: 29, ledgerAccounts: accounts, goals: [buffer] } as Partial<WealthState>);
   assert.equal(state.version, CURRENT_VERSION);
   assert.deepEqual(state.goals[0], buffer);
+});
+
+test("goals: Saved never passes All targets, and an overfunded goal adds nothing extra", () => {
+  // Saved and the percent are one figure, so the tiles cannot disagree.
+  const doneBuffer = { ...buffer, spentAt: "2026-09-22", spentAmount: 4000 };
+  for (const goals of [[laptop, buffer, bearish], [laptop, doneBuffer, bearish], [spentLaptop, doneBuffer, bearish]]) {
+    const snapshot = getGoalsSnapshot(stateWith(goals));
+    assert.ok(snapshot.totalFunded <= snapshot.totalTarget, "Saved never passes All targets");
+  }
+  // A goal over its target counts only up to it: the 156.93 extra is not Saved.
+  const snapshot = getGoalsSnapshot(stateWith([buffer, bearish]));
+  assert.equal(snapshot.totalFunded, 4400);
 });
