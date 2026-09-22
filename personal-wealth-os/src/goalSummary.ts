@@ -81,7 +81,11 @@ export interface GoalsSnapshot {
   /** Incomplete first, matching the existing Goals page ordering. */
   ordered: GoalSnapshot[];
   totalTarget: number;
-  /** Sum of displayed current amounts. */
+  /**
+   * Money actually set aside across all goals. A ledger account linked to
+   * several goals is counted once — each of those goals shows the account's
+   * full balance, so summing their current amounts would count it twice.
+   */
   totalCurrent: number;
   totalRemaining: number;
   totalMonthlyContribution: number;
@@ -139,6 +143,23 @@ export function buildGoalSnapshot(goal: Goal, index: number, state: WealthState)
 }
 
 /**
+ * Sum current amounts, counting each linked account's balance once. A goal
+ * whose link is broken falls back to its own recorded amount, so it counts as
+ * its own money rather than the missing account's.
+ */
+function uniqueCurrentTotal(goals: GoalSnapshot[]): number {
+  const counted = new Set<string>();
+  let total = 0;
+  for (const goal of goals) {
+    const key = goal.accountId && goal.linkedAccountName !== null ? `account:${goal.accountId}` : `goal:${goal.id}`;
+    if (counted.has(key)) continue;
+    counted.add(key);
+    total += goal.currentAmount;
+  }
+  return total;
+}
+
+/**
  * Build the canonical goals snapshot.
  * Pure: the same state always produces the same result.
  *
@@ -168,7 +189,7 @@ export function getGoalsSnapshot(state: WealthState, _now = new Date()): GoalsSn
     goals,
     ordered,
     totalTarget: goals.reduce((sum, goal) => sum + goal.targetAmount, 0),
-    totalCurrent: goals.reduce((sum, goal) => sum + goal.currentAmount, 0),
+    totalCurrent: uniqueCurrentTotal(goals),
     totalRemaining: goals.reduce((sum, goal) => sum + goal.remainingAmount, 0),
     totalMonthlyContribution: goals.reduce((sum, goal) => sum + goal.monthlyContribution, 0),
     completedCount: goals.filter((goal) => goal.isComplete).length,

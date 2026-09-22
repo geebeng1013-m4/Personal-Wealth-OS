@@ -237,6 +237,35 @@ test("goals: totals aggregate across every goal", () => {
   assert.equal(snapshot.activeCount, 2);
 });
 
+test("goals: an account linked to two goals is counted once in the total", () => {
+  // The real layout that showed Saved 9,141.86: two goals share one account.
+  const state = stateWith({
+    ledgerAccounts: [
+      { id: "acc-buffer", name: "Buffer", type: "bank", openingBalance: 4556.93 },
+      { id: "acc-mae", name: "MAE wallet", type: "wallet", openingBalance: 28 },
+    ],
+    goals: [
+      goal({ id: "laptop", target: 4500, accountId: "acc-mae" }),
+      goal({ id: "buffer", target: 4000, accountId: "acc-buffer" }),
+      goal({ id: "bearish", target: 400, accountId: "acc-buffer" }),
+    ],
+  });
+  const snapshot = getGoalsSnapshot(state);
+  assert.equal(getGoal(snapshot, "buffer")!.currentAmount, 4556.93, "each row still shows the full balance");
+  assert.equal(getGoal(snapshot, "bearish")!.currentAmount, 4556.93);
+  assert.equal(Math.round(snapshot.totalCurrent * 100), 458493, "28 + 4,556.93, not 9,141.86");
+});
+
+test("goals: a broken link counts the goal's own amount, not a shared key", () => {
+  const state = stateWith({
+    goals: [
+      goal({ id: "a", current: 100, target: 1000, accountId: "gone" }),
+      goal({ id: "b", current: 200, target: 1000, accountId: "gone" }),
+    ],
+  });
+  assert.equal(getGoalsSnapshot(state).totalCurrent, 300);
+});
+
 test("goals: buildGoalSnapshot agrees with getGoalsSnapshot for the same goal", () => {
   const state = stateWith({
     ledgerAccounts: accounts,
