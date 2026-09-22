@@ -481,6 +481,18 @@ function feesNote(portfolio: PortfolioSnapshot, tradeCount: number): string {
   return `Across ${tradeCount} ${tradeCount === 1 ? "contribution" : "contributions"}`;
 }
 
+/**
+ * What a sale today would leave after the fees still to pay, because the
+ * unrealised figure counts only the fees already paid to buy. Empty when there
+ * is no estimate, so an unchecked broker never gets a made-up fee.
+ */
+function sellFeesNote(portfolio: PortfolioSnapshot): string {
+  const fees = portfolio.estimatedSellFeesMyr;
+  const after = portfolio.unrealizedPnlMyrAfterSellFees;
+  if (fees === null || after === null) return "";
+  return `If sold today ≈ ${after >= 0 ? "+" : "−"}${amountOf(Math.abs(after))} (est. sell fees ${amountOf(fees)})`;
+}
+
 /** Row 1 — the four figures. Market value, P&L and the fee-free return move with the price. */
 function portfolioTilesBody(portfolio: PortfolioSnapshot, tradeCount: number): string {
   const heldCount = portfolio.holdings.filter((position) => position.units > 0).length;
@@ -499,6 +511,8 @@ function portfolioTilesBody(portfolio: PortfolioSnapshot, tradeCount: number): s
     ? ""
     : `<span class="wu-chip${ratio < 0 ? " wu-chip--negative" : ""}">${ratio >= 0 ? "+" : "−"}${percent(Math.abs(ratio), 1)}</span>`;
   const pnl = portfolio.unrealizedPnlMyr;
+  const sellNote = sellFeesNote(portfolio);
+  const sellNoteHtml = sellNote ? `<p class="wu-dash__note">${escapeHtml(sellNote)}</p>` : "";
   return `
         <section class="wu-card wu-dash__tile wu-portfolio-tile wu-valuation" data-valuation-status="${portfolio.valuationStatus}" aria-labelledby="pfValueLabel">
           <div class="wu-tc__top"><span class="wu-label" id="pfValueLabel">Market value</span>${returnChip}</div>
@@ -514,6 +528,7 @@ function portfolioTilesBody(portfolio: PortfolioSnapshot, tradeCount: number): s
           <div class="wu-tc__top"><span class="wu-label" id="pfUnrealisedLabel">Unrealised</span></div>
           ${moneyFigure(pnl, true, pnl == null ? "" : pnl >= 0 ? "t-positive" : "t-negative")}
           <p class="wu-dash__note">Excludes realised gains</p>
+          ${sellNoteHtml}
         </section>
         <section class="wu-card wu-dash__tile wu-portfolio-tile" aria-labelledby="pfFeesLabel">
           <div class="wu-tc__top"><span class="wu-label" id="pfFeesLabel">Fees</span></div>
@@ -526,6 +541,7 @@ function portfolioTilesBody(portfolio: PortfolioSnapshot, tradeCount: number): s
           <p class="wu-dash__note">${escapeHtml(joinNotes(`Invested ${amountOf(portfolio.totalInvestedMyr)}`, `fees ${amountOf(portfolio.feesInCostBasisMyr)}`, holdingsText))}</p>
           ${portfolio.valuationStatus === "complete" ? "" : `<p class="wu-dash__note">${escapeHtml(valuationNote(portfolio))}</p>`}
           ${portfolio.feesInCostBasisMyr > 0.005 && portfolio.unrealizedPnlMyrExFees !== null ? `<p class="wu-dash__note">${escapeHtml(feesNote(portfolio, tradeCount))}</p>` : ""}
+          ${sellNoteHtml}
         </section>`;
 }
 
