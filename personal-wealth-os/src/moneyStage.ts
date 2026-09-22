@@ -25,6 +25,12 @@ import { bufferMonthsFor } from "./onboardingQuiz";
 
 export type MoneyStageId = "debt" | "base" | "buffer" | "ready" | "growing";
 
+/**
+ * Which fact decided the stage. "unmeasured" is a base with nothing to measure
+ * yet (no spending figure): not short of money, just not known.
+ */
+export type MoneyStageBasis = "debt" | "overspending" | "savings" | "unmeasured";
+
 export interface MoneyStage {
   id: MoneyStageId;
   /** 1–4 on the main road; null on the debt track. */
@@ -32,6 +38,7 @@ export interface MoneyStage {
   title: string;
   /** One line on why, from the user's own numbers. */
   reason: string;
+  basis: MoneyStageBasis;
 }
 
 export const STAGE_COUNT = 4;
@@ -45,8 +52,8 @@ const TITLES: Record<MoneyStageId, string> = {
 };
 const STEPS: Record<MoneyStageId, number | null> = { debt: null, base: 1, buffer: 2, ready: 3, growing: 4 };
 
-function stage(id: MoneyStageId, reason: string): MoneyStage {
-  return { id, step: STEPS[id], title: TITLES[id], reason };
+function stage(id: MoneyStageId, reason: string, basis: MoneyStageBasis = "savings"): MoneyStage {
+  return { id, step: STEPS[id], title: TITLES[id], reason, basis };
 }
 
 /** "1.4" but "2" — a month count people read, not a measurement. */
@@ -72,8 +79,8 @@ export function classifyStage(state: WealthState, now = new Date()): MoneyStage 
   // recorded yet still counts: the user said it is there.
   if (state.onboardingAnswers?.primaryGoal === "debt") {
     const owed = totalLiabilities(state.liabilities);
-    if (owed > 0) return stage("debt", `${money(owed)} still owed.`);
-    if (state.liabilities.length === 0) return stage("debt", "You said paying off debt comes first.");
+    if (owed > 0) return stage("debt", `${money(owed)} still owed.`, "debt");
+    if (state.liabilities.length === 0) return stage("debt", "You said paying off debt comes first.", "debt");
   }
 
   // Planned monthly spending: the same figure the buffer suggestion and the
@@ -87,7 +94,7 @@ export function classifyStage(state: WealthState, now = new Date()): MoneyStage 
   const full = target > 0 ? current >= target : cover !== null && cover >= usualMonths;
 
   if (spendingAboveIncome(state, monthly, now)) {
-    return stage("base", "Spending is at or above income. First, make some room each month.");
+    return stage("base", "Spending is at or above income. First, make some room each month.", "overspending");
   }
   if (full) {
     return state.trades.length > 0
@@ -99,7 +106,7 @@ export function classifyStage(state: WealthState, now = new Date()): MoneyStage 
     if (target > 0 && current > 0) {
       return stage("buffer", `${Math.round((current / target) * 100)}% of your ${money(target)} buffer saved.`);
     }
-    return stage("base", "Add your monthly spending to measure your safety buffer.");
+    return stage("base", "Add your monthly spending to measure your safety buffer.", "unmeasured");
   }
   if (cover < 1) return stage("base", "Your savings cover less than a month of spending.");
   return stage("buffer", `About ${months(cover)} of ${months(targetMonths)} months of spending saved.`);

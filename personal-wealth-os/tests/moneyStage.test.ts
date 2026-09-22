@@ -27,6 +27,7 @@ test("stage: a brand-new account with no spending figure is told what to add", (
   assert.equal(stage.id, "base");
   assert.equal(stage.step, 1);
   assert.equal(stage.reason, "Add your monthly spending to measure your safety buffer.");
+  assert.equal(stage.basis, "unmeasured");
 });
 
 test("stage: under a month of spending saved is getting a base", () => {
@@ -37,7 +38,7 @@ test("stage: under a month of spending saved is getting a base", () => {
 
 test("stage: exactly one month is building the buffer, measured in months of the target", () => {
   assert.deepEqual(classifyStage(withBuffer(2000, 6000), NOW), {
-    id: "buffer", step: 2, title: "Building your buffer", reason: "About 1 of 3 months of spending saved.",
+    id: "buffer", step: 2, title: "Building your buffer", reason: "About 1 of 3 months of spending saved.", basis: "savings",
   });
   assert.equal(classifyStage(withBuffer(2900, 12000), NOW).reason, "About 1.5 of 6 months of spending saved.");
 });
@@ -78,7 +79,7 @@ test("stage: without last month's income, planned spending at or above planned i
 test("stage: a target but no spending figure is measured as a share of the target", () => {
   const base = emptyState();
   const state = { ...base, emergency: { ...base.emergency, current: 900, target: 3000 } };
-  assert.deepEqual(classifyStage(state, NOW), { id: "buffer", step: 2, title: "Building your buffer", reason: "30% of your MYR 3,000 buffer saved." });
+  assert.deepEqual(classifyStage(state, NOW), { id: "buffer", step: 2, title: "Building your buffer", reason: "30% of your MYR 3,000 buffer saved.", basis: "savings" });
 });
 
 test("stage: the debt track holds until recorded debts are paid off", () => {
@@ -93,7 +94,7 @@ test("stage: the debt track holds until recorded debts are paid off", () => {
 
 test("stage: the quiz's own answers are enough to place a new user", () => {
   const quiz = applyOnboardingAnswers(emptyState(), { primaryGoal: "save", monthlyIncome: 4500, monthlySpending: 2800, cashInBank: 3000 }, { goalId: "g", today: "2026-09-22" });
-  assert.deepEqual(classifyStage(quiz, NOW), { id: "buffer", step: 2, title: "Building your buffer", reason: "About 1.1 of 3 months of spending saved." });
+  assert.deepEqual(classifyStage(quiz, NOW), { id: "buffer", step: 2, title: "Building your buffer", reason: "About 1.1 of 3 months of spending saved.", basis: "savings" });
 });
 
 test("stage: never NaN or Infinity in the reason, even with zero spending", () => {
