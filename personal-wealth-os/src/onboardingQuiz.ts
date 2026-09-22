@@ -27,6 +27,7 @@ import {
   flatToEffectiveRate,
   isDebtKind,
   monthlyInstalment,
+  monthsToClear,
   starterBufferTarget,
 } from "./debtPriority";
 
@@ -285,7 +286,11 @@ export function buildOnboardingPlan(answers: OnboardingAnswers): OnboardingPlan 
   else if (bufferTarget !== null && bufferTarget > 0 && split.buffer > 0) {
     monthsToBufferFull = Math.ceil((bufferTarget - (cash ?? 0)) / split.buffer);
   }
-  const monthsToGoal = hasGoal(answers) && split.goal > 0 ? Math.ceil((answers.goalAmount ?? 0) / split.goal) : null;
+  // A debt keeps charging interest while it is paid, so its date counts that
+  // (the same sum the Overview's plan card uses); a savings goal does not.
+  const monthsToGoal = !hasGoal(answers) || split.goal <= 0 ? null
+    : debtGoal ? monthsToClear(answers.goalAmount ?? 0, rate, split.goal)
+      : Math.ceil((answers.goalAmount ?? 0) / split.goal);
 
   return { leftover, bufferTarget, monthsCovered, bufferFull, split, monthsToBufferFull, monthsToGoal, debtFirst, starterTarget, debtOnSchedule: cheapDebt };
 }
