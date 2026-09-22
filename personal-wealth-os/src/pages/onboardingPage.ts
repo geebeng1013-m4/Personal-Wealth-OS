@@ -424,6 +424,7 @@ function planScreen(): string {
 
   if (plan.bufferTarget !== null && plan.bufferTarget > 0) {
     const when = plan.bufferFull ? "Already full. Keep it there."
+      : plan.debtFirst ? `On hold at ${rm(plan.starterTarget)} (a month of spending) while the debt is paid off.`
       : plan.monthsToBufferFull !== null ? `Full around ${monthsFromNow(plan.monthsToBufferFull)} if you add ${rm(plan.split.buffer)} a month.`
         : "We'll set a pace once there's money left over each month.";
     cards.push(`<div class="onb-card"><span class="onb-card__k">Safety buffer · ${months} months</span>

@@ -193,3 +193,48 @@ test("onboardingQuiz: an account from before v26 sees it only if it was never us
   const used = { ...structuredClone(untouched), ledgerTransactions: [{ id: "t1", date: "2026-09-01", type: "income", amount: 800, accountId: "account-bank", categoryId: "income-salary", note: "" }] } as Partial<WealthState> & Record<string, unknown>;
   assert.equal(shouldShowOnboardingQuiz(migrateState(used)), false, "an existing user must never be sent back to the quiz");
 });
+
+// --- L-1: the monthly split with a debt -------------------------------------
+
+const DEBT: OnboardingAnswers = { primaryGoal: "debt", monthlyIncome: 5000, monthlySpending: 3000, cashInBank: 1000, goalName: "Credit card", goalAmount: 6000, answeredAt: "" };
+
+test("plan (L-1): high-rate debt, starter money short: half buffer, half debt, nothing invested", () => {
+  const plan = buildOnboardingPlan(DEBT, { debtRate: 0.18 });
+  assert.deepEqual(plan.split, { buffer: 1000, goal: 1000, invest: 0 });
+  assert.equal(plan.debtFirst, true);
+  assert.equal(plan.starterTarget, 3000);
+  assert.equal(plan.monthsToBufferFull, null, "the buffer is on hold while the debt is paid");
+  assert.equal(plan.monthsToGoal, 6);
+});
+
+test("plan (L-1): high-rate debt, a month's spending already aside: everything to the debt", () => {
+  assert.deepEqual(buildOnboardingPlan({ ...DEBT, cashInBank: 3000 }, { debtRate: 0.18 }).split, { buffer: 0, goal: 2000, invest: 0 });
+  assert.deepEqual(buildOnboardingPlan({ ...DEBT, cashInBank: 2999 }, { debtRate: 0.18 }).split, { buffer: 1000, goal: 1000, invest: 0 });
+});
+
+test("plan (L-1): no spending answer means RM1,000 starter money", () => {
+  assert.equal(buildOnboardingPlan({ ...DEBT, monthlySpending: undefined }).starterTarget, 1000);
+});
+
+test("plan (L-1): a debt with no rate given comes first (the user put it first)", () => {
+  assert.deepEqual(buildOnboardingPlan(DEBT).split, { buffer: 1000, goal: 1000, invest: 0 });
+});
+
+test("plan (L-1): a medium-rate debt keeps the usual buffer, then splits 50/50 with investing", () => {
+  assert.deepEqual(buildOnboardingPlan(DEBT, { debtRate: 0.06 }).split, { buffer: 1000, goal: 600, invest: 400 });
+  assert.deepEqual(buildOnboardingPlan({ ...DEBT, cashInBank: 9000 }, { debtRate: 0.06 }).split, { buffer: 0, goal: 1000, invest: 1000 });
+  assert.equal(buildOnboardingPlan(DEBT, { debtRate: 0.06 }).debtFirst, false);
+});
+
+test("plan (L-1): a low-rate debt gets no extra money, paid on its schedule", () => {
+  const plan = buildOnboardingPlan(DEBT, { debtRate: 0.01 });
+  assert.deepEqual(plan.split, { buffer: 1000, goal: 0, invest: 1000 });
+  assert.equal(plan.monthsToGoal, null);
+  assert.equal(plan.debtFirst, false);
+});
+
+test("plan (L-1): a savings goal is unchanged by debt rules", () => {
+  const plan = buildOnboardingPlan({ ...DEBT, primaryGoal: "save" }, { debtRate: 0.18 });
+  assert.deepEqual(plan.split, { buffer: 1000, goal: 600, invest: 400 });
+  assert.equal(plan.debtFirst, false);
+});

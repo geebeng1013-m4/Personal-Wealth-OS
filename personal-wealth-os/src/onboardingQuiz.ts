@@ -18,6 +18,7 @@
 
 import type { WealthState } from "./models";
 import { syncGoalContributionRules, syncPlanningRules } from "./financialRules";
+import { debtComesFirst, debtTier, starterBufferTarget } from "./debtPriority";
 
 export type PrimaryGoal = "buffer" | "invest" | "save" | "debt";
 export const PRIMARY_GOALS: readonly PrimaryGoal[] = ["buffer", "invest", "save", "debt"];
@@ -129,6 +130,14 @@ const MAX_GOAL_NAME = 60;
  */
 const SPLIT_WHILE_BUFFER_SHORT = { buffer: 0.5, goal: 0.3, invest: 0.2 } as const;
 const SPLIT_ONCE_BUFFER_FULL = { buffer: 0, goal: 0.6, invest: 0.4 } as const;
+/**
+ * A pay-off goal that comes first (L-1): half to the starter money until it
+ * holds a month's spending, then everything to the debt, nothing invested.
+ */
+const SPLIT_DEBT_STARTER_SHORT = { buffer: 0.5, goal: 0.5, invest: 0 } as const;
+const SPLIT_DEBT_STARTER_FULL = { buffer: 0, goal: 1, invest: 0 } as const;
+/** A 4–8% debt: buffer as usual, then spare money split between paying early and investing. */
+const SPLIT_MEDIUM_DEBT_BUFFER_FULL = { buffer: 0, goal: 0.5, invest: 0.5 } as const;
 
 export interface MonthlySplit {
   buffer: number;
@@ -150,6 +159,19 @@ export interface OnboardingPlan {
   monthsToBufferFull: number | null;
   /** Months until the goal amount at `split.goal`; null when there is no goal or no money for it. */
   monthsToGoal: number | null;
+  /**
+   * The pay-off goal comes before the buffer (L-1). The buffer then only
+   * fills to `starterTarget`, so `monthsToBufferFull` is null until the debt
+   * is cleared.
+   */
+  debtFirst: boolean;
+  /** A month's spending (RM1,000 without a spending answer); 0 when the debt does not come first. */
+  starterTarget: number;
+}
+
+export interface PlanOptions {
+  /** The pay-off goal's effective yearly rate as a fraction; undefined = not given. */
+  debtRate?: number;
 }
 
 function amountOrUndefined(value: unknown): number | undefined {
@@ -193,7 +215,7 @@ function hasGoal(answers: OnboardingAnswers): boolean {
   return Boolean(answers.goalName) && (answers.goalAmount ?? 0) > 0;
 }
 
-export function buildOnboardingPlan(answers: OnboardingAnswers): OnboardingPlan {
+export function buildOnboardingPlan(answers: OnboardingAnswers, options: PlanOptions = {}): OnboardingPlan {
   const { monthlyIncome: income, monthlySpending: spending } = answers;
   const cash = answeredCash(answers) ?? undefined;
   const leftover = income !== undefined && spending !== undefined ? income - spending : null;
@@ -202,23 +224,36 @@ export function buildOnboardingPlan(answers: OnboardingAnswers): OnboardingPlan 
   // Unknown cash is treated as nothing saved yet: the plan then puts the buffer first.
   const bufferFull = bufferTarget !== null && bufferTarget > 0 && (cash ?? 0) >= bufferTarget;
 
+  const debtGoal = answers.primaryGoal === "debt" && hasGoal(answers);
+  const rate = options.debtRate ?? 0;
+  const debtFirst = debtGoal && debtComesFirst(rate, true);
+  const starterTarget = debtFirst ? starterBufferTarget(spending) : 0;
+  // A cheap debt is paid on its schedule: no extra share for it.
+  const cheapDebt = debtGoal && debtTier(rate) === "low";
+
   const split: MonthlySplit = { buffer: 0, goal: 0, invest: 0 };
   if (leftover !== null && leftover > 0) {
-    const shares = bufferFull || bufferTarget === null || bufferTarget === 0 ? SPLIT_ONCE_BUFFER_FULL : SPLIT_WHILE_BUFFER_SHORT;
+    const bufferDone = bufferFull || bufferTarget === null || bufferTarget === 0;
+    const shares = debtFirst
+      ? ((cash ?? 0) >= starterTarget ? SPLIT_DEBT_STARTER_FULL : SPLIT_DEBT_STARTER_SHORT)
+      : bufferDone
+        ? (debtGoal && debtTier(rate) === "medium" ? SPLIT_MEDIUM_DEBT_BUFFER_FULL : SPLIT_ONCE_BUFFER_FULL)
+        : SPLIT_WHILE_BUFFER_SHORT;
     split.buffer = Math.round(leftover * shares.buffer);
     // Without a goal its share is invested, so every ringgit still has a place.
-    split.goal = hasGoal(answers) ? Math.round(leftover * shares.goal) : 0;
+    split.goal = hasGoal(answers) && !cheapDebt ? Math.round(leftover * shares.goal) : 0;
     split.invest = Math.round(leftover) - split.buffer - split.goal;
   }
 
   let monthsToBufferFull: number | null = null;
   if (bufferFull) monthsToBufferFull = 0;
+  else if (debtFirst) monthsToBufferFull = null;
   else if (bufferTarget !== null && bufferTarget > 0 && split.buffer > 0) {
     monthsToBufferFull = Math.ceil((bufferTarget - (cash ?? 0)) / split.buffer);
   }
   const monthsToGoal = hasGoal(answers) && split.goal > 0 ? Math.ceil((answers.goalAmount ?? 0) / split.goal) : null;
 
-  return { leftover, bufferTarget, monthsCovered, bufferFull, split, monthsToBufferFull, monthsToGoal };
+  return { leftover, bufferTarget, monthsCovered, bufferFull, split, monthsToBufferFull, monthsToGoal, debtFirst, starterTarget };
 }
 
 /** One line for the Overview's goal sentence, from the goal question; "" when there is nothing to say. */
