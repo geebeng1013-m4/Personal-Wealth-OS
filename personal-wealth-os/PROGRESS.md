@@ -9,8 +9,20 @@
 
 - **阶段**：V1 完成（2026-09-09）。核心正确性的洞都补上了。之后：**产品打磨** —— 手机比例这轮
   已收尾（M-1..M-6，见下）。App / 订阅方向因预算暂停（见下），先把产品本身做好。
-- **`main`**：`1ccb372`（2026-09-22，PR #113 连账户 goal 的最后两处已上线）。
+- **`main`**：`a84e08d`（2026-09-22，PR #114 Goals 顶部数字修正 + Mark as done 已上线，数据 v30）。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
+
+## Goals 顶部数字 + Mark as done（已上线，PR #114，v30）
+
+- 问题：Saved 显示 9,141.86 · 100%。Safety Buffer 和 Opportunity for Bearish 连同一个账户（4,556.93），被加了两次；
+  百分比用「总 Saved ÷ 总目标」，一个 goal 存超了会去填别的 goal。
+- 修正：Saved 同一个账户只算一次（→ 4,584.93）；百分比每个 goal 先封顶在自己的目标，共用账户按列表顺序分（→ 50%）。
+- 新增 **Mark as done**：goal 达标后显示 Reached，按了才是 Done（带日期，可 Undo）。Done 的 goal 固定在目标金额，
+  账户花光也不会掉回 0%；不再算每月存入、不再有供款规则、Dashboard 会跳过它。数据：`goal.spentAt` + `spentAmount`（v30）。
+- 中途修正：一开始 Done 会把 goal 从 Saved 拿掉，你按了 Buffer 和 Bearish 后 Saved 掉到 28。Done ≠ 花掉，
+  所以改成 Saved = 账户里现在实际有的钱（按不按 Done 都算），百分比里 Done 的 goal 算满。
+- 验证：typecheck、1366 测试、build 全绿；demo 桌面/手机浅深色；线上 wealthup.cc 已确认是新版本。
+- 没改：Done 的那一行固定显示目标金额（Buffer 4,000 / 4,000，不是余额 4,556.93）。
 
 ## Goal 编辑框整理（已上线）
 
