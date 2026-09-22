@@ -430,7 +430,8 @@ export function buildNextSteps(state: WealthState): NextSteps {
       goalMonths,
       goalEstimate: !income,
       debtInterest,
-      bufferHold: stage.debt?.starterTarget ?? null,
+      // Only while the buffer is short of full: savings already past it are shown as they are.
+      bufferHold: stage.debt && bufferCurrent < bufferTarget ? stage.debt.starterTarget : null,
     } : null,
   };
 }

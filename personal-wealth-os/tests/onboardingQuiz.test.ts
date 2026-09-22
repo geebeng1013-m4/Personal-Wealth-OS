@@ -206,7 +206,7 @@ test("plan (L-1): high-rate debt, starter money short: half buffer, half debt, n
   assert.equal(plan.debtFirst, true);
   assert.equal(plan.starterTarget, 3000);
   assert.equal(plan.monthsToBufferFull, null, "the buffer is on hold while the debt is paid");
-  assert.equal(plan.monthsToGoal, 6);
+  assert.equal(plan.monthsToGoal, 7, "6,000 at 1,000 a month is 6 without interest; 18% makes it 7");
 });
 
 test("plan (L-1): high-rate debt, a month's spending already aside: everything to the debt", () => {

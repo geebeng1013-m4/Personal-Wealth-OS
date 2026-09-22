@@ -4,7 +4,7 @@ import type { WealthState } from "../src/models";
 import { emptyState } from "../src/state";
 import { buildNextSteps, debtPaymentThisMonth } from "../src/onboarding";
 import { classifyStage } from "../src/moneyStage";
-import { applyOnboardingAnswers, type OnboardingAnswers } from "../src/onboardingQuiz";
+import { applyOnboardingAnswers, buildOnboardingPlan, type OnboardingAnswers } from "../src/onboardingQuiz";
 import { monthsToClear } from "../src/debtPriority";
 
 const quiz = (answers: Omit<OnboardingAnswers, "answeredAt">): WealthState =>
@@ -83,4 +83,35 @@ test("L-3 plan card: a cheap loan is cleared on its own schedule", () => {
   const plan = buildNextSteps(ptptn).plan;
   assert.ok(plan?.goalMonths !== null && plan?.goalMonths !== undefined && plan.goalMonths >= 119 && plan.goalMonths <= 120, String(plan?.goalMonths));
   assert.equal(plan?.debtInterest, 10);
+});
+
+// --- L-5: the quiz and the Overview give one payoff month ---------------------
+
+/** The walkthrough's answers: RM216 left over, a full buffer, an 18% card of RM3,000. */
+const WALKTHROUGH: Omit<OnboardingAnswers, "answeredAt"> = {
+  ...CARD, monthlyIncome: 880, monthlySpending: 664, cashInBank: 1992,
+};
+
+test("L-5: the plan screen counts interest, and agrees with the Overview", () => {
+  const plan = buildOnboardingPlan({ ...WALKTHROUGH, answeredAt: "" });
+  assert.equal(plan.split.goal, 216);
+  assert.equal(plan.monthsToGoal, 16, "not 3,000 / 216 = 14");
+  assert.equal(buildNextSteps(quiz(WALKTHROUGH)).plan?.goalMonths, plan.monthsToGoal);
+});
+
+test("L-5: a savings goal's date is still a plain division", () => {
+  const plan = buildOnboardingPlan({ ...WALKTHROUGH, primaryGoal: "save", goalName: "Trip", answeredAt: "" });
+  assert.equal(plan.monthsToGoal, plan.split.goal > 0 ? Math.ceil(3000 / plan.split.goal) : null);
+});
+
+test("L-5: no date when what goes to the debt only covers its interest", () => {
+  // RM40 left over, half to the debt while setting a month aside: RM20, under the RM45 interest.
+  const plan = buildOnboardingPlan({ ...CARD, monthlyIncome: 2540, monthlySpending: 2500, answeredAt: "" });
+  assert.equal(plan.split.goal, 20);
+  assert.equal(plan.monthsToGoal, null);
+});
+
+test("L-5: a buffer already full is shown as it is, not as a month's emergency money", () => {
+  assert.equal(buildNextSteps(quiz(WALKTHROUGH)).plan?.bufferHold, null);
+  assert.equal(buildNextSteps(quiz(CARD)).plan?.bufferHold, 2500, "still short: a month's spending for now");
 });

@@ -405,7 +405,9 @@ function debtReply(): string {
   if (tier === "high" || tier === "unknown") {
     const pace = plan.monthsToGoal !== null
       ? `<br>At your pace, cleared in about ${num(`${plan.monthsToGoal} months`)}: ${num(monthsFromNow(plan.monthsToGoal))}.`
-      : plan.leftover === null ? "" : "<br>Once there's money left over each month, we'll put a date on it.";
+      : plan.leftover === null ? ""
+        : plan.split.goal > 0 ? "<br>No end date yet: what goes to it each month doesn't cover more than the interest."
+          : "<br>Once there's money left over each month, we'll put a date on it.";
     const lead = tier === "high"
       ? `At about ${num(pct(rate))} a year, that's roughly ${num(rm(monthlyInterest(owed, rate)))} of interest a month. Paying it off first is the surest return you can get.`
       : "Without a rate we'll treat it as costly and put it first. Add the rate later to check.";
@@ -507,7 +509,8 @@ function goalCardLine(plan: OnboardingPlan): string {
     const months = a.debtKind && DEBT_KINDS[a.debtKind].hasTerm ? a.debtMonthsLeft : undefined;
     return months ? `Paid on its schedule: cleared around <strong>${monthsFromNow(months)}</strong>.` : "Paid on its schedule, with the usual payments.";
   }
-  return plan.monthsToGoal !== null ? `Reached around <strong>${monthsFromNow(plan.monthsToGoal)}</strong>.` : "We'll date this once there's money left over each month.";
+  if (plan.monthsToGoal !== null) return `${a.primaryGoal === "debt" ? "Cleared" : "Reached"} around <strong>${monthsFromNow(plan.monthsToGoal)}</strong>.`;
+  return plan.split.goal > 0 ? "No end date yet: what goes to it each month doesn't cover more than the interest." : "We'll date this once there's money left over each month.";
 }
 
 function planScreen(): string {
