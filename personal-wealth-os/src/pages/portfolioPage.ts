@@ -528,12 +528,12 @@ function portfolioTilesBody(portfolio: PortfolioSnapshot, tradeCount: number): s
           <div class="wu-tc__top"><span class="wu-label" id="pfUnrealisedLabel">Unrealised</span></div>
           ${moneyFigure(pnl, true, pnl == null ? "" : pnl >= 0 ? "t-positive" : "t-negative")}
           <p class="wu-dash__note">Excludes realised gains</p>
-          ${sellNoteHtml}
         </section>
         <section class="wu-card wu-dash__tile wu-portfolio-tile" aria-labelledby="pfFeesLabel">
           <div class="wu-tc__top"><span class="wu-label" id="pfFeesLabel">Fees</span></div>
           ${moneyFigure(portfolio.feesInCostBasisMyr)}
           <p class="wu-dash__note">${escapeHtml(feesNote(portfolio, tradeCount))}</p>
+          ${sellNoteHtml}
         </section>
         <section class="wu-card wu-dash__tile wu-portfolio-summary" aria-labelledby="pfSummaryLabel">
           <div class="wu-tc__top"><span class="wu-label" id="pfSummaryLabel">Market value</span>${returnChip}</div>
