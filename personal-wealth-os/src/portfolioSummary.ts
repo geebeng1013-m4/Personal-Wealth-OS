@@ -16,7 +16,7 @@
  * Runtime read model: never persisted to WealthState.
  */
 import type { Market, Ticker, WealthState } from "./models";
-import { calculatePositionCostBasis, portfolioSummary, type PositionCostBasis } from "./rules";
+import { calculatePositionCostBasis, estimateUsSellFeeMyr, portfolioSummary, type PositionCostBasis } from "./rules";
 import { tradesWithExchangeCost } from "./currencyExchange";
 import { getPrice, isUsableRate, type PriceMap, type UsdToMyr } from "./marketPrices";
 import { MARKETS, marketOfTicker, normalizeTradeMarket } from "./tradeCurrency";
@@ -103,6 +103,12 @@ export interface PortfolioHolding {
    * Prefer the USD figure when the two are shown side by side.
    */
   unrealizedPnlPercentMyr: number | null;
+  /**
+   * What selling every unit today would cost in fees, in ringgit. Null when
+   * unknown: unpriced, no rate, or a broker/market whose charges have not been
+   * checked (only Moomoo US listings so far). See estimateUsSellFeeMyr.
+   */
+  estimatedSellFeeMyr: number | null;
 }
 
 /** Whether a portfolio could be valued, and how completely. */
@@ -198,6 +204,17 @@ export interface PortfolioSnapshot {
   unrealizedPnlMyrExFees: number | null;
   /** The same return as a ratio of the fee-free cost. Null when unknown. */
   unrealizedPnlPercentMyrExFees: number | null;
+  /**
+   * The fees selling every priced holding today would cost, in ringgit.
+   *
+   * unrealizedPnlMyr counts the fees already paid to buy but none of the fees
+   * still to pay to sell, so it overstates what a sale would hand back. Null
+   * unless every priced holding has an estimate: a total that skipped some
+   * would understate the cost while looking complete.
+   */
+  estimatedSellFeesMyr: number | null;
+  /** unrealizedPnlMyr less estimatedSellFeesMyr. Null when either is. */
+  unrealizedPnlMyrAfterSellFees: number | null;
 
   /** complete = every holding priced; partial = some; unavailable = none. */
   valuationStatus: ValuationStatus;
@@ -288,7 +305,11 @@ export function getPortfolioSnapshot(
   // Where each ticker trades, from its newest trade; a ticker with no trades
   // yet (a DCA target only) is placed by its suffix.
   const marketByTicker = new Map<string, Market>();
-  for (const trade of state.trades) marketByTicker.set(trade.ticker, normalizeTradeMarket(trade).market ?? "US");
+  const platformByTicker = new Map<string, string>();
+  for (const trade of state.trades) {
+    marketByTicker.set(trade.ticker, normalizeTradeMarket(trade).market ?? "US");
+    platformByTicker.set(trade.ticker, trade.platform ?? "");
+  }
 
   const holdings: PortfolioHolding[] = summary.positions.map((position) => {
     const costBasis = costBases.get(position.ticker)
@@ -317,6 +338,12 @@ export function getPortfolioSnapshot(
     // not zero.
     const unrealizedPnlPercentLocal = unrealizedPnlLocal !== null && costBasis.costBasisLocal > 0
       ? unrealizedPnlLocal / costBasis.costBasisLocal
+      : null;
+    // Only the one fee schedule that has been checked: Moomoo, US listings.
+    const hasKnownSellFees = holdingMarket === "US" && isUsd
+      && /moomoo/i.test(platformByTicker.get(position.ticker) ?? "");
+    const estimatedSellFeeMyr = hasKnownSellFees && marketValueLocal !== null && rate !== null
+      ? estimateUsSellFeeMyr(position.units, marketValueLocal, rate)
       : null;
 
     return {
@@ -353,6 +380,7 @@ export function getPortfolioSnapshot(
       unrealizedPnlPercentMyr: unrealizedPnlMyr !== null && position.investedMyr > 0
         ? unrealizedPnlMyr / position.investedMyr
         : null,
+      estimatedSellFeeMyr,
     };
   });
 
@@ -401,7 +429,10 @@ export function getPortfolioSnapshot(
     : null;
   // Dividends of the same holdings the unrealised figure covers, so the two
   // add up over one set of shares.
-  const pricedDividendsMyr = priced.reduce((sum, holding) => sum + holding.dividendsNetMyr, 0);
+  const estimatedSellFeesMyr = priced.length > 0 && priced.every((holding) => holding.estimatedSellFeeMyr !== null)
+    ? priced.reduce((sum, holding) => sum + (holding.estimatedSellFeeMyr ?? 0), 0)
+    : null;
+  const pricedDividendsMyr =priced.reduce((sum, holding) => sum + holding.dividendsNetMyr, 0);
   const pnlWithDividends = unrealizedPnlMyr !== null ? unrealizedPnlMyr + pricedDividendsMyr : null;
   const quoteTimes = priced
     .map((holding) => getPrice(market.prices, holding.ticker)?.quotedAt ?? 0)
@@ -472,6 +503,10 @@ export function getPortfolioSnapshot(
     unrealizedPnlMyrExFees,
     unrealizedPnlPercentMyrExFees: unrealizedPnlMyrExFees !== null && pricedInvestedExFeesMyr > 0
       ? unrealizedPnlMyrExFees / pricedInvestedExFeesMyr
+      : null,
+    estimatedSellFeesMyr,
+    unrealizedPnlMyrAfterSellFees: unrealizedPnlMyr !== null && estimatedSellFeesMyr !== null
+      ? unrealizedPnlMyr - estimatedSellFeesMyr
       : null,
     valuationStatus,
     pricedTickers: priced.map((holding) => holding.ticker),
