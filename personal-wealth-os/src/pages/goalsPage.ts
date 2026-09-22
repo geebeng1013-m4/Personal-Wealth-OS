@@ -126,15 +126,15 @@ function timeToGoal(snapshot: GoalSnapshot): string {
  */
 function goalDetails(snapshot: GoalSnapshot): string {
   const note = snapshot.note.trim();
-  // A reached goal can be marked spent, so buying the thing it was for does
-  // not send it back to 0% when the account empties.
+  // A reached goal can be marked done (its money used), so buying the thing it
+  // was for does not send it back to 0% when the account empties.
   const status = snapshot.isSpent && snapshot.spentAt
-    ? `<p class="wu-goal-detail__eta">Spent <strong>${spentDate(snapshot.spentAt)}</strong></p>`
+    ? `<p class="wu-goal-detail__eta">Done <strong>${spentDate(snapshot.spentAt)}</strong></p>`
     : `<p class="wu-goal-detail__eta">${timeToGoal(snapshot)}</p>`;
   const spendButton = snapshot.isSpent
-    ? `<button class="wu-btn wu-btn--ghost wu-btn--sm undo-goal-spent" data-index="${snapshot.index}" type="button">Undo spent</button>`
+    ? `<button class="wu-btn wu-btn--ghost wu-btn--sm undo-goal-spent" data-index="${snapshot.index}" type="button">Undo</button>`
     : snapshot.isComplete
-      ? `<button class="wu-btn wu-btn--secondary wu-btn--sm mark-goal-spent" data-index="${snapshot.index}" type="button">Mark as spent</button>`
+      ? `<button class="wu-btn wu-btn--secondary wu-btn--sm mark-goal-spent" data-index="${snapshot.index}" type="button">Mark as done</button>`
       : "";
   return `<div class="wu-goal-detail">
       ${note ? `<p class="wu-goal-detail__note">${escapeHtml(note)}</p>` : `<p class="wu-goal-detail__note wu-goal-detail__note--empty">No note yet</p>`}
@@ -150,25 +150,26 @@ function goalRow(state: WealthState, snapshot: GoalSnapshot, featuredId: string)
   const open = openGoalIndex === snapshot.index;
   const featured = snapshot.id === featuredId;
   const ratio = snapshot.progress;
-  const spentLabel = snapshot.isSpent && snapshot.spentAt ? `Spent ${spentDate(snapshot.spentAt)}` : "";
+  // "Done" is kept for a goal marked done; one merely at its target is "Reached".
+  const spentLabel = snapshot.isSpent && snapshot.spentAt ? `Done ${spentDate(snapshot.spentAt)}` : "";
   const pace = spentLabel
     ? spentLabel
     : snapshot.isComplete
-    ? "Done"
+    ? "Reached"
     : snapshot.estimatedMonthsToTarget
       ? `${snapshot.estimatedMonthsToTarget} months left`
       : snapshot.targetAmount <= 0 ? "No target yet" : "Nothing put in each month";
   const monthly = snapshot.isSpent
-    ? `<span class="t-positive">Spent</span>`
-    : snapshot.isComplete
     ? `<span class="t-positive">Done</span>`
+    : snapshot.isComplete
+    ? `<span class="t-positive">Reached</span>`
     : snapshot.monthlyContribution > 0 ? `+${amountOf(snapshot.monthlyContribution)}` : `<span class="t-faint">0</span>`;
   return `<li class="wu-goal${open ? " is-open" : ""}${snapshot.isComplete ? " is-done" : ""}">
       <button class="wu-goal__row goal-row" type="button" data-index="${snapshot.index}" aria-expanded="${open}">
-        <span class="wu-goal__title">${escapeHtml(snapshot.label || snapshot.name)}${featured ? ` <span class="wu-chip wu-chip--muted wu-goal__pin">On Dashboard</span>` : ""}<small>${spentLabel ? escapeHtml(spentLabel) : `${snapshot.isComplete ? "Complete" : `+${amountOf(snapshot.monthlyContribution)} / mo`} · ${escapeHtml(pace)}`}</small></span>
+        <span class="wu-goal__title">${escapeHtml(snapshot.label || snapshot.name)}${featured ? ` <span class="wu-chip wu-chip--muted wu-goal__pin">On Dashboard</span>` : ""}<small>${spentLabel ? escapeHtml(spentLabel) : `${snapshot.isComplete ? escapeHtml(pace) : `+${amountOf(snapshot.monthlyContribution)} / mo · ${escapeHtml(pace)}`}`}</small></span>
         <span class="wu-goal__monthly">${monthly}</span>
         <span class="wu-goal__bar"><span class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(ratio * 100)}%"></span></span></span>
-        <span class="wu-goal__pct">${snapshot.isSpent ? `<span class="wu-chip">Spent</span>` : snapshot.isComplete ? `<span class="wu-chip">Done</span>` : percent(ratio)}</span>
+        <span class="wu-goal__pct">${snapshot.isSpent ? `<span class="wu-chip">Done</span>` : snapshot.isComplete ? `<span class="wu-chip">Reached</span>` : percent(ratio)}</span>
         <span class="wu-goal__amount">${amountOf(snapshot.currentAmount)} / ${amountOf(snapshot.targetAmount)}</span>
         <span class="wu-goal__chev" aria-hidden="true">›</span>
       </button>
@@ -181,7 +182,10 @@ export function goalsTemplate(state: WealthState): string {
   // Incomplete first: goals.ordered already puts completed goals last.
   const rows = goals.ordered.map((snapshot) => goalRow(state, snapshot, goals.featuredGoalId)).join("");
   const overall = goals.totalTarget > 0 ? Math.min(1, goals.totalFunded / goals.totalTarget) : 0;
-  const doneGoal = goals.ordered.find((goal) => goal.isComplete);
+  // Done counts goals marked done; reached ones are still holding their money.
+  const doneCount = state.goals.length - goals.savingCount;
+  const reachedCount = goals.completedCount - doneCount;
+  const doneGoal = goals.ordered.find((goal) => goal.isSpent);
   const addButton = (extra: string) => `<button class="wu-btn ${extra ? "wu-btn--secondary" : "wu-btn--primary"} wu-btn--sm add-goal${extra}" type="button">+ Add goal</button>`;
 
   return `
@@ -208,7 +212,7 @@ export function goalsTemplate(state: WealthState): string {
           <section class="wu-card wu-dash__tile" aria-labelledby="goalsTargetLabel">
             <div class="wu-tc__top"><span class="wu-label" id="goalsTargetLabel">All targets</span></div>
             <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(goals.totalTarget)}</span></p>
-            <p class="wu-dash__note">Across ${goals.savingCount} ${goals.savingCount === 1 ? "goal" : "goals"}${goals.savingCount < state.goals.length ? ` · ${state.goals.length - goals.savingCount} spent` : ""}</p>
+            <p class="wu-dash__note">Across ${goals.savingCount} ${goals.savingCount === 1 ? "goal" : "goals"}${goals.savingCount < state.goals.length ? ` · ${doneCount} done` : ""}</p>
           </section>
           <section class="wu-card wu-dash__tile" aria-labelledby="goalsMonthLabel">
             <div class="wu-tc__top"><span class="wu-label" id="goalsMonthLabel">Each month</span></div>
@@ -217,14 +221,14 @@ export function goalsTemplate(state: WealthState): string {
           </section>
           <section class="wu-card wu-dash__tile" aria-labelledby="goalsDoneLabel">
             <div class="wu-tc__top"><span class="wu-label" id="goalsDoneLabel">Done</span></div>
-            <p class="wu-money wu-money--md"><span>${goals.completedCount}</span><span class="wu-money__of">of ${state.goals.length}</span></p>
-            <p class="wu-dash__note">${doneGoal ? escapeHtml(doneGoal.label || doneGoal.name) : "None finished yet"}</p>
+            <p class="wu-money wu-money--md"><span>${doneCount}</span><span class="wu-money__of">of ${state.goals.length}</span></p>
+            <p class="wu-dash__note">${doneGoal ? escapeHtml(doneGoal.label || doneGoal.name) : reachedCount ? `${reachedCount} reached` : "None finished yet"}</p>
           </section>
         </div>
 
         <!-- phone — overall progress in one card -->
         <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-goals-summary" aria-labelledby="goalsAllLabel">
-          <div class="wu-tc__top"><span class="wu-label" id="goalsAllLabel">All goals</span>${goals.completedCount ? `<span class="wu-chip">${goals.completedCount} done</span>` : ""}</div>
+          <div class="wu-tc__top"><span class="wu-label" id="goalsAllLabel">All goals</span>${doneCount ? `<span class="wu-chip">${doneCount} done</span>` : reachedCount ? `<span class="wu-chip">${reachedCount} reached</span>` : ""}</div>
           <p class="wu-money"><span>${amountOf(goals.totalCurrent)}</span><span class="wu-money__of">of ${amountOf(goals.totalTarget)} MYR</span></p>
           <div class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(overall * 100)}%"></span></div>
           <p class="wu-dash__note">Putting away MYR ${amountOf(goals.totalMonthlyContribution)} a month across ${goals.activeCount} open ${goals.activeCount === 1 ? "goal" : "goals"}.</p>
@@ -308,7 +312,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
     repaint({ ...state, overviewGoalId }, "Changed featured Overview goal");
   }));
 
-  // Mark a reached goal as spent, or undo it. Marking records today and the
+  // Mark a reached goal as done (its money used), or undo it. Marking records today and the
   // target, so the goal stays complete after the purchase empties its account.
   const setSpent = (button: HTMLButtonElement, spent: boolean): void => {
     const index = Number(button.dataset.index);
@@ -321,7 +325,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
     const next = { ...state, goals };
     // A spent goal takes no more money each month; undo brings its rule back.
     next.financialRules = syncGoalContributionRules(next);
-    repaint(next, spent ? "Marked goal as spent" : "Undid spent goal");
+    repaint(next, spent ? "Marked goal as done" : "Undid goal done");
   };
   root.querySelectorAll<HTMLButtonElement>(".mark-goal-spent").forEach((button) => button.addEventListener("click", () => setSpent(button, true)));
   root.querySelectorAll<HTMLButtonElement>(".undo-goal-spent").forEach((button) => button.addEventListener("click", () => setSpent(button, false)));
