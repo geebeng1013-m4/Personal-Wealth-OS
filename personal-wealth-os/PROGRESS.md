@@ -9,8 +9,20 @@
 
 - **阶段**：V1 完成（2026-09-09）。核心正确性的洞都补上了。之后：**产品打磨** —— 手机比例这轮
   已收尾（M-1..M-6，见下）。App / 订阅方向因预算暂停（见下），先把产品本身做好。
-- **`main`**：`3205a46`（2026-09-22，PR #110 分红 Received 列表整理已上线）。
+- **`main`**：`9c1820a`（2026-09-22，PR #111 Goal 编辑框整理已上线）。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
+
+## Goal 编辑框整理（已上线）
+
+- **2026-09-22 你要求**：Goal 编辑框很多格子都没用了。
+- **已上线（PR #111，`main` = `9c1820a`）**：
+  - Current MYR 只在手动的 goal 出现；连了账户的显示「28 · from MAE wallet」。账户选择（Progress comes from）放前面。
+  - 拿掉 Short name（数据里的 `goal.name` 保留，onboarding 靠它认还债 goal）；Money Leaks、What-if 改显示 Name。
+  - 点开 goal 只有一行：Note ｜ 电脑上「Reach it in about 16.6 years」｜ Edit。按 Edit 才出现输入框。
+    （中间试过「Note 放列表」和「四格数字卡」，你都觉得乱，最后定这个最简单版。）
+  - 手机输入框：Target 和 Monthly 并排，Cancel 和 Save 在一起。
+- 验证：typecheck、1347 测试、build 全绿；demo 截图桌面/手机浅深色；你在 5174 用真实账号看过。线上 wealthup.cc 已确认是新版本。
+- **FUTURE IDEAS**：onboarding 下一步卡片算「几个月达标」、`state.ts` 默认挑 Dashboard goal，也还用存着的 Current，不是账户余额。
 
 ## 分红 Received 列表整理（已上线）
 
