@@ -1533,6 +1533,10 @@
     font: var(--weight-semibold) var(--text-num-xl) / 1.05 var(--font-sans);
     letter-spacing: -0.025em;
     font-variant-numeric: tabular-nums;
+    /* one line, never wider than its card: fitFigures.ts steps the font size
+       down when the digits don't fit */
+    min-width: 0;
+    white-space: nowrap;
   }
   .wu-money--md {
     font-size: var(--text-num-lg);
