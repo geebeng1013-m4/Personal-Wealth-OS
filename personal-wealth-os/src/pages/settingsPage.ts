@@ -15,7 +15,7 @@
  */
 
 import type { WealthState } from "../models";
-import { liabilityFields, readLiabilityForm } from "../components/liabilityForm";
+import { bindLiabilityForm, liabilityFields, readLiabilityForm } from "../components/liabilityForm";
 import { createId } from "../state";
 import { syncPlanningRules } from "../financialRules";
 import { DEFAULT_EMERGENCY_MONTHS, money, suggestedEmergencyTarget } from "../rules";
@@ -348,6 +348,7 @@ export function bindSettings(root: HTMLElement, state: WealthState, setState: Se
     if (!result.ok) return;
     saveOpen({ ...state, liabilities: [...state.liabilities, result.liability] }, "Add liability");
   });
+  root.querySelectorAll<HTMLFormElement>('form[data-form="liability-add"]').forEach(bindLiabilityForm);
   root.querySelectorAll<HTMLButtonElement>(".delete-liability").forEach((button) => button.addEventListener("click", () => saveOpen({ ...state, liabilities: state.liabilities.filter((item) => item.id !== button.dataset.id) }, "Delete liability")));
 
   onSubmit("cashflow", (data) => {
