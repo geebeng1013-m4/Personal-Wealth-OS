@@ -114,7 +114,9 @@ export function reviewTemplate(state: WealthState): string {
   const bars = recent.length
     ? `<div class="wu-review-bars" role="img" aria-label="Discipline score, last ${recent.length} months">${recent.map((review) => {
       const score = scoreOutOfTen(review.disciplineScore);
-      return `<span class="wu-review-bars__month"><i class="${score < 9 ? "is-low" : ""}" style="height:${Math.max(4, score * 10)}%" title="${escapeHtml(monthName(review.month))}: ${formatScore(review.disciplineScore)}/10"></i><small>${escapeHtml(monthName(review.month).slice(0, 3))}</small></span>`;
+      // The track is the full 10, so a bar is read against it: the scale never
+      // starts anywhere but zero, and a 9 is visibly short of the top.
+      return `<span class="wu-review-bars__month"><span class="wu-review-bars__track"><i class="${score < 9 ? "is-low" : ""}" style="height:${Math.max(4, score * 10)}%" title="${escapeHtml(monthName(review.month))}: ${formatScore(review.disciplineScore)}/10"></i></span><small>${escapeHtml(monthName(review.month).slice(0, 3))}</small></span>`;
     }).join("")}</div>`
     : `<p class="wu-dash__note">Complete a review to start the score history.</p>`;
 

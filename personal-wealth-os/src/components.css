@@ -2963,10 +2963,18 @@
     height: 100%;
     min-width: 0;
   }
+  .wu-review-bars__track {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    width: 100%;
+    max-width: 22px;
+    border-radius: 5px;
+    background: var(--surface-hover);
+  }
   .wu-review-bars i {
     display: block;
     width: 100%;
-    max-width: 22px;
     border-radius: 5px 5px 2px 2px;
     background: var(--accent);
   }
@@ -2978,16 +2986,21 @@
     color: var(--text-faint);
     text-transform: uppercase;
   }
+  /* The desktop's Average score tile. It used to be a row of squares scaled
+     from zero over 28px, where 9 and 10 came out the same height — no trend to
+     read. Same chart as the phone's, shorter, month labels kept so a dip can
+     be named. */
   .wu-review-bars--mini {
-    height: 28px;
-    gap: 3px;
+    height: 56px;
+    gap: var(--space-1);
     margin-top: auto;
   }
-  .wu-review-bars--mini small {
-    display: none;
+  .wu-review-bars--mini .wu-review-bars__track {
+    max-width: 18px;
+    border-radius: 4px;
   }
   .wu-review-bars--mini i {
-    border-radius: 2px;
+    border-radius: 4px 4px 1px 1px;
   }
   .wu-review-list {
     display: grid;
