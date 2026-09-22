@@ -652,12 +652,12 @@ function dividendsBody(state: WealthState, portfolio: PortfolioSnapshot): string
         </div>`;
 
   const receivedList = received.length === 0 ? "" : `
-        <details class="wu-details"${suggestions.length === 0 ? " open" : ""}>
-          <summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-subheading">Received</strong><span class="t-caption t-faint">${received.length}</span></span></summary>
-          <ul class="wu-ledger-list">${received.map((dividend) => {
+        <details class="wu-details wu-details--inset">
+          <summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-subheading">Received</strong><span class="wu-count">${received.length}</span></span></summary>
+          <ul class="wu-ledger-list wu-dividend-received">${received.map((dividend) => {
             const rate = dividendRateToMyr(dividend, state.currencyExchanges ?? []);
             const net = netDividend(dividend);
-            return `<li class="wu-ledger-row wu-ledger-row--plain">
+            return `<li class="wu-ledger-row wu-dividend-received__row">
             <span class="wu-ledger-row__title">${escapeHtml(dividend.ticker)}<small>${escapeHtml(joinNotes(
               `ex ${shortDate(dividend.exDate)}`,
               dividend.withholdingTax > 0 ? `tax ${payout(dividend.currency, dividend.withholdingTax)}` : "no tax withheld",

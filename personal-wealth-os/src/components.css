@@ -1059,6 +1059,83 @@
     }
   }
 
+  /* Received payouts: an iOS-style grouped list, closed until asked for.
+     Each row is title | amount over its ringgit value | a quiet remove. */
+  .wu-count {
+    display: inline-grid;
+    place-items: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    font: var(--weight-semibold) var(--text-caption) / 1 var(--font-sans);
+    font-variant-numeric: tabular-nums;
+  }
+  .wu-details--inset {
+    background: var(--surface-raised);
+  }
+  .wu-details--inset > .wu-details__summary {
+    padding-block: var(--space-3);
+    transition: background var(--dur-fast) var(--ease-standard);
+  }
+  .wu-details--inset > .wu-details__summary:hover {
+    background: var(--surface-hover);
+  }
+  .wu-details--inset[open] > .wu-details__summary {
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  /* Smooth open/close where the browser supports animating <details>. */
+  @supports (interpolate-size: allow-keywords) {
+    .wu-details--inset {
+      interpolate-size: allow-keywords;
+    }
+    .wu-details--inset::details-content {
+      height: 0;
+      overflow: hidden;
+      transition: height var(--dur-mid) var(--ease-standard), content-visibility var(--dur-mid) allow-discrete;
+    }
+    .wu-details--inset[open]::details-content {
+      height: auto;
+    }
+  }
+  .wu-details--inset > .wu-dividend-received {
+    padding: 0 0 0 var(--space-5);
+  }
+  .wu-dividend-received__row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: var(--space-2) var(--space-3);
+    min-height: 56px;
+    padding: var(--space-2) var(--space-3) var(--space-2) 0;
+  }
+  .wu-dividend-received__row .wu-ledger-row__title small {
+    font-size: var(--text-caption);
+  }
+  .wu-dividend-received__row .wu-ledger-row__amount {
+    display: grid;
+    justify-items: end;
+    gap: 2px;
+  }
+  .wu-dividend-received__row .wu-ledger-row__amount small {
+    font: var(--weight-regular) var(--text-caption) / 1.2 var(--font-sans);
+    color: var(--text-faint);
+  }
+  .wu-dividend-received__row .div-delete {
+    width: 28px;
+    height: 28px;
+    min-height: 0;
+    padding: 0;
+    border-radius: var(--radius-pill);
+    color: var(--text-faint);
+    font-size: 12px;
+  }
+  .wu-dividend-received__row .div-delete:hover,
+  .wu-dividend-received__row .div-delete:focus-visible {
+    background: var(--negative-soft);
+    color: var(--negative);
+  }
+
   /* An amount and its unit on one line — e.g. a fee and the currency it was paid in. */
   .wu-field-pair {
     display: grid;
