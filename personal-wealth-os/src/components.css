@@ -4437,6 +4437,39 @@
     font-size: 11px;
   }
 
+  /* ---- the Overview's stage line (Q-2) ---------------------------------- */
+  .wu-stage {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    margin: calc(var(--space-2) * -1) 0 var(--space-4);
+    color: var(--text-muted);
+    font-size: var(--text-body-sm);
+  }
+  .wu-stage__steps {
+    display: inline-flex;
+    flex: none;
+    gap: 3px;
+    transform: translateY(-2px);
+  }
+  .wu-stage__steps i {
+    width: 14px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--border-strong);
+  }
+  .wu-stage__steps i.is-on {
+    background: var(--accent);
+  }
+  .wu-stage__text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .wu-stage__text strong {
+    color: var(--text);
+    font-weight: var(--weight-semibold);
+  }
+
   /* ---- "Your plan" + "Your next step" (O-3, tidied in Q-1) ------------- */
   /* The plan card: the buffer and the goal, each once, name left and figure
      right, a thin bar under both. */

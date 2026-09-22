@@ -20,6 +20,7 @@ import { syncPlanningRules } from "../financialRules";
 import { BUFFER_MONTHS } from "../onboardingQuiz";
 import { openBottomSheet } from "../components/bottomSheet";
 import { showNotice } from "../components/toast";
+import { classifyStage, STAGE_COUNT, type MoneyStage } from "../moneyStage";
 import { buildCheckins } from "../checkins";
 import type { PortfolioSnapshot } from "../portfolioSummary";
 import { assetDrawdownBelow } from "../drawdowns";
@@ -100,14 +101,14 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
     ${pageHeader({
       eyebrow: `Good ${getGreeting()}, ${greetingName(state.profile.name, signedInName)}`,
       title: "Overview",
-      sub: overview.headline,
     })}
+    ${stageLine(classifyStage(state))}
 
     <!-- The user's own goal sentence, in view every visit. Display only: it is
          written on the Goals page, so this stays a line, not a form. While a
-         beginner's plan card is up it names the goal already (Q-1), so the
+         beginner's plan card is up it says the same thing (Q-1), so the
          sentence waits until that card retires rather than say it twice. -->
-    ${planShowsGoal(nextSteps) ? "" : state.financialGoal
+    ${planCardShown(nextSteps) ? "" : state.financialGoal
       ? `<button class="wu-goal-line dashboard-nav" data-page="goals" type="button" aria-label="My financial goal: ${escapeHtml(state.financialGoal)}. Edit on the Goals page"><span class="wu-goal-line__label">Financial goal</span><span class="wu-goal-line__text">${escapeHtml(state.financialGoal)}</span></button>`
       : `<button class="wu-goal-line wu-goal-line--empty dashboard-nav" data-page="goals" type="button"><span class="wu-goal-line__text">Write down your financial goal</span><span aria-hidden="true">→</span></button>`}
 
@@ -237,6 +238,18 @@ let previouslyDone: Set<NextStepId> | null = null;
 /** A step just saved from the sheet, and the page its "View" opens. */
 let savedFromSheet: { id: NextStepId; page: string } | null = null;
 
+/*
+ * Where the user is on the road to investing (Q-2), in the header's place for
+ * a sentence. It replaced "Safety buffer: 0% funded", which the Health card
+ * still shows. Four segments, the words say it too.
+ */
+function stageLine(stage: MoneyStage): string {
+  const label = stage.step === null ? "Debt first" : `Stage ${stage.step} of ${STAGE_COUNT}`;
+  const segments = stage.step === null ? "" : `<span class="wu-stage__steps" aria-hidden="true">${Array.from({ length: STAGE_COUNT }, (_, index) =>
+    `<i class="${index < (stage.step ?? 0) ? "is-on" : ""}"></i>`).join("")}</span>`;
+  return `<p class="wu-stage">${segments}<span class="wu-stage__text"><strong>${label} · ${escapeHtml(stage.title)}</strong> <span class="wu-stage__why">${escapeHtml(stage.reason)}</span></span></p>`;
+}
+
 /* One line of status (P-6a): the check-ins themselves live on Review. */
 function checkinsLine(due: number): string {
   if (!due) return "";
@@ -255,8 +268,13 @@ function currentStep(next: NextSteps): NextStep | undefined {
   return open.find((step) => !laterSteps.has(step.id)) ?? open[0];
 }
 
-function planShowsGoal(next: NextSteps): boolean {
-  return next.visible && Boolean(next.plan?.goalName);
+/**
+ * The plan card is up. The Q&A writes the goal sentence from the same answers
+ * the card shows (a goal, or the buffer itself), so the sentence waits.
+ */
+function planCardShown(next: NextSteps): boolean {
+  const plan = next.plan;
+  return next.visible && plan !== null && (plan.bufferTarget > 0 || Boolean(plan.goalName));
 }
 
 const plainAmount = (value: number): string => money(value, "").trim();
