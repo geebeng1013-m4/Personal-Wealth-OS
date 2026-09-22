@@ -14,7 +14,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 27;
+export const CURRENT_VERSION = 28;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -675,6 +675,10 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   // v26: the first-run Q&A's answers. Purely additive — older data has none
   // (null), which only shows the quiz to an account that is still empty (see
   // shouldShowOnboardingQuiz); a stored answer set is tidied, never dropped.
+  // v28 adds optional answers inside it (life stage, income band, months
+  // saved, where they sit, long-term goals). Purely additive too: a v26 / v27
+  // set arrives with them unanswered, and an unknown value reads as skipped
+  // without touching the rest of the answers.
   merged.onboardingAnswers = normalizeOnboardingAnswers(candidate.onboardingAnswers);
   // v27: the check-ins' memory. Purely additive — older data starts with no
   // weekly look and the payday question unasked; a stored value is tidied.

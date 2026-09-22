@@ -11,6 +11,7 @@
  */
 
 import type { WealthState } from "./models";
+import { answeredCash } from "./onboardingQuiz";
 
 export type OnboardingStepId = "balances" | "first-entry" | "goal" | "safety-buffer" | "investment";
 
@@ -159,8 +160,10 @@ export function buildNextSteps(state: WealthState): NextSteps {
   const expense = state.ledgerTransactions.some((tx) => tx.type === "expense");
   const hasBalances = state.ledgerAccounts.some((account) => account.openingBalance !== 0);
   const { current: bufferCurrent, target: bufferTarget, monthlyTopUp } = state.emergency;
+  // What the quiz said is saved: a typed figure, or months of spending (v28).
+  const answeredSavings = answers ? answeredCash(answers) ?? 0 : 0;
   // The buffer grew past what the quiz recorded, or is simply full.
-  const bufferMoved = bufferTarget > 0 && (bufferCurrent >= bufferTarget || bufferCurrent > (answers?.cashInBank ?? 0));
+  const bufferMoved = bufferTarget > 0 && (bufferCurrent >= bufferTarget || bufferCurrent > answeredSavings);
 
   const steps: NextStep[] = [{
     id: "record-pay",
@@ -193,11 +196,11 @@ export function buildNextSteps(state: WealthState): NextSteps {
       optional: false,
     });
   }
-  if (answers && bufferTarget > 0 && monthlyTopUp > 0 && (answers.cashInBank ?? 0) < bufferTarget) {
+  if (answers && bufferTarget > 0 && monthlyTopUp > 0 && answeredSavings < bufferTarget) {
     steps.push({
       id: "move-to-buffer",
       title: `Move ${rm(monthlyTopUp)} into your safety buffer`,
-      because: `Your buffer is ${rm(Math.max(0, bufferTarget - (answers.cashInBank ?? 0)))} short of ${rm(bufferTarget)}.`,
+      because: `Your buffer is ${rm(Math.max(0, bufferTarget - answeredSavings))} short of ${rm(bufferTarget)}.`,
       action: "confirm",
       cta: `I've moved ${rm(monthlyTopUp)}`,
       detail: "Transfer it in your bank app, from your current account to your savings. WealthUp never moves money; it keeps score.",

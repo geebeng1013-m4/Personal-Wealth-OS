@@ -70,7 +70,14 @@
 - 新增 `src/moneyStage.ts`（纯函数）`classifyStage(state)`：用真实数据（安全垫、开销、交易），缺数据时才用问答答案；回传阶段 + 一句原因。测试覆盖每个阶段、边界值、缺数据、开销为 0。
 - Overview 显示阶段一行（4 格 + 原因）；按「Dashboard 只放状态」的规则，只加这一行。
 
-### Q-3 — 问答新答案 + Schema v28  `[ ]`
+### Q-3 — 问答新答案 + Schema v28  `[x]`（2026-09-22，分支 `q-overview-tidy`）
+- 已做：`onboardingAnswers` 加 5 个可选答案——`lifeStage`（学生 / 上班 / 自雇 / 待业 / 退休）、`incomeRange`（收入范围，`monthlyIncome` 存范围的估算值）、`bufferMonthsHave`（存了几个月：没有 / 不到 1 / 1–2 / 3–5 / 6+）、`cashKeptIn`（储蓄户口 / FD / MMF / ASB / e-wallet / 现金）、`longTermGoals`（可多选；选「Not sure yet」就只留它）。范围和月数都定义在 `onboardingQuiz.ts`，Q-4 的画面直接用。
+- Schema 27 → 28。`migrateState` 照旧用 `normalizeOnboardingAnswers`：旧答案原样保留，新答案当作没回答；不认识的值当作跳过，不影响其他答案。导入文件同样走这里。`firestore.rules` 不检查字段，不用改。
+- 意思：自雇 → 安全垫目标 6 个月（问答结果、Goal 句子、阶段、Overview 的目标面板默认都跟着变）；「存了几个月 × 开销」→ 安全垫现有金额（只填空值），**不**当成银行余额——钱可能在 MMF 或 FD，所以「设余额」那一步照样会出现。
+- 旧版本（线上 main）打开 v28 数据：不会报错，但它下次存档时会把这 5 个新答案丢掉（它不认识）。已经写进安全垫目标 / 现有金额的数字不受影响。等这个分支上线后就没有这个问题。
+- 实测：11 个新测试，1273 全绿，typecheck / build 通过；5199 重跑 Q-2 的四种情况照旧、无报错，新账号存档是 v28。问答画面还是旧的（Q-4 才改）。
+
+### Q-3（原计划）
 - `onboardingAnswers` 加 `lifeStage`、`incomeRange`、`bufferMonthsHave`、`cashKeptIn`、`longTermGoals`（现在是 v27，所以升到 v28）。`migrateState` 迁移旧答案，缺的字段当作没回答，不重置任何数据；导入导出、云端兼容。
 - `applyOnboardingAnswers`：存款月数 × 开销 → 安全垫现有金额；自雇 → 目标 6 个月。只填空着的值（跟 O-1 一样）。
 

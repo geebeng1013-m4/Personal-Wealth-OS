@@ -17,7 +17,7 @@ import { buildNextSteps, type NextStep, type NextStepId, type NextSteps } from "
 import { queueGuide, type GuideId } from "../onboardingGuide";
 import { buildLedgerTransaction } from "../ledger";
 import { syncPlanningRules } from "../financialRules";
-import { BUFFER_MONTHS } from "../onboardingQuiz";
+import { bufferMonthsFor } from "../onboardingQuiz";
 import { openBottomSheet } from "../components/bottomSheet";
 import { showNotice } from "../components/toast";
 import { classifyStage, STAGE_COUNT, type MoneyStage } from "../moneyStage";
@@ -446,19 +446,24 @@ function openLedgerSheet(stepId: "record-pay" | "log-spending", state: WealthSta
 }
 
 function openBufferSheet(state: WealthState): void {
-  const three = suggestedEmergencyTarget(state, BUFFER_MONTHS);
+  const three = suggestedEmergencyTarget(state, 3);
   const six = suggestedEmergencyTarget(state, 6);
+  // Self-employed: income that moves around starts on 6 months (Q-3).
+  const sixFirst = bufferMonthsFor(state.onboardingAnswers) === 6;
+  const suggested = sixFirst ? six : three;
   openBottomSheet({
     title: "Set your safety buffer target",
     destination: "Settings",
-    intro: three
-      ? `${BUFFER_MONTHS} months of your ${money(three.monthlyEssential)} monthly spending is ${money(three.target)}. If your income moves around, 6 months is safer.`
+    intro: three && six
+      ? sixFirst
+        ? `6 months of your ${money(six.monthlyEssential)} monthly spending is ${money(six.target)}: with income that moves around, a longer buffer is safer.`
+        : `3 months of your ${money(three.monthlyEssential)} monthly spending is ${money(three.target)}. If your income moves around, 6 months is safer.`
       : "How much do you want set aside for surprises? A common rule is 3 to 6 months of what you spend.",
     body: `${three && six ? `<div class="wu-sheet__presets" role="group" aria-label="Months of spending">
-        <button class="wu-btn wu-btn--secondary wu-btn--sm" type="button" data-preset="${three.target}" aria-pressed="true">${BUFFER_MONTHS} months</button>
-        <button class="wu-btn wu-btn--secondary wu-btn--sm" type="button" data-preset="${six.target}" aria-pressed="false">6 months</button>
+        <button class="wu-btn wu-btn--secondary wu-btn--sm" type="button" data-preset="${three.target}" aria-pressed="${!sixFirst}">3 months</button>
+        <button class="wu-btn wu-btn--secondary wu-btn--sm" type="button" data-preset="${six.target}" aria-pressed="${sixFirst}">6 months</button>
       </div>` : ""}
-      <div class="wu-grid wu-grid--2 wu-sheet__grid">${amountField("Target", three?.target ?? "")}</div>`,
+      <div class="wu-grid wu-grid--2 wu-sheet__grid">${amountField("Target", suggested?.target ?? "")}</div>`,
     onOpen: (sheet) => {
       const input = sheet.querySelector<HTMLInputElement>('input[name="amount"]');
       sheet.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((button) => button.addEventListener("click", () => {

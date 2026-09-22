@@ -21,7 +21,7 @@ import type { WealthState } from "./models";
 import { getLedgerSnapshot } from "./ledgerSummary";
 import { money, suggestedEmergencyTarget } from "./rules";
 import { totalLiabilities } from "./financialHealth";
-import { BUFFER_MONTHS } from "./onboardingQuiz";
+import { bufferMonthsFor } from "./onboardingQuiz";
 
 export type MoneyStageId = "debt" | "base" | "buffer" | "ready" | "growing";
 
@@ -81,8 +81,10 @@ export function classifyStage(state: WealthState, now = new Date()): MoneyStage 
   const monthly = suggestedEmergencyTarget(state, 1)?.monthlyEssential ?? null;
   const { current, target } = state.emergency;
   const cover = monthly ? current / monthly : null;
-  const targetMonths = target > 0 && monthly ? target / monthly : BUFFER_MONTHS;
-  const full = target > 0 ? current >= target : cover !== null && cover >= BUFFER_MONTHS;
+  // No target set: the usual size for this person (6 months when self-employed).
+  const usualMonths = bufferMonthsFor(state.onboardingAnswers);
+  const targetMonths = target > 0 && monthly ? target / monthly : usualMonths;
+  const full = target > 0 ? current >= target : cover !== null && cover >= usualMonths;
 
   if (spendingAboveIncome(state, monthly, now)) {
     return stage("base", "Spending is at or above income. First, make some room each month.");
