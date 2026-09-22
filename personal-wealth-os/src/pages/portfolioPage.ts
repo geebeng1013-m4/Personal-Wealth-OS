@@ -337,6 +337,12 @@ function amountOf(value: number): string {
   return money(value, "").trim();
 }
 
+/** A gain or loss written with its own sign, for the compact phone figures. */
+function signedAmount(value: number | null): string {
+  if (value == null) return UNKNOWN;
+  return `${value >= 0 ? "+" : "−"}${amountOf(Math.abs(value))}`;
+}
+
 /** A tile figure: small quiet currency, then the number. "--" when unknown. */
 function moneyFigure(value: number | null, sign = false, toneClass = ""): string {
   if (value == null) return `<p class="wu-money wu-money--md"><span>${UNKNOWN}</span></p>`;
@@ -514,6 +520,7 @@ function portfolioTilesBody(portfolio: PortfolioSnapshot, tradeCount: number): s
     ? ""
     : `<span class="wu-chip${ratio < 0 ? " wu-chip--negative" : ""}">${ratio >= 0 ? "+" : "−"}${percent(Math.abs(ratio), 1)}</span>`;
   const pnl = portfolio.unrealizedPnlMyr;
+  const pnlTone = pnl == null ? "" : pnl >= 0 ? "t-positive" : "t-negative";
   const sellNote = sellFeesNote(portfolio);
   const noteHtml = (text: string): string => `<p class="wu-dash__note">${escapeHtml(text)}</p>`;
   // Desktop splits it across the two tiles it belongs to; the phone's single
@@ -547,8 +554,12 @@ function portfolioTilesBody(portfolio: PortfolioSnapshot, tradeCount: number): s
         <section class="wu-card wu-dash__tile wu-portfolio-summary" aria-labelledby="pfSummaryLabel">
           <div class="wu-tc__top"><span class="wu-label" id="pfSummaryLabel">Market value</span>${returnChip}</div>
           ${moneyFigure(portfolio.totalInvestmentValueMyr)}
-          <p class="wu-dash__note">${escapeHtml(joinNotes(`Invested ${amountOf(portfolio.totalInvestedMyr)}`, `fees ${amountOf(portfolio.feesInCostBasisMyr)}`, holdingsText))}</p>
-          ${portfolio.valuationStatus === "complete" ? "" : `<p class="wu-dash__note">${escapeHtml(valuationNote(portfolio))}</p>`}
+          <p class="wu-dash__note">${escapeHtml(valuationText)}</p>
+          <div class="wu-three wu-portfolio-summary__stats">
+            <div><span>Invested</span><b>${amountOf(portfolio.totalInvestedMyr)}</b></div>
+            <div><span>Unrealised</span><b${pnlTone ? ` class="${pnlTone}"` : ""}>${signedAmount(pnl)}</b></div>
+            <div><span>Fees</span><b>${amountOf(portfolio.feesInCostBasisMyr)}</b></div>
+          </div>
           ${portfolio.feesInCostBasisMyr > 0.005 && portfolio.unrealizedPnlMyrExFees !== null ? `<p class="wu-dash__note">${escapeHtml(feesNote(portfolio, tradeCount))}</p>` : ""}
           ${sellSummaryHtml}
         </section>`;
