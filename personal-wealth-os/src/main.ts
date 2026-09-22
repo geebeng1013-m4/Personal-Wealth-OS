@@ -27,6 +27,7 @@ import { initLiquidGlass } from "./liquidGlass";
 import { applyOnboardingAnswers, shouldShowOnboardingQuiz, skipOnboardingQuiz } from "./onboardingQuiz";
 import { renderOnboarding, resetOnboardingDraft } from "./pages/onboardingPage";
 import { mountPageScrollbar } from "./overlayScrollbar";
+import { startFigureFitting } from "./components/fitFigures";
 
 // Drop stale cached ticker data from previous sessions so localStorage doesn't grow unbounded.
 pruneMarketCache();
@@ -36,6 +37,7 @@ pruneMarketCache();
 initSaveErrorToasts();
 initLiquidGlass();
 mountPageScrollbar();
+startFigureFitting();
 
 // PWA install prompt
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
