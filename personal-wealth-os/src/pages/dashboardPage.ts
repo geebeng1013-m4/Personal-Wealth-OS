@@ -293,12 +293,17 @@ function planCard(next: NextSteps): string {
   }
   if (plan.goalName) {
     const pct = plan.goalTarget > 0 ? Math.min(100, Math.round((plan.goalCurrent / plan.goalTarget) * 100)) : 0;
+    const debt = plan.goalKind === "debt";
+    // A debt reads as what is left to pay; the bar still fills as it is paid off.
+    const value = debt
+      ? `${plainAmount(Math.max(0, plan.goalTarget - plan.goalCurrent))} left <small>of ${plainAmount(plan.goalTarget)}</small>`
+      : `${plainAmount(plan.goalCurrent)} <small>/ ${plainAmount(plan.goalTarget)}</small>`;
     rows.push(`<div class="wu-plan__row">
       <span class="wu-plan__name">${escapeHtml(plan.goalName)}</span>
-      <span class="wu-plan__value">${plainAmount(plan.goalCurrent)} <small>/ ${plainAmount(plan.goalTarget)}</small></span>
-      <span class="wu-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(plan.goalName)} ${pct}% saved"><span class="wu-bar__fill" style="width:${pct}%"></span></span>
+      <span class="wu-plan__value">${value}</span>
+      <span class="wu-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(plan.goalName)} ${pct}% ${debt ? "paid off" : "saved"}"><span class="wu-bar__fill" style="width:${pct}%"></span></span>
       ${plan.goalMonths !== null
-        ? `<span class="wu-plan__note">Around <strong>${monthsFromNow(plan.goalMonths)}</strong></span>`
+        ? `<span class="wu-plan__note">${debt ? "Cleared around" : "Around"} <strong>${monthsFromNow(plan.goalMonths)}</strong></span>`
         // Without a monthly amount there is no date to give; say how to get one.
         : `<button class="wu-plan__link dashboard-nav" data-page="goals" type="button">Give it a monthly amount to get a date <span aria-hidden="true">→</span></button>`}
     </div>`);
@@ -646,9 +651,15 @@ export function bindDashboard(
       const largest = [...state.liabilities].sort((a, b) => b.balance - a.balance)[0];
       if (!largest) return;
       const paid = Math.min(largest.balance, step.amount ?? 0);
+      // The Q&A's pay-off goal moves with it, so Goals and the Next goal tile
+      // show the same progress as the plan card.
+      const debtGoalName = state.onboardingAnswers?.goalName;
       const next: WealthState = {
         ...state,
         liabilities: state.liabilities.map((item) => item.id === largest.id ? { ...item, balance: Math.round((item.balance - paid) * 100) / 100 } : item),
+        goals: state.goals.map((goal) => goal.name === debtGoalName
+          ? { ...goal, current: Math.min(goal.target, Math.round((goal.current + paid) * 100) / 100) }
+          : goal),
       };
       setState(next, "Paid down a debt");
       go("dashboard", next);

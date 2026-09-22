@@ -77,3 +77,25 @@ test("steps by stage: a cleared debt leaves the debt track and its steps", () =>
   assert.ok(!ids(cleared).includes("debt-add"));
   assert.ok(!ids(cleared).includes("debt-pay"));
 });
+
+test("debt progress: the plan shows what is paid off, read from the debts recorded", () => {
+  const state = quiz({ primaryGoal: "debt", monthlyIncome: 4000, monthlySpending: 2500, cashInBank: 1000, goalName: "Card", goalAmount: 3000 });
+  const before = buildNextSteps(state).plan;
+  assert.equal(before?.goalKind, "debt");
+  assert.equal(before?.goalCurrent, 0);
+  const owing = buildNextSteps({ ...state, liabilities: [{ ...card, balance: 2250 }] }).plan;
+  assert.equal(owing?.goalCurrent, 750);
+  assert.equal(owing?.goalTarget, 3000);
+  // 2,250 left at the quiz's monthly amount for it.
+  const monthly = state.goals[0].monthlyContribution;
+  assert.equal(owing?.goalMonths, Math.ceil(2250 / monthly));
+  // Owing more than was said never shows negative progress.
+  assert.equal(buildNextSteps({ ...state, liabilities: [{ ...card, balance: 3600 }] }).plan?.goalCurrent, 0);
+});
+
+test("debt progress: a savings goal is unchanged", () => {
+  const state = quiz({ primaryGoal: "save", monthlyIncome: 4500, monthlySpending: 2800, cashInBank: 3000, goalName: "Japan trip", goalAmount: 6000 });
+  const plan = buildNextSteps({ ...state, liabilities: [card] }).plan;
+  assert.equal(plan?.goalKind, "save");
+  assert.equal(plan?.goalCurrent, 0);
+});

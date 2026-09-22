@@ -149,7 +149,12 @@ export interface NextStepPlan {
   /** The buffer figure still rests on a quiz answer, not on anything confirmed. */
   bufferEstimate: boolean;
   goalName: string;
-  /** The Overview goal's saved and target amounts; both 0 without a goal. */
+  /**
+   * "debt": the Q&A's pay-off goal. Its progress is what has been paid off,
+   * read from the debts recorded, and the date is when it is cleared.
+   */
+  goalKind: "save" | "debt";
+  /** The Overview goal's saved (for a debt: paid off) and target amounts; both 0 without a goal. */
   goalCurrent: number;
   goalTarget: number;
   /** Months to the Overview goal at its monthly contribution; null when it has none. */
@@ -331,8 +336,15 @@ export function buildNextSteps(state: WealthState): NextSteps {
   steps.sort((a, b) => rank(a.id) - rank(b.id));
 
   const complete = steps.every((step) => step.done || step.optional);
-  const goalMonths = goal && goal.monthlyContribution > 0 && goal.target > goal.current
-    ? Math.ceil((goal.target - goal.current) / goal.monthlyContribution)
+  // The Q&A writes a pay-off goal the way it writes a savings goal. Its real
+  // progress is the debt going down: once a debt is recorded, paid off =
+  // what was said minus what is still owed (the goal's own figure otherwise).
+  const debtGoal = Boolean(goal) && answers?.primaryGoal === "debt" && goal?.name === answers.goalName;
+  const goalCurrent = !goal ? 0 : debtGoal && state.liabilities.length > 0
+    ? Math.min(goal.target, Math.max(0, goal.target - totalLiabilities(state.liabilities)))
+    : goal.current;
+  const goalMonths = goal && goal.monthlyContribution > 0 && goal.target > goalCurrent
+    ? Math.ceil((goal.target - goalCurrent) / goal.monthlyContribution)
     : null;
 
   return {
@@ -345,7 +357,8 @@ export function buildNextSteps(state: WealthState): NextSteps {
       bufferTarget,
       bufferEstimate: !bufferMoved,
       goalName: goal?.name ?? "",
-      goalCurrent: goal?.current ?? 0,
+      goalKind: debtGoal ? "debt" : "save",
+      goalCurrent,
       goalTarget: goal?.target ?? 0,
       goalMonths,
       goalEstimate: !income,
