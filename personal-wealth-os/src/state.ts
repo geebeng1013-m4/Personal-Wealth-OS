@@ -1,6 +1,7 @@
 import type { AllocationPlan, AllocationStep, Bucket, LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, Liability, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
 import { isDebtKind, isMonth } from "./debtPriority";
 import { buildOnboardingChecklist } from "./onboarding";
+import { linkedGoalCurrent } from "./financialHealth";
 import { getDefaultFinancialRules, normalizeFinancialRules, repairPlaceholderRules } from "./financialRules";
 import { normalizeActionRecords } from "./actionRecords";
 import { normalizeCurrencyExchanges } from "./currencyExchange";
@@ -704,7 +705,8 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   const requestedOverviewGoalId = typeof candidate.overviewGoalId === "string" ? candidate.overviewGoalId : "";
   merged.overviewGoalId = merged.goals.some((goal) => goal.id === requestedOverviewGoalId)
     ? requestedOverviewGoalId
-    : merged.goals.find((goal) => goal.target > 0 && goal.current < goal.target)?.id ?? merged.goals[0]?.id ?? "";
+    // First unfinished goal, judged by the amount the Goals page shows.
+    : merged.goals.find((goal) => goal.target > 0 && linkedGoalCurrent(goal, merged) < goal.target)?.id ?? merged.goals[0]?.id ?? "";
 
   if ((input.version ?? 0) < 3) {
     const legacyTextTranslations: Record<string, string> = {
