@@ -1,4 +1,5 @@
 import type { Goal, LedgerTransaction, WealthState } from "./models";
+import { linkedGoalCurrent } from "./financialHealth";
 
 export type MoneyLeakSeverity = "high" | "medium" | "low";
 export type MoneyLeakCategory = "subscription" | "fee" | "duplicate" | "increase" | "unusual" | "budget" | "goal" | "debt";
@@ -265,15 +266,21 @@ function detectBudgetDrift(state: WealthState): MoneyLeakObservation[] {
   });
 }
 
-function goalUrgency(goal: Goal): { shortfall: number; suggestedMonthly: number } | undefined {
-  if (goal.target <= goal.current || goal.monthlyContribution > 0) return undefined;
-  const suggestedMonthly = (goal.target - goal.current) / 12;
+/**
+ * `current` is the goal's canonical amount: the linked account's balance when
+ * it has one, the typed figure otherwise — the same number the Goals page
+ * shows, so a goal the account has already funded is not flagged.
+ */
+function goalUrgency(goal: Goal, current: number): { shortfall: number; suggestedMonthly: number } | undefined {
+  if (goal.target <= current || goal.monthlyContribution > 0) return undefined;
+  const suggestedMonthly = (goal.target - current) / 12;
   return { shortfall: suggestedMonthly, suggestedMonthly };
 }
 
 function detectGoalDrift(state: WealthState): MoneyLeakObservation[] {
   return state.goals.flatMap((goal) => {
-    const urgency = goalUrgency(goal);
+    const current = linkedGoalCurrent(goal, state);
+    const urgency = goalUrgency(goal, current);
     if (!urgency) return [];
     return [{
       id: `goal-${goal.id}`,
@@ -290,7 +297,7 @@ function detectGoalDrift(state: WealthState): MoneyLeakObservation[] {
       evidence: [
         { label: "Current monthly contribution", value: `MYR ${goal.monthlyContribution.toFixed(2)}` },
         { label: "12-month catch-up estimate", value: `MYR ${urgency.suggestedMonthly.toFixed(2)}` },
-        { label: "Amount remaining", value: `MYR ${Math.max(goal.target - goal.current, 0).toFixed(2)}` },
+        { label: "Amount remaining", value: `MYR ${Math.max(goal.target - current, 0).toFixed(2)}` },
       ],
     }];
   });
