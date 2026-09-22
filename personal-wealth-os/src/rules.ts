@@ -100,6 +100,40 @@ export function tradeUnits(trade: TradeAmountFields & Pick<Trade, "units">): num
   return amount / price;
 }
 
+const cents = (value: number): number => Math.round(value * 100) / 100;
+
+/**
+ * What Moomoo Malaysia would charge, in ringgit, to sell `units` of a US
+ * listing worth `amountUsd` in one order today. An estimate for display only:
+ * nothing is recorded from it.
+ *
+ * Under one share Moomoo fills the order fractionally and charges only its
+ * platform fee (0.99% capped at USD 0.99) — commission and the US regulatory
+ * fees are waived. That schedule was checked against the user's real sells
+ * (VOO USD 45.62 → 0.45, QQQM USD 16.34 → 0.16). At one share or more the
+ * whole-share schedule applies: commission, platform fee, settlement, the
+ * sell-only FINRA activity fee and the CAT fee. That one is Moomoo's published
+ * rate card, not yet seen on a real order.
+ *
+ * Malaysian stamp duty is MYR 1 per MYR 1,000 or part, either way. Its cap is
+ * MYR 200 for an ETF and MYR 1,000 for a stock; nothing here says which a
+ * ticker is, so the stock cap is used. The two differ only above MYR 200,000
+ * in a single order.
+ *
+ * Null when any input is unusable, so a caller never shows a made-up fee.
+ */
+export function estimateUsSellFeeMyr(units: number, amountUsd: number, usdToMyr: number): number | null {
+  if (![units, amountUsd, usdToMyr].every(Number.isFinite) || units <= 0 || amountUsd <= 0 || usdToMyr <= 0) return null;
+  const stampDutyMyr = Math.min(Math.ceil((amountUsd * usdToMyr) / 1000), 1000);
+  if (units < 1) return cents(Math.min(amountUsd * 0.0099, 0.99)) * usdToMyr + stampDutyMyr;
+  const commissionUsd = cents(amountUsd * 0.0003);
+  const platformUsd = 0.99;
+  const settlementUsd = cents(Math.min(units * 0.003, amountUsd * 0.01));
+  const activityUsd = cents(Math.max(0.01, Math.min(units * 0.000166, 8.3)));
+  const catUsd = cents(units * 0.000003);
+  return (commissionUsd + platformUsd + settlementUsd + activityUsd + catUsd) * usdToMyr + stampDutyMyr;
+}
+
 export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: string): PositionCostBasis {
   const matchingTrades = trades
     .map((trade, index) => ({ trade, index }))
