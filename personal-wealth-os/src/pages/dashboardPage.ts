@@ -473,7 +473,7 @@ function openDebtSheet(state: WealthState): void {
   const fromQuiz = answers?.primaryGoal === "debt";
   openBottomSheet({
     title: "Write down what you owe",
-    destination: "Settings · liabilities",
+    destination: "Me · liabilities",
     intro: fromQuiz && answers.goalName && answers.goalAmount
       ? `Filled in from your answer (${answers.goalName}, about ${money(answers.goalAmount)}). Change it to what your statement says.`
       : "What your latest statement says you still owe.",
@@ -490,7 +490,7 @@ function openDebtSheet(state: WealthState): void {
       const next: WealthState = { ...current, liabilities: [...current.liabilities, result.liability] };
       const failed = saveOrExplain(setState, next, "Add liability");
       if (failed) return failed;
-      savedFromSheet = { id: "debt-add", page: "settings" };
+      savedFromSheet = { id: "debt-add", page: "me" };
       refresh(next);
       return null;
     },
@@ -507,7 +507,7 @@ function openInvestSheet(state: WealthState): void {
   const suggested = freedTopUp > 0 ? freedTopUp : leftover > 0 ? Math.round(leftover * 0.4) : 0;
   openBottomSheet({
     title: "Decide a monthly amount to invest",
-    destination: "Settings · Monthly DCA",
+    destination: "Me · Monthly DCA",
     intro: freedTopUp > 0
       ? `Your buffer is full, so the ${money(freedTopUp)} a month that went into it is free. Start with any amount you are comfortable leaving for years.`
       : suggested > 0
@@ -526,7 +526,7 @@ function openInvestSheet(state: WealthState): void {
       next.financialRules = syncPlanningRules(next, ["dca-monthly-amount"]);
       const failed = saveOrExplain(setState, next, "Set monthly investment");
       if (failed) return failed;
-      savedFromSheet = { id: "invest-monthly", page: "settings" };
+      savedFromSheet = { id: "invest-monthly", page: "me" };
       refresh(next);
       return null;
     },
@@ -541,7 +541,7 @@ function openBufferSheet(state: WealthState): void {
   const suggested = sixFirst ? six : three;
   openBottomSheet({
     title: "Set your safety buffer target",
-    destination: "Settings",
+    destination: "Me",
     intro: three && six
       ? sixFirst
         ? `6 months of your ${money(six.monthlyEssential)} monthly spending is ${money(six.target)}: with income that moves around, a longer buffer is safer.`
@@ -572,7 +572,7 @@ function openBufferSheet(state: WealthState): void {
       next.financialRules = syncPlanningRules(next, ["emergency-fund-minimum"]);
       const failed = saveOrExplain(setState, next, "Set safety buffer target");
       if (failed) return failed;
-      savedFromSheet = { id: "safety-buffer", page: "settings" };
+      savedFromSheet = { id: "safety-buffer", page: "me" };
       refresh(next);
       return null;
     },

@@ -11,6 +11,7 @@ import { createSideRays, type SideRays } from "./sideRays";
 import type { Navigate, Setter } from "./pages/pageTypes";
 import { bindReview, reviewTemplate } from "./pages/reviewPage";
 import { bindRules, rulesTemplate } from "./pages/rulesPage";
+import { bindMe, meTemplate } from "./pages/mePage";
 import { bindSettings, settingsTemplate } from "./pages/settingsPage";
 import { bindGoals, goalsTemplate } from "./pages/goalsPage";
 import { bindBuckets, bucketsTemplate } from "./pages/budgetPage";
@@ -66,6 +67,7 @@ const pageGroups = [
     ["calculator", "Investment Growth", "Contribution projections"],
   ]],
   ["System", [
+    ["me", "Me", "About you"],
     ["settings", "Settings", "Configuration"],
   ]],
 ] as const satisfies readonly PageGroup[];
@@ -135,9 +137,9 @@ function tabbarTemplate(activePage: string, checkinsDue: number): string {
 
 /*
  * The "More" page — a Discover-style landing list of every page that does not
- * have its own tab, in the same groups as the desktop sidebar, plus the account
- * row. The data tools (theme, export, import, version history, reset) live on
- * the Settings page. On a phone this replaces the slide-in drawer
+ * have its own tab, in the same groups as the desktop sidebar. The account
+ * and Sign Out live on the Me page; the data tools (theme, export, import,
+ * version history, reset) on the Settings page. On a phone this replaces the slide-in drawer
  * entirely; the drawer markup stays only for the desktop sidebar.
  */
 const MORE_ICONS: Record<string, string> = {
@@ -149,6 +151,7 @@ const MORE_ICONS: Record<string, string> = {
   rules: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h10M4 18h10"/><path d="M17.5 5l1.5 1.5L22 3.5"/></svg>',
   tvm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg>',
   calculator: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M4 20h16"/><path d="M8 15l4-5 3 2 5-7"/></svg>',
+  me: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>',
 };
 
@@ -160,7 +163,7 @@ function moreRow(id: string, label: string, sub: string, due = false): string {
     + `</span><span class="more-row__chev" aria-hidden="true">›</span></button>`;
 }
 
-function moreTemplate(checkinsDue: number, user?: AppUser): string {
+function moreTemplate(checkinsDue: number): string {
   const tabIds = new Set(primaryTabs.map(([id]) => id));
   const groups = pageGroups
     .map(([title, groupPages]) => {
@@ -173,12 +176,9 @@ function moreTemplate(checkinsDue: number, user?: AppUser): string {
         : "";
     })
     .join("");
-  const account = user
-    ? `<section class="more-account"><img src="${escapeHtml(user.photoURL || "")}" alt="" class="more-account__avatar" referrerpolicy="no-referrer"><span class="more-account__name">${escapeHtml(user.displayName || user.email || "User")}</span><button class="wu-btn wu-btn--ghost wu-btn--sm logout-btn" type="button">Sign Out</button></section>`
-    : "";
   return `<div class="wu">
     ${pageHeader({ title: "More", sub: "Everything else WealthUp does." })}
-    <div class="more-list">${groups}${account}</div>
+    <div class="more-list">${groups}</div>
   </div>`;
 }
 
@@ -201,10 +201,9 @@ function navTemplate(activePage: string, checkinsDue: number): string {
 }
 
 // Map ticker to TradingView symbol format (EXCHANGE:SYMBOL)
-function shellTemplate(activePage: string, state: WealthState, user?: AppUser): string {
+function shellTemplate(activePage: string, state: WealthState): string {
   const checkinsDue = buildCheckins(state).dueCount;
   const active = pages.find(([id]) => id === activePage);
-  const userBadge = user ? `<div class="user-badge"><img src="${escapeHtml(user.photoURL || "")}" alt="" class="user-avatar" referrerpolicy="no-referrer"><span class="user-name">${escapeHtml(user.displayName || user.email || "User")}</span><button class="wu-btn wu-btn--ghost wu-btn--sm logout-btn" type="button">Sign Out</button></div>` : "";
   return `
     <button class="hamburger" id="sidebarToggle" type="button" aria-label="Open navigation" aria-expanded="false">☰</button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -221,16 +220,15 @@ function shellTemplate(activePage: string, state: WealthState, user?: AppUser): 
         <nav class="nav line-sidebar" aria-label="Primary navigation">
           ${navTemplate(activePage, checkinsDue)}
         </nav>
-        <div class="profile-card">
+        <button class="profile-card" data-page="me" type="button" aria-label="Wealth Mandate: open Me">
           <span class="eyebrow">Wealth Mandate</span>
           <strong>${escapeHtml(state.profile.riskTolerance)} risk · ${state.profile.investmentHorizonYears}+ years</strong>
           <small>${escapeHtml(state.profile.stage)} · MYR base currency</small>
-        </div>
+        </button>
       </div>
       <div class="sidebar-scrollbar" aria-hidden="true" hidden></div>
       </div>
       <div class="sidebar-actions">
-        ${userBadge}
         <p class="sidebar-disclaimer">${DISCLAIMER_SHORT}</p>
       </div>
     </aside>
@@ -285,7 +283,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   priceRefreshCleanup.delete(root);
 
   root.className = "app-shell";
-  root.innerHTML = shellTemplate(activePage, state, user);
+  root.innerHTML = shellTemplate(activePage, state);
   settleTabbarLens(root);
   const sidebarScrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
   if (sidebarScrollArea) {
@@ -333,9 +331,10 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
     advisor: advisorPageTemplate(state),
     rules: rulesTemplate(state),
     review: reviewTemplate(state),
+    me: meTemplate(state, user),
     settings: settingsTemplate(state),
     "money-leaks": moneyLeaksTemplate(state),
-    more: moreTemplate(buildCheckins(state).dueCount, user),
+    more: moreTemplate(buildCheckins(state).dueCount),
   };
   mount.innerHTML = templates[activePage] ?? templates.dashboard;
 
@@ -355,7 +354,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   titleBarCleanup.set(root, mountTitleBar(root));
 
   bindCommon(root, state, setState, navigate, user, onLogout);
-  bindPage(root, state, setState, activePage, navigate);
+  bindPage(root, state, setState, activePage, navigate, user, onLogout);
 
   // Last: the assistant can navigate and pre-fill, so it binds against a page
   // that is already wired up. It lives outside #pageMount and is re-mounted on
@@ -396,13 +395,13 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
   // The phone tab bar, the "More" page rows and the back-to-More arrow all
   // navigate by data-page. They live outside the drawer, so there is no sidebar
   // scroll or drawer to touch.
-  root.querySelectorAll<HTMLButtonElement>(".tabbar__btn[data-page], .more-row[data-page], .wu-page-back[data-page]").forEach((button) => {
+  root.querySelectorAll<HTMLButtonElement>(".tabbar__btn[data-page], .more-row[data-page], .wu-page-back[data-page], .profile-card[data-page]").forEach((button) => {
     button.addEventListener("click", () => doNavigate(button.dataset.page ?? "dashboard"));
   });
 
-  // The account row appears in two places (desktop sidebar, phone More page),
-  // so bind every match. The data tools live on the Settings page and are found
-  // by data-tool, so these handlers follow the buttons wherever they render.
+  // Sign Out lives on the Me page and the data tools on the Settings page; both
+  // are found by class or data-tool, so these handlers follow the buttons
+  // wherever they render.
   const bindAll = (selector: string, type: string, handler: (event: Event) => void): void => {
     root.querySelectorAll<HTMLElement>(selector).forEach((el) => el.addEventListener(type, handler));
   };
@@ -589,7 +588,7 @@ function activePageFromNav(root: HTMLElement): string | undefined {
   return root.querySelector<HTMLButtonElement>(".nav-item.active")?.dataset?.page;
 }
 
-function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activePage: string, navigate?: Navigate): void {
+function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activePage: string, navigate?: Navigate, user?: AppUser, onLogout?: () => void): void {
   root.querySelectorAll<HTMLButtonElement>(".dashboard-nav").forEach((button) => {
     button.addEventListener("click", () => {
       if (button.dataset.leakId) setSelectedMoneyLeakId(button.dataset.leakId);
@@ -659,6 +658,7 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
   }
   if (activePage === "advisor") bindAdvisor(root, state, setState, navigate, renderApp);
   if (activePage === "review") bindReview(root, state, setState, navigate, renderApp);
+  if (activePage === "me") bindMe(root, state, setState, navigate, renderApp, user, onLogout);
   if (activePage === "settings") bindSettings(root, state, setState, navigate, renderApp);
   if (activePage === "goals") bindGoals(root, state, setState, navigate, renderApp);
   if (activePage === "market") bindMarket(root, state, setState);

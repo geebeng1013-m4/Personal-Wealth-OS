@@ -94,7 +94,7 @@ export function rulesGuideTemplate(): string {
       </div>
       <div class="wu-stack">
         <ol class="wu-stack wu-stack--sm guide-steps">
-          <li class="t-body-sm"><strong class="t-subheading">Settings</strong> — your income, regular expenses and any debts.</li>
+          <li class="t-body-sm"><strong class="t-subheading">Me</strong> — your income, regular expenses and any debts.</li>
           <li class="t-body-sm"><strong class="t-subheading">Rules</strong> — your monthly investing amount, emergency fund target and target allocation. Everything the Advisor says depends on these.</li>
           <li class="t-body-sm"><strong class="t-subheading">Ledger</strong> — add your accounts, then record this month's income and spending.</li>
           <li class="t-body-sm"><strong class="t-subheading">Portfolio</strong> — record what you already hold, or import it. If you invest in US shares, add your currency conversions too.</li>

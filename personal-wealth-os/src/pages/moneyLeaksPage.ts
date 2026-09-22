@@ -288,11 +288,11 @@ export function bindMoneyLeaks(root: HTMLElement, state: WealthState, setState: 
   }));
 
   const pageByAction: Record<MoneyLeak["primaryAction"], string> = {
-    "review-recurring": "settings",
+    "review-recurring": "me",
     "review-ledger": "ledger",
     "review-budget": "buckets",
     "review-goal": "goals",
-    "review-debt": "settings",
+    "review-debt": "me",
   };
   root.querySelectorAll<HTMLButtonElement>(".leak-primary-action").forEach((button) => button.addEventListener("click", () => {
     const leakId = button.closest<HTMLElement>("[data-leak-detail]")?.dataset.leakDetail;

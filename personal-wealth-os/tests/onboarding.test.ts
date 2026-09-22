@@ -77,7 +77,7 @@ test("onboarding: each step ticks from its own data only", () => {
 
 test("onboarding: every step points at the page that holds its field", () => {
   const pages = Object.fromEntries(buildOnboardingChecklist(emptyState()).steps.map((step) => [step.id, step.page]));
-  assert.deepEqual(pages, { balances: "ledger", "first-entry": "ledger", goal: "goals", "safety-buffer": "settings", investment: "portfolio" });
+  assert.deepEqual(pages, { balances: "ledger", "first-entry": "ledger", goal: "goals", "safety-buffer": "me", investment: "portfolio" });
 });
 
 test("onboarding: the four required steps complete it; the investment step is optional", () => {

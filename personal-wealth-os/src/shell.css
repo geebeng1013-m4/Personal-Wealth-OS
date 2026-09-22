@@ -304,6 +304,7 @@
 }
 
 /* ---- profile card ---- */
+/* A button to the Me page, where these values are edited. */
 .profile-card {
   margin: 6px 4px 0;
   padding: 16px;
@@ -312,6 +313,20 @@
   background: transparent;
   display: grid;
   gap: 6px;
+  width: calc(100% - 8px);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.profile-card:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+}
+.profile-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .profile-card .eyebrow {
   margin-bottom: 2px;
@@ -341,29 +356,6 @@
   font-size: 10.5px;
   line-height: 1.4;
   color: var(--text-faint);
-}
-.sidebar-actions .user-badge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-}
-.sidebar-actions .user-badge .user-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  object-fit: cover;
-}
-.sidebar-actions .user-badge .user-name {
-  font-size: 12px;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sidebar-actions .user-badge .logout-btn {
-  flex: none;
 }
 .file-button {
   position: relative;
