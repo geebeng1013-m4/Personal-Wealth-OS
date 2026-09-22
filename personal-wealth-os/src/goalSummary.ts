@@ -87,6 +87,12 @@ export interface GoalsSnapshot {
    * full balance, so summing their current amounts would count it twice.
    */
   totalCurrent: number;
+  /**
+   * Money that counts toward targets: each goal capped at its own target, so
+   * one overfunded goal cannot fill another. An account shared by several
+   * goals is split in list order and never counted past its balance.
+   */
+  totalFunded: number;
   totalRemaining: number;
   totalMonthlyContribution: number;
   completedCount: number;
@@ -159,6 +165,24 @@ function uniqueCurrentTotal(goals: GoalSnapshot[]): number {
   return total;
 }
 
+function fundedTotal(goals: GoalSnapshot[]): number {
+  const accountLeft = new Map<string, number>();
+  let total = 0;
+  for (const goal of goals) {
+    const target = Math.max(goal.targetAmount, 0);
+    const shared = goal.accountId && goal.linkedAccountName !== null ? goal.accountId : null;
+    if (!shared) {
+      total += Math.min(Math.max(goal.currentAmount, 0), target);
+      continue;
+    }
+    const left = accountLeft.get(shared) ?? Math.max(goal.currentAmount, 0);
+    const funded = Math.min(left, target);
+    accountLeft.set(shared, left - funded);
+    total += funded;
+  }
+  return total;
+}
+
 /**
  * Build the canonical goals snapshot.
  * Pure: the same state always produces the same result.
@@ -190,6 +214,7 @@ export function getGoalsSnapshot(state: WealthState, _now = new Date()): GoalsSn
     ordered,
     totalTarget: goals.reduce((sum, goal) => sum + goal.targetAmount, 0),
     totalCurrent: uniqueCurrentTotal(goals),
+    totalFunded: fundedTotal(goals),
     totalRemaining: goals.reduce((sum, goal) => sum + goal.remainingAmount, 0),
     totalMonthlyContribution: goals.reduce((sum, goal) => sum + goal.monthlyContribution, 0),
     completedCount: goals.filter((goal) => goal.isComplete).length,

@@ -153,7 +153,7 @@ export function goalsTemplate(state: WealthState): string {
   const goals = getGoalsSnapshot(state);
   // Incomplete first: goals.ordered already puts completed goals last.
   const rows = goals.ordered.map((snapshot) => goalRow(state, snapshot, goals.featuredGoalId)).join("");
-  const overall = goals.totalTarget > 0 ? Math.min(1, goals.totalCurrent / goals.totalTarget) : 0;
+  const overall = goals.totalTarget > 0 ? Math.min(1, goals.totalFunded / goals.totalTarget) : 0;
   const doneGoal = goals.ordered.find((goal) => goal.isComplete);
   const addButton = (extra: string) => `<button class="wu-btn ${extra ? "wu-btn--secondary" : "wu-btn--primary"} wu-btn--sm add-goal${extra}" type="button">+ Add goal</button>`;
 

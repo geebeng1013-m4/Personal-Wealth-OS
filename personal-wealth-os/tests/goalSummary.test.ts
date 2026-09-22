@@ -254,6 +254,31 @@ test("goals: an account linked to two goals is counted once in the total", () =>
   assert.equal(getGoal(snapshot, "buffer")!.currentAmount, 4556.93, "each row still shows the full balance");
   assert.equal(getGoal(snapshot, "bearish")!.currentAmount, 4556.93);
   assert.equal(Math.round(snapshot.totalCurrent * 100), 458493, "28 + 4,556.93, not 9,141.86");
+  assert.equal(snapshot.totalFunded, 28 + 4000 + 400, "each goal capped at its own target");
+});
+
+test("goals: an overfunded goal does not fill another goal's target", () => {
+  const state = stateWith({
+    goals: [
+      goal({ id: "rich", current: 5000, target: 1000 }),
+      goal({ id: "poor", current: 0, target: 1000 }),
+    ],
+  });
+  const snapshot = getGoalsSnapshot(state);
+  assert.equal(snapshot.totalCurrent, 5000);
+  assert.equal(snapshot.totalFunded, 1000, "50% of targets, not 100%");
+});
+
+test("goals: a shared account is split in list order and never past its balance", () => {
+  const state = stateWith({
+    ledgerAccounts: [{ id: "acc", name: "Shared", type: "bank", openingBalance: 1200 }],
+    goals: [
+      goal({ id: "first", target: 1000, accountId: "acc" }),
+      goal({ id: "second", target: 1000, accountId: "acc" }),
+      goal({ id: "third", target: 1000, accountId: "acc" }),
+    ],
+  });
+  assert.equal(getGoalsSnapshot(state).totalFunded, 1200);
 });
 
 test("goals: a broken link counts the goal's own amount, not a shared key", () => {
