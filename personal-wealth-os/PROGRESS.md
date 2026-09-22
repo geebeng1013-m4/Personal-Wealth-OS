@@ -12,6 +12,13 @@
 - **`main`**：`0beedc7`（2026-09-17，PR #71 iPad 排版已合并；整齐版 T 系列 + T-8 全部完成）。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 
+## 问答后的 Overview 整理 + 填空式问答 + 分阶段（Q 系列，计划中）
+
+- **2026-09-22 定**：问答后的 Overview 太挤、重点不明显；学 Versa 的填空式问答，并按答案分阶段。计划见 `PLAN.md` Q 系列。
+- 示意页（改前 / 改后、底部面板、填空问答、分阶段规则）：https://claude.ai/artifact/CPgmdEtLygu466XZYL7CHa
+- 决定：下一步用底部面板直接填、存到原本的地方；金额用范围 + 可以自己输入；自雇安全垫 6 个月；阶段从真实数据算、不存。
+- **当前任务：Q-1（Overview 整理 + 底部面板）**，等你说开始。
+
 ## 用户反馈（F 系列）
 
 朋友试用后反馈 6 条，分析报告：https://claude.ai/code/artifact/989dcaef-777d-4469-a7a7-9f488fb7d756
