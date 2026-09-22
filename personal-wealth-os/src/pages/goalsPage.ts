@@ -78,7 +78,6 @@ function goalEditor(state: WealthState, snapshot: GoalSnapshot, featured: boolea
       ${accountLine}
       <div class="wu-grid wu-grid--2">
         <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="label" type="text" value="${escapeHtml(goal.label)}"></label>
-        <label class="wu-field-row"><span class="wu-field-row__label">Short name</span><input class="wu-field" name="name" type="text" value="${escapeHtml(goal.name)}"></label>
         <label class="wu-field-row"><span class="wu-field-row__label">Progress comes from</span><select class="wu-field goal-account" name="accountId"><option value="">Manual — I type it in</option>${state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}" data-balance="${balances.get(account.id) ?? 0}"${account.id === goal.accountId ? " selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}</select></label>
         <label class="wu-field-row goal-current-manual"${linked ? " hidden" : ""}><span class="wu-field-row__label">Current MYR</span><input class="wu-field" name="current" type="number" min="0" step="1" value="${goal.current}"></label>
         <div class="wu-field-row goal-current-linked"${linked ? "" : " hidden"}><span class="wu-field-row__label">Current MYR</span><p class="wu-goal-editor__linked">${linked ? linkedCurrentText(snapshot.currentAmount, snapshot.linkedAccountName ?? "") : ""}</p></div>
@@ -265,13 +264,12 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
         return;
       }
       const data = new FormData(form);
-      const name = String(data.get("name") ?? "").trim();
       const label = String(data.get("label") ?? "").trim();
       const current = Number(data.get("current"));
       const target = Number(data.get("target"));
       const monthlyContribution = Number(data.get("monthlyContribution"));
-      if (!name || !label) {
-        showError("Name and short name are required.");
+      if (!label) {
+        showError("Give the goal a name.");
         return;
       }
       if (![current, target, monthlyContribution].every((value) => Number.isFinite(value) && value >= 0)) {
@@ -280,8 +278,9 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
       }
       const goals = [...state.goals];
       goals[index] = {
+        // goal.name is no longer edited here: it stays as stored, because
+        // onboarding recognises its debt goal by that name.
         ...goals[index],
-        name,
         label,
         current,
         target,
