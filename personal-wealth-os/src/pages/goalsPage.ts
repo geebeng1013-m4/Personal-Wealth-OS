@@ -183,7 +183,7 @@ export function goalsTemplate(state: WealthState): string {
   const rows = goals.ordered.map((snapshot) => goalRow(state, snapshot, goals.featuredGoalId)).join("");
   const overall = goals.totalTarget > 0 ? Math.min(1, goals.totalFunded / goals.totalTarget) : 0;
   // Done counts goals marked done; reached ones are still holding their money.
-  const doneCount = state.goals.length - goals.savingCount;
+  const doneCount = goals.doneCount;
   const reachedCount = goals.completedCount - doneCount;
   const doneGoal = goals.ordered.find((goal) => goal.isSpent);
   const addButton = (extra: string) => `<button class="wu-btn ${extra ? "wu-btn--secondary" : "wu-btn--primary"} wu-btn--sm add-goal${extra}" type="button">+ Add goal</button>`;
@@ -212,7 +212,7 @@ export function goalsTemplate(state: WealthState): string {
           <section class="wu-card wu-dash__tile" aria-labelledby="goalsTargetLabel">
             <div class="wu-tc__top"><span class="wu-label" id="goalsTargetLabel">All targets</span></div>
             <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(goals.totalTarget)}</span></p>
-            <p class="wu-dash__note">Across ${goals.savingCount} ${goals.savingCount === 1 ? "goal" : "goals"}${goals.savingCount < state.goals.length ? ` · ${doneCount} done` : ""}</p>
+            <p class="wu-dash__note">Across ${state.goals.length} ${state.goals.length === 1 ? "goal" : "goals"}</p>
           </section>
           <section class="wu-card wu-dash__tile" aria-labelledby="goalsMonthLabel">
             <div class="wu-tc__top"><span class="wu-label" id="goalsMonthLabel">Each month</span></div>

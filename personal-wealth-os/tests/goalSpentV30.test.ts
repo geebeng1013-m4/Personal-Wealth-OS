@@ -49,15 +49,38 @@ test("goals v30: a spent goal stays complete at its spent amount after the accou
   assert.equal(g.monthlyContribution, 0, "a spent goal takes nothing each month");
 });
 
-test("goals v30: totals leave a spent goal out, but Done still counts it", () => {
+test("goals v30: Saved counts the money still held; % counts a done goal in full", () => {
+  // The laptop was bought: MAE wallet is 0, the goal is marked done.
   const snapshot = getGoalsSnapshot(stateWith([spentLaptop, buffer, bearish]));
-  assert.equal(snapshot.savingCount, 2);
-  assert.equal(snapshot.totalTarget, 4400);
-  assert.equal(snapshot.totalCurrent, 4556.93, "only the money still set aside");
-  assert.equal(snapshot.totalFunded, 4400);
+  assert.equal(snapshot.doneCount, 1);
+  assert.equal(snapshot.totalTarget, 8900, "every goal's target, done or not");
+  assert.equal(snapshot.totalCurrent, 4556.93, "the laptop money is gone; the buffer money is not");
+  assert.equal(snapshot.totalFunded, 8900, "all three reached: 100%");
   assert.equal(snapshot.totalMonthlyContribution, 0);
   assert.equal(snapshot.completedCount, 3);
   assert.equal(snapshot.activeCount, 0);
+});
+
+test("goals v30: marking a kept buffer done does not take its money out of Saved", () => {
+  // What the user pressed on 2026-09-22: Buffer and Bearish done, laptop still saving.
+  const mae28: LedgerAccount[] = [accounts[0], { ...accounts[1], openingBalance: 28 }];
+  const doneBuffer = { ...buffer, spentAt: "2026-09-22", spentAmount: 4000 };
+  const doneBearish = { ...bearish, spentAt: "2026-09-22", spentAmount: 400 };
+  const snapshot = getGoalsSnapshot(stateWith([laptop, doneBuffer, doneBearish], { ledgerAccounts: mae28 }));
+  assert.equal(Math.round(snapshot.totalCurrent * 100), 458493, "28 + 4,556.93, not 28");
+  assert.equal(snapshot.totalFunded, 28 + 4000 + 400, "50%, not 1%");
+  assert.equal(snapshot.totalTarget, 8900);
+  assert.equal(getGoal(snapshot, "buffer")!.heldAmount, 4556.93);
+  assert.equal(getGoal(snapshot, "buffer")!.currentAmount, 4000, "the row stays at its target");
+});
+
+test("goals v30: a done goal still takes its share of a shared account", () => {
+  const state = stateWith([
+    { ...goal({ id: "first", target: 4000, accountId: "acc-buffer" }), spentAt: "2026-09-22", spentAmount: 4000 },
+    goal({ id: "second", target: 1000, accountId: "acc-buffer" }),
+  ]);
+  // 4,556.93: the done goal takes 4,000, the second gets the 556.93 left.
+  assert.equal(Math.round(getGoalsSnapshot(state).totalFunded * 100), 455693);
 });
 
 test("goals v30: the Dashboard moves off a spent goal and back when it is undone", () => {
