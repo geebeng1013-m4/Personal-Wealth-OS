@@ -77,13 +77,13 @@ function goalEditor(state: WealthState, snapshot: GoalSnapshot, featured: boolea
   return `<form class="wu-stack wu-stack--sm goalForm wu-goal-editor" data-index="${index}">
       ${accountLine}
       <div class="wu-grid wu-grid--2">
-        <label class="wu-field-row"><span class="wu-field-row__label">Name</span><input class="wu-field" name="label" type="text" value="${escapeHtml(goal.label)}"></label>
+        <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Name</span><input class="wu-field" name="label" type="text" value="${escapeHtml(goal.label)}"></label>
         <label class="wu-field-row"><span class="wu-field-row__label">Progress comes from</span><select class="wu-field goal-account" name="accountId"><option value="">Manual — I type it in</option>${state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}" data-balance="${balances.get(account.id) ?? 0}"${account.id === goal.accountId ? " selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}</select></label>
-        <label class="wu-field-row goal-current-manual"${linked ? " hidden" : ""}><span class="wu-field-row__label">Current MYR</span><input class="wu-field" name="current" type="number" min="0" step="1" value="${goal.current}"></label>
-        <div class="wu-field-row goal-current-linked"${linked ? "" : " hidden"}><span class="wu-field-row__label">Current MYR</span><p class="wu-goal-editor__linked">${linked ? linkedCurrentText(snapshot.currentAmount, snapshot.linkedAccountName ?? "") : ""}</p></div>
+        <label class="wu-field-row wu-goal-editor__current goal-current-manual"${linked ? " hidden" : ""}><span class="wu-field-row__label">Current MYR</span><input class="wu-field" name="current" type="number" min="0" step="1" value="${goal.current}"></label>
+        <div class="wu-field-row wu-goal-editor__current goal-current-linked"${linked ? "" : " hidden"}><span class="wu-field-row__label">Current MYR</span><p class="wu-goal-editor__linked">${linked ? linkedCurrentText(snapshot.currentAmount, snapshot.linkedAccountName ?? "") : ""}</p></div>
         <label class="wu-field-row"><span class="wu-field-row__label">Target MYR</span><input class="wu-field" name="target" type="number" min="0" step="1" value="${goal.target}"></label>
         <label class="wu-field-row"><span class="wu-field-row__label">Monthly MYR</span><input class="wu-field" name="monthlyContribution" type="number" min="0" step="1" value="${goal.monthlyContribution}"></label>
-        <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Note</span><textarea class="wu-field" name="note" rows="2">${escapeHtml(goal.note)}</textarea></label>
+        <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Note <span class="wu-field-row__hint">· shows under the goal's name</span></span><textarea class="wu-field" name="note" rows="2" placeholder="Why this goal matters, or anything to remember">${escapeHtml(goal.note)}</textarea></label>
       </div>
       <p class="wu-field-row__error goal-form-error" role="alert" hidden></p>
       <div class="wu-row wu-row--tight wu-goal-editor__actions">
@@ -92,7 +92,7 @@ function goalEditor(state: WealthState, snapshot: GoalSnapshot, featured: boolea
           : `<button class="wu-btn wu-btn--secondary wu-btn--sm feature-goal" data-goal-id="${escapeHtml(goal.id)}" type="button">Show on Dashboard</button>`}
         <button class="wu-btn wu-btn--ghost wu-btn--sm wu-goal-danger delete-goal" data-index="${index}" type="button">Delete</button>
         <span class="wu-goal-editor__grow"></span>
-        <button class="wu-btn wu-btn--ghost wu-btn--sm cancel-goal-edit" type="button">Cancel</button>
+        <button class="wu-btn wu-btn--ghost wu-btn--sm wu-goal-editor__cancel cancel-goal-edit" type="button">Cancel</button>
         <button class="wu-btn wu-btn--primary wu-btn--sm save-goal" type="button">Save</button>
       </div>
     </form>`;
@@ -112,7 +112,7 @@ function goalRow(state: WealthState, snapshot: GoalSnapshot, featuredId: string)
     : snapshot.monthlyContribution > 0 ? `+${amountOf(snapshot.monthlyContribution)}` : `<span class="t-faint">0</span>`;
   return `<li class="wu-goal${open ? " is-open" : ""}${snapshot.isComplete ? " is-done" : ""}">
       <button class="wu-goal__row goal-row" type="button" data-index="${snapshot.index}" aria-expanded="${open}">
-        <span class="wu-goal__title">${escapeHtml(snapshot.label || snapshot.name)}${featured ? ` <span class="wu-chip wu-chip--muted wu-goal__pin">On Dashboard</span>` : ""}<small>${snapshot.isComplete ? "Complete" : `+${amountOf(snapshot.monthlyContribution)} / mo`} · ${escapeHtml(pace)}</small></span>
+        <span class="wu-goal__title">${escapeHtml(snapshot.label || snapshot.name)}${featured ? ` <span class="wu-chip wu-chip--muted wu-goal__pin">On Dashboard</span>` : ""}<small>${snapshot.isComplete ? "Complete" : `+${amountOf(snapshot.monthlyContribution)} / mo`} · ${escapeHtml(pace)}</small>${snapshot.note.trim() ? `<span class="wu-goal__note">${escapeHtml(snapshot.note.trim())}</span>` : ""}</span>
         <span class="wu-goal__monthly">${monthly}</span>
         <span class="wu-goal__bar"><span class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(ratio * 100)}%"></span></span></span>
         <span class="wu-goal__pct">${snapshot.isComplete ? `<span class="wu-chip">Done</span>` : percent(ratio)}</span>

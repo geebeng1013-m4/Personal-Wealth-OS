@@ -3551,6 +3551,17 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* The goal's own note, read in the list without opening the editor. */
+  .wu-goal__note {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    font: var(--weight-regular) var(--text-body-sm) / 1.4 var(--font-sans);
+    color: var(--text-muted);
+  }
   .wu-goal__pin {
     justify-self: start;
     margin-top: 2px;
@@ -3634,6 +3645,24 @@
   .wu-goal-danger {
     color: var(--negative);
   }
+  /* Phone: Target and Monthly are short numbers, so they share a line, and
+     Cancel/Save stay together on their own line rather than Save wrapping
+     alone. */
+  @media (max-width: 900px) {
+    .wu-goal-editor .wu-grid--2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .wu-goal-editor .wu-grid--2 > :nth-child(2),
+    .wu-goal-editor__current {
+      grid-column: 1 / -1;
+    }
+    .wu-goal-editor__grow {
+      flex-basis: 100%;
+    }
+    .wu-goal-editor__cancel {
+      margin-left: auto;
+    }
+  }
   @media (max-width: 900px) {
     .wu-goals-tiles,
     .wu-goals-page .wu-page-header__actions {
@@ -3652,6 +3681,10 @@
       column-gap: var(--space-4);
       min-height: var(--row-h);
       padding: var(--space-1) 0;
+    }
+    /* a noted goal's row grows to fit the note; keep it off the row's edges */
+    .wu-goal__row:has(.wu-goal__note) {
+      padding: var(--space-2) 0;
     }
     .wu-goal__monthly {
       grid-area: monthly;
