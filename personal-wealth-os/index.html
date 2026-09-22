@@ -72,8 +72,13 @@
          It covers #app until main.ts has rendered and the fonts are in, then
          fades. Inline, so it paints with the HTML. Dark in both themes on
          purpose: it has to match the phone's screen. */
-      html { background: #0b0b0c; }
-      html[data-theme='light'] { background: #f4f1ea; }
+      /* While the launch screen is up the document canvas has to be dark too.
+         On iOS the strip behind the home indicator is painted from the html
+         background, not by the fixed overlay, so a light theme left a white
+         bar under the W. The theme colours come back once #launch retires. */
+      html { background: #141310; }
+      html.launch-done { background: #0b0b0c; }
+      html.launch-done[data-theme='light'] { background: #f4f1ea; }
       body { margin: 0; }
       /* shell.css styles this properly once it loads; until then keep it off-screen. */
       .skip-link { position: absolute; left: -9999px; }
@@ -105,7 +110,11 @@
       (function () {
         var launch = document.getElementById('launch');
         var app = document.getElementById('app');
-        if (!launch || !app) return;
+        // Hands the canvas back to the theme; until then it stays launch-dark.
+        var restoreThemeBackground = function () {
+          document.documentElement.classList.add('launch-done');
+        };
+        if (!launch || !app) return restoreThemeBackground();
         // One attempt per tab, so a failure that a reload cannot fix shows the
         // retry button instead of reloading round and round.
         var RECOVERY_FLAG = 'pwo-launch-recovered';
@@ -114,7 +123,10 @@
         var fade = function () {
           if (launch.classList.contains('is-done')) return;
           launch.classList.add('is-done');
-          var remove = function () { if (launch.parentNode) launch.parentNode.removeChild(launch); };
+          var remove = function () {
+            if (launch.parentNode) launch.parentNode.removeChild(launch);
+            restoreThemeBackground();
+          };
           launch.addEventListener('transitionend', remove);
           setTimeout(remove, 400);
         };
