@@ -131,6 +131,9 @@ export interface NextStepPlan {
   /** The buffer figure still rests on a quiz answer, not on anything confirmed. */
   bufferEstimate: boolean;
   goalName: string;
+  /** The Overview goal's saved and target amounts; both 0 without a goal. */
+  goalCurrent: number;
+  goalTarget: number;
   /** Months to the Overview goal at its monthly contribution; null when it has none. */
   goalMonths: number | null;
   /** The goal date still rests on estimated income: no real pay recorded yet. */
@@ -251,6 +254,8 @@ export function buildNextSteps(state: WealthState): NextSteps {
       bufferTarget,
       bufferEstimate: !bufferMoved,
       goalName: goal?.name ?? "",
+      goalCurrent: goal?.current ?? 0,
+      goalTarget: goal?.target ?? 0,
       goalMonths,
       goalEstimate: !income,
     } : null,

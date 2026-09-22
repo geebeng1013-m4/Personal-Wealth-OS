@@ -1,10 +1,11 @@
 /**
  * The one place the app talks to the user out-of-band.
  *
- * One thing uses it:
+ * Two things use it:
  *   - `pwo-save-error` CustomEvents from state.ts — a write it cannot retry has
  *     failed (localStorage over quota or blocked, a Firestore sync rejected, a
  *     snapshot not stored). Silent until this listener existed.
+ *   - showNotice: a quiet confirmation, e.g. what the Overview's sheet saved.
  *
  * Deliberately small: a stacked, self-dismissing strip at the bottom-right, no
  * dependency, no framework. It never blocks and never steals focus.
@@ -77,6 +78,14 @@ function show(message: string, opts: ToastOptions = {}): void {
   host.appendChild(toast);
   requestAnimationFrame(() => toast.classList.add("is-in"));
   setTimeout(() => dismiss(toast), opts.dismissAfterMs ?? ERROR_DISMISS_MS);
+}
+
+/**
+ * A neutral line of news, e.g. "Saved to Ledger" after the Overview's bottom
+ * sheet (Q-1), with an optional action such as "View".
+ */
+export function showNotice(message: string, action?: ToastOptions["action"]): void {
+  show(message, { tone: "notice", dismissAfterMs: 5000, action });
 }
 
 /**

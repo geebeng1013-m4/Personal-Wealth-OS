@@ -766,7 +766,7 @@ export function saveState(state: WealthState, uid?: string, changeLabel?: string
   } catch (err) {
     // localStorage quota exceeded or serialization failure — surface to UI
     console.error("[saveState] localStorage write failed:", err);
-    window.dispatchEvent(new CustomEvent("pwo-save-error", { detail: { message: "Local storage save failed. Data may not persist." } }));
+    window.dispatchEvent(new CustomEvent("pwo-save-error", { detail: { message: "Local storage save failed. Data may not persist.", kind: "local-write" } }));
     return null;
   }
   // Also sync to Firestore if logged in

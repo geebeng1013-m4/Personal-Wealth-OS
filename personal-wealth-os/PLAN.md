@@ -41,7 +41,15 @@
 | 3 可以开始投资 | 安全垫满，没投资 | 记收入 → 记开销 → 定每月投资 |
 | 4 投资中 | 安全垫满，有交易 | 记收入 → 记第一笔交易 → 看真实回报 |
 
-### Q-1 — Overview 整理 + 底部面板  `[ ]`
+### Q-1 — Overview 整理 + 底部面板  `[x]`（2026-09-22，分支 `q-overview-tidy`，Q-6 时一起开 PR）
+- 已做：Overview 改成「Your plan」卡（安全垫、目标各一次；没日期时是「Give it a monthly amount to get a date →」）+ 精简的「Your next step」卡（圆点 + 「2 of 4」、灰字原因、「All steps」收起清单和 Hide）；卡片在时 Financial goal 那一行先不显示；「✓ …」改成底部提示条（手机在 tab bar 上面），面板存的带「View」。
+- 底部面板 `src/components/bottomSheet.ts`：手机从底部滑出、电脑居中；Esc / Cancel / 点背景关闭不存；焦点留在面板内；手机键盘弹出时往上推。用在记薪水、记开销（Ledger）、安全垫目标（Settings，有开销数据时有 3 / 6 个月按钮）。
+- Ledger 的检查规则抽成 `buildLedgerTransaction`（`ledger.ts`），Ledger 表格和面板共用；安全垫写法跟 Settings 一样（同步 emergency-fund-minimum 规则）。面板存档时以最新的 state 为准（云端中途更新不会被旧数据盖掉）；只有「这台设备存不进去」才算失败，面板不关、内容保留；离线照常存在本机，之后同步。
+- 跟计划不同：「第一笔交易」没有做面板，照旧跳到 Portfolio——交易要选市场、币种、手续费和汇率，一个面板放不下，硬做会变成第二套交易规则。设余额、加目标也照旧跳页。
+- 实测（5199 `?fresh`，独立无头 Edge）：手机 390 深色走完问答 → 面板记薪水（空、负数被拒；Esc 不存；「2,000.50」存成 2,000.5）、设目标、记开销（没选类别被拒）；电脑浅色面板居中。无报错。4 个新测试，1250 全绿，typecheck / build 通过。
+- 已知：金额显示「2,000.5」少一位小数，是原本 `money()` 的格式问题（P-4 已记在 NEW IDEAS）。
+
+### Q-1（原计划）
 - `dashboardPage.ts`：`nextStepCard` 改排版（Your plan 卡 + 精简的下一步卡 + 「All steps」收起）；`financialGoal` 那一行和计划条合并，目标只出现一次；「✓ …」改成提示条。
 - 新增底部面板组件（所有页面可以重用）：预填、检查（空、0、负数、NaN 都拒绝）、Save 时显示 Saving…、存档失败时面板不关、内容保留、写明失败原因（不假装成功）；Esc / 取消 / 点背景关闭且不存；焦点留在面板内，关闭后回到原按钮；手机键盘弹出时不遮住 Save。
 - 面板用在：记薪水、记开销（Ledger）、安全垫目标（Settings）、第一笔交易（Portfolio）。写入走现有的 ledger / settings / trade 函数和 `setState`，不另写一套。

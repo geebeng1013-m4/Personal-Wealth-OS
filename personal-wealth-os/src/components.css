@@ -4437,31 +4437,66 @@
     font-size: 11px;
   }
 
-  /* ---- "Your next step" card (O-3): one step at a time, with its reason -- */
-  .wu-next__plan {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: var(--space-3);
-    padding: var(--space-3);
-    border-radius: var(--radius-md);
-    background: var(--surface-hover);
+  /* ---- "Your plan" + "Your next step" (O-3, tidied in Q-1) ------------- */
+  /* The plan card: the buffer and the goal, each once, name left and figure
+     right, a thin bar under both. */
+  .wu-plan {
+    margin-bottom: var(--space-4);
   }
-  .wu-next__plan > div {
+  .wu-plan__row {
     display: grid;
-    gap: var(--space-1);
-    align-content: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: var(--space-1) var(--space-3);
+  }
+  .wu-plan__row + .wu-plan__row {
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+  }
+  .wu-plan__name {
     min-width: 0;
-  }
-  .wu-next__k {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    color: var(--text-faint);
-    font-size: 11px;
+    overflow-wrap: anywhere;
     font-weight: var(--weight-semibold);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+  }
+  .wu-plan__value {
+    font: var(--weight-medium) var(--text-body) / 1.3 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .wu-plan__value small {
+    color: var(--text-faint);
+    font-size: var(--text-caption);
+  }
+  .wu-plan__row > .wu-bar,
+  .wu-plan__note,
+  .wu-plan__link {
+    grid-column: 1 / -1;
+  }
+  .wu-plan__note {
+    color: var(--text-muted);
+    font-size: var(--text-body-sm);
+  }
+  .wu-plan__note strong {
+    color: var(--text);
+    font-weight: var(--weight-semibold);
+  }
+  .wu-plan__link {
+    justify-self: start;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: var(--weight-medium) var(--text-body-sm) / 1.4 var(--font-sans);
+    text-align: left;
+    cursor: pointer;
+  }
+  .wu-plan__link:hover {
+    text-decoration: underline;
+  }
+  .wu-plan__link:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+    border-radius: var(--radius-xs);
   }
   .wu-next__est {
     padding: 1px 7px;
@@ -4472,30 +4507,29 @@
     letter-spacing: 0.02em;
     text-transform: none;
   }
-  .wu-next__v {
-    font: var(--weight-semibold) 18px / 1.3 var(--font-mono);
-    font-variant-numeric: tabular-nums;
+  /* Where you are in the list: filled = done, ring = now. The text says it too. */
+  .wu-next__dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: var(--text-caption);
   }
-  .wu-next__v small {
-    color: var(--text-faint);
-    font-size: 12px;
-    font-weight: var(--weight-medium);
+  .wu-next__dots i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--border-strong);
   }
-  .wu-next__v--text {
-    font-family: var(--font-sans);
-    font-size: 16px;
+  .wu-next__dots i.is-done {
+    background: var(--accent);
   }
-  .wu-next__done {
-    margin: 0;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    background: var(--accent-soft);
-    color: var(--text);
-    font-size: var(--text-body-sm);
+  .wu-next__dots i.is-now {
+    background: none;
+    box-shadow: inset 0 0 0 1.5px var(--accent);
   }
-  .wu-next__done span {
-    color: var(--accent);
-    font-weight: var(--weight-bold);
+  .wu-next__dots > span {
+    margin-left: var(--space-1);
   }
   .wu-next__step {
     display: grid;
@@ -4509,24 +4543,56 @@
     text-wrap: balance;
   }
   .wu-next__because {
-    justify-self: start;
     margin: 0;
-    padding: 3px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--accent-soft);
-    color: var(--text);
+    color: var(--text-muted);
     font-size: var(--text-body-sm);
   }
-  .wu-next__because strong {
-    color: var(--accent);
-    font-weight: var(--weight-semibold);
+  /* The whole list, folded away under the step. */
+  .wu-next__all {
+    border-top: 1px solid var(--border-subtle);
+    padding-top: var(--space-2);
+  }
+  .wu-next__all > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 32px;
+    color: var(--text-muted);
+    font-size: var(--text-body-sm);
+    cursor: pointer;
+    list-style: none;
+  }
+  .wu-next__all > summary::-webkit-details-marker {
+    display: none;
+  }
+  .wu-next__all > summary::after {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 0.15s ease;
+  }
+  .wu-next__all[open] > summary::after {
+    transform: translateY(1px) rotate(-135deg);
+  }
+  .wu-next__all > summary:hover {
+    color: var(--text);
+  }
+  .wu-next__all > summary:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus);
+    border-radius: var(--radius-sm);
+  }
+  .wu-next__all > .wu-btn {
+    margin-top: var(--space-2);
   }
   .wu-next__path {
     display: grid;
     gap: var(--space-1);
     margin: 0;
-    padding: var(--space-2) 0 0;
-    border-top: 1px solid var(--border);
+    padding: var(--space-1) 0 0;
     list-style: none;
     color: var(--text-faint);
     font-size: var(--text-body-sm);
@@ -4556,6 +4622,160 @@
   }
   .wu-next__path li.is-now .wu-onboard__check {
     border-color: var(--accent);
+  }
+
+  /* ---- bottom sheet (Q-1) ------------------------------------------------- */
+  /* Slides up over the page on a phone; a centred dialog on a desktop. Above
+     the tab bar (120), below the toasts (1000). */
+  .wu-sheet-host {
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    padding-bottom: var(--sheet-keyboard, 0px);
+  }
+  .wu-sheet__scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--surface-overlay-glass, rgb(0 0 0 / 0.4));
+    animation: wu-sheet-fade 0.2s ease both;
+  }
+  .wu-sheet {
+    position: relative;
+    display: grid;
+    gap: var(--space-3);
+    width: 100%;
+    max-width: 520px;
+    max-height: calc(100dvh - var(--sheet-keyboard, 0px) - 24px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin: 0;
+    padding: var(--space-2) var(--space-5) calc(var(--space-5) + env(safe-area-inset-bottom));
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    box-shadow: var(--shadow-md);
+    animation: wu-sheet-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .wu-sheet__handle {
+    justify-self: center;
+    width: 38px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+  .wu-sheet__head {
+    display: grid;
+    gap: 2px;
+  }
+  .wu-sheet__title {
+    margin: 0;
+    font-size: var(--text-heading);
+    font-weight: var(--weight-semibold);
+    text-wrap: balance;
+  }
+  .wu-sheet__dest {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: var(--text-caption);
+  }
+  .wu-sheet__dest strong {
+    color: var(--accent);
+    font-weight: var(--weight-semibold);
+  }
+  .wu-sheet__intro {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--accent-soft);
+    color: var(--text);
+    font-size: var(--text-body-sm);
+  }
+  .wu-sheet__grid {
+    gap: var(--space-3);
+  }
+  .wu-sheet__grid .wu-field {
+    min-height: 42px;
+    font-size: 16px; /* 16px or more: iOS does not zoom into the field */
+  }
+  .wu-sheet__presets {
+    display: flex;
+    gap: var(--space-2);
+  }
+  .wu-sheet__presets .wu-btn {
+    flex: 1;
+  }
+  .wu-sheet__presets .wu-btn[aria-pressed="true"] {
+    box-shadow: 0 0 0 1.5px var(--accent);
+    color: var(--accent);
+  }
+  .wu-sheet__error {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--negative);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: var(--text-body-sm);
+  }
+  .wu-sheet__error::before {
+    content: "! ";
+    color: var(--negative);
+    font-weight: var(--weight-bold);
+  }
+  .wu-sheet__actions {
+    display: flex;
+    gap: var(--space-2);
+  }
+  .wu-sheet__actions .wu-btn--primary {
+    flex: 1;
+  }
+  .wu-sheet__actions .wu-btn[aria-busy="true"] {
+    cursor: progress;
+    opacity: 0.7;
+  }
+  .has-sheet,
+  .has-sheet body {
+    overflow: hidden;
+  }
+  @media (min-width: 901px) {
+    .wu-sheet-host {
+      justify-content: center;
+      padding: var(--space-6);
+    }
+    .wu-sheet {
+      border-radius: var(--radius-xl);
+      padding-bottom: var(--space-5);
+    }
+    .wu-sheet__handle {
+      display: none;
+    }
+  }
+  @media (max-width: 900px) {
+    /* Toasts sit above the floating tab bar, not under it. */
+    .wu-toast-stack {
+      left: var(--space-4);
+      right: var(--space-4);
+      bottom: calc(76px + var(--tabbar-gap, 12px));
+      max-width: none;
+    }
+  }
+  @keyframes wu-sheet-up {
+    from { transform: translateY(100%); }
+    to { transform: none; }
+  }
+  @keyframes wu-sheet-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wu-sheet,
+    .wu-sheet__scrim {
+      animation: none;
+    }
+    .wu-next__all > summary::after {
+      transition: none;
+    }
   }
 
   /* The field a "Get started" step points at, and the one line under it. */
