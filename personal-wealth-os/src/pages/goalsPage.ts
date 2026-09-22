@@ -100,15 +100,26 @@ function goalEditor(state: WealthState, snapshot: GoalSnapshot, featured: boolea
     </form>`;
 }
 
+/** How long until the goal is reached at its monthly amount, in words. */
+function timeToGoal(snapshot: GoalSnapshot): string {
+  if (snapshot.isComplete) return "Reached";
+  if (snapshot.targetAmount <= 0) return "Set a target to see when";
+  const months = snapshot.estimatedMonthsToTarget;
+  if (months === null) return "Add a monthly amount to see when";
+  if (months < 12) return `Reach it in <strong>${months} ${months === 1 ? "month" : "months"}</strong>`;
+  return `Reach it in <strong>about ${snapshot.estimatedYearsToTarget} years</strong>`;
+}
+
 /**
- * What an open goal shows before any editing: its note and an Edit button.
- * The row above already carries the figures, so nothing is repeated here, and
- * the form only appears behind Edit.
+ * What an open goal shows before any editing: its note, how long until it is
+ * reached, and an Edit button. The row above already carries the figures, so
+ * they are not repeated, and the form only appears behind Edit.
  */
 function goalDetails(snapshot: GoalSnapshot): string {
   const note = snapshot.note.trim();
   return `<div class="wu-goal-detail">
       ${note ? `<p class="wu-goal-detail__note">${escapeHtml(note)}</p>` : `<p class="wu-goal-detail__note wu-goal-detail__note--empty">No note yet</p>`}
+      <p class="wu-goal-detail__eta">${timeToGoal(snapshot)}</p>
       <button class="wu-btn wu-btn--secondary wu-btn--sm edit-goal" type="button">Edit</button>
     </div>`;
 }

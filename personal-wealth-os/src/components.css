@@ -3647,6 +3647,16 @@
     overflow-wrap: anywhere;
     white-space: pre-line;
   }
+  .wu-goal-detail__eta {
+    margin: 0;
+    color: var(--text-muted);
+    font: var(--weight-regular) var(--text-body-sm) / 1.4 var(--font-sans);
+    white-space: nowrap;
+  }
+  .wu-goal-detail__eta strong {
+    color: var(--text);
+    font-weight: var(--weight-semibold);
+  }
   .wu-goal-detail__note--empty {
     border-left-color: var(--border);
     color: var(--text-faint);
@@ -3670,6 +3680,10 @@
     }
     .wu-goal-editor__grow {
       flex-basis: 100%;
+    }
+    /* the phone row already says "N months left" */
+    .wu-goal-detail__eta {
+      display: none;
     }
     .wu-goal-editor__cancel {
       margin-left: auto;
