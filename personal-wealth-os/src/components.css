@@ -2119,6 +2119,14 @@
   .wu-portfolio-summary {
     grid-column: 1 / -1;
   }
+  /* The three figures the desktop gives a tile each — invested, unrealised,
+     fees — on one line under the market value. A hairline separates them from
+     the headline figure; no glass here, the card is already a surface. */
+  .wu-portfolio-summary__stats {
+    margin-top: var(--space-1);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+  }
   @media (max-width: 900px) {
     .wu-portfolio-tile {
       display: none;
