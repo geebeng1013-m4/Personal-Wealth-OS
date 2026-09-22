@@ -46,7 +46,9 @@ test("steps by stage: debt first — write it down, then pay a fixed amount", ()
   assert.equal(classifyStage(state).id, "debt");
   assert.deepEqual(ids(state).slice(0, 4), ["record-pay", "debt-add", "debt-pay", "log-spending"]);
   const add = step(state, "debt-add");
-  assert.equal(add?.done, false);
+  // v29: "Start my plan" records the debt, so this step is already ticked.
+  assert.equal(add?.done, true);
+  assert.deepEqual(state.liabilities.map((item) => item.balance), [3000]);
   assert.match(add?.because ?? "", /Card is about MYR 3,000/);
   const pay = step(state, "debt-pay");
   assert.equal(pay?.action, "confirm");

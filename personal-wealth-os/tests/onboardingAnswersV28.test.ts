@@ -20,8 +20,8 @@ const bankBalance = (state: WealthState) => state.ledgerAccounts.find((account) 
 
 // --- schema ------------------------------------------------------------------
 
-test("answers v28: the schema is v28", () => {
-  assert.equal(CURRENT_VERSION, 28);
+test("answers v28: the schema is v28 or later", () => {
+  assert.ok(CURRENT_VERSION >= 28);
 });
 
 test("answers v28: a v27 answer set migrates unchanged, the new answers unanswered", () => {
@@ -29,7 +29,7 @@ test("answers v28: a v27 answer set migrates unchanged, the new answers unanswer
     answeredAt: "2026-09-19", primaryGoal: "save", monthlyIncome: 4500, monthlySpending: 2800, cashInBank: 3000, invests: false,
   } } as unknown as WealthState;
   const migrated = migrateState(v27);
-  assert.equal(migrated.version, 28);
+  assert.equal(migrated.version, CURRENT_VERSION);
   assert.deepEqual(migrated.onboardingAnswers, v27.onboardingAnswers);
 });
 

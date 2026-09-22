@@ -298,7 +298,8 @@ function detectGoalDrift(state: WealthState): MoneyLeakObservation[] {
 
 function detectDebtDrag(state: WealthState): MoneyLeakObservation[] {
   return state.liabilities.flatMap((liability) => {
-    if (liability.balance <= 0 || liability.annualRate < 0.12) return [];
+    // A card cleared every month charges no interest, whatever its rate.
+    if (liability.balance <= 0 || liability.annualRate < 0.12 || liability.paidInFull) return [];
     const monthlyInterest = liability.balance * liability.annualRate / 12;
     return [{
       id: `debt-${liability.id}`,

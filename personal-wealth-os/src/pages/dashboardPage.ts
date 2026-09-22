@@ -19,6 +19,7 @@ import { buildLedgerTransaction } from "../ledger";
 import { syncPlanningRules } from "../financialRules";
 import { bufferMonthsFor } from "../onboardingQuiz";
 import { openBottomSheet } from "../components/bottomSheet";
+import { liabilityFields, readLiabilityForm } from "../components/liabilityForm";
 import { showNotice } from "../components/toast";
 import { classifyStage, STAGE_COUNT, type MoneyStage } from "../moneyStage";
 import { buildCheckins } from "../checkins";
@@ -454,40 +455,26 @@ function openLedgerSheet(stepId: "record-pay" | "log-spending", state: WealthSta
   });
 }
 
-/** Same checks as the Settings liability form, plus: something must be owed. */
+/** The Settings liability form's fields and checks, plus: something must be owed. */
 function openDebtSheet(state: WealthState): void {
   const answers = state.onboardingAnswers;
+  const fromQuiz = answers?.primaryGoal === "debt";
   openBottomSheet({
     title: "Write down what you owe",
     destination: "Settings · liabilities",
-    intro: answers?.goalName && answers.goalAmount
+    intro: fromQuiz && answers.goalName && answers.goalAmount
       ? `Filled in from your answer (${answers.goalName}, about ${money(answers.goalAmount)}). Change it to what your statement says.`
       : "What your latest statement says you still owe.",
     body: `<div class="wu-grid wu-grid--2 wu-sheet__grid">
-        <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">What it is</span>
-          <input class="wu-field" name="name" maxlength="60" autocomplete="off" placeholder="Credit card" value="${escapeHtml(answers?.primaryGoal === "debt" ? answers.goalName ?? "" : "")}"></label>
-        ${amountField("Still owed", answers?.primaryGoal === "debt" ? answers.goalAmount ?? "" : "")}
-        <label class="wu-field-row"><span class="wu-field-row__label">Interest a year (%, optional)</span>
-          <input class="wu-field" name="annualRate" inputmode="decimal" autocomplete="off" placeholder="0"></label>
-        <label class="wu-field-row"><span class="wu-field-row__label">Minimum payment (optional)</span>
-          <span class="wu-affix"><span>MYR</span><input class="wu-field" name="minimumPayment" inputmode="decimal" autocomplete="off" placeholder="0"></span></label>
+        ${liabilityFields({ name: fromQuiz ? answers.goalName ?? "" : "", balance: fromQuiz ? answers.goalAmount ?? "" : "" })}
       </div>`,
     onSave: (form) => {
       if (!live) return "The Overview has closed. Open it again to save.";
-      const data = new FormData(form);
-      const name = String(data.get("name") ?? "").trim().slice(0, 60);
-      const number = (key: string): number => {
-        const raw = cleanNumber(String(data.get(key) ?? ""));
-        return raw === "" ? 0 : Number(raw);
-      };
-      const balance = number("amount");
-      const annualRate = number("annualRate");
-      const minimumPayment = number("minimumPayment");
-      if (!name) return "Give it a name, like Credit card.";
-      if (!Number.isFinite(balance) || balance <= 0) return "Enter how much is still owed, above 0.";
-      if (![annualRate, minimumPayment].every((value) => Number.isFinite(value) && value >= 0)) return "Interest and minimum payment can't be negative.";
+      const result = readLiabilityForm(new FormData(form), createId("liability"), today());
+      if (!result.ok) return result.error;
+      if (result.liability.balance <= 0) return "Enter how much is still owed, above 0.";
       const { state: current, setState, refresh } = live;
-      const next: WealthState = { ...current, liabilities: [...current.liabilities, { id: createId("liability"), name, balance, annualRate, minimumPayment }] };
+      const next: WealthState = { ...current, liabilities: [...current.liabilities, result.liability] };
       const failed = saveOrExplain(setState, next, "Add liability");
       if (failed) return failed;
       savedFromSheet = { id: "debt-add", page: "settings" };

@@ -215,12 +215,22 @@ export interface Dividend {
   notes?: string;
 }
 
+/** What a debt is (v29). Decides the typical rate and whether it has a term; see debtPriority.ts. */
+export type DebtKind = "credit-card" | "personal-loan" | "bnpl" | "car-loan" | "ptptn" | "housing-loan" | "other";
+
 export interface Liability {
   id: string;
   name: string;
   balance: number;
+  /** Effective yearly rate as a fraction: 0.18 = 18%. 0 = not given. (Before v29 the forms stored the typed percent.) */
   annualRate: number;
   minimumPayment: number;
+  /** v29. */
+  kind?: DebtKind;
+  /** v29: the month the last instalment is due, "YYYY-MM". Absent for debts without a term (a card). */
+  endMonth?: string;
+  /** v29: a card cleared in full every month charges no interest, whatever its rate. */
+  paidInFull?: boolean;
 }
 
 export interface RecurringTransaction {

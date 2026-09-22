@@ -4,7 +4,9 @@ import type { WealthState } from "../src/models";
 import { CURRENT_VERSION, emptyState, migrateState } from "../src/state";
 import { getFinancialRule, getFinancialRulesOfKind } from "../src/financialRules";
 import { buildOnboardingChecklist } from "../src/onboarding";
+import { classifyStage } from "../src/moneyStage";
 import {
+  answeredDebtRate,
   applyOnboardingAnswers,
   buildOnboardingPlan,
   goalSentence,
@@ -199,7 +201,7 @@ test("onboardingQuiz: an account from before v26 sees it only if it was never us
 const DEBT: OnboardingAnswers = { primaryGoal: "debt", monthlyIncome: 5000, monthlySpending: 3000, cashInBank: 1000, goalName: "Credit card", goalAmount: 6000, answeredAt: "" };
 
 test("plan (L-1): high-rate debt, starter money short: half buffer, half debt, nothing invested", () => {
-  const plan = buildOnboardingPlan(DEBT, { debtRate: 0.18 });
+  const plan = buildOnboardingPlan({ ...DEBT, debtRate: 0.18 });
   assert.deepEqual(plan.split, { buffer: 1000, goal: 1000, invest: 0 });
   assert.equal(plan.debtFirst, true);
   assert.equal(plan.starterTarget, 3000);
@@ -208,8 +210,8 @@ test("plan (L-1): high-rate debt, starter money short: half buffer, half debt, n
 });
 
 test("plan (L-1): high-rate debt, a month's spending already aside: everything to the debt", () => {
-  assert.deepEqual(buildOnboardingPlan({ ...DEBT, cashInBank: 3000 }, { debtRate: 0.18 }).split, { buffer: 0, goal: 2000, invest: 0 });
-  assert.deepEqual(buildOnboardingPlan({ ...DEBT, cashInBank: 2999 }, { debtRate: 0.18 }).split, { buffer: 1000, goal: 1000, invest: 0 });
+  assert.deepEqual(buildOnboardingPlan({ ...DEBT, cashInBank: 3000, debtRate: 0.18 }).split, { buffer: 0, goal: 2000, invest: 0 });
+  assert.deepEqual(buildOnboardingPlan({ ...DEBT, cashInBank: 2999, debtRate: 0.18 }).split, { buffer: 1000, goal: 1000, invest: 0 });
 });
 
 test("plan (L-1): no spending answer means RM1,000 starter money", () => {
@@ -221,20 +223,91 @@ test("plan (L-1): a debt with no rate given comes first (the user put it first)"
 });
 
 test("plan (L-1): a medium-rate debt keeps the usual buffer, then splits 50/50 with investing", () => {
-  assert.deepEqual(buildOnboardingPlan(DEBT, { debtRate: 0.06 }).split, { buffer: 1000, goal: 600, invest: 400 });
-  assert.deepEqual(buildOnboardingPlan({ ...DEBT, cashInBank: 9000 }, { debtRate: 0.06 }).split, { buffer: 0, goal: 1000, invest: 1000 });
-  assert.equal(buildOnboardingPlan(DEBT, { debtRate: 0.06 }).debtFirst, false);
+  assert.deepEqual(buildOnboardingPlan({ ...DEBT, debtRate: 0.06 }).split, { buffer: 1000, goal: 600, invest: 400 });
+  assert.deepEqual(buildOnboardingPlan({ ...DEBT, cashInBank: 9000, debtRate: 0.06 }).split, { buffer: 0, goal: 1000, invest: 1000 });
+  assert.equal(buildOnboardingPlan({ ...DEBT, debtRate: 0.06 }).debtFirst, false);
 });
 
 test("plan (L-1): a low-rate debt gets no extra money, paid on its schedule", () => {
-  const plan = buildOnboardingPlan(DEBT, { debtRate: 0.01 });
+  const plan = buildOnboardingPlan({ ...DEBT, debtRate: 0.01 });
   assert.deepEqual(plan.split, { buffer: 1000, goal: 0, invest: 1000 });
   assert.equal(plan.monthsToGoal, null);
   assert.equal(plan.debtFirst, false);
 });
 
 test("plan (L-1): a savings goal is unchanged by debt rules", () => {
-  const plan = buildOnboardingPlan({ ...DEBT, primaryGoal: "save" }, { debtRate: 0.18 });
+  const plan = buildOnboardingPlan({ ...DEBT, primaryGoal: "save", debtRate: 0.18 });
   assert.deepEqual(plan.split, { buffer: 1000, goal: 600, invest: 400 });
   assert.equal(plan.debtFirst, false);
+});
+
+// --- L-2: the debt's kind, rate and term (Schema v29) ---------------------------
+
+const OPT = { goalId: "goal-quiz", today: "2026-09-22" };
+
+test("answers v29: debt details are kept when valid, dropped alone when not", () => {
+  const kept = normalizeOnboardingAnswers({ ...DEBT, debtKind: "car-loan", debtRate: 0.03, debtRateFlat: true, debtMonthsLeft: 84, debtPaidInFull: false });
+  assert.equal(kept?.debtKind, "car-loan");
+  assert.equal(kept?.debtRate, 0.03);
+  assert.equal(kept?.debtRateFlat, true);
+  assert.equal(kept?.debtMonthsLeft, 84);
+  const bad = normalizeOnboardingAnswers({ ...DEBT, debtKind: "mortgage", debtRate: 18, debtRateFlat: "yes", debtMonthsLeft: 2.5, debtPaidInFull: 1 });
+  assert.equal(bad?.debtKind, undefined);
+  assert.equal(bad?.debtRate, undefined, "a percent, not a fraction: not a rate");
+  assert.equal(bad?.debtRateFlat, undefined);
+  assert.equal(bad?.debtMonthsLeft, undefined);
+  assert.equal(bad?.debtPaidInFull, undefined);
+  assert.equal(bad?.goalAmount, 6000, "the rest of the answers survive");
+});
+
+test("answers v29: a flat rate is read as its effective rate", () => {
+  assert.equal(answeredDebtRate({ debtRate: 0.18 }), 0.18);
+  const flat = answeredDebtRate({ debtRate: 0.03, debtRateFlat: true, debtMonthsLeft: 84 });
+  assert.ok(Math.abs(flat - 0.0557) < 0.0005, String(flat));
+  assert.equal(answeredDebtRate({}), 0);
+});
+
+test("start my plan (v29): the debt is recorded as a liability with its rate", () => {
+  const next = applyOnboardingAnswers(emptyState(), { ...DEBT, debtKind: "credit-card", debtRate: 0.18, debtPaidInFull: false }, OPT);
+  assert.deepEqual(next.liabilities, [{ id: "goal-quiz-debt", name: "Credit card", balance: 6000, annualRate: 0.18, minimumPayment: 300, kind: "credit-card", paidInFull: false }]);
+  assert.equal(classifyStage(next, new Date(2026, 8, 22)).id, "debt");
+});
+
+test("start my plan (v29): a loan gets its last-payment month and instalment", () => {
+  const next = applyOnboardingAnswers(emptyState(), { ...DEBT, goalName: "PTPTN", goalAmount: 12000, debtKind: "ptptn", debtRate: 0.01, debtMonthsLeft: 120 }, OPT);
+  const [loan] = next.liabilities;
+  assert.equal(loan?.endMonth, "2036-09");
+  assert.equal(loan?.minimumPayment, 105.12);
+  assert.equal(loan?.annualRate, 0.01);
+  assert.notEqual(classifyStage(next, new Date(2026, 8, 22)).id, "debt", "1% is paid on schedule");
+});
+
+test("start my plan (v29): nothing is added when debts are already recorded, or without an amount", () => {
+  const owing = { ...emptyState(), liabilities: [{ id: "old", name: "Car", balance: 20000, annualRate: 0.05, minimumPayment: 400 }] };
+  assert.deepEqual(applyOnboardingAnswers(owing, { ...DEBT, debtKind: "credit-card", debtRate: 0.18 }, OPT).liabilities, owing.liabilities);
+  assert.deepEqual(applyOnboardingAnswers(emptyState(), { ...DEBT, goalAmount: undefined, debtKind: "credit-card" }, OPT).liabilities, []);
+  assert.deepEqual(applyOnboardingAnswers(emptyState(), { ...DEBT, primaryGoal: "save" }, OPT).liabilities, []);
+});
+
+test("start my plan (v29): an old-style debt answer (typed name, no kind) still records it, rate unknown", () => {
+  const next = applyOnboardingAnswers(emptyState(), DEBT, OPT);
+  assert.deepEqual(next.liabilities, [{ id: "goal-quiz-debt", name: "Credit card", balance: 6000, annualRate: 0, minimumPayment: 0 }]);
+  assert.equal(classifyStage(next, new Date(2026, 8, 22)).id, "debt", "rate unknown, but the user put debt first");
+});
+
+test("plan (v29): a card paid in full every month is not paid down first", () => {
+  const plan = buildOnboardingPlan({ ...DEBT, debtKind: "credit-card", debtRate: 0.18, debtPaidInFull: true });
+  assert.equal(plan.debtFirst, false);
+  assert.equal(plan.debtOnSchedule, true);
+  assert.deepEqual(plan.split, { buffer: 1000, goal: 0, invest: 1000 });
+  const next = applyOnboardingAnswers(emptyState(), { ...DEBT, debtKind: "credit-card", debtRate: 0.18, debtPaidInFull: true }, OPT);
+  const stage = classifyStage(next, new Date(2026, 8, 22));
+  assert.notEqual(stage.id, "debt");
+  assert.match(stage.reason, /clear your card in full each month/);
+});
+
+test("plan (v29): a flat car loan is judged by its real rate (medium), not the 3% on paper", () => {
+  const plan = buildOnboardingPlan({ ...DEBT, goalName: "Car loan", goalAmount: 30000, debtKind: "car-loan", debtRate: 0.03, debtRateFlat: true, debtMonthsLeft: 84, cashInBank: 20000 });
+  assert.equal(plan.debtFirst, false);
+  assert.deepEqual(plan.split, { buffer: 0, goal: 1000, invest: 1000 }, "buffer full: 50/50 paying early and investing");
 });

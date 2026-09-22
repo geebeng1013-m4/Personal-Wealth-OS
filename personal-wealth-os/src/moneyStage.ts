@@ -129,10 +129,13 @@ export function classifyStage(state: WealthState, now = new Date()): MoneyStage 
 
   const road = mainRoad(state, monthly, now);
   // Put debt first, but every debt is cheap: say why the buffer still leads.
-  const cheapDebt = state.onboardingAnswers?.primaryGoal === "debt" && totalLiabilities(state.liabilities) > 0;
-  return cheapDebt
-    ? { ...road, reason: `${road.reason} Your debt's rate is under 8%, so pay it on schedule: the buffer comes first.` }
-    : road;
+  if (state.onboardingAnswers?.primaryGoal !== "debt") return road;
+  const owing = state.liabilities.filter((item) => item.balance > 0);
+  if (owing.length === 0) return road;
+  const why = owing.every((item) => item.paidInFull)
+    ? "You clear your card in full each month, so it costs no interest: the buffer comes first."
+    : "Your debt's rate is under 8%, so pay it on schedule: the buffer comes first.";
+  return { ...road, reason: `${road.reason} ${why}` };
 }
 
 function mainRoad(state: WealthState, monthly: number | null, now: Date): MoneyStage {
