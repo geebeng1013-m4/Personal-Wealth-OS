@@ -38,3 +38,27 @@ test("quota: a missing or broken reset still gives a useful sentence", () => {
     assert.match(dailyLimitMessage(retryAt, now), /available again tomorrow\./, String(retryAt));
   }
 });
+
+// --- which allowance ran out, and what still works -----------------------
+
+test("quota: running out of Ask says so, and says Record still works", () => {
+  const now = new Date(2026, 8, 23, 20, 0, 0);
+  const text = dailyLimitMessage(new Date(2026, 8, 24, 0, 0, 0).getTime(), now, "en-MY", "help");
+  assert.match(text, /today's Ask allowance/);
+  assert.match(text, /Record still works/);
+});
+
+test("quota: running out of Record says so, and never claims Ask is gone too", () => {
+  const now = new Date(2026, 8, 23, 20, 0, 0);
+  const text = dailyLimitMessage(new Date(2026, 8, 24, 0, 0, 0).getTime(), now, "en-MY", "fill");
+  assert.match(text, /today's Record allowance/);
+  assert.match(text, /Ask still works/);
+  assert.doesNotMatch(text, /Record still works/);
+});
+
+test("quota: with no mode given it stays general rather than naming the wrong one", () => {
+  const now = new Date(2026, 8, 23, 20, 0, 0);
+  const text = dailyLimitMessage(new Date(2026, 8, 24, 0, 0, 0).getTime(), now, "en-MY");
+  assert.match(text, /today's assistant allowance/);
+  assert.match(text, /rest of WealthUp works as usual/);
+});
