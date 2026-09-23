@@ -1,7 +1,7 @@
 /**
  * The browser's side of the assistant proxy.
  *
- * The OpenRouter key lives only in the Cloud Function; this module knows one
+ * The DeepSeek key lives only in the Cloud Function; this module knows one
  * URL and nothing else. Every failure resolves to a typed `{ ok: false }` with
  * a sentence the panel can show a person — a thrown error here would surface as
  * a silent dead panel, which is the one outcome worse than a bad answer.
@@ -54,6 +54,18 @@ export function setAssistantTokenProvider(provider: AssistantTokenProvider | nul
   tokenProvider = provider;
 }
 
+/**
+ * Whether anyone is signed in, as far as the assistant is concerned.
+ *
+ * The panel asks this so it can say "sign in" instead of offering a composer
+ * that can only ever come back 401 — which is what demo mode would do, since
+ * it never signs in at all. It is not a security check: the server's token
+ * check is, and it does not trust this or anything else the browser says.
+ */
+export function assistantSignedIn(): boolean {
+  return tokenProvider !== null;
+}
+
 async function authHeader(): Promise<Record<string, string>> {
   if (!tokenProvider) return {};
   try {
@@ -73,7 +85,7 @@ export type AssistantResponse =
 /** The panel gives up well before the function's own 30s ceiling would bite. */
 const REQUEST_TIMEOUT_MS = 28_000;
 
-function messageForStatus(status: number, body: unknown): string {
+function messageForStatus(status: number, body: unknown, mode: AssistantMode): string {
   const serverError = typeof (body as { error?: unknown } | null)?.error === "string"
     ? (body as { error: string }).error
     : "";
@@ -83,7 +95,7 @@ function messageForStatus(status: number, body: unknown): string {
     // moment: it lasts until midnight, so say when it comes back instead of
     // "try again shortly".
     if ((body as { reason?: unknown } | null)?.reason === "daily-quota") {
-      return dailyLimitMessage((body as { retryAt?: unknown }).retryAt, new Date());
+      return dailyLimitMessage((body as { retryAt?: unknown }).retryAt, new Date(), undefined, mode);
     }
     return serverError || "Too many requests just now. Give it a moment and try again.";
   }
@@ -139,7 +151,7 @@ export async function askAssistant(request: AssistantRequest, signal?: AbortSign
     // Leave body null; the status still decides the message.
   }
 
-  if (!response.ok) return { ok: false, error: messageForStatus(response.status, body) };
+  if (!response.ok) return { ok: false, error: messageForStatus(response.status, body, request.mode) };
 
   const reply = (body as { reply?: unknown } | null)?.reply;
   if (typeof reply !== "string" || reply.trim().length === 0) {

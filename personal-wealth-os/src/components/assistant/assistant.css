@@ -469,14 +469,33 @@
   flex-direction: column;
   gap: var(--space-2);
 }
+/* Stands in for the mode tabs when signed out, so the header keeps its shape
+   without offering a switch that would change nothing. */
+.assistant-head__title {
+  margin: 0;
+  color: var(--text);
+  font: var(--weight-medium) var(--text-subheading) / var(--leading-tight) var(--font-sans);
+}
+
 .assistant-share {
   display: flex;
-  align-items: center;
+  /* The label now carries a second line under it, so the box sits with the
+     first line rather than in the middle of both. */
+  align-items: flex-start;
   gap: var(--space-2);
   color: var(--text-muted);
   font: var(--weight-regular) var(--text-caption) / var(--leading-normal) var(--font-sans);
   cursor: pointer;
   margin: 0;
+}
+/* Where the figures go, under the choice to send them. Quieter than the label
+   and allowed to wrap onto as many lines as a narrow phone needs. */
+.assistant-share__note {
+  display: block;
+  color: var(--text-faint);
+  font-size: var(--text-overline);
+  line-height: var(--leading-normal);
+  margin-top: 2px;
 }
 .assistant-share--static {
   cursor: default;

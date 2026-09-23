@@ -37,11 +37,24 @@ export function describeReset(resetAt: number, now: Date, locale?: string): stri
  * Says what happened in plain terms (an allowance, not an error the user
  * caused), when it comes back, and that nothing is lost in the meantime.
  */
-export function dailyLimitMessage(retryAt: unknown, now: Date, locale?: string): string {
-  const lead = "You have used today's assistant allowance.";
+export function dailyLimitMessage(
+  retryAt: unknown,
+  now: Date,
+  locale?: string,
+  mode?: "help" | "fill",
+): string {
+  // Which allowance ran out matters: the other one is still there, and being
+  // told "the assistant" is done when recording still works would be wrong.
+  const what = mode === "fill" ? "Record" : mode === "help" ? "Ask" : "assistant";
+  const lead = `You have used today's ${what} allowance.`;
   const valid = typeof retryAt === "number" && Number.isFinite(retryAt) && retryAt > now.getTime() - 60_000;
   const when = valid
     ? `It will be available again ${describeReset(retryAt, now, locale)}.`
     : "It will be available again tomorrow.";
-  return `${lead} ${when} The rest of WealthUp works as usual.`;
+  const rest = mode === "fill"
+    ? "Ask still works, and you can record anything by hand as usual."
+    : mode === "help"
+      ? "Record still works, and the rest of WealthUp is unaffected."
+      : "The rest of WealthUp works as usual.";
+  return `${lead} ${when} ${rest}`;
 }

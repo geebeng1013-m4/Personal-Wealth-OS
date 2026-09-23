@@ -28,7 +28,7 @@ import { escapeHtml } from "../../html";
 import type { Navigate } from "../../pages/pageTypes";
 import { applyLedgerDraft } from "../../pages/ledgerPage";
 import { knownPlatforms, queueTradePrefill } from "../../pages/portfolioPage";
-import { askAssistant } from "./assistantClient";
+import { askAssistant, assistantSignedIn } from "./assistantClient";
 import { syncAssistantHistoryNow } from "./assistantSync";
 import { buildAssistantContext } from "./assistantContext";
 import { describeDraft, draftPage, parseAssistantAction } from "./assistantActions";
@@ -105,7 +105,7 @@ const STATUS_META: Record<RecordStatus, { label: string; tone: string }> = {
 function noticeHtml(): string {
   if (noticeDismissed()) return "";
   return `<div class="assistant-notice">
-    <p class="assistant-notice__body">Your messages are sent to OpenRouter to be answered. <strong>Ask</strong> sends no figures unless you switch on “Share my figures”. <strong>Record</strong> sends your category, account and ticker <em>names</em> — never amounts — because filling a form needs them.</p>
+    <p class="assistant-notice__body">Your messages are answered by DeepSeek, whose servers are in China. <strong>Ask</strong> sends no figures unless you switch on “Share my figures”. <strong>Record</strong> sends your category, account and ticker <em>names</em> — never amounts — because filling a form needs them.</p>
     <button class="assistant-notice__ok" type="button" data-assistant-action="dismiss-notice">Got it</button>
   </div>`;
 }
@@ -262,12 +262,37 @@ function panelHtml(): string {
     `<button class="assistant-tab${mode === id ? " is-active" : ""}" type="button" data-assistant-mode="${id}"${mode === id ? ' aria-current="true"' : ""}>${label}</button>`;
 
   const hasHistory = mode === "fill" ? recordEntries().length > 0 : askMessages().length > 0;
+  // The checkbox says what it does; the line under it says where the figures
+  // go. Someone deciding whether to tick it should not have to remember the
+  // notice at the top of the panel, which they dismissed weeks ago.
   const figures = mode === "help"
     ? `<label class="assistant-share">
         <input type="checkbox" data-assistant-action="share"${shareFigures() ? " checked" : ""}>
-        <span>Share my figures for a specific answer</span>
+        <span>Share my figures for a specific answer<small class="assistant-share__note">Sends a summary of your figures to DeepSeek, in China. Off again next time you open this panel.</small></span>
       </label>`
-    : `<p class="assistant-share assistant-share--static">Sends your category and account names, never amounts.</p>`;
+    : `<p class="assistant-share assistant-share--static">Sends your category and account names to DeepSeek, in China — never amounts.</p>`;
+
+  // Signed out (including demo mode, which never signs in): the assistant is
+  // counted and paid for per account, so there is nothing to offer here but
+  // the reason. A composer would only produce a 401 on every send.
+  if (!assistantSignedIn()) {
+    // No mode tabs here: switching between Ask and Record would change nothing
+    // on screen, and a control that does nothing is worse than no control.
+    return `<div class="assistant-panel wu-glass wu-glass--sheet" id="assistantPanel" role="dialog" aria-label="WealthUp assistant" aria-modal="false">
+    <header class="assistant-head">
+      <p class="assistant-head__title">Assistant</p>
+      <div class="assistant-head__actions">
+        <button class="assistant-icon-btn assistant-icon-btn--glyph" type="button" data-assistant-action="close" aria-label="Close assistant">${ICON_CLOSE}</button>
+      </div>
+    </header>
+    <div class="assistant-log" id="assistantLog" aria-live="polite">
+      <div class="assistant-empty">
+        <p class="assistant-empty__title">Available once you sign in</p>
+        <p class="assistant-empty__body">The assistant answers from your own figures and has its own daily allowance, so it needs an account. Everything else in WealthUp works as usual.</p>
+      </div>
+    </div>
+  </div>`;
+  }
 
   return `<div class="assistant-panel wu-glass wu-glass--sheet" id="assistantPanel" role="dialog" aria-label="WealthUp assistant" aria-modal="false">
     <header class="assistant-head">
