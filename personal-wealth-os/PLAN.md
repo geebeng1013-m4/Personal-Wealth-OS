@@ -38,6 +38,27 @@ https://claude.ai/artifact/3URvhvbo6ND7gyp8GcdhwY（14 页，1280×900 vs 390×8
 - 手机版持仓列表要不要列名（ETF / Weight vs target / Value）—— 手机是两行网格，列名放不进去，
   且每个数字本身已有标注。
 
+## 默认浅色主题  `[x]`（2026-09-23，PR #125 已合并上线，`main` = `0d84f13`）
+
+用户要求：「Theme color default white」。
+
+- 主题原本**没有自己的默认值**：第一次打开读 `prefers-color-scheme`，系统是深色就进深色。
+  现在「没存过偏好 → `light`」，**存过的选择仍然优先**，所以没有人的切换被重置。
+- 改在两处且必须同字：`index.html` 首屏脚本（首次绘制前）与 `main.ts` `getStoredTheme()`。
+  两边不一致会让页面在首屏之后重绘一次。
+- **状态条 `theme-color` 必须跟着改**：原来两个 meta 按系统媒体查询给色，主题不跟系统了以后，
+  深色手机 + 浅色 App 会把状态条染成近黑。改成单个 `#app-theme-color`，由 `applyTheme()`
+  跟着 `data-theme` 更新。登录页两个主题下都是深色，所以它报自己的 `#050706`（`LOGIN_BG`，
+  与 `shell.css` 的 `.login-shell` 对齐）。
+- `color-scheme` 改 `light dark`，`html.ts` `getTheme()` 兜底改 `light`。
+- SW 缓存 v23 → v24（`index.html` 属于 app shell）。**无 Schema 变更**，主题存在
+  `localStorage.pwo-theme`，不在 `WealthState` 里，不需要迁移。
+- **范围（用户 2026-09-23 决定）**：只影响新用户 / 新浏览器，不做一次性重置。老用户（包括你自己）
+  早已存了 `dark`，要变白得手动切一次，或清掉 `pwo-theme`。
+
+FUTURE IDEAS：
+- 真机状态条颜色只能在 production 验证（Vercel preview 有登录保护），待你在 iPhone 上确认。
+
 ## 标记完成后可撤销  `[x]`（2026-09-23，PR #124 已合并上线，`main` = `61bdd81`）
 
 用户要求：「advisor Guidance complete press wrong can be cancel」——建议按了完成，按错了要能取消。

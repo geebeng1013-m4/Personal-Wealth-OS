@@ -9,9 +9,34 @@
 
 - **阶段**：V1 完成（2026-09-09）。核心正确性的洞都补上了。之后：**产品打磨** —— 手机比例这轮
   已收尾（M-1..M-6，见下）。App / 订阅方向因预算暂停（见下），先把产品本身做好。
-- **`main`**：`61bdd81`（2026-09-23，启动画面白条已修好并经你在 iPhone 上确认）。
+- **`main`**：`0d84f13`（2026-09-23，默认主题改浅色已上线）。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 - **当前在做**：双端差异账本（电脑版 ↔ 手机版补齐），T1 / T2 已上线，下一个 T3。
+
+## 默认浅色主题（已上线，PR #125）
+
+- **2026-09-23 你要求**：Theme color default white。
+- 原因：主题原本没有自己的默认值 —— 第一次打开读系统的深浅色偏好，系统是深色就进深色。
+  所以「默认白色」不是改一个颜色，是把**那句判断**从「跟系统」换成「浅色」。
+- 做法：`index.html` 首屏脚本和 `main.ts` `getStoredTheme()` 两处同步改成默认 `light`。
+  两边必须一字不差 —— 首屏脚本决定第一次绘制的样子，`main.ts` 决定之后的样子，不一致就会闪。
+  **存过的偏好仍然优先**，所以谁都不会被重置。
+- 顺带必须修的一处：手机状态条的 `theme-color`。它原本有两个 meta，按系统深浅色各给一个。
+  主题不跟系统了以后，深色手机打开白色 App，状态条会是近黑的 —— 就是 #121 那条白线的反面。
+  改成单个 meta，由 `applyTheme()` 跟着 `data-theme` 走。登录页两个主题下都是深色的，
+  所以它报自己的底色 `#050706`，不报主题色。
+- 另外：`color-scheme` 改 `light dark`，`html.ts` 兜底改 `light`，SW 缓存 v23 → v24
+  （`index.html` 属于 app shell）。**没有 Schema 变更**，主题存在 `localStorage.pwo-theme`。
+- 范围是你定的：**只影响新用户 / 新浏览器**，不做一次性重置。代价是你自己打开不会变白 ——
+  `applyTheme()` 每次启动都写 `localStorage`，你早就存了 `dark`，要点一次切换或清掉
+  `pwo-theme` 才看得到。
+- 验证：typecheck / build / CI 全过，控制台 0 错误。CDP 把系统模拟成深色实测四种情况
+  （全新浏览器 → light、已存 dark → dark、清掉偏好 → light、登录页 → `#050706`），
+  切换按钮来回各一次主题与状态条都跟得上；桌面 1400px、手机 390px 截图正常，
+  `scrollWidth == innerWidth`。线上抓 `wealthup.cc` 确认 `var theme = 'light'`、
+  只剩 `#app-theme-color` 一个 meta、`color-scheme: light dark`、`sw.js` 是 `wealth-os-v24`。
+- **待你确认**：真机状态条颜色（iPhone 普通 Safari 与加到主屏幕）。Vercel preview 有登录保护，
+  手机打不开，这类只能合并到 production 之后验 —— 跟 #121 同一个坑。
 
 ## 标记完成后可撤销（已上线，PR #124）
 
