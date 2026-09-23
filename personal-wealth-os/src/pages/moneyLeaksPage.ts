@@ -17,7 +17,7 @@ import { detectMoneyLeaks, getAdvisorSnapshot, type MoneyLeak } from "../advisor
 import { money } from "../rules";
 import { escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
-import { isRecommendationCompleted, markRecommendationDone } from "../actionRecords";
+import { isRecommendationCompleted, markRecommendationDone, undoRecommendationDone } from "../actionRecords";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
 const leakCategoryLabels: Record<MoneyLeak["category"], string> = {
@@ -85,9 +85,18 @@ function leakAdvice(
  * Completing an action records only that the user did what was suggested. The
  * finding itself is untouched: the leak may well still be there, so this must
  * never be presented as the problem being solved.
+ *
+ * Completing is one press with no confirmation, so the completed state keeps
+ * the same slot in the action row and offers Undo there. Undo drops the record
+ * only — the finding never changed, so nothing else has to be put back.
  */
 function leakDoneButton(state: WealthState, recommendation: AdvisorRecommendation | undefined): string {
-  if (!recommendation || isRecommendationCompleted(state, recommendation.id)) return "";
+  if (!recommendation) return "";
+  if (isRecommendationCompleted(state, recommendation.id)) {
+    return `<button class="wu-btn wu-btn--ghost wu-btn--sm leak-undo-done"
+    data-recommendation-id="${escapeHtml(recommendation.id)}"
+    aria-label="Undo marking this done" type="button">Undo</button>`;
+  }
   return `<button class="wu-btn wu-btn--ghost wu-btn--sm leak-mark-done"
     data-recommendation-id="${escapeHtml(recommendation.id)}"
     data-action-label="${escapeHtml(recommendation.action)}" type="button">Mark as done</button>`;
@@ -283,6 +292,22 @@ export function bindMoneyLeaks(root: HTMLElement, state: WealthState, setState: 
       }),
     };
     setState(next, "Marked a money-leak action as done");
+    if (navigate) navigate("money-leaks");
+    else rerender(root, next, setState, "money-leaks");
+  }));
+
+  /**
+   * Undo a completion. Removes the execution record and nothing else: the
+   * finding, its impact and its severity were never touched by completing it.
+   */
+  root.querySelectorAll<HTMLButtonElement>(".leak-undo-done").forEach((button) => button.addEventListener("click", () => {
+    const recommendationId = button.dataset.recommendationId ?? "";
+    if (!recommendationId) return;
+    const next: WealthState = {
+      ...state,
+      actionRecords: undoRecommendationDone(state.actionRecords, recommendationId),
+    };
+    setState(next, "Undid a money-leak action");
     if (navigate) navigate("money-leaks");
     else rerender(root, next, setState, "money-leaks");
   }));
