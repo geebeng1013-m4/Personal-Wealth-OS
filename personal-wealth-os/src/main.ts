@@ -111,7 +111,11 @@ if (!root) {
 // Theme management
 type Theme = "dark" | "light";
 
-/** The sign-in page's ground, kept in step with `.login-shell` in shell.css. */
+/**
+ * The sign-in page's ground, kept in step with `.login-shell` in shell.css and
+ * with the `html.is-login` rule in index.html — `.login-shell` is #app, which
+ * does not reach the iOS home-indicator strip.
+ */
 const LOGIN_BG = "#050706";
 
 function getStoredTheme(): Theme {
@@ -253,6 +257,7 @@ function navigate(page: string): void {
 function renderSignedIn(user: User): void {
   // Whatever brought us here, the screen is about to show the current `state`.
   screenIsStale = false;
+  document.documentElement.classList.remove("is-login");
   setThemeColor(themeColor(getStoredTheme()));
   if (!quizAllowed || !shouldShowOnboardingQuiz(state)) {
     renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
@@ -404,6 +409,7 @@ function rememberSignedIn(signedIn: boolean): void {
 
 function renderLogin(): void {
   setThemeColor(LOGIN_BG);
+  document.documentElement.classList.add("is-login");
   document.body.classList.toggle("mask-financial-amounts", state.privacy.maskAmounts);
   root!.className = "login-shell";
   root!.innerHTML = `
