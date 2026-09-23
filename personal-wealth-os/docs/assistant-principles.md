@@ -4,6 +4,8 @@ WealthUp 助手回答理财问题时必须遵守的六条原则。这是**正式
 代码里的提示词要和这份文件保持一致。
 
 - 定稿：2026-09-15（R 系列，和产品负责人逐条讨论后确定）
+- 回答的模型：**DeepSeek `deepseek-v4-pro`**（2026-09-24 起，DS 系列）。Record 用便宜的 `deepseek-flash`，
+  它不涉及建议。模型名只写在 `functions/src/deepseekRequest.ts` 的两个常量里。
 - 代码位置：`functions/src/deepseekRequest.ts` 里的 `SYSTEM_PROMPT`（「WEALTHUP PRINCIPLES」一段）
 - 同步检查：`tests/assistantPrinciplesDoc.test.ts`。六条原则的标题和关键数字在这里和提示词里必须一致，
   改了一边没改另一边，测试就会失败。
@@ -97,6 +99,9 @@ WealthUp 助手回答理财问题时必须遵守的六条原则。这是**正式
 | Ask，**「Share my figures」打开** | 你的数字，再加上你的规则：财务目标这句话、已开启的规则、预算桶占计划收入的百分比、每个目标的时间（3 年内 / 3 年以上，标明是估算）、Notes（最后发，有长度上限）。 |
 | Record | 只有分类、账户、股票代码、平台的**名称**，不含金额。 |
 
+**这些内容送到哪里**：DeepSeek 的 API，服务器在中国境内。助手面板顶部的告知和「Share my figures」
+下面的小字都写明了这一点。DeepSeek 的政策称付费 API 账号的对话默认不用于训练。
+
 - **Notes 是你的偏好，不是指令**：助手会参考，但不会照着执行，也不能用来推翻原则。
 - **熊市储备**：如果你自己开了这条规则，助手收到的会是「这是用户自己的选择，不要推荐给别人」。新用户默认是关的。
 
@@ -111,6 +116,11 @@ WealthUp 助手回答理财问题时必须遵守的六条原则。这是**正式
 - 「把 20% 存进紧急资金」这种**存入**的说法不会被误判。
 
 它刻意做得很窄，不是通用的内容过滤器，也不应该扩展成那样。
+
+**换成 DeepSeek 之后（2026-09-24）**：22 题里触发过 **1 次**（EF-5「度假能不能用紧急资金」）。
+同一题随后单独重跑 16 次，**一次都没再触发**，每次回答都正确。触发那次发出去的回答仍然是对的
+（就是安全网那段固定说明）。旧模型是零触发，所以这是一个变化，但发生率低，而且失败方向是安全的。
+安全网**不记录被替换的原文**（那段文字可能含用户的数字），所以无法回看那一次模型究竟写了什么。
 
 ## 6. 已经做过的决定
 
@@ -130,9 +140,13 @@ WealthUp 助手回答理财问题时必须遵守的六条原则。这是**正式
 2. 改 `functions/src/deepseekRequest.ts` 的 `SYSTEM_PROMPT`，保持和这里一致。
 3. 如果改的是标题或关键数字，同步改 `tests/assistantPrinciplesDoc.test.ts`；跑 `node _test.mjs`。
 4. **在本地模拟器跑测试题**：`node scripts/assistant-principles-eval.mjs [endpoint]`（第 8 节），全部要守住原则。
-   免费额度是全 app 每天 50 次，一轮 22 题，注意别在上线前用光。
+   助手现在要登录才能用，所以模拟器要连 Auth 和 Firestore 一起起：
+   `firebase emulators:start --only functions,firestore,auth`（Firestore 模拟器需要 Java）。
+   脚本会自己在 Auth 模拟器里注册一个一次性账号，所以每次重跑都是满额度。
+   对着线上跑要自己给 `ASSISTANT_TOKEN`（真实 ID token），并记得一轮 22 题会吃掉那个账号当天 30 次 Ask 里的 22 次。
 5. 开 PR，合并。
-6. **部署函数**：`firebase deploy --only functions:assistant`。
+6. **部署函数**：`firebase deploy --only functions:assistant`。改过 `firestore.rules` 就用
+   `firebase deploy --only firestore:rules,functions:assistant`。
    注意：合并 PR 只会让 Vercel 更新网站，**提示词在 Cloud Function 里，不部署函数就不会生效**。
 7. 上线后在线上问一两题确认。
 
