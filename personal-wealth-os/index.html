@@ -113,14 +113,19 @@
          the whole screen jumping up. #launch itself keeps `inset: 0`: it only
          has to paint, and <html>/<body> cover anything it misses (#121). */
       #launch { position: fixed; inset: 0; z-index: 2000; background: #141310; transition: opacity 450ms ease; }
-      #launch-mark { position: absolute; left: 50%; top: 50vh; transform: translate(-50%, -50%); width: 120px; height: auto; animation: launch-breathe 1.6s ease-in-out infinite; }
+      /* Static, deliberately. The native startup image is a frozen picture,
+         and iOS does not lift it the moment the page paints — it holds on a
+         little longer, by then a breathing W had shrunk toward 0.95 and the
+         handover showed the logo popping a size smaller before growing back.
+         With nothing moving there is nothing to see: measured against
+         apple-splash-1170x2532.png the two agree within 1px (W 360x209 vs
+         360x210, centre 1266.0 vs 1265.5). 120px must stay in step with
+         MARK_CSS_WIDTH in scripts/generate-launch-images.py. */
+      #launch-mark { position: absolute; left: 50%; top: 50vh; transform: translate(-50%, -50%); width: 120px; height: auto; }
       /* launch-name.png is drawn at 3x; bottom 9vh matches the startup images. */
       #launch-name { position: absolute; left: 50%; bottom: 9vh; transform: translateX(-50%); width: 77px; height: auto; }
       .is-android #launch-name { display: none; }
       #launch.is-done { opacity: 0; pointer-events: none; }
-      /* Carries the centring translate: a keyframe replaces the whole
-         transform, so `scale(0.95)` alone would drop the W to the corner. */
-      @keyframes launch-breathe { 50% { transform: translate(-50%, -50%) scale(0.95); } }
       /* Shown only when the app could not start and clearing its cached files
          did not help either, so the launch screen never becomes a dead end. */
       #launch-retry { position: absolute; left: 50%; bottom: 22vh; transform: translateX(-50%); width: min(280px, 80vw); display: none; flex-direction: column; align-items: center; gap: 12px; text-align: center; color: #f4f1ea; font: 500 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; }
@@ -128,7 +133,7 @@
       #launch-retry p { margin: 0; }
       #launch-retry button { font: inherit; color: #141310; background: #f4f1ea; border: 0; border-radius: 999px; padding: 10px 22px; cursor: pointer; }
       #launch-retry button:focus-visible { outline: 2px solid #f4f1ea; outline-offset: 3px; }
-      @media (prefers-reduced-motion: reduce) { #launch { transition: none; } #launch-mark { animation: none; } }
+      @media (prefers-reduced-motion: reduce) { #launch { transition: none; } }
     </style>
   </head>
   <body>
