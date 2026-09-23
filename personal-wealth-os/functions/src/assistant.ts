@@ -27,7 +27,15 @@ import {
   buildDeepSeekPayload,
   parseDeepSeekReply,
 } from "./deepseekRequest.js";
-import { bearerToken, dayKeyFor, decideQuota, usageDocId, type QuotaDecision } from "./quota.js";
+import {
+  QUOTA_TIMEOUT_MS,
+  bearerToken,
+  dayKeyFor,
+  decideQuota,
+  usageDocId,
+  withTimeout,
+  type QuotaDecision,
+} from "./quota.js";
 
 const DEEPSEEK_API_KEY = defineSecret("DEEPSEEK_API_KEY");
 
@@ -133,7 +141,7 @@ export const assistant = onRequest(
     const usageRef = firestore.collection(USAGE_COLLECTION).doc(usageDocId(uid, now));
     let quota: QuotaDecision;
     try {
-      quota = await firestore.runTransaction(async (transaction) => {
+      quota = await withTimeout(firestore.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(usageRef);
         const decision = decideQuota(snapshot.data(), built.mode, now);
         if (decision.allowed) {
@@ -149,7 +157,7 @@ export const assistant = onRequest(
           );
         }
         return decision;
-      });
+      }), QUOTA_TIMEOUT_MS);
     } catch (error) {
       // Fail closed. Letting turns through while the counter is unreachable
       // would lift the ceiling exactly when something is already wrong.

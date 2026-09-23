@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "./testHarness";
 import {
   DAILY_LIMITS,
+  QUOTA_TIMEOUT_MS,
   bearerToken,
   countsFrom,
   dayKeyFor,
   decideQuota,
   nextResetAt,
   usageDocId,
+  withTimeout,
 } from "../functions/src/quota";
 import { resolveCors } from "../functions/src/cors";
 
@@ -115,4 +117,27 @@ test("quota: CORS lets the Authorization header through, or no token ever arrive
   const decision = resolveCors("https://wealthup.cc");
   assert.match(decision.headers["Access-Control-Allow-Headers"], /Authorization/);
   assert.match(decision.headers["Access-Control-Allow-Headers"], /Content-Type/);
+});
+
+// --- the counter gets a deadline of its own ------------------------------
+
+test("quota: a fast answer comes back as itself", async () => {
+  const value = await withTimeout(Promise.resolve("counted"), 1000);
+  assert.equal(value, "counted");
+});
+
+test("quota: work that outlasts the deadline is rejected, not awaited", async () => {
+  const slow = new Promise<string>((resolve) => setTimeout(() => resolve("too late"), 5000));
+  await assert.rejects(withTimeout(slow, 20), /timed out after 20ms/);
+});
+
+test("quota: a rejection of its own is passed through unchanged", async () => {
+  await assert.rejects(withTimeout(Promise.reject(new Error("firestore said no")), 1000), /firestore said no/);
+});
+
+test("quota: the deadline is shorter than the function's own ceiling", () => {
+  // The function times out at 30s. A quota check that takes longer than that
+  // never reaches its own error path, and the caller gets a bare 500 instead
+  // of "unavailable" — which is what happened before this deadline existed.
+  assert.ok(QUOTA_TIMEOUT_MS < 30_000);
 });

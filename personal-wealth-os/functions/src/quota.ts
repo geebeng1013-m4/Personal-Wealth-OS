@@ -96,6 +96,40 @@ export function decideQuota(
 }
 
 /**
+ * How long the counter gets to answer before the turn is refused.
+ *
+ * Firestore being unreachable is not a fast failure: the admin SDK retries
+ * with its own backoff, and in testing a dead Firestore kept one request alive
+ * for 32 seconds — past the function's own 30-second ceiling, so the caller got
+ * a generic 500 after half a minute of waiting instead of a clear answer. Six
+ * seconds is far longer than a healthy transaction (milliseconds) and short
+ * enough that nobody sits staring at a spinner.
+ *
+ * A transaction abandoned this way may still land afterwards and count a turn
+ * that was never answered. That is the safe direction: it can only ever
+ * over-count, never let an extra turn through.
+ */
+export const QUOTA_TIMEOUT_MS = 6000;
+
+/**
+ * `work`, or a rejection once `ms` has passed — whichever comes first.
+ *
+ * The timer is always cleared, so a fast answer never leaves the process
+ * holding a handle open.
+ */
+export async function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
  * The bearer token on a request, or "" when there is none to read.
  *
  * Shape only — whether the token is real is Firebase's answer, not ours.
