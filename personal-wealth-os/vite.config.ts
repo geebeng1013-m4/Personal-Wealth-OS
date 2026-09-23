@@ -52,9 +52,58 @@ function devApiRoutes(): Plugin {
   };
 }
 
+/**
+ * Stop the first screen swapping typefaces, now that nothing covers it.
+ *
+ * The launch screen used to wait for document.fonts.ready before it faded, so
+ * the swap happened behind it. With the launch screen gone (#133) it became
+ * visible: measured at 390x844, a warm start showed the fallback for ~104ms on
+ * a good connection and ~499ms on a throttled one before Inter arrived. A cold
+ * start does not swap at all — everything else is slower than the fonts.
+ *
+ * Two halves, and both are needed. `optional` is the guarantee: the browser
+ * gives the font a short window and, if it misses, uses the fallback for that
+ * whole page load rather than swapping mid-read. Preloading is what keeps that
+ * window winnable, so "no swap" does not turn into "system font every time".
+ *
+ * Only the latin subsets, and not Lato: it dresses one line on the Overview,
+ * its stack already falls through to Inter, and 23 KB is a poor trade for it.
+ */
+function fontsWithoutSwap(): Plugin {
+  const PRELOAD = /(inter-latin-wght-normal|geist-mono-latin-[456]00-normal)-[^.]+\.woff2$/;
+  return {
+    name: "fonts-without-swap",
+    apply: "build",
+    enforce: "post",
+    generateBundle(_options, bundle) {
+      for (const [fileName, chunk] of Object.entries(bundle)) {
+        if (chunk.type !== "asset" || !fileName.endsWith(".css")) continue;
+        const css = typeof chunk.source === "string" ? chunk.source : Buffer.from(chunk.source).toString("utf8");
+        // @fontsource ships font-display: swap; this is the only place it is set.
+        chunk.source = css.replaceAll("font-display:swap", "font-display:optional");
+      }
+    },
+    transformIndexHtml: {
+      order: "post",
+      // The bundle is read here rather than remembered from generateBundle:
+      // the HTML is transformed first, so a list built there is still empty.
+      handler(_html, ctx) {
+        return Object.keys(ctx.bundle ?? {})
+          .filter((file) => PRELOAD.test(file))
+          .sort()
+          .map((file) => ({
+            tag: "link",
+            attrs: { rel: "preload", as: "font", type: "font/woff2", href: `/${file}`, crossorigin: "" },
+            injectTo: "head" as const,
+          }));
+      },
+    },
+  };
+}
+
 export default defineConfig({
   root: resolve(__dirname),
-  plugins: [react(), devApiRoutes()],
+  plugins: [react(), devApiRoutes(), fontsWithoutSwap()],
   build: {
     rollupOptions: {
       output: {
