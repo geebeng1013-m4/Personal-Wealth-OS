@@ -495,13 +495,31 @@ Advisor 不受影响，仍然零 AI。详见 `PLAN.md` A-1..A-6。
 比对过，确实含新规则。`firestore.rules` 未改，无需单独部署；SW 缓存规则未改，`wealth-os-v23`
 不需要 bump。
 
+## 单选胶囊收尾：触控区 + 全站统一 → #123(2026-09-23)
+
+#122 留下的两件事，用户确认后合成一个 PR 做完。
+
+**触控区**：胶囊只有 30px 高，小于 Apple 建议的 44px。做法是**让 radio 长大，不是胶囊长大** ——
+`--pill-hit: 7px`，`input { inset: -7px 0 }`，胶囊视觉尺寸一点没变。两个刻意的约束：
+
+- **只上下扩**：胶囊横向只隔 12px，横向外扩会让一颗的点击区盖到隔壁那颗上面。
+- **行距 = 2 × 外扩**（14px）：上下两行的点击区刚好贴合，既没有重叠也没有死区。
+
+实测 390px：胶囊 29px、可点 43px、8 颗两两比对 **0 处重叠**、最后一行下方是表单容器而不是
+Sponsored 开关。
+
+**全站统一**：`liabilityForm.ts` 两个 fieldset 加上 `wu-choice--glass`。Ledger 分类、Me 的
+Add liability、Overview 的「Write down what you owe」弹层，从此是同一个控件。顺手改掉两处
+停在 #107 之前的注释（债务早就从 Settings 搬到 Me 了）。
+
+**验证时踩到的坑**：Overview 那张弹层在 demo 里**走不到** —— `demoData.ts` 声明 `version: 19`，
+而 `state.ts:705` 有条迁移规则：v25 之前的老数据只要有活动痕迹就把 `onboardingDone` 设成 true
+（免得老用户被塞新手卡）。demo 数据很丰富，卡片因此永久退休。临时把 fixture 改成
+`version: 30` + 债务清空 + `primaryGoal: "debt"` 才能看到，看完已还原。
+
+已上线：CI 通过、1374 测试全过，线上 `index-D00zETE-.css` 抓下来确认含 `--pill-hit: 7px`。
+
 ## FUTURE IDEAS / 待清
-
-- 分类胶囊高 30px，小于 iOS 建议的 44px 触控目标。整个 label 都是点击区，但手机上若难按，
-  可在不改视觉尺寸的前提下垫高点击区。（#122 遗留，等用户决定）
-
-- `.wu-choice--glass` 目前只用在 Ledger 分类。是否推广到债务表单那几组选项，让全站单选
-  控件统一。（#122 遗留，等用户决定）
 
 - `functions/` 的 `firebase-functions` 版本偏旧，部署时 CLI 提示升级（有破坏性变更，单独做）。
 
