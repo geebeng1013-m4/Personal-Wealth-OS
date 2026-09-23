@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "./testHarness";
 import { ALL_PAGES, PAGE_GROUPS, PHONE_TABS, describePage, pageName } from "../src/pageDirectory";
 import { SYSTEM_PROMPT } from "../functions/src/deepseekRequest";
+import { buildAssistantContext } from "../src/components/assistant/assistantContext";
+import { emptyState } from "../src/state";
 
 /**
  * The assistant tells people which page to go to. If the app grows a page,
@@ -80,4 +82,45 @@ test("page map: a page is described for the assistant as name plus subtitle", ()
   // An id the app does not know is passed through rather than invented over.
   assert.equal(describePage("nowhere"), "nowhere");
   assert.equal(pageName("nowhere"), "nowhere");
+});
+
+// --- telling the assistant where the user is ------------------------------
+
+test("page map: Ask mode says which page the user is on, in words the model knows", () => {
+  const context = buildAssistantContext(emptyState(), new Date(2026, 8, 24), {
+    mode: "help",
+    shareFigures: false,
+    platforms: [],
+    page: "money-leaks",
+  });
+  assert.match(context, /The user is on the Money Leaks \(Detected cash-flow drag\) page\./);
+  // Still no figures: knowing which page someone is looking at is not knowing
+  // anything about their money.
+  assert.doesNotMatch(context, /MYR/);
+});
+
+test("page map: with no page given, nothing is claimed about where they are", () => {
+  const context = buildAssistantContext(emptyState(), new Date(2026, 8, 24), {
+    mode: "help",
+    shareFigures: false,
+    platforms: [],
+  });
+  assert.doesNotMatch(context, /is on the/);
+});
+
+test("page map: Record mode carries vocabulary, not the page", () => {
+  // Filling a form needs names; which page they are on does not help, and
+  // Record's context is the one that stays free of anything it does not need.
+  const context = buildAssistantContext(emptyState(), new Date(2026, 8, 24), {
+    mode: "fill",
+    shareFigures: false,
+    platforms: [],
+    page: "ledger",
+  });
+  assert.doesNotMatch(context, /is on the/);
+});
+
+test("page map: the prompt tells the model what to do with the current page", () => {
+  assert.match(SYSTEM_PROMPT, /which page the user is on/);
+  assert.match(SYSTEM_PROMPT, /you are on it/);
 });

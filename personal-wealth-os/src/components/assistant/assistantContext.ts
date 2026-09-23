@@ -31,6 +31,7 @@ import { getBudgetSnapshot } from "../../budgetSummary";
 import { getGoalsSnapshot, type GoalSnapshot } from "../../goalSummary";
 import { getFinancialRule } from "../../financialRules";
 import { localDateKey } from "./assistantActions";
+import { describePage } from "../../pageDirectory";
 
 /** Must stay under MAX_CONTEXT_CHARS in functions/src/deepseekRequest.ts. */
 export const MAX_CONTEXT_CHARS = 4000;
@@ -273,6 +274,12 @@ export interface ContextOptions {
   /** The user's opt-in for sending figures in Ask mode. */
   shareFigures: boolean;
   platforms: readonly string[];
+  /**
+   * The page id the user is looking at, so an answer can say "you are already
+   * on it" rather than sending them somewhere they are standing. A page name
+   * is not a figure — it rides with the date, not behind the figures opt-in.
+   */
+  page?: string;
 }
 
 /**
@@ -289,6 +296,7 @@ export function buildAssistantContext(state: WealthState, now: Date, options: Co
     parts.push(buildVocabularyContext(state, now, options.platforms));
   } else {
     parts.push(`Today is ${localDateKey(now)}.`);
+    if (options.page) parts.push(`The user is on the ${describePage(options.page)} page.`);
     if (options.shareFigures) parts.push(buildFiguresContext(state, now));
   }
 
