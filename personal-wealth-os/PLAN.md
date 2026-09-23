@@ -1722,6 +1722,52 @@ Preview（另一个会话做的，项目代码没有改动）：
 
 ---
 
+## 助手换用 DeepSeek（DS 系列）
+
+计划书：https://claude.ai/code/artifact/c4ba2448-e368-4e65-8755-6daa3385810c
+
+**为什么**：OpenRouter 免费档是**全 app 每天 50 次**、所有用户共用一把 key，用光了谁都不能问
+（2026-09-15 测原则那天就用光过一次）。DeepSeek 官方 API 没有这堵墙，按 token 计费，
+一次 Ask 约 $0.0012、一次 Record 约 $0.0004，估算一个月不到 RM7。
+
+**2026-09-23 定的四条**：① 直连 `api.deepseek.com`（OpenAI 格式兼容，不走中间商）；
+② Ask 用 `deepseek-v4-pro`、Record 用 `deepseek-flash`；③ 每人每天额度，计数存 Firestore；
+④ 隐私写明（DeepSeek 数据在中国境内处理）。另定：**未登录不能用助手**，额度 30 / 30。
+
+### T1 — 只换管道  `[x]`（2026-09-23，PR #136 已合并）
+
+- `openrouterRequest.ts` → `deepseekRequest.ts`；两个系统提示词**一个字没动**，这样 T4 测出差异时变量只有模型。
+- 思考关掉（不送 `thinking`）→ Record 上限从 2400 降回 800，那个预算现在只装答案。
+- Record 加 `response_format: json_object`；浏览器端宽松解析和逐字段校验全部保留。
+- 429 改回「稍后再试」（DeepSeek 的 429 是并发限制）；402 / 401 记日志 + 显示「暂时不可用」。
+- 实打验证：中文 Ask 守住原则 2；`bought 500 usd of VOO at 520.50, fee 3 myr` 四次全对、**没再编汇率**；
+  中文记账日期正确；`what is DCA?` → `action: none`。有一次 Record 在正确对象后多写了一段自我更正，
+  解析器取第一个对象（正好是对的那个），不影响。
+
+### T2 — 每人每天额度  `[ ]`
+
+客户端带 Firebase ID token；函数加 `firebase-admin` 验 token 拿 uid；`assistantUsage/{uid}_{date}`
+用 transaction 递增；`firestore.rules` 把这个集合对客户端**完全封死**（函数用 admin SDK 绕过规则写）；
+Firestore 挂了**拒绝**（fail-closed），放行会烧钱。
+
+### T3 — 隐私文案 + 额度话术  `[ ]`
+
+面板告知里的 OpenRouter → DeepSeek 并补一句数据在中国境内处理；「Share my figures」旁一行小字；
+`quotaMessage.ts` 从「免费额度用完」改写成「你今天的 30 次用完了」；明暗主题和手机宽度都要看。
+
+### T4 — 重跑 22 题原则测试  `[ ]`
+
+守不守原则是**模型相关**的，换了模型等于重新验一次。跑 `scripts/assistant-principles-eval.mjs`，
+人读每一条。同步改 `docs/assistant-principles.md`（模型名、文件路径、第 7 / 8 节里「每天 50 次」的说法）。
+若 Ask 守不住，就单独给 help 模式开 `thinking` 并提高 `MAX_OUTPUT_TOKENS`，再测。
+
+### T5 — 上线  `[ ]`
+
+secret 已设（`DEEPSEEK_API_KEY`，2026-09-23）。**合并 PR 只更新 Vercel 前端；模型和 key 在 Cloud Function 里，
+不跑 `firebase deploy --only functions:assistant` 就不会生效。**
+
+---
+
 ## FUTURE IDEAS（V1 之后 / 待决定，不自动做）
 
 - **Ledger 记账表单的吸顶可能不生效**（做 DG-2 时发现，2026-09-16）：`.wu-ledger-entry` 设置了 `position: sticky`，但外层 `.main` 是 `overflow: hidden`，sticky 会粘在 `.main` 上，滚动时表单不会跟着。没有实测确认，也没改。修法可能是把 `.main` 改成 `overflow: clip`，但它会影响光线裁切，需要单独验证。

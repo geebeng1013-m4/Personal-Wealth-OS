@@ -756,6 +756,22 @@ Add liability、Overview 的「Write down what you owe」弹层，从此是同�
 
 已上线：CI 通过、1374 测试全过，线上 `index-D00zETE-.css` 抓下来确认含 `--pill-hit: 7px`。
 
+## 助手换用 DeepSeek（DS 系列，2026-09-23 起）
+
+免费档那堵墙（全 app 每天 50 次）换成 DeepSeek 官方 API 按 token 计费。计划书和五个任务见 PLAN.md。
+
+| 任务 | 状态 |
+| --- | --- |
+| T1 只换管道（模型、地址、secret、JSON 模式、错误话术） | **已合并 #136**，线上未生效 |
+| T2 每人每天 30/30 额度，Firestore 计数 | 待做 |
+| T3 隐私文案 + 额度话术 | 待做 |
+| T4 重跑 22 题原则测试 + 同步文档 | 待做 |
+| T5 部署函数上线 | 待做 |
+
+**要记住的一件事**：合并 PR 只会让 Vercel 更新网站。助手的模型、提示词、key 全在 Cloud Function 里，
+**`firebase deploy --only functions:assistant` 不跑，线上就还是旧的免费模型**。所以 #136 合并后
+线上助手行为没有任何变化，这是预期的。
+
 ## FUTURE IDEAS / 待清
 
 - **启动交接时 logo 会抖一下（iOS，够不着，2026-09-23 停手）**——原生 App 只有一张图：启动画面
