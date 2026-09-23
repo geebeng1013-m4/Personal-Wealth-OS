@@ -34,11 +34,11 @@ export function numberInput(name: string, label: string, value = "", step = "0.0
 }
 
 /**
- * The active theme, as the root element's data-theme (default "dark").
+ * The active theme, as the root element's data-theme (default "light").
  *
  * A one-line DOM read, shared because the shell's theme toggle and the Market
  * page's chart both branch on it and neither owns it.
  */
 export function getTheme(): string {
-  return document.documentElement.getAttribute("data-theme") ?? "dark";
+  return document.documentElement.getAttribute("data-theme") ?? "light";
 }
