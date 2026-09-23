@@ -73,6 +73,10 @@
       })();
     </script>
     <style>
+      /* The fade is long (450ms) on purpose: the launch screen is dark in both
+         themes, so with the light default it lifts onto a near-white Overview.
+         At 220ms that much contrast read as a flash rather than a transition.
+         The boot script reads this duration back, so changing it here is enough. */
       /* Launch screen (PLAN.md S-1, S-4): the same picture the phone shows
          before the page arrives — #141310, the white W in the middle and, except
          on Android, the name near the bottom (the iPhone startup images from
@@ -95,7 +99,7 @@
       body { margin: 0; }
       /* shell.css styles this properly once it loads; until then keep it off-screen. */
       .skip-link { position: absolute; left: -9999px; }
-      #launch { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; background: #141310; transition: opacity 220ms ease; }
+      #launch { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; background: #141310; transition: opacity 450ms ease; }
       #launch-mark { width: 120px; height: auto; animation: launch-breathe 1.6s ease-in-out infinite; }
       /* launch-name.png is drawn at 3x; bottom 9% matches the startup images. */
       #launch-name { position: absolute; left: 50%; bottom: 9%; transform: translateX(-50%); width: 77px; height: auto; }
@@ -143,7 +147,14 @@
             restoreThemeBackground();
           };
           launch.addEventListener('transitionend', remove);
-          setTimeout(remove, 400);
+          // Safety net for a transitionend that never fires (reduced motion,
+          // a backgrounded tab). It has to outlast the fade, or it rips the
+          // overlay out mid-fade and reinstates the jump the fade exists to
+          // smooth over — so it reads the duration off the element rather
+          // than repeating the number the CSS above already states.
+          var fadeMs = 0;
+          try { fadeMs = (parseFloat(getComputedStyle(launch).transitionDuration) || 0) * 1000; } catch (e) {}
+          setTimeout(remove, fadeMs + 250);
         };
         // Fade only once the app's fonts are in, so the first Overview the
         // user sees does not swap typefaces under the fade. Capped: a slow
