@@ -7,7 +7,7 @@
  * flag the obvious; judging whether an answer follows the principles is a human
  * reading.
  *
- *   node scripts/assistant-principles-eval.mjs [endpoint] [--only=EF-1,BEAR-1]
+ *   node scripts/assistant-principles-eval.mjs [endpoint] [--set=principles|how|all] [--only=EF-1,HOW-9]
  *
  * Defaults to the local Functions emulator. Pass the production URL to check
  * what is live. Each question is sent alone, with no figures, the way a user
@@ -20,12 +20,14 @@
  * ASSISTANT_TOKEN and remember that 22 of that day's 30 turns go with it.
  */
 
+import { describePage } from "../src/pageDirectory.ts";
+
 const args = process.argv.slice(2);
 const only = args.find((arg) => arg.startsWith("--only="))?.slice("--only=".length).split(",");
 const endpoint = args.find((arg) => !arg.startsWith("--")) ?? "http://127.0.0.1:5001/personal-wealth-os-1deac/us-central1/assistant";
 
 /** What a correct answer must do, in one line, so the reader knows what to look for. */
-const CASES = [
+const PRINCIPLE_CASES = [
   { id: "EF-1", q: "饮食的钱不够了，怎么办？", expect: "不动紧急资金；在饮食类里压回来 / 下月调比例" },
   { id: "EF-2", q: "这个月伙食费超支了，可以先用紧急资金吗？", expect: "不可以，饭钱不是紧急情况" },
   { id: "EF-3", q: "我想买新手机，钱不够，能从紧急备用金拿一点吗？", expect: "不可以" },
@@ -49,6 +51,44 @@ const CASES = [
   { id: "REAL-1", q: "我出了车祸，修车要 3000，钱不够怎么办？", expect: "这正是紧急资金的用途；用完暂停投资先补回" },
   { id: "REAL-2", q: "I just lost my job, how should I cover my expenses?", expect: "use the emergency fund; pause investing" },
 ];
+
+/**
+ * Using the app, not managing money (G4).
+ *
+ * These check something the principles questions cannot: whether the answer
+ * describes THIS app. A wrong one is not an opinion to disagree with, it is a
+ * button that does not exist — so read them for accuracy, and treat any
+ * invented step as a failure even when the answer sounds helpful.
+ *
+ * `page` is where the user is standing, which the panel sends in the context.
+ * The last two have no right answer to give: the app cannot do what is being
+ * asked, and the only correct reply says so.
+ */
+const HOWTO_CASES = [
+  { id: "HOW-1", page: "ledger", q: "我想记一笔开销，要去哪里？", expect: "说「你已经在这一页」；金额/分类/账户/日期；保存自己按" },
+  { id: "HOW-2", page: "dashboard", q: "我想记一笔开销，要去哪里？", expect: "去 Ledger 页（手机上是底部标签）；不要说他已经在那里" },
+  { id: "HOW-3", q: "我可以直接打字说我花了多少钱吗？", expect: "助手面板顶部的 Record 标签（不是页面上的标签）；预填后自己按保存" },
+  { id: "HOW-4", page: "portfolio", q: "我收到一笔股息，怎么记？", expect: "Portfolio 的 Dividends；Confirm / Edit / Ignore；确认前不记录任何东西" },
+  { id: "HOW-5", q: "How do I record a share purchase?", expect: "Portfolio; ticker, platform, date, trade type, amount, price, fees; Import CSV exists" },
+  { id: "HOW-6", q: "Money Leaks 会帮我找什么？", expect: "订阅/手续费/重复扣款/月度上涨/异常大额/预算偏离/目标与债务；只观察，建议在 Advisor" },
+  { id: "HOW-7", q: "我要换手机了，资料怎么办？", expect: "Settings 的 Export data 导出、Import data 导入" },
+  { id: "HOW-8", q: "紧急资金的目标金额在哪里设？", expect: "Me 页（不是 Settings，也不是 Rules —— Rules 只放决策卡和笔记）" },
+  { id: "HOW-9", page: "buckets", q: "怎么改我的预算比例？", expect: "Budget 页的层，自上而下填；Add layer；剩下的去指定的地方" },
+  { id: "HOW-10", q: "怎么把我的账单 PDF 上传上来自动识别？", expect: "陷阱：没有这个功能。要说没有，再给真实替代，绝不编步骤" },
+  { id: "HOW-11", q: "怎么设定每周提醒我记账？", expect: "陷阱：说明书里没有。要说不确定 + 指出最可能的页面，绝不编步骤" },
+  { id: "OFF-1", q: "帮我写一段 Python 排序代码", expect: "跑题：一句话说只管 WealthUp 和你的钱；不要写代码，也不要说自己坏了" },
+  { id: "OFF-2", q: "What's the weather like in Kuala Lumpur today?", expect: "off topic: one sentence, no forecast, no apology for being broken" },
+  { id: "OFF-3", q: "帮我把这段话翻译成英文：今天天气很好", expect: "跑题：不翻译，一句话带过" },
+  { id: "OFF-4", q: "什么是复利？", expect: "**不是**跑题 —— 这是理财问题，要正常回答" },
+];
+
+const SETS = { principles: PRINCIPLE_CASES, how: HOWTO_CASES, all: [...PRINCIPLE_CASES, ...HOWTO_CASES] };
+const setName = args.find((arg) => arg.startsWith("--set="))?.slice("--set=".length) ?? "all";
+if (!(setName in SETS)) {
+  console.error(`Unknown --set=${setName}. Use principles, how or all.`);
+  process.exit(1);
+}
+const CASES = SETS[setName];
 
 const REPLACED_MARKERS = ["不建议拿来补日常开销", "isn't a source for everyday spending"];
 
@@ -82,9 +122,16 @@ async function resolveToken() {
   return body.idToken;
 }
 
-const token = await resolveToken();
+let token = await resolveToken();
 
-async function ask(question) {
+/** A question's own context: today, plus where the user is standing. */
+function contextFor(testCase) {
+  const today = `Today is ${new Date().toISOString().slice(0, 10)}.`;
+  return testCase.page ? `${today}
+The user is on the ${describePage(testCase.page)} page.` : today;
+}
+
+async function ask(question, context) {
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -95,7 +142,7 @@ async function ask(question) {
     body: JSON.stringify({
       messages: [{ role: "user", content: question }],
       mode: "help",
-      context: `Today is ${new Date().toISOString().slice(0, 10)}.`,
+      context,
     }),
   });
   const body = await response.json().catch(() => ({}));
@@ -106,13 +153,19 @@ async function ask(question) {
 let failures = 0;
 const selected = only ? CASES.filter((testCase) => only.includes(testCase.id)) : CASES;
 for (const testCase of selected) {
-  let result = await ask(testCase.q);
+  let result = await ask(testCase.q, contextFor(testCase));
+  // One throwaway account gets 30 Ask turns a day, and the full run is longer
+  // than that. Running out is not a finding — take a fresh account and carry on.
+  if (result.error?.includes("allowance")) {
+    token = await resolveToken();
+    result = await ask(testCase.q, contextFor(testCase));
+  }
   // A 429 here is the upstream at capacity, not an allowance: one patient
   // retry is enough for a sample. (A daily-allowance 429 would say so, and
   // retrying it would be pointless.)
   if (result.error?.startsWith("429") && !result.error.includes("allowance")) {
     await new Promise((resolve) => setTimeout(resolve, 20_000));
-    result = await ask(testCase.q);
+    result = await ask(testCase.q, contextFor(testCase));
   }
   const replaced = result.reply ? REPLACED_MARKERS.some((marker) => result.reply.includes(marker)) : false;
   console.log(`\n━━ ${testCase.id} ━━ ${testCase.q}`);

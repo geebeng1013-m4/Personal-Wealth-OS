@@ -37,8 +37,14 @@ test("principles doc: the key figures agree with the prompt", () => {
   }
 });
 
-test("principles doc: the eval question count matches the script", () => {
+test("principles doc: both eval question counts match the script", () => {
   const script = readFileSync(resolve(process.cwd(), "scripts/assistant-principles-eval.mjs"), "utf8");
-  const count = [...script.matchAll(/\{ id: "[A-Z]+-\d+"/g)].length;
-  assert.ok(doc.includes(`共 ${count} 题`), `script has ${count} questions`);
+  // The two sets are counted apart: one proves the principles hold, the other
+  // proves the app is described as it is. A question added to either has to
+  // show up in the doc's own table, or the doc stops being the record.
+  const [principles, howto] = script.split("const HOWTO_CASES");
+  assert.ok(howto, "the script still has a how-to set");
+  const count = (text: string): number => [...text.matchAll(/\{ id: "[A-Z]+-\d+"/g)].length;
+  assert.ok(doc.includes(`共 ${count(principles)} 题`), `principles set has ${count(principles)} questions`);
+  assert.ok(doc.includes(`共 ${count(howto)} 题`), `how-to set has ${count(howto)} questions`);
 });
