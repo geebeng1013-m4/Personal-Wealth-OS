@@ -18,6 +18,7 @@ import { renderApp } from "./ui";
 import { onAuth, preloadFirestore, signInWithGoogle, handleRedirectResult, logOut, subscribeToFirestore, loadAssistantHistory, saveAssistantHistory, type CloudSnapshot } from "./firebase";
 import { setAssistantOwner } from "./components/assistant/assistantStore";
 import { flushAssistantSync, startAssistantSync, stopAssistantSync } from "./components/assistant/assistantSync";
+import { setAssistantTokenProvider } from "./components/assistant/assistantClient";
 import { fetchUsdToMyr, pruneMarketCache } from "./market";
 import type { User } from "firebase/auth";
 import { isDemoMode } from "./demo";
@@ -486,6 +487,11 @@ async function handleAuth(user: User | null): Promise<void> {
     setAssistantOwner(user.uid);
     void startAssistantSync(user.uid, { load: loadAssistantHistory, save: saveAssistantHistory });
 
+    // Every assistant request now says whose it is: the server counts this
+    // account's daily allowance and refuses a request with no token. Firebase
+    // refreshes the token itself when it is close to expiring.
+    setAssistantTokenProvider(() => user.getIdToken());
+
     const userStorageKey = `personal-wealth-os-state-${user.uid}`;
     const hasLocalData = localStorage.getItem(userStorageKey) !== null;
     quizAllowed = hasLocalData;
@@ -547,6 +553,7 @@ async function handleAuth(user: User | null): Promise<void> {
     resetOnboardingDraft();
     stopAssistantSync();
     setAssistantOwner(null);
+    setAssistantTokenProvider(null);
     if (cloudSyncUnsub) { cloudSyncUnsub(); cloudSyncUnsub = null; }
     renderLogin();
   }

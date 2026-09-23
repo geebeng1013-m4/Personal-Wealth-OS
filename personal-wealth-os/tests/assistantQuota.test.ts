@@ -25,7 +25,8 @@ test("quota: a reset further out names the date", () => {
 test("quota: the full message says what happened, when it returns, and that nothing else is affected", () => {
   const now = new Date(2026, 8, 15, 20, 0, 0);
   const text = dailyLimitMessage(new Date(2026, 8, 16, 8, 0, 0).getTime(), now, "en-MY");
-  assert.match(text, /used up today's free allowance/);
+  assert.match(text, /used today's assistant allowance/);
+  assert.doesNotMatch(text, /free/i, "the allowance is this account's, not a free tier's");
   assert.match(text, /available again tomorrow at /);
   assert.match(text, /rest of WealthUp works as usual/);
   assert.doesNotMatch(text, /shortly/i, "never 'try again shortly' for a limit that lasts hours");

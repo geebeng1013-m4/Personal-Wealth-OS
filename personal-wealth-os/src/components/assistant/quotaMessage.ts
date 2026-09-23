@@ -1,14 +1,13 @@
 /**
- * What to tell someone when the assistant's free daily allowance is used up.
+ * What to tell someone when their daily assistant allowance is used up.
  *
- * The whole app shares one OpenRouter key on the free tier, which allows a fixed
- * number of requests per day. When they run out, every user is refused until the
- * reset — hours away, not seconds. The old wording, "try again shortly", sent
- * people straight back into the same refusal.
+ * The allowance is this account's own: a fixed number of Ask and Record turns
+ * a day, counted server-side (functions/src/quota.ts). It comes back at local
+ * midnight — hours away, not seconds — so "try again shortly" would send people
+ * straight back into the same refusal.
  *
  * The reset arrives from the server as an absolute time, so it is shown in the
- * reader's own clock ("tomorrow at 8:00 am" in Malaysia, the same instant in any
- * other zone) rather than as the UTC midnight it actually is.
+ * reader's own clock rather than as the instant it actually is.
  *
  * Pure: `now` and the formatting locale are passed in, so it is testable.
  */
@@ -35,11 +34,11 @@ export function describeReset(resetAt: number, now: Date, locale?: string): stri
 /**
  * The full sentence for the panel.
  *
- * Says what happened in plain terms (the free allowance, not an error the user
+ * Says what happened in plain terms (an allowance, not an error the user
  * caused), when it comes back, and that nothing is lost in the meantime.
  */
 export function dailyLimitMessage(retryAt: unknown, now: Date, locale?: string): string {
-  const lead = "The assistant has used up today's free allowance.";
+  const lead = "You have used today's assistant allowance.";
   const valid = typeof retryAt === "number" && Number.isFinite(retryAt) && retryAt > now.getTime() - 60_000;
   const when = valid
     ? `It will be available again ${describeReset(retryAt, now, locale)}.`

@@ -35,6 +35,37 @@ export interface AssistantRequest {
   context: string;
 }
 
+/**
+ * Where the caller's Firebase ID token comes from.
+ *
+ * The server counts a daily allowance per account, so every request has to say
+ * whose it is. Firebase is injected rather than imported for the same reason
+ * assistantSync takes its cloud as an argument: this module stays testable
+ * without it, and the demo account simply never sets one.
+ *
+ * Returning null means "nobody is signed in" — the request is still sent, and
+ * the server answers 401. Deciding here would only duplicate that rule badly.
+ */
+export type AssistantTokenProvider = () => Promise<string | null>;
+
+let tokenProvider: AssistantTokenProvider | null = null;
+
+export function setAssistantTokenProvider(provider: AssistantTokenProvider | null): void {
+  tokenProvider = provider;
+}
+
+async function authHeader(): Promise<Record<string, string>> {
+  if (!tokenProvider) return {};
+  try {
+    const token = await tokenProvider();
+    return typeof token === "string" && token.length > 0 ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    // A token refresh can fail offline. Send the request without it and let
+    // the server's 401 be the single place that says "sign in".
+    return {};
+  }
+}
+
 export type AssistantResponse =
   | { ok: true; reply: string }
   | { ok: false; error: string };
@@ -48,9 +79,10 @@ function messageForStatus(status: number, body: unknown): string {
     : "";
 
   if (status === 429) {
-    // The free daily allowance is a different problem from a busy moment: it
-    // lasts hours, so say when it comes back instead of "try again shortly".
-    if ((body as { reason?: unknown } | null)?.reason === "daily-limit") {
+    // This account's daily allowance is a different problem from a busy
+    // moment: it lasts until midnight, so say when it comes back instead of
+    // "try again shortly".
+    if ((body as { reason?: unknown } | null)?.reason === "daily-quota") {
       return dailyLimitMessage((body as { retryAt?: unknown }).retryAt, new Date());
     }
     return serverError || "Too many requests just now. Give it a moment and try again.";
@@ -75,12 +107,14 @@ export async function askAssistant(request: AssistantRequest, signal?: AbortSign
     ? AbortSignal.any([signal, timeout])
     : timeout;
 
+  const auth = await authHeader();
+
   let response: Response;
   try {
     response = await fetch(assistantEndpoint(), {
       method: "POST",
       signal: combined,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...auth },
       body: JSON.stringify({
         messages: request.messages,
         mode: request.mode,
