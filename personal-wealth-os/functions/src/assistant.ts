@@ -16,6 +16,9 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
+import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { guardHelpReply } from "./answerGuard.js";
 import { resolveCors } from "./cors.js";
 import { checkRateLimit, clientKeyFromHeaders } from "./rateLimit.js";
@@ -24,8 +27,19 @@ import {
   buildDeepSeekPayload,
   parseDeepSeekReply,
 } from "./deepseekRequest.js";
+import { bearerToken, dayKeyFor, decideQuota, usageDocId, type QuotaDecision } from "./quota.js";
 
 const DEEPSEEK_API_KEY = defineSecret("DEEPSEEK_API_KEY");
+
+/**
+ * The admin app, created once per instance and shared by every invocation.
+ * It runs with the project's own credentials, which is what lets it write the
+ * usage counters that `firestore.rules` denies to every client.
+ */
+initializeApp();
+
+/** Where the counters live. Clients cannot read or write this collection. */
+const USAGE_COLLECTION = "assistantUsage";
 
 /** One conversational turn a minute is plenty; 15 leaves slack for retries. */
 const RATE_WINDOW_MS = 60_000;
@@ -92,6 +106,67 @@ export const assistant = onRequest(
       response.status(built.status).json({ error: built.error });
       return;
     }
+
+    // From here the request costs real money, so it has to belong to somebody.
+    // A signed-in account is the only thing a daily allowance can be counted
+    // against: an IP is shared, spoofable and forgotten on a cold start.
+    const idToken = bearerToken(request.headers);
+    if (idToken.length === 0) {
+      response.status(401).json({ error: "Sign in to use the assistant.", reason: "signed-out" });
+      return;
+    }
+    let uid: string;
+    try {
+      uid = (await getAuth().verifyIdToken(idToken)).uid;
+    } catch {
+      // Expired, malformed, or for another project. Never log the token.
+      response.status(401).json({ error: "Sign in again to use the assistant.", reason: "signed-out" });
+      return;
+    }
+
+    // Today's allowance, counted in Firestore so it survives a cold start and
+    // holds across instances. The turn is charged here, before the model is
+    // called: a refused turn costs nothing, and a turn the model then fails to
+    // answer still costs one — which is the safe way round for a bill.
+    const now = Date.now();
+    const firestore = getFirestore();
+    const usageRef = firestore.collection(USAGE_COLLECTION).doc(usageDocId(uid, now));
+    let quota: QuotaDecision;
+    try {
+      quota = await firestore.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(usageRef);
+        const decision = decideQuota(snapshot.data(), built.mode, now);
+        if (decision.allowed) {
+          transaction.set(
+            usageRef,
+            {
+              uid,
+              day: dayKeyFor(now),
+              [built.mode]: FieldValue.increment(1),
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+        }
+        return decision;
+      });
+    } catch (error) {
+      // Fail closed. Letting turns through while the counter is unreachable
+      // would lift the ceiling exactly when something is already wrong.
+      logger.error("assistant quota unavailable", { reason: error instanceof Error ? error.message : "unknown" });
+      response.status(503).json({ error: "The assistant is unavailable right now." });
+      return;
+    }
+    if (!quota.allowed) {
+      logger.info("assistant daily allowance used up", { mode: built.mode });
+      response.status(429).json({
+        error: "You have used today's assistant allowance.",
+        reason: "daily-quota",
+        retryAt: quota.resetAt,
+      });
+      return;
+    }
+    response.setHeader("Assistant-Quota-Remaining", String(quota.remaining));
 
     let upstream: Awaited<ReturnType<typeof fetch>>;
     try {

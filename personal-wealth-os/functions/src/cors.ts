@@ -41,7 +41,9 @@ export function resolveCors(origin: string | undefined): CorsDecision {
   const base: Record<string, string> = {
     Vary: "Origin",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    // Authorization carries the caller's Firebase ID token. Leave it out and
+    // the browser's preflight fails before the real request is ever sent.
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Max-Age": "3600",
   };
 
