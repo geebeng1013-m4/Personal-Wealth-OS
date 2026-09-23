@@ -1770,10 +1770,22 @@ Firestore 挂了**拒绝**（fail-closed），放行会烧钱。
    提示词禁止用任何语言提到或编号原则，安全网的固定话术也去掉了。
 3. **熊市储备改写**（用户 2026-09-24 定，见文档决定 ③ 修订）。
 
-### T5 — 上线  `[ ]`
+### T5 — 上线  `[x]`（2026-09-24）
 
-secret 已设（`DEEPSEEK_API_KEY`，2026-09-23）。**合并 PR 只更新 Vercel 前端；模型和 key 在 Cloud Function 里，
-不跑 `firebase deploy --only functions:assistant` 就不会生效。**
+`firebase deploy --only firestore:rules,functions:assistant`。规则必须一起部署，否则
+`assistantUsage` 任何登录用户都能改，额度等于没有。
+
+**踩到的坑：云端 secret 存错了。** 第一次部署后线上报「The assistant is unavailable right now」，
+日志是 `assistant cannot bill upstream, status 401` —— DeepSeek 拒绝了 key。对比发现
+Secret Manager 里存的是 **359 个字符、开头 `keysk`**，也就是在隐藏输入框里把网页文字连 key 一起贴进去了；
+本地 `.secret.local` 里那份是干净的 35 字符，所以本地一直正常。
+用 `--data-file` 从本地那份重设为 version 2 后重新部署，恢复正常。
+**教训：`functions:secrets:set` 的输入是隐藏的，贴错看不出来；设完值得比一次长度。**
+
+线上验证：未登录 401、假 token 401、预检放行 `Authorization`、非白名单 403、真实账号问答正常（约 4 秒、
+不自称原则、按规矩提示 "Share my figures"）。**额度也由此得证**：计数事务若失败，fail-closed 会返回 503 而不是答案。
+
+成本实测：整个开发 + 三轮完整 22 题测试，共花 **$0.10**（余额从 $5.00 到 $4.90）。
 
 ---
 

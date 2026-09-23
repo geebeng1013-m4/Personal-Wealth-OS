@@ -766,10 +766,13 @@ Add liability、Overview 的「Write down what you owe」弹层，从此是同�
 | T2 每人每天 30/30 额度，Firestore 计数 | **已合并 #137**，线上未生效 |
 | T3 隐私文案 + 额度话术 | **已合并 #138**，线上已生效（前端走 Vercel）|
 | T4 重跑 22 题原则测试 + 同步文档 | **已合并 #139**，含关掉思考 / 不再自称 / 熊市储备改写 |
-| T5 部署函数上线 | 待做 |
+| T5 部署函数上线 | **已上线 2026-09-24**，真实账号实测正常 |
 
-**现在的状态（2026-09-24）**：前端已经是新的（面板写着「由 DeepSeek 回答」、会带 token、未登录显示提示），
-但**函数还是旧的 OpenRouter 版**。所以线上此刻说法不实：写着 DeepSeek，实际答话的是旧免费模型。T5 部署函数后一致。
+**DS 系列已全部上线（2026-09-24）**：助手由 DeepSeek 回答（Ask `deepseek-v4-pro`、Record `deepseek-flash`），
+每账号每天 30 Ask / 30 Record，未登录不能用。整个开发 + 三轮 22 题测试共花 $0.10。
+
+上线当天踩的坑：云端 secret 存成了一段 359 字符的网页文字（隐藏输入框贴错，看不出来），
+线上报 401「cannot bill upstream」。从本地 `.secret.local` 用 `--data-file` 重设并重新部署后恢复。
 
 **要记住的一件事**：合并 PR 只会让 Vercel 更新网站。助手的模型、提示词、key 全在 Cloud Function 里，
 **`firebase deploy --only functions:assistant` 不跑，线上就还是旧的免费模型**。所以 #136 合并后
