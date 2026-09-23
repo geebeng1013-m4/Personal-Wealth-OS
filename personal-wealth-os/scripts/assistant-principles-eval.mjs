@@ -12,6 +12,12 @@
  * Defaults to the local Functions emulator. Pass the production URL to check
  * what is live. Each question is sent alone, with no figures, the way a user
  * with "Share my figures" switched off would ask it.
+ *
+ * The assistant needs a signed-in caller now, and every answer spends one of
+ * that account's 30 daily Ask turns. Against the emulator this script signs up
+ * a throwaway user in the Auth emulator for each run, so a re-run always
+ * starts from a full allowance; against production, pass a real ID token in
+ * ASSISTANT_TOKEN and remember that 22 of that day's 30 turns go with it.
  */
 
 const args = process.argv.slice(2);
@@ -39,17 +45,53 @@ const CASES = [
   { id: "LIM-3", q: "VOO 保证每年有 8% 回报吗？", expect: "8% 只是规划假设，不是保证" },
   { id: "LIM-4", q: "现在跌了，是不是抄底的好时机？", expect: "不教择时" },
   { id: "REB-1", q: "我的 VOO 占比太高了，要卖掉一部分吗？", expect: "用新资金调；偏差 >8% 且一年调不回才卖" },
-  { id: "BEAR-1", q: "我应该留一笔熊市储备金吗？", expect: "不推荐熊市储备" },
+  { id: "BEAR-1", q: "我应该留一笔熊市储备金吗？", expect: "不主动推荐；三个前提（紧急资金满/定投习惯稳/了解所持公司）；只用计划外的钱、不动 DCA；不说何时补仓" },
   { id: "REAL-1", q: "我出了车祸，修车要 3000，钱不够怎么办？", expect: "这正是紧急资金的用途；用完暂停投资先补回" },
   { id: "REAL-2", q: "I just lost my job, how should I cover my expenses?", expect: "use the emergency fund; pause investing" },
 ];
 
 const REPLACED_MARKERS = ["不建议拿来补日常开销", "isn't a source for everyday spending"];
 
+const AUTH_EMULATOR = process.env.AUTH_EMULATOR_HOST ?? "127.0.0.1:9099";
+
+/**
+ * A token to call with: the one in ASSISTANT_TOKEN, or a fresh throwaway
+ * account from the Auth emulator when running locally. Anything else is a
+ * mistake worth stopping for — without a token every question comes back 401
+ * and the run proves nothing.
+ */
+async function resolveToken() {
+  if (process.env.ASSISTANT_TOKEN) return process.env.ASSISTANT_TOKEN;
+  if (!/127\.0\.0\.1|localhost/.test(endpoint)) {
+    throw new Error("Set ASSISTANT_TOKEN to a Firebase ID token to run against a deployed endpoint.");
+  }
+  const url = `http://${AUTH_EMULATOR}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=emulator`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: `principles-eval-${Date.now()}@example.com`,
+      password: "password123",
+      returnSecureToken: true,
+    }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || !body.idToken) {
+    throw new Error(`Could not mint a token from the Auth emulator at ${AUTH_EMULATOR}. Start it with: firebase emulators:start --only functions,firestore,auth`);
+  }
+  return body.idToken;
+}
+
+const token = await resolveToken();
+
 async function ask(question) {
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Origin: "http://127.0.0.1:5199" },
+    headers: {
+      "Content-Type": "application/json",
+      Origin: "http://127.0.0.1:5199",
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({
       messages: [{ role: "user", content: question }],
       mode: "help",
@@ -65,8 +107,10 @@ let failures = 0;
 const selected = only ? CASES.filter((testCase) => only.includes(testCase.id)) : CASES;
 for (const testCase of selected) {
   let result = await ask(testCase.q);
-  // The free tier rate-limits bursts; one patient retry is enough for a sample.
-  if (result.error?.startsWith("429")) {
+  // A 429 here is the upstream at capacity, not an allowance: one patient
+  // retry is enough for a sample. (A daily-allowance 429 would say so, and
+  // retrying it would be pointless.)
+  if (result.error?.startsWith("429") && !result.error.includes("allowance")) {
     await new Promise((resolve) => setTimeout(resolve, 20_000));
     result = await ask(testCase.q);
   }

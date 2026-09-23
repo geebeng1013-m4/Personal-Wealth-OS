@@ -29,7 +29,7 @@ test("principles doc: the key figures agree with the prompt", () => {
     ["About 8% a year", "年化约 8%"],
     ["drift is above 8%", "偏差超过 8%"],
     ["a goal 3 years away or less goes in a money market fund", "3 年或以内 → 货币市场基金"],
-    ["Do not recommend keeping a bear-market reserve", "不推荐熊市储备金"],
+    ["Do not recommend keeping a bear-market reserve, but do not rule it out either", "不主动推荐，但也不再一概否定"],
   ];
   for (const [inPrompt, inDoc] of pairs) {
     assert.ok(prompt.includes(inPrompt), `prompt no longer says: ${inPrompt}`);

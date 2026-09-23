@@ -169,3 +169,25 @@ test("assistant prompt: carries all six WealthUp principles and their order of p
 test("assistant prompt: tells the model to answer in the user's language", () => {
   assert.ok(SYSTEM_PROMPT.includes("same language the user writes in"));
 });
+
+// --- the assistant does not quote itself --------------------------------
+
+test("assistant prompt: forbids citing the principles by name or number", () => {
+  assert.match(SYSTEM_PROMPT, /NEVER cite the principles/);
+  assert.match(SYSTEM_PROMPT, /按 WealthUp 原则/, "the forbidden Chinese phrasing is named, so the model can recognise it");
+  assert.match(SYSTEM_PROMPT, /Principle 4/, "and the forbidden English one");
+});
+
+test("answer guard: its own replacements do not cite WealthUp either", () => {
+  // The guard's text is what goes out in place of a bad answer, so it has to
+  // read like the rest of the assistant — an explanation, not a citation.
+  for (const [question, reply] of [
+    ["伙食费不够了，可以用紧急资金吗？", "可以先从紧急资金拿一点出来应急。"],
+    ["My food budget ran out, can I use my emergency fund?", "You could take a little from your emergency fund."],
+  ] as const) {
+    const guarded = guardHelpReply(reply, question);
+    assert.equal(guarded.replaced, true, question);
+    assert.doesNotMatch(guarded.reply, /WealthUp/i, "no self-citation in the replacement");
+    assert.doesNotMatch(guarded.reply, /原则/, "nor in Chinese");
+  }
+});

@@ -46,17 +46,19 @@ test("assistant: each mode carries its own model", () => {
   assert.notEqual(ASSISTANT_MODEL_HELP, ASSISTANT_MODEL_FILL);
 });
 
-test("assistant: only fill mode asks for JSON, and neither mode enables thinking", () => {
+test("assistant: only fill mode asks for JSON, and both modes switch thinking off", () => {
   const help = buildDeepSeekPayload({ messages: [{ role: "user", content: "hi" }], mode: "help" });
   const fill = buildDeepSeekPayload({ messages: [{ role: "user", content: "coffee 5" }], mode: "fill" });
   assert.equal(help.ok && fill.ok, true);
   if (!help.ok || !fill.ok) return;
   assert.deepEqual(fill.payload.response_format, { type: "json_object" });
   assert.equal(help.payload.response_format, undefined, "prose must not be forced into JSON");
-  // An absent `thinking` field is what switches reasoning off. Sending it at
-  // all would bring back the empty completions and double the bill.
+  // Thinking is ON by default on both models and has to be switched off by
+  // name. Leaving the field out does not disable it: the reasoning then shares
+  // max_tokens with the answer and empties it, and a turn takes ~25s instead
+  // of ~4s. Measured on 2026-09-24, after shipping exactly that mistake.
   for (const built of [help.payload, fill.payload]) {
-    assert.equal(Object.prototype.hasOwnProperty.call(built, "thinking"), false);
+    assert.deepEqual(built.thinking, { type: "disabled" });
   }
 });
 
