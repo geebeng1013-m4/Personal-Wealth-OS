@@ -40,7 +40,14 @@ MARK_CSS_WIDTH = 120  # must match #launch img in index.html
 
 # Whether to link the startup images from index.html.
 #
-# Back on 2026-09-23: turning them off did not stop the twitch (it happens
+# Off again 2026-09-23: the user asked for the logo launch screen to go,
+# and iOS's startup image is one of them - it is the W the phone draws
+# before the page arrives. With no links iOS fills the screen with
+# manifest background_color instead and the app is the first thing shown.
+# (It was briefly off before for another reason: turning it off does not
+# stop iOS's open-from-the-icon twitch, which happens inside a transition
+# a web app cannot opt out of. See PROGRESS.md FUTURE IDEAS.)
+# With them
 # inside iOS's transition, which a web app cannot opt out of), and it cost
 # the logo ~100-150ms of arriving late. Kept as a flag because the reasoning
 # is worth keeping. With them, iOS draws the W itself and then cross-
@@ -56,7 +63,7 @@ MARK_CSS_WIDTH = 120  # must match #launch img in index.html
 # The images are still generated, so setting this back to True restores the
 # old behaviour. iOS reads the links only when the icon is added to the
 # home screen, so either way the icon has to be re-added to see the change.
-LINK_STARTUP_IMAGES = True
+LINK_STARTUP_IMAGES = False
 
 # (label, CSS width, CSS height, device pixel ratio) in portrait.
 IPHONES = [
@@ -168,14 +175,20 @@ def main() -> None:
     # The page's launch screen shows the same two images, inlined so they
     # paint with the HTML; its CSS sizes the name at 1/NAME_SCALE.
     import re
-    for element_id, path in (("launch-mark", MARK_OUT), ("launch-name", NAME)):
-        html, count = re.subn(rf'(<img id="{element_id}"[^>]*? src=")data:image/png;base64,[^"]*(")', rf"\g<1>{data_uri(path)}\g<2>", html)
+    # The page no longer draws a launch screen of its own, so there are no
+    # inlined images to keep in step. The splash PNGs are still built, so
+    # LINK_STARTUP_IMAGES can bring the native one back on its own; restoring
+    # the page's overlay would mean restoring its markup from git history too.
+    if '<img id="launch-mark"' in html:
+        for element_id, path in (("launch-mark", MARK_OUT), ("launch-name", NAME)):
+            html, count = re.subn(rf'(<img id="{element_id}"[^>]*? src=")data:image/png;base64,[^"]*(")', rf"\g<1>{data_uri(path)}\g<2>", html)
+            if count != 1:
+                raise SystemExit(f"index.html needs exactly one <img id=\"{element_id}\" ... src=\"data:...\">")
+        css_width = f"width: {name.width / NAME_SCALE:g}px;"
+        html, count = re.subn(r"(#launch-name \{[^}]*?)width: [0-9.]+px;", rf"\g<1>{css_width}", html)
         if count != 1:
-            raise SystemExit(f"index.html needs exactly one <img id=\"{element_id}\" ... src=\"data:...\">")
-    css_width = f"width: {name.width / NAME_SCALE:g}px;"
-    html, count = re.subn(r"(#launch-name \{[^}]*?)width: [0-9.]+px;", rf"\g<1>{css_width}", html)
-    if count != 1:
-        raise SystemExit("index.html needs one #launch-name rule with a width")
+            raise SystemExit("index.html needs one #launch-name rule with a width")
+
     INDEX.write_text(html, encoding="utf-8")
     print(f"{len(seen)} images, {len(links)} links; name {name.width}x{name.height} px = {name.width / NAME_SCALE:.2f} CSS px wide")
 
