@@ -38,6 +38,31 @@ https://claude.ai/artifact/3URvhvbo6ND7gyp8GcdhwY（14 页，1280×900 vs 390×8
 - 手机版持仓列表要不要列名（ETF / Weight vs target / Value）—— 手机是两行网格，列名放不进去，
   且每个数字本身已有标注。
 
+## 字体不再中途切换  `[x]`（2026-09-24，PR #134 已上线，`main` = `936e0b7`）
+
+#133 移除启动画面后露出来的：遮罩原本会等 `document.fonts.ready`（上限 800ms）才淡出，
+顺手把字体切换盖住了。实测 390×840：暖启动好网络看到后备字体 **104ms**，慢网 **499ms**；
+**冷启动反而不跳**（整体比字体慢，字体早到了）。
+
+用户选 **B+C**：
+- **C `font-display: optional`** —— 浏览器给字体一个很短的窗口，赶不上就**这一整次加载都用后备
+  字体、中途不换**。这是「不跳」的保证。`@fontsource` 把 `swap` 写死在自己的 CSS 里，所以用
+  `vite.config.ts` 的 `fontsWithoutSwap()` 插件在构建期替换。
+- **B 预加载** —— 只有这样那个窗口才赶得上，否则「不跳」会变成「每次都是系统字体」。只预加载
+  latin 子集，4 个文件 76KB。**不含 Lato**（只装点 Overview 一行，后备栈本来就落到 Inter）。
+- 插件的坑：`transformIndexHtml` 比 `generateBundle` 先跑，所以文件名要从 `ctx.bundle` 现取，
+  不能在 `generateBundle` 里攒好。
+
+**验证方式要点（以后复用）**：`document.fonts.ready` 在这里是**错的指标** —— `optional` 的重点
+是不换，字体晚到不代表用户看到跳变。正确做法是**从第一帧起盯住探针的宽度**：跳变会改变字符宽度，
+宽度出现第二个值即重排。参考 Inter 259.31px / 系统后备 247.61px；三种场景（冷启动清 HTTP 缓存、
+暖启动慢网、暖启动好网）**全程只有一个宽度值，且都用上 Inter**。
+- 自己踩过一次：探针用 `font: 500 16px var(--font-sans, sans-serif)` 简写，变量未定义时解析成
+  后备字体，一度误判「好网络下 Inter 没生效」。要用明确字体栈。
+
+剩余风险：`optional` 按定义仍可能在极端情况（全新安装 + 网络很差）整页用系统字体。
+SW 方面：preload 是同源 `/assets/` 链接，`assetPathsFrom` 会算进预缓存和 `shellIsBootable`。
+
 ## 移除 Logo 启动画面，直接进主页面  `[x]`（2026-09-23，PR #133 已上线，`main` = `01075c7`）
 
 用户要求：从 Safari「Add to Home Screen」打开时不要 Logo 启动画面，直接进主页面；
