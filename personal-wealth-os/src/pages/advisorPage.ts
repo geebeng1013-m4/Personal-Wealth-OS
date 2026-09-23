@@ -26,7 +26,7 @@ import { createId } from "../state";
 import { money } from "../rules";
 import { escapeHtml } from "../html";
 import { getAdvisorSnapshot } from "../advisor";
-import { isRecommendationCompleted, markRecommendationDone } from "../actionRecords";
+import { isRecommendationCompleted, markRecommendationDone, undoRecommendationDone } from "../actionRecords";
 import { assetDrawdownBelow } from "../drawdowns";
 import { getPrice } from "../marketPrices";
 import { livePriceInputs, refreshLivePrices } from "../livePrices";
@@ -59,10 +59,23 @@ function destinationButton(recommendation: AdvisorRecommendation, primary: boole
   return `<button class="wu-btn ${primary ? "wu-btn--primary" : "wu-btn--secondary"} wu-btn--sm dashboard-nav" type="button" data-page="${escapeHtml(recommendation.destination)}">Go to ${escapeHtml(recommendation.destination.replace(/-/g, " "))}</button>`;
 }
 
+function markDoneButton(recommendation: AdvisorRecommendation): string {
+  return `<button class="wu-btn wu-btn--ghost wu-btn--sm advisor-mark-done" type="button" data-recommendation-id="${escapeHtml(recommendation.id)}" data-action-label="${escapeHtml(recommendation.action)}">Mark as done</button>`;
+}
+
+/**
+ * Undo a completion. Marking something done is one press with no confirmation,
+ * so the completed state has to offer the way back. It drops the record only,
+ * which returns the advice to its normal form — it can be completed again.
+ */
+function undoDoneButton(recommendation: AdvisorRecommendation): string {
+  return `<button class="wu-btn wu-btn--ghost wu-btn--sm advisor-undo-done" type="button" aria-label="Undo marking this done" data-recommendation-id="${escapeHtml(recommendation.id)}">Undo</button>`;
+}
+
 function markDoneControl(state: WealthState, recommendation: AdvisorRecommendation): string {
   return isRecommendationCompleted(state, recommendation.id)
-    ? `<span class="wu-chip">Completed</span>`
-    : `<button class="wu-btn wu-btn--ghost wu-btn--sm advisor-mark-done" type="button" data-recommendation-id="${escapeHtml(recommendation.id)}" data-action-label="${escapeHtml(recommendation.action)}">Mark as done</button>`;
+    ? `<span class="wu-chip">Completed</span>${undoDoneButton(recommendation)}`
+    : markDoneButton(recommendation);
 }
 
 function priorityCard(state: WealthState, priority: AdvisorRecommendation | null): string {
@@ -84,7 +97,7 @@ function priorityCard(state: WealthState, priority: AdvisorRecommendation | null
       <div class="wu-tc__top"><span class="wu-label" id="advPriorityLabel">Priority</span>${chip}</div>
       <h3 class="wu-advisor-heading">${escapeHtml(priority.action)}</h3>
       <p class="wu-dash__note">${escapeHtml(priority.fact)}</p>
-      <div class="wu-row wu-row--tight wu-dash__actions">${destinationButton(priority, true)}${done ? "" : markDoneControl(state, priority)}</div>
+      <div class="wu-row wu-row--tight wu-dash__actions">${destinationButton(priority, true)}${done ? undoDoneButton(priority) : markDoneButton(priority)}</div>
     </section>`;
 }
 
@@ -227,6 +240,23 @@ export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Set
         }),
       };
       setState(next, "Mark advisor action done");
+      repaint(next);
+    });
+  });
+
+  // Undo a completion, from the priority card or an open guidance row. Same id
+  // check as marking done, so a stale button cannot drop a live record.
+  root.querySelectorAll<HTMLButtonElement>(".advisor-undo-done").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      const target = event.currentTarget as HTMLButtonElement;
+      const recommendationId = target.dataset.recommendationId;
+      if (!recommendationId) return;
+      if (!recommendations.some((item) => item.id === recommendationId)) return;
+      const next: WealthState = {
+        ...state,
+        actionRecords: undoRecommendationDone(state.actionRecords, recommendationId),
+      };
+      setState(next, "Undo advisor action done");
       repaint(next);
     });
   });

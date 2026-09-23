@@ -159,3 +159,21 @@ export function markRecommendationDone(
   const withRecord = createActionRecord(records, { ...input, now });
   return completeActionRecord(withRecord, input.recommendationId.trim(), now);
 }
+
+/**
+ * Undo a completion: drop the record tracking a recommendation.
+ *
+ * Records are only ever created by marking something done, so removing the
+ * record is the exact state before the press — the recommendation goes back to
+ * offering "Mark as done" and can be completed again with a fresh timestamp.
+ * Returns the records unchanged when nothing tracks that recommendation. Pure.
+ */
+export function undoRecommendationDone(
+  records: ActionRecord[],
+  recommendationId: string,
+): ActionRecord[] {
+  const id = recommendationId.trim();
+  if (!id) return records;
+  const next = records.filter((record) => record.recommendationId !== id);
+  return next.length === records.length ? records : next;
+}
