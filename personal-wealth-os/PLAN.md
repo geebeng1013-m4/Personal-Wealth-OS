@@ -38,6 +38,35 @@ https://claude.ai/artifact/3URvhvbo6ND7gyp8GcdhwY（14 页，1280×900 vs 390×8
 - 手机版持仓列表要不要列名（ETF / Weight vs target / Value）—— 手机是两行网格，列名放不进去，
   且每个数字本身已有标注。
 
+## 移除 Logo 启动画面，直接进主页面  `[x]`（2026-09-23，PR #133 已上线，`main` = `01075c7`）
+
+用户要求：从 Safari「Add to Home Screen」打开时不要 Logo 启动画面，直接进主页面；
+不影响网站本身的 Logo、图标和 UI。
+
+**两个 logo 画面都拿掉** —— 从主屏幕打开时它们是接连的两张：
+1. **iOS 原生启动图**（31 个 `apple-touch-startup-image` 链接）—— 手机在网页到达**之前**自己画的
+   那个 W，网页管不着，不拿掉还会看到。`LINK_STARTUP_IMAGES = False`。
+2. **网页启动画面** `#launch` 遮罩（深色底 + 内嵌 W + 名字）—— 整块删除。
+
+iOS 现在在页面加载期间铺 manifest `background_color`，页面画出的第一样东西就是 App。
+
+- **首屏底色保持 `#141310`**（用户选的，2026-09-23）：与 iOS 铺的颜色一致，中间不插第三种颜色。
+  代价：浅色主题用户会看到「深一闪 → 白主页」。
+- `launch-done` → `app-ready`（`#app` 有内容时置上；已经没有画面需要「退场」）。
+  `pwo-launch-done` → `pwo-app-ready`。`main.ts` 的 `launchIsDone` → `appIsReady`。
+- **自愈机制保留，行为一字未改**（用户明确选择保留）：`#app` 始终为空 → 清 `wealth-os-*` 缓存、
+  注销 SW、重载一次；第二次失败显示纯文字面板 `#stuck`（`role="alert"`）+ Reload 按钮。
+  仍然只碰程序文件，不碰 localStorage / IndexedDB / Firestore。
+- **Logo / 图标 / UI 未动**：`/brand/wealth-mark.png`（侧栏、手机顶栏、登录页）、`favicon.png`、
+  `apple-touch-icon.png`、manifest 图标全部原样，截图确认。
+- 生成脚本：splash PNG 仍然生成（`LINK_STARTUP_IMAGES` 可恢复原生启动图）；内嵌图片那段用
+  `if '<img id="launch-mark"' in html` 包住，页面没有它时**跳过而不是报错退出**。
+  网页遮罩若要恢复需从 git 历史取回 markup。
+- **已知副作用**：字体是 `font-display: swap`，启动画面原本会等 `document.fonts.ready`（上限
+  800ms）才让路，顺手盖住了字体切换。现在第一屏可能先用备用字体再跳成 Inter。
+  要消除就得在字体到齐前继续挡画面 = 把启动画面换个形式装回来，与需求相反。
+- **真机需重加主屏幕图标才生效**（iOS 只在添加那一刻读启动图配置）。
+
 ## 登录页画布底色 + 启动图链接放回  `[x]`（2026-09-23，PR #132 已上线，`main` = `b144f71`）
 
 **跳的那条到此为止**：#131 试过了，用户回「一样」。抖动发生在 **iOS 自己的转场里**，网页 App
