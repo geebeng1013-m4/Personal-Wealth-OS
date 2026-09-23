@@ -134,27 +134,28 @@ function getStoredTheme(): Theme {
  * of the theme's — otherwise a light theme tints the strip sand over a near
  * black page.
  *
- * Held back until the launch overlay has gone. iOS colours the strip behind
- * the home indicator from the page, so a light tint written while the dark W
- * is still up shows as a sand band under it (#125 did exactly that, undoing
- * #121). The meta starts launch-dark; the boot script says when it may move.
+ * Held back until the app is actually on screen. iOS colours the strip behind
+ * the home indicator from the page, so a tint written while the screen is
+ * still the pre-render ground shows as a band in the wrong colour under it
+ * (#125 did exactly that, undoing #121). The meta starts dark; the boot
+ * script says when it may move.
  */
 let pendingThemeColor: string | null = null;
 
-function launchIsDone(): boolean {
-  return document.documentElement.classList.contains("launch-done");
+function appIsReady(): boolean {
+  return document.documentElement.classList.contains("app-ready");
 }
 
 function flushThemeColor(): void {
-  if (pendingThemeColor === null || !launchIsDone()) return;
+  if (pendingThemeColor === null || !appIsReady()) return;
   const meta = document.querySelector<HTMLMetaElement>("#app-theme-color");
   if (meta) meta.content = pendingThemeColor;
 }
 
-// The boot script fires this when it retires #launch. Checking the class as
-// well covers the case where it had already retired before this module ran —
-// with no #launch in the document it retires immediately.
-document.addEventListener("pwo-launch-done", flushThemeColor);
+// The boot script fires this once #app has content. Checking the class as well
+// covers the case where it had already fired before this module ran — with no
+// #app in the document it fires immediately.
+document.addEventListener("pwo-app-ready", flushThemeColor);
 
 function setThemeColor(color: string): void {
   pendingThemeColor = color;
