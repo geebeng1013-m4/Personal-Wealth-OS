@@ -1,13 +1,13 @@
 /**
  * AI-assistant proxy (Cloud Functions, 2nd gen).
  *
- * The browser must never hold the OpenRouter key, so this function is the only
- * thing that talks to OpenRouter. It validates the chat request (see
- * openrouterRequest.ts), forwards it to the fixed free model, and returns just
- * the reply text. No user data is stored; nothing about the key ever reaches
- * the client, including in an error.
+ * The browser must never hold the DeepSeek key, so this function is the only
+ * thing that talks to DeepSeek. It validates the chat request (see
+ * deepseekRequest.ts), forwards it to the model fixed for that mode, and
+ * returns just the reply text. No user data is stored; nothing about the key
+ * ever reaches the client, including in an error.
  *
- * Two modes are carried, both shaped by openrouterRequest.ts: "help" answers in
+ * Two modes are carried, both shaped by deepseekRequest.ts: "help" answers in
  * prose, "fill" answers with one JSON action object that the browser parses and
  * validates against the live state. Either way this handler only moves text —
  * it never writes anything, and nothing it returns can change data on its own.
@@ -20,25 +20,24 @@ import { guardHelpReply } from "./answerGuard.js";
 import { resolveCors } from "./cors.js";
 import { checkRateLimit, clientKeyFromHeaders } from "./rateLimit.js";
 import {
-  OPENROUTER_CHAT_URL,
-  buildOpenRouterPayload,
-  parseOpenRouterReply,
-  readUpstreamLimit,
-} from "./openrouterRequest.js";
+  DEEPSEEK_CHAT_URL,
+  buildDeepSeekPayload,
+  parseDeepSeekReply,
+} from "./deepseekRequest.js";
 
-const OPENROUTER_API_KEY = defineSecret("OPENROUTER_API_KEY");
+const DEEPSEEK_API_KEY = defineSecret("DEEPSEEK_API_KEY");
 
 /** One conversational turn a minute is plenty; 15 leaves slack for retries. */
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX = 15;
 
-/** The free model can be slow; give it room but never hang the function. */
+/** The model can be slow at peak hours; give it room but never hang the function. */
 const UPSTREAM_TIMEOUT_MS = 25_000;
 
 export const assistant = onRequest(
   {
     region: "us-central1",
-    secrets: [OPENROUTER_API_KEY],
+    secrets: [DEEPSEEK_API_KEY],
     timeoutSeconds: 30,
     memory: "256MiB",
     maxInstances: 5,
@@ -88,7 +87,7 @@ export const assistant = onRequest(
       }
     }
 
-    const built = buildOpenRouterPayload(body);
+    const built = buildDeepSeekPayload(body);
     if (!built.ok) {
       response.status(built.status).json({ error: built.error });
       return;
@@ -96,15 +95,12 @@ export const assistant = onRequest(
 
     let upstream: Awaited<ReturnType<typeof fetch>>;
     try {
-      upstream = await fetch(OPENROUTER_CHAT_URL, {
+      upstream = await fetch(DEEPSEEK_CHAT_URL, {
         method: "POST",
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
         headers: {
-          Authorization: `Bearer ${OPENROUTER_API_KEY.value()}`,
+          Authorization: `Bearer ${DEEPSEEK_API_KEY.value()}`,
           "Content-Type": "application/json",
-          // OpenRouter attribution headers (optional, but recommended).
-          "HTTP-Referer": "https://wealthup.cc",
-          "X-Title": "WealthUp",
         },
         body: JSON.stringify(built.payload),
       });
@@ -115,22 +111,21 @@ export const assistant = onRequest(
       return;
     }
 
+    // DeepSeek's 429 is a concurrency limit, not a daily allowance: it clears
+    // in moments, so "try again shortly" is the honest thing to say. (The old
+    // free tier's per-day cap, which lasted hours, is gone with it.)
     if (upstream.status === 429) {
-      let limitBody: unknown = null;
-      try {
-        limitBody = await upstream.json();
-      } catch { /* an unreadable 429 is read as a short-term limit */ }
-      const limit = readUpstreamLimit(limitBody, upstream.headers.get("x-ratelimit-reset"), Date.now());
-      if (limit.kind === "daily") {
-        logger.warn("assistant daily free-model allowance used up", { resetAt: limit.resetAt });
-        response.status(429).json({
-          error: "The assistant has used today's free allowance.",
-          reason: "daily-limit",
-          ...(limit.resetAt !== null ? { retryAt: limit.resetAt } : {}),
-        });
-        return;
-      }
+      logger.warn("assistant upstream at capacity");
       response.status(429).json({ error: "The assistant is busy. Try again shortly." });
+      return;
+    }
+    // 402 = the prepaid balance is empty; 401 = the key is missing or revoked.
+    // Both are ours to fix, not the user's, and neither is something to explain
+    // to them — the panel says the assistant is unavailable while the log says
+    // which one it was. The account balance is the thing to check first.
+    if (upstream.status === 402 || upstream.status === 401) {
+      logger.error("assistant cannot bill upstream", { status: upstream.status });
+      response.status(503).json({ error: "The assistant is unavailable right now." });
       return;
     }
     if (!upstream.ok) {
@@ -148,7 +143,7 @@ export const assistant = onRequest(
       return;
     }
 
-    const parsed = parseOpenRouterReply(json);
+    const parsed = parseDeepSeekReply(json);
     if (!parsed.ok) {
       logger.error("assistant reply not usable", { reason: parsed.error });
       response.status(502).json({ error: "The assistant returned nothing usable." });

@@ -5,7 +5,7 @@
  * network, never reads a secret, and any input it cannot make sense of resolves
  * to a typed error rather than throwing. `assistant.ts` does the network and the
  * Cloud Functions wiring; it hands the request body here to be validated and
- * turned into an OpenRouter payload, and hands the upstream JSON back here to be
+ * turned into a DeepSeek payload, and hands the upstream JSON back here to be
  * read. That seam is what the unit tests exercise.
  *
  * Two modes share this path:
@@ -24,14 +24,24 @@
  * carried as a separate system message.
  */
 
-/** OpenRouter's OpenAI-compatible chat-completions endpoint. */
-export const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
+/** DeepSeek's OpenAI-compatible chat-completions endpoint. */
+export const DEEPSEEK_CHAT_URL = "https://api.deepseek.com/chat/completions";
 
 /**
- * The model is fixed here and never read from the request. A client cannot ask
- * this proxy to bill a different (possibly paid) model.
+ * One model per mode, fixed here and never read from the request. A client
+ * cannot ask this proxy to bill a different (dearer) model.
+ *
+ * Ask reasons about the six principles and has to argue a case, so it gets the
+ * stronger model; Record only copies a sentence into one JSON object, which the
+ * cheap one does as well and several times faster. Per million tokens at
+ * off-peak rates (2026-09-23): Pro $0.66 in / $1.98 out, Flash $0.15 / $0.60.
+ *
+ * These two strings are the whole of what names a model. DeepSeek retired the
+ * previous names (`deepseek-chat`, `deepseek-reasoner`) on 2026-07-24, so
+ * expect to come back here one day — and nowhere else.
  */
-export const ASSISTANT_MODEL = "ling-3.0-flash-fin:free";
+export const ASSISTANT_MODEL_HELP = "deepseek-v4-pro";
+export const ASSISTANT_MODEL_FILL = "deepseek-flash";
 
 /** Caps on what one request may carry. Generous for a chat turn, hostile to abuse. */
 export const MAX_MESSAGES = 20;
@@ -47,14 +57,17 @@ export const MAX_CONTEXT_CHARS = 4000;
 /**
  * Upstream generation limits.
  *
- * This model reasons before answering and bills that reasoning against the same
- * budget, so the ceiling has to cover thinking AND the answer. At 800 a trade
- * request ("bought 500 usd of VOO at 520.50, fee 3") spent the whole budget
- * reasoning about exchange rates and returned an EMPTY completion. Fill mode
- * gets the larger budget because its reasoning is the longer of the two.
+ * These budgets cover the answer alone: thinking is off (see the payload — the
+ * `thinking` field is simply not sent), so nothing else is billed against them.
+ * That is why fill is back down to 800. Under the old free model, whose
+ * reasoning shared this budget, 800 was not enough: a trade request ("bought
+ * 500 usd of VOO at 520.50, fee 3") spent the whole of it reasoning about
+ * exchange rates and returned an EMPTY completion, and the ceiling was raised
+ * to 2400 to get around that. One action object has never needed more than a
+ * few hundred tokens of actual output.
  */
 export const MAX_OUTPUT_TOKENS = 1200;
-export const MAX_OUTPUT_TOKENS_FILL = 2400;
+export const MAX_OUTPUT_TOKENS_FILL = 800;
 /** Prose wants a little warmth; a JSON action wants determinism. */
 export const TEMPERATURE_HELP = 0.3;
 export const TEMPERATURE_FILL = 0.1;
@@ -179,16 +192,23 @@ export interface ChatMessage {
   content: string;
 }
 
-export interface OpenRouterPayload {
+export interface DeepSeekPayload {
   model: string;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   max_tokens: number;
   temperature: number;
   stream: false;
+  /**
+   * Fill mode only. DeepSeek then guarantees syntactically valid JSON, which
+   * the prompt alone never could. It does not guarantee our schema, and the
+   * docs admit the content can occasionally come back empty — so the browser
+   * still validates every field and still has a "could not read that" path.
+   */
+  response_format?: { type: "json_object" };
 }
 
 export type BuildResult =
-  | { ok: true; payload: OpenRouterPayload; mode: AssistantMode }
+  | { ok: true; payload: DeepSeekPayload; mode: AssistantMode }
   | { ok: false; status: number; error: string };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -196,13 +216,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Validate the request body and build the OpenRouter payload.
+ * Validate the request body and build the DeepSeek payload.
  *
  * Accepts `{ messages: ChatMessage[], mode?: "help" | "fill", context?: string }`.
  * The `system` role is rejected from the client — this proxy owns the system
  * prompt and prepends it.
  */
-export function buildOpenRouterPayload(body: unknown): BuildResult {
+export function buildDeepSeekPayload(body: unknown): BuildResult {
   if (!isPlainObject(body)) {
     return { ok: false, status: 400, error: "Body must be a JSON object" };
   }
@@ -268,7 +288,11 @@ export function buildOpenRouterPayload(body: unknown): BuildResult {
 
   const system = mode === "fill" ? FILL_SYSTEM_PROMPT : SYSTEM_PROMPT;
   const contextText = typeof context === "string" ? context.trim() : "";
-  const preamble: OpenRouterPayload["messages"] = [{ role: "system", content: system }];
+  // The system prompt stays first and byte-identical from one request to the
+  // next: DeepSeek caches a shared prefix automatically, and a cache hit bills
+  // input at a fraction of the miss rate. Anything that varies — the user's
+  // context, then the turns — goes after it.
+  const preamble: DeepSeekPayload["messages"] = [{ role: "system", content: system }];
   if (contextText.length > 0) {
     preamble.push({ role: "system", content: `Context:\n${contextText}` });
   }
@@ -277,11 +301,17 @@ export function buildOpenRouterPayload(body: unknown): BuildResult {
     ok: true,
     mode,
     payload: {
-      model: ASSISTANT_MODEL,
+      model: mode === "fill" ? ASSISTANT_MODEL_FILL : ASSISTANT_MODEL_HELP,
       messages: [...preamble, ...clean],
       max_tokens: mode === "fill" ? MAX_OUTPUT_TOKENS_FILL : MAX_OUTPUT_TOKENS,
       temperature: mode === "fill" ? TEMPERATURE_FILL : TEMPERATURE_HELP,
       stream: false,
+      // Thinking is left off for both modes: no `thinking` field means disabled.
+      // It is what made the old model return an empty completion, it doubles
+      // the wait, and it is billed as output. If the 22-question principles run
+      // shows Ask slipping on a principle, turn it on for help mode alone and
+      // raise MAX_OUTPUT_TOKENS to cover the reasoning as well as the answer.
+      ...(mode === "fill" ? { response_format: { type: "json_object" as const } } : {}),
     },
   };
 }
@@ -291,14 +321,15 @@ export type ReplyResult =
   | { ok: false; error: string };
 
 /**
- * Pull the assistant's text out of an OpenRouter chat-completions response.
+ * Pull the assistant's text out of a DeepSeek chat-completions response.
  *
  * Total, like parseYahooQuote in api/quote.ts: any shape the upstream did not
  * promise — a renamed key, a missing level, an error object, an HTML page
  * parsed to a bare string — resolves to `{ ok: false }`, never to a fabricated
- * or partial reply.
+ * or partial reply. An empty completion, which DeepSeek's own JSON-mode docs
+ * say can happen, is one of those shapes.
  */
-export function parseOpenRouterReply(json: unknown): ReplyResult {
+export function parseDeepSeekReply(json: unknown): ReplyResult {
   if (!isPlainObject(json)) return { ok: false, error: "Malformed response" };
 
   const upstreamError = (json as { error?: unknown }).error;
@@ -316,53 +347,4 @@ export function parseOpenRouterReply(json: unknown): ReplyResult {
     return { ok: false, error: "Empty completion" };
   }
   return { ok: true, reply: content.trim() };
-}
-
-/**
- * Why OpenRouter refused a request with 429.
- *
- *   daily — the free tier's per-day request allowance is used up. It comes back
- *           at a fixed reset time, usually hours away, for every user at once:
- *           the whole app shares one key.
- *   burst — a short-term limit. Trying again in a moment is the right advice.
- *
- * The two need different words. Telling someone to "try again shortly" when the
- * answer is "tomorrow morning" was what users actually saw the first time the
- * daily allowance ran out.
- */
-export type UpstreamLimit =
-  | { kind: "daily"; resetAt: number | null }
-  | { kind: "burst" };
-
-/** A reset time as epoch ms, or null. Accepts seconds or ms; rejects the absurd. */
-function toResetAt(value: unknown, now: number): number | null {
-  const n = typeof value === "string" ? Number(value) : typeof value === "number" ? value : Number.NaN;
-  if (!Number.isFinite(n) || n <= 0) return null;
-  const ms = n < 1e12 ? n * 1000 : n;
-  // A daily reset is never in the past and never more than two days out.
-  if (ms < now - 60_000 || ms > now + 2 * 24 * 60 * 60 * 1000) return null;
-  return ms;
-}
-
-/**
- * Read an OpenRouter 429 body (and its X-RateLimit-Reset header).
- *
- * Total, like the other readers here: any shape it does not recognise is treated
- * as a burst limit, which is the conservative reading — it only ever produces the
- * old "try again shortly" wording, never a wrong promise about tomorrow.
- */
-export function readUpstreamLimit(json: unknown, resetHeader: string | null, now: number): UpstreamLimit {
-  const error = isPlainObject(json) ? (json as { error?: unknown }).error : undefined;
-  if (!isPlainObject(error)) return { kind: "burst" };
-
-  const message = typeof error.message === "string" ? error.message : "";
-  const metadata = isPlainObject(error.metadata) ? error.metadata : {};
-  const source = typeof metadata.limit_source === "string" ? metadata.limit_source : "";
-
-  const daily = /per[-\s]?day/i.test(message) || /daily/i.test(source);
-  if (!daily) return { kind: "burst" };
-
-  const metaHeaders = isPlainObject(metadata.headers) ? metadata.headers : {};
-  const resetAt = toResetAt(resetHeader, now) ?? toResetAt(metaHeaders["X-RateLimit-Reset"], now);
-  return { kind: "daily", resetAt };
 }

@@ -32,7 +32,7 @@ import { getGoalsSnapshot, type GoalSnapshot } from "../../goalSummary";
 import { getFinancialRule } from "../../financialRules";
 import { localDateKey } from "./assistantActions";
 
-/** Must stay under MAX_CONTEXT_CHARS in functions/src/openrouterRequest.ts. */
+/** Must stay under MAX_CONTEXT_CHARS in functions/src/deepseekRequest.ts. */
 export const MAX_CONTEXT_CHARS = 4000;
 
 /** Long lists are trimmed rather than truncated mid-name. */

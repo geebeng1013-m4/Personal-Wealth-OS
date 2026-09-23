@@ -4,7 +4,7 @@ WealthUp 助手回答理财问题时必须遵守的六条原则。这是**正式
 代码里的提示词要和这份文件保持一致。
 
 - 定稿：2026-09-15（R 系列，和产品负责人逐条讨论后确定）
-- 代码位置：`functions/src/openrouterRequest.ts` 里的 `SYSTEM_PROMPT`（「WEALTHUP PRINCIPLES」一段）
+- 代码位置：`functions/src/deepseekRequest.ts` 里的 `SYSTEM_PROMPT`（「WEALTHUP PRINCIPLES」一段）
 - 同步检查：`tests/assistantPrinciplesDoc.test.ts`。六条原则的标题和关键数字在这里和提示词里必须一致，
   改了一边没改另一边，测试就会失败。
 
@@ -127,7 +127,7 @@ WealthUp 助手回答理财问题时必须遵守的六条原则。这是**正式
 ## 7. 要改原则时怎么做
 
 1. **先改这份文件**，写清楚改了什么、为什么。
-2. 改 `functions/src/openrouterRequest.ts` 的 `SYSTEM_PROMPT`，保持和这里一致。
+2. 改 `functions/src/deepseekRequest.ts` 的 `SYSTEM_PROMPT`，保持和这里一致。
 3. 如果改的是标题或关键数字，同步改 `tests/assistantPrinciplesDoc.test.ts`；跑 `node _test.mjs`。
 4. **在本地模拟器跑测试题**：`node scripts/assistant-principles-eval.mjs [endpoint]`（第 8 节），全部要守住原则。
    免费额度是全 app 每天 50 次，一轮 22 题，注意别在上线前用光。

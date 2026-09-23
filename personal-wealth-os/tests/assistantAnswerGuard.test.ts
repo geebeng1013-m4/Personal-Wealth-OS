@@ -8,7 +8,7 @@ import {
   describesRealEmergency,
   guardHelpReply,
 } from "../functions/src/answerGuard";
-import { SYSTEM_PROMPT } from "../functions/src/openrouterRequest";
+import { SYSTEM_PROMPT } from "../functions/src/deepseekRequest";
 
 const ASK_ZH = "饮食的钱不够了，怎么办？";
 const ASK_EN = "My food budget ran out this month, what should I do?";

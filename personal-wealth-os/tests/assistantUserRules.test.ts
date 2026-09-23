@@ -7,7 +7,7 @@ import {
   goalTiming,
 } from "../src/components/assistant/assistantContext";
 import { migrateState } from "../src/state";
-import { SYSTEM_PROMPT } from "../functions/src/openrouterRequest";
+import { SYSTEM_PROMPT } from "../functions/src/deepseekRequest";
 import type { WealthState } from "../src/models";
 
 const NOW = new Date(2026, 8, 15, 12, 0, 0);
