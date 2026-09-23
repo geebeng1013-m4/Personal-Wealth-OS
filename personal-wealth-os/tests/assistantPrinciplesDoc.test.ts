@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "./testHarness";
-import { SYSTEM_PROMPT } from "../functions/src/openrouterRequest";
+import { SYSTEM_PROMPT } from "../functions/src/deepseekRequest";
 
 /*
  * docs/assistant-principles.md is the agreed version of the principles; the
