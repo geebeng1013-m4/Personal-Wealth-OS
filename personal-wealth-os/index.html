@@ -6,16 +6,18 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
-    <!-- First theme-color wins, and this one matches no media query so it always
-         applies: the launch screen is dark in both themes, and iOS tints the
-         strip behind the home indicator from the page. The boot script drops
-         this meta when #launch retires, handing the two below back over. -->
-    <meta name="theme-color" content="#141310" id="launch-theme-color" />
-    <!-- The app's own tint, matched to the theme rather than to the OS: the
-         theme no longer follows prefers-color-scheme, so a dark phone showing
-         the light app would otherwise tint its status strip dark. applyTheme
-         in main.ts keeps this in sync with data-theme. -->
-    <meta name="theme-color" content="#f4f1ea" id="app-theme-color" />
+    <!-- One tint for the whole page, and it starts launch-dark.
+         iOS colours the strip behind the home indicator from the page, and
+         which surface it reads is not observable from a desktop browser, so
+         every same-coloured candidate has to stay launch-dark until #launch
+         retires: <html> and <body> in the CSS below, and this. #125 let
+         applyTheme write the theme's colour here at module init — while the
+         W was still on screen — and the light sand came back as a band under
+         the W on iPhone, which is what #121 had already fixed once.
+         main.ts holds its colour back until the boot script says the overlay
+         is gone. Deliberately a single meta: two that both match leave it
+         ambiguous which one the phone picks. -->
+    <meta name="theme-color" content="#141310" id="app-theme-color" />
     <meta name="color-scheme" content="light dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -128,10 +130,13 @@
         var launch = document.getElementById('launch');
         var app = document.getElementById('app');
         // Hands the page back to the theme; until then it stays launch-dark.
+        // The tint is main.ts's to set — the login page is dark in both
+        // themes and wants its own colour, which this script cannot know — so
+        // this only announces that the overlay has gone.
         var restoreThemeBackground = function () {
+          if (document.documentElement.classList.contains('launch-done')) return;
           document.documentElement.classList.add('launch-done');
-          var launchTint = document.getElementById('launch-theme-color');
-          if (launchTint && launchTint.parentNode) launchTint.parentNode.removeChild(launchTint);
+          document.dispatchEvent(new Event('pwo-launch-done'));
         };
         if (!launch || !app) return restoreThemeBackground();
         // One attempt per tab, so a failure that a reload cannot fix shows the

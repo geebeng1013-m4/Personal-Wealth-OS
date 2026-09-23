@@ -129,10 +129,32 @@ function getStoredTheme(): Theme {
  * The sign-in page is dark in both themes, so it names its own colour instead
  * of the theme's — otherwise a light theme tints the strip sand over a near
  * black page.
+ *
+ * Held back until the launch overlay has gone. iOS colours the strip behind
+ * the home indicator from the page, so a light tint written while the dark W
+ * is still up shows as a sand band under it (#125 did exactly that, undoing
+ * #121). The meta starts launch-dark; the boot script says when it may move.
  */
-function setThemeColor(color: string): void {
+let pendingThemeColor: string | null = null;
+
+function launchIsDone(): boolean {
+  return document.documentElement.classList.contains("launch-done");
+}
+
+function flushThemeColor(): void {
+  if (pendingThemeColor === null || !launchIsDone()) return;
   const meta = document.querySelector<HTMLMetaElement>("#app-theme-color");
-  if (meta) meta.content = color;
+  if (meta) meta.content = pendingThemeColor;
+}
+
+// The boot script fires this when it retires #launch. Checking the class as
+// well covers the case where it had already retired before this module ran —
+// with no #launch in the document it retires immediately.
+document.addEventListener("pwo-launch-done", flushThemeColor);
+
+function setThemeColor(color: string): void {
+  pendingThemeColor = color;
+  flushThemeColor();
 }
 
 function themeColor(theme: Theme): string {
