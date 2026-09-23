@@ -38,6 +38,24 @@ https://claude.ai/artifact/3URvhvbo6ND7gyp8GcdhwY（14 页，1280×900 vs 390×8
 - 手机版持仓列表要不要列名（ETF / Weight vs target / Value）—— 手机是两行网格，列名放不进去，
   且每个数字本身已有标注。
 
+## 修：内容变了文件名没变  `[x]`（2026-09-24，PR #135 已上线，`main` = `164461c`）
+
+#134 的实现有个真问题，上线后抓线上文件才发现：
+
+- 我在 `generateBundle` 里改 CSS 内容，**Vite 的内容哈希在那之前就算好了**。结果线上是
+  `/assets/index-D00zETE-.css`（和改之前同一个文件名）却装着 `font-display:optional`。
+- `/assets/` 的缓存头是 `public, max-age=31536000, immutable`。**URL 没变，所以已缓存过它的
+  浏览器和 SW 会继续用旧的那份一整年** —— 修复对现有用户永久不生效，而线上看起来一切正常。
+- 修法：替换挪到 `transform`（哈希之前）。`index-D00zETE-.css` → `index-wp0D1UOk.css`。
+- 插件同时改 `enforce: "pre"`：这也解释了第一版为什么「看起来работа」—— `post` 阶段拿到的
+  CSS 模块 `code` 长度是 **0**（样式已被 Vite 的 CSS 插件抽进 bundle），那里的替换一个字都没
+  匹配到，真正起作用的只有 `generateBundle` 那条。`transformIndexHtml` 保留自己的
+  `order: "post"`，它要读构建完成后的文件名。
+
+**教训：凡是在构建期改产物内容，必须确认文件名跟着变。** `generateBundle` 在哈希之后，
+`transform` 在哈希之前；配合 `immutable` 缓存头，改错阶段 = 改动对现有用户永久不生效。
+**验证方法：构建后比对文件名有没有变，并 `curl` 线上确认。**
+
 ## 字体不再中途切换  `[x]`（2026-09-24，PR #134 已上线，`main` = `936e0b7`）
 
 #133 移除启动画面后露出来的：遮罩原本会等 `document.fonts.ready`（上限 800ms）才淡出，
