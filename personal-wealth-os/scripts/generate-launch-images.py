@@ -40,7 +40,10 @@ MARK_CSS_WIDTH = 120  # must match #launch img in index.html
 
 # Whether to link the startup images from index.html.
 #
-# Off since 2026-09-23. With them, iOS draws the W itself and then cross-
+# Back on 2026-09-23: turning them off did not stop the twitch (it happens
+# inside iOS's transition, which a web app cannot opt out of), and it cost
+# the logo ~100-150ms of arriving late. Kept as a flag because the reasoning
+# is worth keeping. With them, iOS draws the W itself and then cross-
 # dissolves to the web view's own copy, and its open-from-the-icon zoom is
 # plainly visible because there is a logo in the picture to watch: measured
 # off the user's screen recording, the logo grew 16% and rose 21.5px over
@@ -53,7 +56,7 @@ MARK_CSS_WIDTH = 120  # must match #launch img in index.html
 # The images are still generated, so setting this back to True restores the
 # old behaviour. iOS reads the links only when the icon is added to the
 # home screen, so either way the icon has to be re-added to see the change.
-LINK_STARTUP_IMAGES = False
+LINK_STARTUP_IMAGES = True
 
 # (label, CSS width, CSS height, device pixel ratio) in portrait.
 IPHONES = [
