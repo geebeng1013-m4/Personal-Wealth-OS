@@ -91,7 +91,7 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
     : 0;
   const pnl = portfolio.unrealizedPnlMyr ?? 0;
   const pnlKnown = portfolio.unrealizedPnlMyr !== null;
-  const investedNote = pnlKnown ? `Unrealised ${pnl >= 0 ? "+" : "−"}${amount(Math.abs(pnl))} at cost ${amount(portfolio.totalInvestedMyr)}` : "No market price yet";
+  const investedNote = pnlKnown ? `Unrealised ${pnl >= 0 ? "+" : "−"}${amount(Math.abs(pnl))}` : "No market price yet";
   const pnlChip = portfolio.unrealizedPnlPercentMyr === null || !pnlKnown
     ? ""
     : `<span class="wu-chip${pnl >= 0 ? "" : " wu-chip--negative"}">${pnl >= 0 ? "+" : "−"}${percent(Math.abs(portfolio.unrealizedPnlPercentMyr))}</span>`;
@@ -743,7 +743,7 @@ export function bindDashboard(
       const livePnl = portfolio.unrealizedPnlMyr;
       investedNoteEl.textContent = livePnl === null
         ? "No market price yet"
-        : `Unrealised ${livePnl >= 0 ? "+" : "−"}${plain(Math.abs(livePnl))} at cost ${plain(portfolio.totalInvestedMyr)}`;
+        : `Unrealised ${livePnl >= 0 ? "+" : "−"}${plain(Math.abs(livePnl))}`;
     }
     if (noteEl) noteEl.textContent = dashboardValuationNote(portfolio);
   };
