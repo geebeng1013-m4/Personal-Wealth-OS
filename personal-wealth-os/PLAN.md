@@ -1789,7 +1789,48 @@ Secret Manager 里存的是 **359 个字符、开头 `keysk`**，也就是在隐
 
 ---
 
+## 助手教你用 WealthUp（G 系列，全部上线 2026-09-24）
+
+计划书：https://claude.ai/code/artifact/08334228-af3a-42ea-9b6a-92736a268808
+
+**为什么**：助手只知道有哪些页面，不知道怎么操作 —— 你问「怎么记股息」，它会**用很肯定的语气编一套步骤**。
+最危险的不是答不上来，是它不知道自己不知道。
+
+### G1 — 页面地图跟代码走  `[x]`（PR #140）
+
+`src/pageDirectory.ts` 是侧边栏的唯一定义（14 页 / 5 组 / 副标题 + 手机四个底部标签）。`ui.ts` 从它渲染，
+提示词照它描述，`tests/assistantPageMap.test.ts` 两边对账。**单独成文件是因为测试要 import 它，
+而 import `ui.ts` 会把 Firebase、DOM 和所有页面模块拖进来。它自己不 import 任何东西，请保持这样。**
+顺手修掉了原来手写那句漏掉 Money Leaks 和 Me 的问题。
+
+### G2 — 告诉它你在哪一页  `[x]`（PR #141）
+
+context 多一行 `The user is on the Ledger (Income & expenses) page.`。**跟日期走，不跟「Share my figures」走** ——
+你在看哪个屏幕说不出你任何一笔钱。Record 模式不给（填表单只需要名字）。
+
+### G3 — 怎么做：操作说明书  `[x]`（PR #142）
+
+提示词新增一段真实操作说明，外加凌驾一切的一条：**说明书里没有的，就说不确定、指出最可能的页面、然后停，绝不编。**
+写在经得起改版的层级（哪一页、什么顺序、谁按保存），不写「右上角那个绿按钮」。
+`tests/assistantHowToGuide.test.ts` 把每个提到的控件去源码里验一遍，Money Leaks 那份清单直接和
+`MoneyLeakCategory` 对账 —— 它当场抓到两个控件名被换行切断的错。
+
+### G4 — 怎么用的考题 + 跑题不答  `[x]`（PR #143）
+
+eval 分两组：`--set=principles`（22 题）/ `--set=how`（15 题）/ `--set=all`。
+**跑题**（写代码、天气、翻译、闲聊）一句话回绝，用对方写的语言，**不假装自己坏了** ——
+没有沿用 `The assistant is unavailable right now.`，那句是服务器出错专用的，混用会让真故障查不出来。
+**和钱有关但跟 app 无关的问题仍然要答**（OFF-4「什么是复利」就是守这条线的）。
+一次跑 37 题会超过单账号每天 30 次，脚本会自动换一次性账号继续 —— 实测第 31 题触发过。
+
+**上线**：`firebase deploy --only functions:assistant`（这轮只改提示词，没动规则）。
+整个 G 系列花费 $0.03（余额 $4.90 → $4.87）。
+
+---
+
 ## FUTURE IDEAS（V1 之后 / 待决定，不自动做）
+
+- **助手回答里附「带我过去」按钮（G 系列的 C，2026-09-24 缓做）**——Record 模式已经有跳转 + 预填的机制，技术上现成，但会牵动面板交互，值得单独一轮。
 
 - **Ledger 记账表单的吸顶可能不生效**（做 DG-2 时发现，2026-09-16）：`.wu-ledger-entry` 设置了 `position: sticky`，但外层 `.main` 是 `overflow: hidden`，sticky 会粘在 `.main` 上，滚动时表单不会跟着。没有实测确认，也没改。修法可能是把 `.main` 改成 `overflow: clip`，但它会影响光线裁切，需要单独验证。
 
