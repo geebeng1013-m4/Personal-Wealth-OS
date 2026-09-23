@@ -14,12 +14,18 @@ import { emptyState } from "../src/state";
  * list on the other. They are meant to FAIL when only one side changes.
  */
 
-/** The prompt's page section, which is where every page name must appear. */
+/**
+ * The prompt's page section, which is where every page name must appear.
+ *
+ * It ends where the how-to guide begins. The guide has bullet lines of its own
+ * in the same "- X — y" shape, and swallowing them would make this test insist
+ * every task heading is a page.
+ */
 function pageSection(): string {
   const start = SYSTEM_PROMPT.indexOf("THE PAGES");
-  const end = SYSTEM_PROMPT.indexOf("HOW TO ANSWER");
+  const end = SYSTEM_PROMPT.indexOf("HOW THINGS ARE DONE");
   assert.ok(start >= 0, "the prompt has a page section");
-  assert.ok(end > start, "and it comes before the answering rules");
+  assert.ok(end > start, "and the how-to guide follows it");
   return SYSTEM_PROMPT.slice(start, end);
 }
 
