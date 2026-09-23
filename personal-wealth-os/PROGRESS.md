@@ -38,6 +38,13 @@
 - **待你确认**：真机状态条颜色（iPhone 普通 Safari 与加到主屏幕）。Vercel preview 有登录保护，
   手机打不开，这类只能合并到 production 之后验 —— 跟 #121 同一个坑。
 
+## Overview Invested 去掉 at cost（已上线，PR #126）
+
+- **2026-09-23 你要求**：Invested 卡片的 `Unrealised +111.74 at cost 2,016.46` 里，at cost 多余
+  ——上面的大数字本来就是成本。
+- 做法：`dashboardPage.ts` 两处都改（首次渲染 ＋ 行情刷新后的更新），只剩 `Unrealised ±金额`。
+  纯文字改动，没有 Schema / 计算变化。
+
 ## 标记完成后可撤销（已上线，PR #124）
 
 - **2026-09-23 你要求**：Advisor 的建议按了 `Mark as done`，按错了要能取消。
