@@ -1,5 +1,5 @@
 /**
- * The debt form: Settings' "Add liability" and the Overview's "Write down what
+ * The debt form: Me's "Add liability" and the Overview's "Write down what
  * you owe" sheet (L-2, made into choices in L-6).
  *
  * Like the Q&A: pick what the debt is first, then only that kind's questions

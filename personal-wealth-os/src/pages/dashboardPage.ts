@@ -467,7 +467,7 @@ function openLedgerSheet(stepId: "record-pay" | "log-spending", state: WealthSta
   });
 }
 
-/** The Settings liability form's fields and checks, plus: something must be owed. */
+/** The Me page's liability form, same fields and checks, plus: something must be owed. */
 function openDebtSheet(state: WealthState): void {
   const answers = state.onboardingAnswers;
   const fromQuiz = answers?.primaryGoal === "debt";
