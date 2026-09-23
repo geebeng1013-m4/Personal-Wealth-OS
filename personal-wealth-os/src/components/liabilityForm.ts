@@ -118,7 +118,7 @@ function choices(name: string, legend: string, options: Array<[value: string, la
   const box = custom
     ? `<span class="wu-affix wu-choice__custom" data-custom-for="${name}"${picked === CUSTOM ? "" : " hidden"}>${custom.unit === "RM" ? "<span>MYR</span>" : ""}<input class="wu-field" name="${name}:custom" inputmode="decimal" autocomplete="off" placeholder="${escapeHtml(custom.placeholder)}" aria-label="${escapeHtml(legend)}, typed" value="${escapeHtml(custom.value)}">${custom.unit !== "RM" ? `<span>${escapeHtml(custom.unit)}</span>` : ""}</span>`
     : "";
-  return `<fieldset class="wu-choice wu-field-row--wide"><legend class="wu-field-row__label">${escapeHtml(legend)}</legend>
+  return `<fieldset class="wu-choice wu-choice--glass wu-field-row--wide"><legend class="wu-field-row__label">${escapeHtml(legend)}</legend>
       <div class="wu-choice__opts">${radios}${own}</div>${box}</fieldset>`;
 }
 
@@ -170,7 +170,7 @@ export interface LiabilityFormDefaults {
 export function liabilityFields(defaults: LiabilityFormDefaults = {}): string {
   const kinds = DEBT_KIND_IDS.map((id) =>
     `<label class="wu-choice__opt"><input type="radio" name="kind" value="${id}"${defaults.kind === id ? " checked" : ""}><span>${escapeHtml(id === "other" ? "Something else" : DEBT_KINDS[id].label)}</span></label>`).join("");
-  return `<fieldset class="wu-choice wu-field-row--wide"><legend class="wu-field-row__label">What kind of debt?</legend>
+  return `<fieldset class="wu-choice wu-choice--glass wu-field-row--wide"><legend class="wu-field-row__label">What kind of debt?</legend>
       <div class="wu-choice__opts">${kinds}</div></fieldset>
     ${DEBT_KIND_IDS.map((id) => kindSection(id, defaults)).join("")}
     <p class="wu-debt-form__summary wu-field-row--wide" data-debt-summary aria-live="polite" hidden></p>

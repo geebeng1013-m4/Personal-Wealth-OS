@@ -4766,6 +4766,10 @@
   /* Smaller pills need more air around them, not less: at this size the row
      reads as one grey mass when the gaps stay at the default --space-2. */
   .wu-choice--glass {
+    /* Grown on each side of a 30px pill to reach the 44px touch target Apple
+       asks for, without making the pill itself bigger. The row gap is twice
+       this, so stacked rows' targets meet exactly and never overlap. */
+    --pill-hit: 7px;
     gap: var(--space-3);
   }
   /* A <legend> is not a grid item, so the fieldset's gap never separates it
@@ -4774,7 +4778,13 @@
     padding-bottom: var(--space-2);
   }
   .wu-choice--glass .wu-choice__opts {
-    gap: var(--space-3);
+    gap: calc(var(--pill-hit) * 2) var(--space-3);
+  }
+  /* The radio is the hit area, so it — not the pill — is what grows. Vertically
+     only: side by side the pills are 12px apart, and a sideways grow would put
+     one option's target under its neighbour. */
+  .wu-choice--glass .wu-choice__opt input {
+    inset: calc(var(--pill-hit) * -1) 0;
   }
   .wu-choice--glass .wu-choice__opt span {
     position: relative;
