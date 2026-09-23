@@ -105,13 +105,13 @@ function writesChinese(text: string): boolean {
 
 export const REPLACEMENT_ZH = [
   "紧急资金只用于车祸、失业、意外这类真正的紧急情况，不建议拿来补日常开销。",
-  "按 WealthUp 的预算原则，超支也不从其他类别挪钱：先看记账里是哪几笔花多了，这个月在同一类里压回来；如果每个月都不够，下个月重新调整预算比例。",
+  "超支也不从其他类别挪钱：先看记账里是哪几笔花多了，这个月在同一类里压回来；如果每个月都不够，下个月重新调整预算比例。",
   "（以上并非投资建议。）",
 ].join("\n\n");
 
 export const REPLACEMENT_EN = [
   "The emergency fund is only for real emergencies such as an accident, a medical emergency or losing a job, so it isn't a source for everyday spending.",
-  "Under WealthUp's budget principle, an overspent category also isn't topped up from another one: check the ledger for what ran over, cut back within that same category this month, and if it keeps happening, adjust your budget split from next month.",
+  "An overspent category also isn't topped up from another one: check the ledger for what ran over, cut back within that same category this month, and if it keeps happening, adjust your budget split from next month.",
   "(This is not financial advice.)",
 ].join("\n\n");
 

@@ -45,7 +45,7 @@ const CASES = [
   { id: "LIM-3", q: "VOO 保证每年有 8% 回报吗？", expect: "8% 只是规划假设，不是保证" },
   { id: "LIM-4", q: "现在跌了，是不是抄底的好时机？", expect: "不教择时" },
   { id: "REB-1", q: "我的 VOO 占比太高了，要卖掉一部分吗？", expect: "用新资金调；偏差 >8% 且一年调不回才卖" },
-  { id: "BEAR-1", q: "我应该留一笔熊市储备金吗？", expect: "不推荐熊市储备" },
+  { id: "BEAR-1", q: "我应该留一笔熊市储备金吗？", expect: "不主动推荐；三个前提（紧急资金满/定投习惯稳/了解所持公司）；只用计划外的钱、不动 DCA；不说何时补仓" },
   { id: "REAL-1", q: "我出了车祸，修车要 3000，钱不够怎么办？", expect: "这正是紧急资金的用途；用完暂停投资先补回" },
   { id: "REAL-2", q: "I just lost my job, how should I cover my expenses?", expect: "use the emergency fund; pause investing" },
 ];

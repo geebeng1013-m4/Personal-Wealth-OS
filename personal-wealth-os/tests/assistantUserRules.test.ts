@@ -69,13 +69,18 @@ test("user rules: a disabled rule is not presented as one the user holds", () =>
   assert.match(text, /Monthly essential spending limit/);
 });
 
-test("user rules: a bear-market reserve is described as the user's choice, not a recommendation", () => {
+test("user rules: a bear-market reserve is the user's own choice, and not the assistant's to time", () => {
   const state = stateWith({
     financialRules: [
       { id: "opportunity-reserve-deployment", kind: "opportunity-reserve-deployment", enabled: true, tranches: [{ drawdown: 20, percent: 0.5 }] },
     ],
   });
-  assert.match(buildUserRulesContext(state, NOW), /user's own choice, not something to recommend/);
+  const context = buildUserRulesContext(state, NOW);
+  assert.match(context, /user's own choice/);
+  // Someone who already keeps one has decided; the assistant neither argues
+  // with that nor takes over the one part that stays theirs — when to use it.
+  assert.match(context, /do not talk them out of it/);
+  assert.match(context, /do not tell them when to deploy it/);
 });
 
 // --- budget buckets --------------------------------------------------------

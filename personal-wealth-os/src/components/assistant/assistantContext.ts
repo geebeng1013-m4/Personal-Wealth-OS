@@ -170,7 +170,7 @@ export function buildUserRulesContext(state: WealthState, now: Date): string {
 
   const reserve = getFinancialRule(state, "opportunity-reserve-deployment");
   if (reserve?.enabled && reserve.tranches.length > 0) {
-    rules.push("Keeps an opportunity (bear-market) reserve with its own deployment steps. This is the user's own choice, not something to recommend.");
+    rules.push("Keeps an opportunity (bear-market) reserve with its own deployment steps. This is the user's own choice; do not talk them out of it and do not tell them when to deploy it.");
   }
 
   if (rules.length > 0) lines.push("The user's own rules (set in WealthUp):", ...rules.map((rule) => `  - ${rule}`));
