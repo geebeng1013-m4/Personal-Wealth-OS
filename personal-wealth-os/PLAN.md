@@ -38,6 +38,22 @@ https://claude.ai/artifact/3URvhvbo6ND7gyp8GcdhwY（14 页，1280×900 vs 390×8
 - 手机版持仓列表要不要列名（ETF / Weight vs target / Value）—— 手机是两行网格，列名放不进去，
   且每个数字本身已有标注。
 
+## 标记完成后可撤销  `[x]`（2026-09-23，PR #124 已合并上线，`main` = `61bdd81`）
+
+用户要求：「advisor Guidance complete press wrong can be cancel」——建议按了完成，按错了要能取消。
+
+- `actionRecords.ts` 新增纯函数 `undoRecommendationDone`：移除该建议的执行记录。记录只由
+  `markRecommendationDone` 创建，移除即精确还原按下前的状态，之后可以重新标记完成。
+  `ActionRecord` 结构未变，**没有 Schema 变更、不需要迁移**。
+- **Advisor**：Guidance 展开行已完成时显示 `Completed` ＋ `Undo`；Priority 卡原本完成后不渲染
+  任何控件，改为渲染 `Undo`（顶部已有 `Completed` 标签，不重复）。
+- **Money Leaks**：已完成时同一个按钮位置变 `Undo`，桌面详情卡与手机展开行共用同一操作行。
+- **Dashboard 不改**（用户 2026-09-23 决定）：首页 Priority 卡是**拿来看资料，不是拿来填资料的**，
+  在那里按错到 Advisor 撤销即可。
+
+FUTURE IDEAS：
+- 「已完成」的建议做一个历史清单 —— 现在记录写了之后只能从同一条建议看到。
+
 ## 预估卖出手续费  `[x]`（2026-09-23，PR #116 已合并上线，`main` = `4d1167e`）
 
 ### Task 1 — 用真实卖出订单核对收费  `[x]`

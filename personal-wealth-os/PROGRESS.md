@@ -9,9 +9,29 @@
 
 - **阶段**：V1 完成（2026-09-09）。核心正确性的洞都补上了。之后：**产品打磨** —— 手机比例这轮
   已收尾（M-1..M-6，见下）。App / 订阅方向因预算暂停（见下），先把产品本身做好。
-- **`main`**：`be95475`（2026-09-23，启动画面白条已修好并经你在 iPhone 上确认）。
+- **`main`**：`61bdd81`（2026-09-23，启动画面白条已修好并经你在 iPhone 上确认）。
 - **工作方式**：见 `CLAUDE.md`（每次会话自动加载）。文档 bookkeeping 直接进 main，代码走 PR。
 - **当前在做**：双端差异账本（电脑版 ↔ 手机版补齐），T1 / T2 已上线，下一个 T3。
+
+## 标记完成后可撤销（已上线，PR #124）
+
+- **2026-09-23 你要求**：Advisor 的建议按了 `Mark as done`，按错了要能取消。
+- 原因：完成是一次**无确认的单击**，按错后只剩一个 `Completed` 标签，记录写进
+  `state.actionRecords` 就没有回退入口。
+- 做法：新增纯函数 `undoRecommendationDone`，直接移除那条执行记录。记录只由「完成」创建，
+  所以移除＝精确还原按下前的状态，可以重新标记完成。**没有 Schema 变更**（`ActionRecord`
+  结构不变，`pending` 本来就是合法状态），所以不需要版本迁移。
+- 画面：Advisor 的 Guidance 展开行显示 `Completed` ＋ `Undo`；Advisor 的 Priority 卡原本完成后
+  连按钮都不渲染，改为显示 `Undo`（顶部标签已经写了 Completed，不重复）；Money Leaks 在原来
+  `Mark as done` 的位置变 `Undo`，桌面详情卡和手机展开行共用同一操作行，两边自动一致。
+  Money Leaks 顶上那句「Action completed · Recorded on your side」保留——撤销只删执行记录，
+  发现本身从来没被改过。
+- **Dashboard 按你的要求不动**：「dashboard 是拿来看资料不是拿来填资料的」。首页 Priority 卡
+  仍然只有 `Mark as done` ＋ 一行「You marked this done.」，在那里按错就到 Advisor 撤销。
+- 验证：typecheck、CI 全绿；5199 demo 用无头 Edge + CDP 实际点过两页的
+  完成 → 撤销 → 再完成（`actionRecords` 0 → 1 → 0 → 1），无 console 错误；
+  桌面 1400 宽与手机 390 宽各截图看过，按钮同一行不溢出。
+- 这次没有新增自动化测试（仓库这条路径本来就没有），属于人工＋浏览器驱动验证。
 
 ## 启动画面底部白条（iPhone，已修好 PR #120 + #121）
 
