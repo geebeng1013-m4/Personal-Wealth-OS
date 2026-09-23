@@ -74,14 +74,21 @@ function fontsWithoutSwap(): Plugin {
   return {
     name: "fonts-without-swap",
     apply: "build",
-    enforce: "post",
-    generateBundle(_options, bundle) {
-      for (const [fileName, chunk] of Object.entries(bundle)) {
-        if (chunk.type !== "asset" || !fileName.endsWith(".css")) continue;
-        const css = typeof chunk.source === "string" ? chunk.source : Buffer.from(chunk.source).toString("utf8");
-        // @fontsource ships font-display: swap; this is the only place it is set.
-        chunk.source = css.replaceAll("font-display:swap", "font-display:optional");
-      }
+    // `pre`, so `transform` sees the raw CSS: by the time Vite's own CSS
+    // plugin has run, the module's code is an empty string and the styles
+    // live in the bundle. transformIndexHtml below asks for `post` on its
+    // own, since it needs the finished bundle's file names.
+    enforce: "pre",
+    // In `transform`, not `generateBundle`: Vite hashes an asset's content
+    // before generateBundle can touch it, so rewriting there changed the CSS
+    // while leaving it at the same /assets/index-<hash>.css. Those URLs are
+    // served `max-age=31536000, immutable`, so every browser and service
+    // worker that already held the file would have gone on serving the old
+    // one for a year and never seen the change.
+    transform(code, id) {
+      if (!id.includes("@fontsource") || !/\.css(\?|$)/.test(id)) return null;
+      if (!code.includes("font-display")) return null;
+      return { code: code.replace(/font-display:\s*swap/g, "font-display: optional"), map: null };
     },
     transformIndexHtml: {
       order: "post",
