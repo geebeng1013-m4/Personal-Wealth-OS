@@ -327,7 +327,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   // Last: the assistant can navigate and pre-fill, so it binds against a page
   // that is already wired up. It lives outside #pageMount and is re-mounted on
   // every render, with its conversation held in module state.
-  mountAssistant(root, state, navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user, onLogout)));
+  mountAssistant(root, state, navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user, onLogout)), activePage);
 
   // A "Get started" step picked on the Dashboard points at its field here,
   // once this page is fully wired (F-7).

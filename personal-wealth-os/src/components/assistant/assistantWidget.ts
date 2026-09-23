@@ -67,6 +67,8 @@ interface WidgetContext {
   root: HTMLElement;
   state: WealthState;
   navigate: Navigate;
+  /** The page id behind the panel, re-read on every render. */
+  page: string;
 }
 
 let ctx: WidgetContext | null = null;
@@ -389,6 +391,7 @@ async function sendAsk(text: string): Promise<void> {
     mode: "help",
     shareFigures: shareFigures(),
     platforms: knownPlatforms(context.state),
+    page: context.page,
   });
   // Only this visit's turns: earlier visits stay on screen but are never sent
   // again (see visitId in assistantStore). A failed turn holds an error
@@ -602,8 +605,8 @@ function bind(): void {
  * Wire the widget up after a render. Safe to call on every renderApp: it only
  * re-reads the DOM and re-binds, and the history lives outside the DOM.
  */
-export function mountAssistant(root: HTMLElement, state: WealthState, navigate: Navigate): void {
-  ctx = { root, state, navigate };
+export function mountAssistant(root: HTMLElement, state: WealthState, navigate: Navigate, page: string): void {
+  ctx = { root, state, navigate, page };
   bind();
   if (isPanelOpen()) scrollLogToNewest();
 
