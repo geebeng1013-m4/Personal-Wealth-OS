@@ -1,4 +1,5 @@
 import type { WealthState } from "./models";
+import { ALL_PAGES, PAGE_GROUPS, PHONE_TABS, type Page } from "./pageDirectory";
 import { emptyState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, IMPORT_SNAPSHOT_LABEL, type Snapshot } from "./state";
 import { refreshLivePrices, priceRefreshCleanup, PRICE_POLL_INTERVAL_MS } from "./livePrices";
 import { bindTvmCalculator, tvmCalculatorTemplate } from "./pages/tvmPage";
@@ -42,37 +43,8 @@ const sidebarScrollPositions = new WeakMap<HTMLElement, number>();
  */
 type AppUser = { uid?: string | null; displayName?: string | null; email?: string | null; photoURL?: string | null };
 
-type Page = readonly [id: string, english: string, subtitle: string];
-type PageGroup = readonly [title: string, pages: readonly Page[]];
-
-const pageGroups = [
-  ["Wealth", [
-    ["dashboard", "Overview", "Financial command centre"],
-    ["portfolio", "Portfolio", "Investments & activity"],
-    ["goals", "Goals", "Progress & targets"],
-    ["market", "Market", "Research when needed"],
-  ]],
-  ["Money", [
-    ["ledger", "Ledger", "Income & expenses"],
-    ["buckets", "Budget", "Fund allocation"],
-    ["money-leaks", "Money Leaks", "Detected cash-flow drag"],
-  ]],
-  ["Intelligence", [
-    ["advisor", "Advisor", "Guidance & scenarios"],
-    ["review", "Review", "Monthly check-in"],
-    ["rules", "Rules", "Decision framework"],
-  ]],
-  ["Tools", [
-    ["tvm", "TVM Calculator", "Time value of money"],
-    ["calculator", "Investment Growth", "Contribution projections"],
-  ]],
-  ["System", [
-    ["me", "Me", "About you"],
-    ["settings", "Settings", "Configuration"],
-  ]],
-] as const satisfies readonly PageGroup[];
-
-const pages: Page[] = pageGroups.flatMap<Page>(([, groupPages]) => [...groupPages]);
+const pageGroups = PAGE_GROUPS;
+const pages: Page[] = [...ALL_PAGES];
 
 /*
  * Bottom tab bar (phone only, see .tabbar in shell.css).
@@ -91,12 +63,8 @@ const TAB_ICONS: Record<string, string> = {
   budget: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg>',
   more: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>',
 };
-const primaryTabs: ReadonlyArray<readonly [id: string, label: string, icon: string]> = [
-  ["dashboard", "Home", TAB_ICONS.home],
-  ["ledger", "Ledger", TAB_ICONS.ledger],
-  ["portfolio", "Portfolio", TAB_ICONS.portfolio],
-  ["buckets", "Budget", TAB_ICONS.budget],
-];
+const primaryTabs: ReadonlyArray<readonly [id: string, label: string, icon: string]> =
+  PHONE_TABS.map(([id, label]) => [id, label, TAB_ICONS[id === "buckets" ? "budget" : id === "dashboard" ? "home" : id]] as const);
 
 /*
  * Pages the phone "More" list opens — everything without its own bottom tab.
