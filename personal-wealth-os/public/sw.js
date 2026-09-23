@@ -2,7 +2,7 @@
 // cache, including one an earlier worker left in a state the app cannot boot
 // from. This only ever removes copies of the app's own files — the ledger
 // lives in local storage and Firestore, which a service worker never touches.
-const CACHE_NAME = "wealth-os-v23";
+const CACHE_NAME = "wealth-os-v24";
 
 // How long opening the app waits for the network before it shows the copy
 // already on the phone. A connection that is up but not answering (weak

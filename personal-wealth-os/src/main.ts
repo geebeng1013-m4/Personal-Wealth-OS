@@ -111,19 +111,37 @@ if (!root) {
 // Theme management
 type Theme = "dark" | "light";
 
+/** The sign-in page's ground, kept in step with `.login-shell` in shell.css. */
+const LOGIN_BG = "#050706";
+
 function getStoredTheme(): Theme {
   const t = localStorage.getItem("pwo-theme");
   if (t === "light" || t === "dark") return t;
-  // First load: follow the OS. Once the user toggles, the stored value wins.
-  try {
-    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-  } catch {
-    return "dark";
-  }
+  // First load: light, whatever the OS prefers. Once the user toggles, the
+  // stored value wins. Kept identical to the boot script in index.html — the
+  // two disagreeing would repaint the page after first paint.
+  return "light";
+}
+
+/**
+ * Tints the phone's status strip (index.html #app-theme-color).
+ *
+ * The sign-in page is dark in both themes, so it names its own colour instead
+ * of the theme's — otherwise a light theme tints the strip sand over a near
+ * black page.
+ */
+function setThemeColor(color: string): void {
+  const meta = document.querySelector<HTMLMetaElement>("#app-theme-color");
+  if (meta) meta.content = color;
+}
+
+function themeColor(theme: Theme): string {
+  return theme === "light" ? "#f4f1ea" : "#141310";
 }
 
 function applyTheme(theme: Theme): void {
   document.documentElement.setAttribute("data-theme", theme);
+  setThemeColor(themeColor(theme));
   localStorage.setItem("pwo-theme", theme);
 }
 
@@ -213,6 +231,7 @@ function navigate(page: string): void {
 function renderSignedIn(user: User): void {
   // Whatever brought us here, the screen is about to show the current `state`.
   screenIsStale = false;
+  setThemeColor(themeColor(getStoredTheme()));
   if (!quizAllowed || !shouldShowOnboardingQuiz(state)) {
     renderApp(root!, state, setState, currentPage, navigate, user, handleLogout);
     return;
@@ -362,6 +381,7 @@ function rememberSignedIn(signedIn: boolean): void {
 }
 
 function renderLogin(): void {
+  setThemeColor(LOGIN_BG);
   document.body.classList.toggle("mask-financial-amounts", state.privacy.maskAmounts);
   root!.className = "login-shell";
   root!.innerHTML = `

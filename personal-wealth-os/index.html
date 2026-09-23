@@ -11,9 +11,12 @@
          strip behind the home indicator from the page. The boot script drops
          this meta when #launch retires, handing the two below back over. -->
     <meta name="theme-color" content="#141310" id="launch-theme-color" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141310" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f1ea" />
-    <meta name="color-scheme" content="dark light" />
+    <!-- The app's own tint, matched to the theme rather than to the OS: the
+         theme no longer follows prefers-color-scheme, so a dark phone showing
+         the light app would otherwise tint its status strip dark. applyTheme
+         in main.ts keeps this in sync with data-theme. -->
+    <meta name="theme-color" content="#f4f1ea" id="app-theme-color" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="WealthUp" />
@@ -57,11 +60,11 @@
     <script>
       // Runs before first paint: the same theme choice main.ts makes.
       (function () {
-        var theme = 'dark';
+        // Light is the default; only a stored choice moves off it.
+        var theme = 'light';
         try {
           var stored = localStorage.getItem('pwo-theme');
-          theme = stored === 'light' || stored === 'dark' ? stored
-            : window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          if (stored === 'light' || stored === 'dark') theme = stored;
         } catch (e) {}
         document.documentElement.setAttribute('data-theme', theme);
         // Android draws its own splash (background colour + icon) and cannot
