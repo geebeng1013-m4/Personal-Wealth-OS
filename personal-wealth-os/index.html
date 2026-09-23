@@ -101,16 +101,29 @@
       body { margin: 0; }
       /* shell.css styles this properly once it loads; until then keep it off-screen. */
       .skip-link { position: absolute; left: -9999px; }
-      #launch { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; background: #141310; transition: opacity 450ms ease; }
-      #launch-mark { width: 120px; height: auto; animation: launch-breathe 1.6s ease-in-out infinite; }
-      /* launch-name.png is drawn at 3x; bottom 9% matches the startup images. */
-      #launch-name { position: absolute; left: 50%; bottom: 9%; transform: translateX(-50%); width: 77px; height: auto; }
+      /* The W and the name are placed against the SCREEN (vh), not against
+         #launch's own box, because that is the basis the startup images are
+         drawn on: generate-launch-images.py centres the W on the full canvas
+         and puts the name's bottom edge 9% above the canvas bottom.
+         `position: fixed; inset: 0` does not resolve to the full screen in
+         iOS standalone — measured on the user's iPhone it stopped 65 device
+         px short at the bottom, so a box-centred W sat 32.5px above the
+         screen centre and the name landed at 14.1% instead of 9.1%. Against
+         a native startup image that has them right, the handover looked like
+         the whole screen jumping up. #launch itself keeps `inset: 0`: it only
+         has to paint, and <html>/<body> cover anything it misses (#121). */
+      #launch { position: fixed; inset: 0; z-index: 2000; background: #141310; transition: opacity 450ms ease; }
+      #launch-mark { position: absolute; left: 50%; top: 50vh; transform: translate(-50%, -50%); width: 120px; height: auto; animation: launch-breathe 1.6s ease-in-out infinite; }
+      /* launch-name.png is drawn at 3x; bottom 9vh matches the startup images. */
+      #launch-name { position: absolute; left: 50%; bottom: 9vh; transform: translateX(-50%); width: 77px; height: auto; }
       .is-android #launch-name { display: none; }
       #launch.is-done { opacity: 0; pointer-events: none; }
-      @keyframes launch-breathe { 50% { transform: scale(0.95); } }
+      /* Carries the centring translate: a keyframe replaces the whole
+         transform, so `scale(0.95)` alone would drop the W to the corner. */
+      @keyframes launch-breathe { 50% { transform: translate(-50%, -50%) scale(0.95); } }
       /* Shown only when the app could not start and clearing its cached files
          did not help either, so the launch screen never becomes a dead end. */
-      #launch-retry { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); width: min(280px, 80vw); display: none; flex-direction: column; align-items: center; gap: 12px; text-align: center; color: #f4f1ea; font: 500 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      #launch-retry { position: absolute; left: 50%; bottom: 22vh; transform: translateX(-50%); width: min(280px, 80vw); display: none; flex-direction: column; align-items: center; gap: 12px; text-align: center; color: #f4f1ea; font: 500 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; }
       #launch.is-stuck #launch-retry { display: flex; }
       #launch-retry p { margin: 0; }
       #launch-retry button { font: inherit; color: #141310; background: #f4f1ea; border: 0; border-radius: 999px; padding: 10px 22px; cursor: pointer; }
