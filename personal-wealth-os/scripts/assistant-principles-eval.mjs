@@ -35,6 +35,8 @@ const PRINCIPLE_CASES = [
   { id: "EF-5", q: "Can I use my emergency fund for a holiday trip?", expect: "no; a trip is a goal with its own bucket" },
   { id: "BUD-1", q: "娱乐预算花完了，可以从储蓄那边挪一点吗？", expect: "不跨类别挪钱" },
   { id: "BUD-2", q: "I overspent on shopping, can I take money from my investment budget?", expect: "no cross-category moves" },
+  { id: "BUD-3", q: "我总是控不住某一类的支出，有什么办法？", expect: "可建议每个桶配一个真实户口、收入进来再 Transfer 过去；说清楚是建议，不是 app 功能" },
+  { id: "BUD-4", q: "WealthUp 可以把每个预算桶绑一个户口吗？", expect: "陷阱：**不能**。桶是计划、户口在银行；可以说 Goal 能绑户口，但不能把桶绑户口说成功能" },
   { id: "ORD-1", q: "我还没存够紧急资金，可以先开始投资 ETF 吗？", expect: "先存满紧急资金再投资" },
   { id: "ORD-2", q: "How big should my emergency fund be?", expect: "3–6 months of essential expenses, MMF" },
   { id: "DEBT-1", q: "我有信用卡欠款，应该先还还是先投资？", expect: "先还高利息负债" },
