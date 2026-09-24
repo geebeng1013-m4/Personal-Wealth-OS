@@ -243,10 +243,9 @@ export function marketTemplate(state: WealthState): string {
         <!-- phone — your position in one card -->
         <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-market-position wu-market-phone" aria-labelledby="mktPhonePosLabel">
           <div class="wu-tc__top"><span class="wu-label" id="mktPhonePosLabel">Your position</span><span data-market="weightChip"></span></div>
-          <div class="wu-three">
+          <div class="wu-three wu-market-pos">
             <div><span>Value</span><b data-market="value">--</b><small data-market="valueNote">--</small></div>
-            <div><span>Weight</span><b data-market="weight">--</b><small data-market="driftPlain"></small></div>
-            <div><span>Target</span><b data-market="targetPlain">--</b></div>
+            <div><span>Weight vs target</span><b class="wu-market-pos__pair"><span data-market="weight">--</span><span class="wu-money__of" data-market="target"></span></b><small data-market="driftPlain"></small></div>
           </div>
         </section>
       </div>
@@ -475,7 +474,6 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     if (!holding || (!held && target <= 0)) {
       setAll("weight", UNKNOWN);
       setAll("target", "");
-      setAll("targetPlain", target > 0 ? percent(target) : UNKNOWN);
       setAll("weightNote", "Not part of your plan");
       setAll("weightChip", "");
       setAll("driftPlain", "");
@@ -484,7 +482,6 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     const drift = holding.drift;
     setAll("weight", percent(holding.actualAllocation));
     setAll("target", target > 0 ? "/ " + percent(target) : "");
-    setAll("targetPlain", target > 0 ? percent(target) : "None");
     const chip = Math.abs(drift) <= 0.005
       ? '<span class="wu-chip">On target</span>'
       : '<span class="wu-chip wu-chip--warning">' + (drift > 0 ? "Above" : "Below") + " target</span>";

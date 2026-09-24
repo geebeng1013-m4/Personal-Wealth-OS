@@ -4541,15 +4541,22 @@
     .wu-market-position.wu-market-phone {
       display: grid;
     }
-    /* the three figures span the card: Value on the left edge, Target on the
-       right, Weight centred — so each one sits over the edge it reads from */
-    .wu-market-position .wu-three > :nth-child(2) {
-      align-items: center;
-      text-align: center;
+    /* two halves, not three columns: what you hold on the left, how it sits
+       against the target on the right, each three lines deep so neither
+       corner of the card is left empty */
+    .wu-three.wu-market-pos {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
     }
-    .wu-market-position .wu-three > :nth-child(3) {
+    .wu-market-pos > :nth-child(2) {
       align-items: flex-end;
       text-align: right;
+    }
+    /* the weight and its target read as one figure, as they do on a desktop */
+    .wu-market-pos__pair {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-1);
     }
   }
   @media (min-width: 901px) {
