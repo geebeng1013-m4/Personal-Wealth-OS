@@ -4541,6 +4541,16 @@
     .wu-market-position.wu-market-phone {
       display: grid;
     }
+    /* the three figures span the card: Value on the left edge, Target on the
+       right, Weight centred — so each one sits over the edge it reads from */
+    .wu-market-position .wu-three > :nth-child(2) {
+      align-items: center;
+      text-align: center;
+    }
+    .wu-market-position .wu-three > :nth-child(3) {
+      align-items: flex-end;
+      text-align: right;
+    }
   }
   @media (min-width: 901px) {
     /* the chart card's label row carries the periods on a desktop */
