@@ -316,7 +316,14 @@ export function loadDefaultTemplate(uid?: string): WealthState {
   }
 }
 
-export function emptyState(): WealthState {
+/**
+ * Every block in its empty form.
+ *
+ * Deliberately free of deviceId(), and so of localStorage: migrateState fills
+ * absent blocks from here on every load, including in Node, where there is no
+ * localStorage to read. emptyState() adds the device identity on top.
+ */
+function emptyStateBase(): WealthState {
   const state: WealthState = {
     version: CURRENT_VERSION,
     profile: {
@@ -366,7 +373,7 @@ export function emptyState(): WealthState {
     privacy: { maskAmounts: false, requireExportConfirmation: true },
     updatedAt: 0,
     lastSyncedAt: 0,
-    deviceId: deviceId(),
+    deviceId: "",
     ruleCardOverrides: {},
     ruleNoteTitle: "",
     ruleNotes: "",
@@ -385,6 +392,37 @@ export function emptyState(): WealthState {
   // mostly disabled placeholders — present and valid, but asserting nothing.
   state.financialRules = getDefaultFinancialRules(state);
   return state;
+}
+
+export function emptyState(): WealthState {
+  return { ...emptyStateBase(), deviceId: deviceId() };
+}
+
+/**
+ * Buckets out of an imported file or an older state.
+ *
+ * Malformed entries are dropped one by one, as ledger accounts and liabilities
+ * are, so one bad layer cannot cost the user the rest of the plan. An absent
+ * list means no layers — never the sample ones.
+ */
+function validBuckets(value: unknown): Bucket[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate): Bucket[] => {
+    if (!candidate || typeof candidate !== "object") return [];
+    const bucket = candidate as Partial<Bucket>;
+    const amount = Number(bucket.amount);
+    if (typeof bucket.id !== "string" || !bucket.id.trim()) return [];
+    if (!Number.isFinite(amount) || amount < 0) return [];
+    const name = typeof bucket.name === "string" ? bucket.name : "";
+    return [{
+      id: bucket.id,
+      name,
+      label: typeof bucket.label === "string" && bucket.label ? bucket.label : name,
+      amount,
+      cadence: bucket.cadence === "one-time" ? "one-time" : "monthly",
+      note: typeof bucket.note === "string" ? bucket.note : "",
+    }];
+  });
 }
 
 function isLedgerType(value: unknown): value is LedgerTransactionType {
@@ -564,22 +602,28 @@ function migrateGoalSpent(goal: Goal): Goal {
 
 export function migrateState(input: Partial<WealthState>): WealthState {
   const candidate = input as Partial<WealthState> & Record<string, unknown>;
+  // What a missing block is worth: nothing. defaultState is the sample state —
+  // filling a gap from it would hand the user an emergency fund of MYR 4,000
+  // they never recorded, and every figure derived from it would be wrong while
+  // the screen looked entirely normal.
+  const empty = emptyStateBase();
   const merged = {
-    ...cloneDefaultState(),
+    ...empty,
     ...input,
     version: CURRENT_VERSION,
   } as WealthState;
 
-  merged.profile = { ...defaultState.profile, ...input.profile };
-  merged.cashflow = { ...defaultState.cashflow, ...input.cashflow };
-  merged.emergency = { ...defaultState.emergency, ...input.emergency };
-  merged.dca = { ...defaultState.dca, ...input.dca, targets: { ...defaultState.dca.targets, ...input.dca?.targets } };
+  merged.profile = { ...empty.profile, ...input.profile };
+  merged.cashflow = { ...empty.cashflow, ...input.cashflow };
+  merged.emergency = { ...empty.emergency, ...input.emergency };
+  merged.dca = { ...empty.dca, ...input.dca, targets: { ...empty.dca.targets, ...input.dca?.targets } };
   merged.opportunity = {
-    ...defaultState.opportunity,
+    ...empty.opportunity,
     ...input.opportunity,
-    allocation: { ...defaultState.opportunity.allocation, ...input.opportunity?.allocation },
-    tranches: input.opportunity?.tranches ?? defaultState.opportunity.tranches,
+    allocation: { ...empty.opportunity.allocation, ...input.opportunity?.allocation },
+    tranches: input.opportunity?.tranches ?? empty.opportunity.tranches,
   };
+  merged.buckets = validBuckets(input.buckets);
   merged.customTickers = Array.isArray(input.customTickers)
     ? [...new Set(input.customTickers
       .filter((ticker): ticker is string => typeof ticker === "string")
@@ -755,15 +799,28 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   return merged;
 }
 
+/**
+ * The state this device holds for a user, or an empty one.
+ *
+ * Empty, never the sample state: main.ts shows this immediately on sign-in,
+ * before the cloud document arrives, so on a new device — or when the cloud
+ * read fails or the app is offline — the demo portfolio would otherwise be
+ * what the user sees, and what an edit would then save as theirs.
+ *
+ * An unreadable stored state is reported rather than swallowed, and its raw
+ * text is left where it is: this function only reads, so a state that fails
+ * to parse here can still be recovered by hand or replaced from the cloud.
+ */
 export function loadState(uid?: string): WealthState {
   const key = getUserStorageKey(uid);
   const raw = localStorage.getItem(key);
-  if (!raw) return cloneDefaultState();
+  if (!raw) return emptyState();
 
   try {
     return migrateState(JSON.parse(raw) as Partial<WealthState>);
-  } catch {
-    return cloneDefaultState();
+  } catch (err) {
+    console.error("[loadState] stored state could not be read; starting empty and keeping the stored copy:", err);
+    return emptyState();
   }
 }
 

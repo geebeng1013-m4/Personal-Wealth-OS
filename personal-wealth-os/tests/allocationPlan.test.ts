@@ -151,9 +151,29 @@ test("allocation plan: the plan survives a round trip through storage", () => {
 });
 
 test("allocation plan: every earlier persisted state arrives with a usable plan", () => {
+  // Each fixture carries layers, because a state of that age had them: the
+  // plan is derived from the buckets, so this is what "usable" is derived from.
+  const buckets: Bucket[] = [
+    { id: "survival", name: "Survival", label: "Survival Bucket", amount: 720, cadence: "monthly", note: "" },
+    { id: "growth", name: "Growth", label: "Growth Bucket", amount: 100, cadence: "monthly", note: "" },
+  ];
   for (const version of [3, 10, 15, 18, 21]) {
-    const migrated = migrateState({ version, deviceId: `v${version}` });
+    const migrated = migrateState({ version, deviceId: `v${version}`, buckets });
     assert.ok(migrated.allocation.steps.length > 0, `v${version} has no layers`);
     assert.deepEqual(validatePlan(migrated.allocation), [], `v${version} migrated to an invalid plan`);
   }
+});
+
+test("allocation plan: a state with no layers arrives with an empty plan, not an invented one", () => {
+  // The other half of the same promise. Nobody's figures may move, and that
+  // includes a state that never had layers: the Budget page shows nothing
+  // rather than six layers the user never wrote.
+  const migrated = migrateState({ version: 3, deviceId: "v3-no-buckets" });
+  assert.deepEqual(migrated.buckets, []);
+  assert.deepEqual(migrated.allocation.steps, []);
+  // "no-steps" is the plan saying it is empty, not malformed — the same thing
+  // emptyState() produces, which is what every new user starts from and what
+  // the Budget page already has an empty state for.
+  assert.deepEqual(validatePlan(migrated.allocation), [{ code: "no-steps" }], "empty, and nothing else wrong with it");
+  assert.deepEqual(validatePlan(emptyState().allocation), validatePlan(migrated.allocation), "a migrated empty state is a new user's state");
 });
