@@ -31,6 +31,7 @@ import {
   type LedgerFilters,
 } from "../ledger";
 import { getLedgerSnapshot } from "../ledgerSummary";
+import { ledgerTagsByCategory, type LedgerTag } from "../ledgerTags";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
 let ledgerFilters: LedgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "", fundingSource: "all" };
@@ -47,6 +48,14 @@ let ledgerEntryType: LedgerTransactionType = "expense";
  * they still had to pick hidden behind the keyboard.
  */
 let focusLedgerAmountNext = false;
+/**
+ * Set for one render after a merchant-prefix tag was tapped: the note is half
+ * written ("chagee-") and the caret belongs at the end of it, on the half that
+ * changes every visit.
+ */
+let focusLedgerNoteNext = false;
+/** How many tags a category shows before the rest go behind "More". */
+const VISIBLE_TAGS = 6;
 let ledgerEntryDraft = {
   amount: "",
   accountId: "",
@@ -128,6 +137,26 @@ export function applyLedgerDraft(draft: LedgerDraft): void {
   focusLedgerAmountNext = draft.amount <= 0;
 }
 
+/**
+ * What the entry form currently holds, in the shape the draft keeps.
+ *
+ * Both the type switch and a tag tap re-render the form, and both have to
+ * carry across whatever the user already typed rather than blanking it.
+ */
+function readEntryForm(form: HTMLFormElement | null): typeof ledgerEntryDraft {
+  const field = (name: string) => form?.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | null;
+  return {
+    amount: field("amount")?.value ?? "",
+    accountId: field("accountId")?.value ?? ledgerEntryDraft.accountId,
+    fromAccountId: field("fromAccountId")?.value ?? ledgerEntryDraft.fromAccountId,
+    toAccountId: field("toAccountId")?.value ?? ledgerEntryDraft.toAccountId,
+    date: field("date")?.value ?? "",
+    note: field("note")?.value ?? "",
+    categoryId: form ? (new FormData(form).get("categoryId") as string | null) ?? "" : "",
+    fundingSource: (field("fundingSource") as HTMLInputElement | null)?.checked ? "sponsored" : "personal",
+  };
+}
+
 function defaultAccountIcon(type: LedgerAccountType): string {
   return type === "bank" ? "🏦" : type === "wallet" ? "👛" : "📈";
 }
@@ -174,6 +203,33 @@ export function ledgerTemplate(state: WealthState): string {
   const draftCategoryId = entryCategories.some((category) => category.id === ledgerEntryDraft.categoryId)
     ? ledgerEntryDraft.categoryId
     : "";
+  const selectedCategoryId = editing?.categoryId ?? (draftCategoryId || entryCategories[0]?.id || "");
+  /**
+   * The notes already written under each category, offered back as one-tap
+   * fills. Only for a new expense: on income and transfers the note is rarely
+   * repeated, and while editing an existing row the tags would compete with
+   * the row's own values.
+   */
+  const quickTags = entryType === "expense" && !editing
+    ? ledgerTagsByCategory(state.ledgerTransactions)
+    : new Map<string, LedgerTag[]>();
+  const tagStrip = (categoryId: string, tags: LedgerTag[]): string => {
+    const buttons = tags.map((tag, index) => {
+      const extra = index >= VISIBLE_TAGS;
+      return `<button type="button" class="wu-tags__tag" data-ledger-tag="${escapeHtml(tag.value)}" data-ledger-tag-kind="${tag.kind}"${tag.accountId ? ` data-ledger-tag-account="${escapeHtml(tag.accountId)}"` : ""}${extra ? " data-ledger-tag-extra hidden" : ""}>${escapeHtml(tag.value)}</button>`;
+    }).join("");
+    const more = tags.length > VISIBLE_TAGS
+      ? `<button type="button" class="wu-tags__more" data-ledger-tags-more="${escapeHtml(categoryId)}">More (${tags.length - VISIBLE_TAGS})</button>`
+      : "";
+    return `<div class="wu-tags" role="group" aria-label="Notes used before" data-ledger-tags="${escapeHtml(categoryId)}"${categoryId === selectedCategoryId ? "" : " hidden"}><span class="wu-field-row__label">Used before</span><div class="wu-tags__list">${buttons}${more}</div></div>`;
+  };
+  // Every category's strip is rendered and all but one hidden, so picking a
+  // different category swaps the strip without a re-render — the form keeps
+  // whatever is already typed in it.
+  const quickTagsMarkup = [...quickTags.entries()]
+    .filter(([categoryId]) => entryCategories.some((category) => category.id === categoryId))
+    .map(([categoryId, tags]) => tagStrip(categoryId, tags))
+    .join("");
   const transferUnavailable = entryType === "transfer" && state.ledgerAccounts.length < 2;
   const entryAmount = editing ? String(editing.amount) : ledgerEntryDraft.amount;
   const entryDate = editing?.date ? localDateValue(editing.date) : ledgerEntryDraft.date || localDateValue();
@@ -269,9 +325,10 @@ export function ledgerTemplate(state: WealthState): string {
           <input name="type" type="hidden" value="${entryType}">
           ${entryType === "transfer"
             ? `<div class="wu-grid wu-grid--2"><label class="wu-field-row"><span class="wu-field-row__label">From account</span><select class="wu-field" name="fromAccountId" required>${accountOptions(selectedFromAccountId)}</select></label><label class="wu-field-row"><span class="wu-field-row__label">To account</span><select class="wu-field" name="toAccountId" required>${accountOptions(selectedToAccountId)}</select></label></div>`
-            : `<fieldset class="wu-choice wu-choice--glass"><legend class="wu-field-row__label">Category</legend><div class="wu-choice__opts">${entryCategories.map((category, index) => `<label class="wu-choice__opt"><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === editing?.categoryId || (!editing && (draftCategoryId ? category.id === draftCategoryId : index === 0)) ? " checked" : ""}><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)}</span></label>`).join("")}</div></fieldset>
+            : `<fieldset class="wu-choice wu-choice--glass"><legend class="wu-field-row__label">Category</legend><div class="wu-choice__opts">${entryCategories.map((category) => `<label class="wu-choice__opt"><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === selectedCategoryId ? " checked" : ""}><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)}</span></label>`).join("")}</div></fieldset>
           <label class="wu-field-row"><span class="wu-field-row__label">Account</span><select class="wu-field" name="accountId" required>${accountOptions(selectedAccountId)}</select></label>`}
-          <label class="wu-field-row"><span class="wu-field-row__label">Note</span><input class="wu-field" name="note" maxlength="500" value="${escapeHtml(entryNote)}" placeholder="${entryType === "expense" ? "shop name-what you bought" : "Optional"}"></label>
+          <label class="wu-field-row"><span class="wu-field-row__label">Note</span><input id="ledgerNote" class="wu-field" name="note" maxlength="500" value="${escapeHtml(entryNote)}" placeholder="${entryType === "expense" ? "shop name-what you bought" : "Optional"}"></label>
+          ${quickTagsMarkup}
           <label class="wu-field-row"><span class="wu-field-row__label">Amount (MYR)</span><input id="ledgerAmount" class="wu-field" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required value="${escapeHtml(entryAmount)}" placeholder="0.00"></label>
           ${entryType === "income"
             ? `<div id="ledgerRoutingHint" aria-live="polite">${incomeRoutingHint(state, {
@@ -516,19 +573,54 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
     focusLedgerAmountNext = false;
     root.querySelector<HTMLInputElement>("#ledgerAmount")?.focus({ preventScroll: true });
   }
+  if (focusLedgerNoteNext) {
+    focusLedgerNoteNext = false;
+    const note = root.querySelector<HTMLInputElement>("#ledgerNote");
+    note?.focus({ preventScroll: true });
+    // After the separator, not over it: the merchant half is already right.
+    note?.setSelectionRange(note.value.length, note.value.length);
+  }
+
+  // Swapping which category's tags are on screen. Toggling `hidden` rather
+  // than re-rendering keeps whatever the user has already typed in the form.
+  root.querySelectorAll<HTMLInputElement>('#ledgerForm input[name="categoryId"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      root.querySelectorAll<HTMLElement>("[data-ledger-tags]").forEach((strip) => {
+        strip.hidden = strip.dataset.ledgerTags !== radio.value;
+      });
+    });
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-ledger-tags-more]").forEach((button) => {
+    button.addEventListener("click", () => {
+      button.closest("[data-ledger-tags]")?.querySelectorAll<HTMLElement>("[data-ledger-tag-extra]").forEach((tag) => {
+        tag.hidden = false;
+      });
+      button.hidden = true;
+    });
+  });
+  root.querySelectorAll<HTMLButtonElement>("[data-ledger-tag]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const current = readEntryForm(root.querySelector<HTMLFormElement>("#ledgerForm"));
+      // Through the draft and a re-render, the way the assistant fills this
+      // form: one path, one set of validations, no half-written DOM.
+      ledgerEntryDraft = {
+        ...current,
+        note: button.dataset.ledgerTag ?? "",
+        accountId: button.dataset.ledgerTagAccount ?? current.accountId,
+      };
+      // A whole note is finished, so the amount is all that is left. A
+      // merchant prefix is half a note, so the caret stays in it.
+      if (button.dataset.ledgerTagKind === "prefix") focusLedgerNoteNext = true;
+      else focusLedgerAmountNext = true;
+      refresh(state, undefined, true);
+    });
+  });
   root.querySelectorAll<HTMLButtonElement>("[data-ledger-type]").forEach((button) => button.addEventListener("click", () => {
     const type = button.dataset.ledgerType as LedgerTransactionType;
-    const form = root.querySelector<HTMLFormElement>("#ledgerForm");
     ledgerEntryDraft = {
-      amount: (form?.elements.namedItem("amount") as HTMLInputElement | null)?.value ?? "",
-      accountId: (form?.elements.namedItem("accountId") as HTMLSelectElement | null)?.value ?? ledgerEntryDraft.accountId,
-      fromAccountId: (form?.elements.namedItem("fromAccountId") as HTMLSelectElement | null)?.value ?? ledgerEntryDraft.fromAccountId,
-      toAccountId: (form?.elements.namedItem("toAccountId") as HTMLSelectElement | null)?.value ?? ledgerEntryDraft.toAccountId,
-      date: (form?.elements.namedItem("date") as HTMLInputElement | null)?.value ?? "",
-      note: (form?.elements.namedItem("note") as HTMLInputElement | null)?.value ?? "",
+      ...readEntryForm(root.querySelector<HTMLFormElement>("#ledgerForm")),
       // Categories are per type, so the old selection cannot carry over.
       categoryId: "",
-      fundingSource: (form?.elements.namedItem("fundingSource") as HTMLInputElement | null)?.checked ? "sponsored" : "personal",
     };
     ledgerEditingId = "";
     ledgerEntryType = type;
