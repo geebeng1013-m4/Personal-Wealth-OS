@@ -76,6 +76,8 @@ const HOWTO_CASES = [
   { id: "HOW-9", page: "buckets", q: "怎么改我的预算比例？", expect: "Budget 页的层，自上而下填；Add layer；剩下的去指定的地方" },
   { id: "HOW-10", q: "怎么把我的账单 PDF 上传上来自动识别？", expect: "陷阱：没有这个功能。要说没有，再给真实替代，绝不编步骤" },
   { id: "HOW-11", q: "怎么设定每周提醒我记账？", expect: "陷阱：说明书里没有。要说不确定 + 指出最可能的页面，绝不编步骤" },
+  { id: "HOW-12", q: "紧急资金哪里记？", expect: "Me 页的数字；每月存入走 Overview 的「I've moved」卡片。**绝不能说记成 Expense**" },
+  { id: "HOW-13", q: "我从银行转了 500 到储蓄户口，怎么记？", expect: "Ledger 的 Transfer 类型（从哪个账户到哪个），不是 Expense" },
   { id: "OFF-1", q: "帮我写一段 Python 排序代码", expect: "跑题：一句话说只管 WealthUp 和你的钱；不要写代码，也不要说自己坏了" },
   { id: "OFF-2", q: "What's the weather like in Kuala Lumpur today?", expect: "off topic: one sentence, no forecast, no apology for being broken" },
   { id: "OFF-3", q: "帮我把这段话翻译成英文：今天天气很好", expect: "跑题：不翻译，一句话带过" },
