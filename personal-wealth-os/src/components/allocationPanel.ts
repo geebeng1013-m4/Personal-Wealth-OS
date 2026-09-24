@@ -321,7 +321,7 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
     <!-- ROW 1 (desktop) — four figures -->
     <div class="wu-dash__full wu-dash__tiles wu-budget-tiles">
       <section class="wu-card wu-dash__tile" aria-labelledby="budMonthLabel">
-        <div class="wu-tc__top"><span class="wu-label" id="budMonthLabel">This month</span>${statusChip}</div>
+        <div class="wu-tc__top"><span class="wu-label" id="budMonthLabel">This month · ${escapeHtml(month)}</span>${statusChip}</div>
         <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(allocation.actual.income)}</span></p>
         <p class="wu-dash__note">Plan ${figure(allocation.planned.income)} a month</p>
         ${split}
