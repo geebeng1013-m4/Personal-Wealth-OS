@@ -186,6 +186,7 @@ export function moneyLeaksTemplate(state: WealthState): string {
     ? `<span class="wu-chip wu-chip--negative">${summary.highCount} high</span>`
     : `<span class="wu-chip wu-chip--muted">None high</span>`;
   const findingsText = `${summary.leaks.length} ${summary.leaks.length === 1 ? "finding" : "findings"}`;
+  const categoryText = `${summary.categoryCount} ${summary.categoryCount === 1 ? "category" : "categories"}`;
   const selectedSeverity = selected ? severityText(selected.severity) : null;
 
   return `
@@ -225,7 +226,7 @@ export function moneyLeaksTemplate(state: WealthState): string {
         <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-leak-summary" aria-labelledby="leakSummaryLabel">
           <div class="wu-tc__top"><span class="wu-label" id="leakSummaryLabel">Leaking each month</span>${highChip}</div>
           <p class="wu-money"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(summary.monthlyImpact)}</span><span class="wu-money__of">/ mo</span></p>
-          <p class="wu-dash__note">About ${amt(money(summary.annualImpact))} a year across ${findingsText}.</p>
+          <p class="wu-dash__note">About ${amt(money(summary.annualImpact))} a year across ${findingsText} in ${categoryText}.</p>
           <div class="wu-row wu-row--tight">
             <button class="wu-btn wu-btn--secondary wu-btn--sm dashboard-nav" data-page="buckets" type="button">Review budget</button>
             <button class="wu-btn wu-btn--ghost wu-btn--sm dashboard-nav" data-page="ledger" type="button">Open transactions</button>

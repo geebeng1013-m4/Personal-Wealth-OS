@@ -130,7 +130,7 @@ export function reviewTemplate(state: WealthState): string {
     const note = review.notes || "No notes";
     return `<li class="wu-review${open ? " is-open" : ""}">
         <button class="wu-review__row review-row" type="button" data-review-id="${escapeHtml(review.id)}" aria-expanded="${open}">
-          <span class="wu-review__month">${escapeHtml(monthName(review.month))}<small>Spent ${amt(amountOf(review.spending))} · ${amtIn(note)}</small></span>
+          <span class="wu-review__month">${escapeHtml(monthName(review.month))}<small>Income ${amt(amountOf(review.income))} · spent ${amt(amountOf(review.spending))} · ${amtIn(note)}</small></span>
           <span class="wu-review__num wu-review__col t-amt">${amountOf(review.income)}</span>
           <span class="wu-review__num wu-review__col t-amt">${amountOf(review.spending)}</span>
           <span class="wu-review__col ${review.dcaDone ? "t-positive" : "t-faint"}">${review.dcaDone ? "Done" : "Missed"}</span>
@@ -189,6 +189,7 @@ export function reviewTemplate(state: WealthState): string {
             <div><span>Spent</span><b class="t-amt">${amountOf(snapshot.currentMonthExpenses)}</b></div>
             <div><span>DCA</span><b class="${close.dcaDone ? "t-positive" : ""}">${dcaText}</b></div>
           </div>
+          <p class="wu-dash__note wu-review-month__note"><span>Recorded so far</span><span>${amt(amountOf(close.dcaInvested))} of ${amt(amountOf(state.dca.monthly))} invested</span></p>
           ${toggle(" wu-btn--block")}
         </section>
 

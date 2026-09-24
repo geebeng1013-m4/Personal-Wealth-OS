@@ -242,9 +242,9 @@ export function InvestmentGrowthCalculator() {
           <div className="wu-tc__top"><span className="wu-label" id="growthResultLabel">Projected value</span><span className="wu-chip">+{amount(result.totalInterest)} interest</span></div>
           <p className="wu-money"><span className="wu-money__cur">MYR</span><span>{amount(result.totalBalance)}</span></p>
           {split}
-          <div className="wu-legend">
-            <span><i style={{ background: "var(--highlight)" }} />You put in <b>{amount(result.totalPrincipal)}</b></span>
-            <span><i style={{ background: "var(--accent)" }} />Interest <b>{amount(result.totalInterest)}</b></span>
+          <div className="wu-legend wu-growth-legend">
+            <span><i style={{ background: "var(--highlight)" }} /><span>You put in <b>{amount(result.totalPrincipal)}</b><small>{amount(initialDeposit)} now + {amount(contributionAmount)} {cadence}</small></span></span>
+            <span><i style={{ background: "var(--accent)" }} /><span>Interest <b>{amount(result.totalInterest)}</b><small>{growthShare}% of the final balance</small></span></span>
           </div>
           <p className="wu-dash__note">After {years} {years === 1 ? "year" : "years"} at {annualReturnPercent}% a year, {compoundingFrequency} compounding.</p>
         </section>
