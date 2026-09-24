@@ -107,3 +107,26 @@ test("how-to: the emergency fund figures are placed on Me, where they are", () =
   assert.ok(source("src/pages/mePage.ts").includes("Emergency fund"));
   assert.match(guide(), /are on the Me page/);
 });
+
+test("how-to: a transfer is a transfer, and the app really has that type", () => {
+  // Reported live on 2026-09-24: asked where to record the emergency fund, the
+  // assistant said to log an Expense in the Ledger. That counts the money as
+  // spent AND leaves the emergency figure untouched — wrong twice over.
+  assert.ok(source("src/models.ts").includes('"transfer"'), "the ledger still has a transfer type");
+  assert.ok(source("src/pages/ledgerPage.ts").includes(">Transfer<"), "and the page still offers it");
+  const text = guide();
+  assert.match(text, /type Transfer/);
+  assert.match(text, /It is NEVER an Expense/);
+});
+
+test("how-to: topping up the emergency fund goes through the card that exists", () => {
+  // The step and its button live in onboarding.ts; the dashboard renders them.
+  const steps = source("src/onboarding.ts");
+  assert.ok(steps.includes("into your safety buffer"), "the step still says what it says");
+  assert.ok(steps.includes("I've moved"), "and its button is still called that");
+  assert.ok(source("src/pages/mePage.ts").includes("Current emergency MYR"), "the figure is still on Me");
+  const text = guide();
+  assert.match(text, /Current emergency MYR/);
+  assert.match(text, /I've moved RM X/);
+  assert.match(text, /WealthUp never moves money/);
+});
