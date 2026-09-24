@@ -34,6 +34,9 @@ function plannedState(overrides: Partial<WealthState> = {}): WealthState {
   return stateWith({
     cashflow: { allowance: 2000, transport: 300, food: 400, otherFixed: 100, irregularIncome: 200 },
     dca: { monthly: 500, targets: { VOO: 1 } },
+    // Stated, not inherited: a migrated state no longer carries a sample
+    // emergency fund, and the cover tests below are about holding one back.
+    emergency: { current: 4000, target: 4000, annualYield: 0, monthlyTopUp: 0 },
     ...overrides,
   });
 }
@@ -726,7 +729,7 @@ test("budget/I: one month of history says nothing, and says so", () => {
 });
 
 test("budget/I: cover is counted in worst months, and never from the emergency fund", () => {
-  // The bank holds 5,000 opening + 3,800 income = 8,800. The seeded 4,000
+  // The bank holds 5,000 opening + 3,800 income = 8,800. The fixture's 4,000
   // emergency fund is not linked to an account, so it is held back from that:
   // 4,800 to spend, against a worst month 700 short — six such months.
   const state = freelancer(incomeIn(1, 800, "m1"), incomeIn(2, 3000, "m2"));

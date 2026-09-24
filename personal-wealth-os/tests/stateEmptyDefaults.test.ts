@@ -61,7 +61,7 @@ test("migrateState: an empty input gets no bear-market reserve, not 400 in three
 test("migrateState: an empty input gets no buckets, not the six sample layers", () => {
   const result = nothing();
   assert.deepEqual(result.buckets, [], "the Budget page reads these — sample layers would be a whole fake page");
-  assert.deepEqual(result.allocation.layers, [], "and the plan derived from them is empty too");
+  assert.deepEqual(result.allocation.steps, [], "and the plan derived from them has no steps either");
 });
 
 test("migrateState: an empty input gets an empty profile, not 'Student Investor', 19", () => {
