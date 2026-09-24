@@ -87,9 +87,21 @@ weight 与 target 合成一个数字后，`targetPlain` 这个 `data-market` 键
 **顺带修好的**：`.wu-three span` 连 figure 里的 `<span class="t-amt">` 一起选中了，
 `Value` 一直被当标签画（11px + faint 灰），旁边 `Weight` 却是 14px 半粗。改成
 `.wu-three > * > span`；格子改成竖向 flex 后，两条小字才落在同一基线上。
-### T6 — Review 手机版：DCA 明细、历史收入列、「已记录未复盘」注脚  `[ ]`
+### T6 — Review 手机版：DCA 明细、历史收入列、「已记录未复盘」注脚  `[x]`（2026-09-25，PR #158 已合并）
+
+- 当月卡底下一行：左 `Recorded so far`，右 `271.8 of 300 invested`（右对齐在 DCA 那一栏底下）。
+  「· not reviewed yet」不重复——卡片右上角的药丸已经在说复盘状态。
+- 历史每一行补收入：`Income 3,000 · spent 1,550 · 备注…`。
+- **故意没做**：历史行的 DCA done/missed 留在点开后的详情里。那一行再塞第四个数字，备注就没位置了。
 ### T7 — Me 手机版加仓档位那一行；Settings 手机版危险区说明  `[x]`（PR #154）
-### T8 — 收尾：Budget 电脑版月份名、Growth 手机版投入拆解、Money Leaks 类别数  `[ ]`
+### T8 — 收尾：Budget 电脑版月份名、Growth 手机版投入拆解、Money Leaks 类别数  `[x]`（2026-09-25，PR #158 已合并）
+
+- Budget 电脑版那张卡只说 `This month`，没说是哪个月 → `This month · September 2026`（手机版本来就有）。
+- Investment Growth 手机版只有两个总数，没说它们由什么构成 → 图例两半各自补上电脑版那句：
+  `10,000 now + 500 a month`、`57% of the final balance`。沿用 T5 定的「两半、等深」。
+- Money Leaks 手机版只数了 findings，没数类别 → `across 5 findings in 3 categories`。
+
+**双端差异账本到此全部完成（T1–T8）。**
 
 待你决定：
 - 手机版行情图要不要放回 TradingView 的工具条 / 日期区间 / 换股票（目前故意隐藏，是唯一真的少了功能的一处）。
