@@ -55,6 +55,7 @@ import {
   onAssistantHistoryMerged,
   setShareFigures,
   shareFigures,
+  sharesFigures,
   updateRecord,
 } from "./assistantStore";
 import type { AssistantDraft, AssistantMessage, RecordEntry, RecordStatus } from "./assistantTypes";
@@ -108,7 +109,7 @@ const STATUS_META: Record<RecordStatus, { label: string; tone: string }> = {
 function noticeHtml(): string {
   if (noticeDismissed()) return "";
   return `<div class="assistant-notice">
-    <p class="assistant-notice__body">Your messages are answered by DeepSeek, whose servers are in China. <strong>Ask</strong> sends no figures unless you switch on “Share my figures”. <strong>Record</strong> sends your category, account and ticker <em>names</em> — never amounts — because filling a form needs them.</p>
+    <p class="assistant-notice__body">Your messages are answered by DeepSeek, whose servers are in China. <strong>Ask</strong> sends no figures unless you switch on “Share my figures”, which stays off while “Mask amounts on screen” is on. <strong>Record</strong> sends your category, account and ticker <em>names</em> — never amounts — because filling a form needs them.</p>
     <button class="assistant-notice__ok" type="button" data-assistant-action="dismiss-notice">Got it</button>
   </div>`;
 }
@@ -271,7 +272,7 @@ function logHtml(): string {
 
 // --- panel -----------------------------------------------------------------
 
-function panelHtml(): string {
+function panelHtml(masked: boolean): string {
   const mode = assistantMode();
   const sending = isSending();
   const tab = (id: "help" | "fill", label: string): string =>
@@ -279,10 +280,10 @@ function panelHtml(): string {
 
   const hasHistory = mode === "fill" ? recordEntries().length > 0 : askMessages().length > 0;
   const figures = mode === "help"
-    ? `<label class="assistant-share">
-        <input type="checkbox" data-assistant-action="share"${shareFigures() ? " checked" : ""}>
+    ? `<label class="assistant-share${masked ? " is-locked" : ""}">
+        <input type="checkbox" data-assistant-action="share"${masked ? " disabled aria-describedby=\"assistantShareLocked\"" : shareFigures() ? " checked" : ""}>
         <span>Share my figures for a specific answer</span>
-      </label>`
+      </label>${masked ? `<p class="assistant-share assistant-share--static" id="assistantShareLocked">Masked: no figures are sent. Turn off “Mask amounts on screen” in Settings to share them.</p>` : ""}`
     : `<p class="assistant-share assistant-share--static">Sends your category and account names to DeepSeek, in China — never amounts.</p>`;
 
   // Signed out (including demo mode, which never signs in): the assistant is
@@ -331,11 +332,22 @@ function panelHtml(): string {
   </div>`;
 }
 
-/** The whole widget, for shellTemplate. */
-export function assistantTemplate(): string {
+/**
+ * The whole widget, for shellTemplate.
+ *
+ * Takes the state rather than reading ctx, because the shell builds this
+ * markup before mountAssistant hands ctx the new state — reading ctx here
+ * would render the panel one save behind, which is exactly how long a locked
+ * control stays unlocked.
+ */
+export function assistantTemplate(state?: WealthState): string {
   const open = isPanelOpen();
+  // Privacy mode and this switch say the same thing from two ends: if the
+  // amounts are not to be on screen, they are not to leave the device either.
+  // So the mask locks the switch off rather than leaving a way around itself.
+  const masked = (state ?? ctx?.state)?.privacy.maskAmounts === true;
   return `<div class="assistant${open ? " is-open" : ""}" id="assistant">
-    ${open ? panelHtml() : ""}
+    ${open ? panelHtml(masked) : ""}
     <button class="assistant-fab wu-glass wu-glass--tint wu-glass--press" id="assistantFab" type="button"
       aria-expanded="${open ? "true" : "false"}" aria-controls="assistantPanel"
       aria-label="${open ? "Close assistant" : "Open assistant"}">
@@ -400,7 +412,9 @@ async function sendAsk(text: string): Promise<void> {
 
   const contextText = buildAssistantContext(context.state, new Date(), {
     mode: "help",
-    shareFigures: shareFigures(),
+    // Checked against the state on every send: a switch left on before the
+    // mask went up must not still be sending figures.
+    shareFigures: sharesFigures(context.state.privacy.maskAmounts),
     platforms: knownPlatforms(context.state),
     page: context.page,
   });
@@ -434,7 +448,7 @@ async function sendRecord(text: string): Promise<void> {
   const now = new Date();
   const contextText = buildAssistantContext(context.state, now, {
     mode: "fill",
-    shareFigures: shareFigures(),
+    shareFigures: sharesFigures(context.state.privacy.maskAmounts),
     platforms: knownPlatforms(context.state),
   });
 
@@ -627,6 +641,9 @@ function bind(): void {
  */
 export function mountAssistant(root: HTMLElement, state: WealthState, navigate: Navigate, page: string): void {
   ctx = { root, state, navigate, page };
+  // Turning the mask on with the switch already on: drop it here, so the panel
+  // reopens unchecked instead of remembering a choice it will not honour.
+  if (state.privacy.maskAmounts && shareFigures()) setShareFigures(false);
   bind();
   if (isPanelOpen()) scrollLogToNewest();
 

@@ -450,8 +450,8 @@ function openLedgerSheet(stepId: "record-pay" | "log-spending", state: WealthSta
     title: income ? "Record this month's pay" : "Add something you spent",
     destination: "Ledger",
     intro: income && answers?.monthlyIncome
-      ? `Filled in from your answer (about ${money(answers.monthlyIncome)} a month). Change it to what actually came in.`
-      : !income && answers?.monthlySpending ? `You estimated about ${money(answers.monthlySpending)} a month. One real entry shows how close that is.` : undefined,
+      ? `Filled in from your answer (about ${amt(money(answers.monthlyIncome))} a month). Change it to what actually came in.`
+      : !income && answers?.monthlySpending ? `You estimated about ${amt(money(answers.monthlySpending))} a month. One real entry shows how close that is.` : undefined,
     body: `<div class="wu-grid wu-grid--2 wu-sheet__grid">
         ${amountField("Amount", income ? answers?.monthlyIncome ?? "" : "")}
         <label class="wu-field-row"><span class="wu-field-row__label">Category</span>
@@ -493,7 +493,7 @@ function openDebtSheet(state: WealthState): void {
     title: "Write down what you owe",
     destination: "Me · liabilities",
     intro: fromQuiz && answers.goalName && answers.goalAmount
-      ? `Filled in from your answer (${answers.goalName}, about ${money(answers.goalAmount)}). Change it to what your statement says.`
+      ? `Filled in from your answer (${escapeHtml(answers.goalName)}, about ${amt(money(answers.goalAmount))}). Change it to what your statement says.`
       : "What your latest statement says you still owe.",
     body: `<div class="wu-grid wu-grid--2 wu-sheet__grid">
         ${liabilityFields(fromQuiz ? { kind: answers.debtKind, name: answers.goalName, balance: answers.goalAmount, paidInFull: answers.debtPaidInFull } : {})}
@@ -527,9 +527,9 @@ function openInvestSheet(state: WealthState): void {
     title: "Decide a monthly amount to invest",
     destination: "Me · Monthly DCA",
     intro: freedTopUp > 0
-      ? `Your buffer is full, so the ${money(freedTopUp)} a month that went into it is free. Start with any amount you are comfortable leaving for years.`
+      ? `Your buffer is full, so the ${amt(money(freedTopUp))} a month that went into it is free. Start with any amount you are comfortable leaving for years.`
       : suggested > 0
-        ? `Your plan has about ${money(suggested)} a month for investing. Start with any amount you are comfortable leaving for years.`
+        ? `Your plan has about ${amt(money(suggested))} a month for investing. Start with any amount you are comfortable leaving for years.`
         : "Start with any amount you are comfortable leaving for years. You can change it any time.",
     body: `<div class="wu-grid wu-grid--2 wu-sheet__grid">${amountField("Each month", suggested > 0 ? suggested : "")}</div>
       <p class="t-caption t-muted">For guidance only, not financial advice.</p>`,
@@ -562,8 +562,8 @@ function openBufferSheet(state: WealthState): void {
     destination: "Me",
     intro: three && six
       ? sixFirst
-        ? `6 months of your ${money(six.monthlyEssential)} monthly spending is ${money(six.target)}: with income that moves around, a longer buffer is safer.`
-        : `3 months of your ${money(three.monthlyEssential)} monthly spending is ${money(three.target)}. If your income moves around, 6 months is safer.`
+        ? `6 months of your ${amt(money(six.monthlyEssential))} monthly spending is ${amt(money(six.target))}: with income that moves around, a longer buffer is safer.`
+        : `3 months of your ${amt(money(three.monthlyEssential))} monthly spending is ${amt(money(three.target))}. If your income moves around, 6 months is safer.`
       : "How much do you want set aside for surprises? A common rule is 3 to 6 months of what you spend.",
     body: `${three && six ? `<div class="wu-sheet__presets" role="group" aria-label="Months of spending">
         <button class="wu-btn wu-btn--secondary wu-btn--sm" type="button" data-preset="${three.target}" aria-pressed="${!sixFirst}">3 months</button>
