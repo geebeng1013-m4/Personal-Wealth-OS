@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "./testHarness";
-import { ledgerTagsByCategory } from "../src/ledgerTags";
+import { categoryDrift, ledgerTagsByCategory } from "../src/ledgerTags";
 import type { LedgerTransaction } from "../src/models";
 
 const NOW = new Date("2026-09-24T00:00:00.000Z");
@@ -239,4 +239,62 @@ test("tags: the same input always gives the same order", () => {
   const first = tags(rows, "food").map((tag) => tag.value);
   const second = tags([...rows].reverse(), "food").map((tag) => tag.value);
   assert.deepEqual(first, second);
+});
+
+// --- category drift ---------------------------------------------------------
+
+function settled(merchant: string, categoryId: string, times: number, stray = 0, strayCategoryId = "other"): LedgerTransaction[] {
+  return [
+    ...Array.from({ length: times }, () => expense(`${merchant}-thing`, categoryId)),
+    ...Array.from({ length: stray }, () => expense(`${merchant}-thing`, strayCategoryId)),
+  ];
+}
+
+test("drift: a merchant with a settled home says so when filed elsewhere", () => {
+  // "toll" went to Transport 17 of 19 times in the real ledger this is drawn from.
+  const result = categoryDrift(settled("toll", "transport", 17, 2, "food"), "toll-sunway", "food", { now: NOW });
+  assert.equal(result?.categoryId, "transport");
+  assert.equal(result?.uses, 19);
+  assert.equal(result?.underExpected, 17);
+});
+
+test("drift: nothing is said when the entry already agrees", () => {
+  assert.equal(categoryDrift(settled("toll", "transport", 17, 2, "food"), "toll-sunway", "transport", { now: NOW }), null);
+});
+
+test("drift: a genuinely mixed merchant is left alone", () => {
+  // "chagee": 4 Food to 2 Other. A nudge here would be wrong a third of the time.
+  assert.equal(categoryDrift(settled("chagee", "food", 4, 2), "chagee-boya", "other", { now: NOW }), null);
+});
+
+test("drift: too few uses to have a habit yet", () => {
+  // "weige" is 2 and 2 — four rows cannot establish anything.
+  assert.equal(categoryDrift(settled("weige", "food", 2, 2), "weige-chicken rice", "other", { now: NOW }), null);
+  // Even a perfect run stays quiet until there is enough of it.
+  assert.equal(categoryDrift(settled("newshop", "food", 4), "newshop-x", "other", { now: NOW }), null);
+  assert.ok(categoryDrift(settled("newshop", "food", 5), "newshop-x", "other", { now: NOW }));
+});
+
+test("drift: a note with no merchant half still matches on the whole note", () => {
+  const rows = Array.from({ length: 5 }, () => expense("parking", "transport"));
+  assert.equal(categoryDrift(rows, "parking", "food", { now: NOW })?.categoryId, "transport");
+});
+
+test("drift: an unknown merchant, an empty note or no category say nothing", () => {
+  const rows = settled("toll", "transport", 17);
+  assert.equal(categoryDrift(rows, "somewhere new-x", "food", { now: NOW }), null);
+  assert.equal(categoryDrift(rows, "   ", "food", { now: NOW }), null);
+  assert.equal(categoryDrift(rows, "toll-sunway", "", { now: NOW }), null);
+});
+
+test("drift: the row being edited does not vote on its own category", () => {
+  const rows = settled("toll", "transport", 5);
+  const target = rows[0] as LedgerTransaction;
+  // Four left is under the threshold, so excluding the row silences the hint.
+  assert.equal(categoryDrift(rows, "toll-x", "food", { now: NOW, excludeTransactionId: target.id }), null);
+});
+
+test("drift: history outside the window does not count", () => {
+  const rows = Array.from({ length: 6 }, () => expense("toll-kemuning", "transport", { date: daysAgo(200) }));
+  assert.equal(categoryDrift(rows, "toll-kemuning", "food", { now: NOW }), null);
 });

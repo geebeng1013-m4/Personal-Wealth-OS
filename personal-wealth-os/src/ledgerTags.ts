@@ -66,6 +66,18 @@ export interface LedgerTag {
   lastUsed: string;
 }
 
+/**
+ * A merchant that is almost always filed under one category, when the entry
+ * being written puts it somewhere else.
+ */
+export interface CategoryDrift {
+  /** Where this merchant nearly always goes. */
+  categoryId: string;
+  /** Times seen, and the share of them under that category — both for wording. */
+  uses: number;
+  underExpected: number;
+}
+
 export interface LedgerTagOptions {
   /** Defaults to the current time. Passed in so results stay reproducible. */
   now?: Date;
@@ -88,6 +100,18 @@ const DEFAULT_WINDOW_DAYS = 90;
 const DEFAULT_RECENT_PER_CATEGORY = 8;
 /** Below this a note has not repeated, so only recency can offer it. */
 const REPEAT_THRESHOLD = 2;
+
+/**
+ * Below these a merchant has no settled habit to speak of.
+ *
+ * Real numbers from a real ledger set them. "toll" went to Transport 17 times
+ * out of 19 — a genuine slip worth mentioning. "weige" is 2 Food and 2 Other,
+ * and "chagee" 4 Food to 2 Other: no habit, and a nudge on either would fire
+ * constantly while being wrong half the time. A hint that cries wolf gets
+ * ignored, which costs more than never having shown it.
+ */
+const DRIFT_MIN_USES = 5;
+const DRIFT_MIN_SHARE = 0.8;
 
 interface Aggregate {
   value: string;
@@ -245,4 +269,53 @@ export function ledgerTagsByCategory(
   }
 
   return result;
+}
+
+/**
+ * Is this note's merchant being filed somewhere it usually is not?
+ *
+ * Answers only where the habit is overwhelming; see DRIFT_MIN_USES. Returns
+ * null when the merchant is new, when its category is genuinely mixed, or when
+ * the entry already agrees with the habit.
+ *
+ * Pure, and it decides nothing: the caller shows a line of text. The category
+ * the user picked is the category that gets saved.
+ */
+export function categoryDrift(
+  transactions: readonly LedgerTransaction[],
+  note: string,
+  categoryId: string,
+  options: LedgerTagOptions & { excludeTransactionId?: string } = {},
+): CategoryDrift | null {
+  const key = normalizeNote(merchantOf(note) || note);
+  if (!key || !categoryId) return null;
+
+  const now = options.now ?? new Date();
+  const cutoff = now.getTime() - (options.windowDays ?? DEFAULT_WINDOW_DAYS) * 24 * 60 * 60 * 1000;
+  const counts = new Map<string, number>();
+  let uses = 0;
+
+  for (const transaction of transactions) {
+    if (!usableRow(transaction) || transaction.id === options.excludeTransactionId) continue;
+    const at = Date.parse(transaction.date);
+    if (!Number.isFinite(at) || at < cutoff || at > now.getTime()) continue;
+    const note = (transaction.note as string).trim();
+    if (normalizeNote(merchantOf(note) || note) !== key) continue;
+    const seen = transaction.categoryId as string;
+    counts.set(seen, (counts.get(seen) ?? 0) + 1);
+    uses += 1;
+  }
+
+  if (uses < DRIFT_MIN_USES) return null;
+  let expected = "";
+  let underExpected = 0;
+  for (const [id, count] of counts) {
+    if (count > underExpected) {
+      expected = id;
+      underExpected = count;
+    }
+  }
+  if (underExpected / uses < DRIFT_MIN_SHARE) return null;
+  if (expected === categoryId) return null;
+  return { categoryId: expected, uses, underExpected };
 }
