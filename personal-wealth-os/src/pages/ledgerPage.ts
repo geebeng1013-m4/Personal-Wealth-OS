@@ -365,6 +365,9 @@ export function ledgerTemplate(state: WealthState): string {
           <details class="wu-details"${editing ? " open" : ""}><summary class="wu-details__summary"><span class="t-subheading">Date</span></summary><label class="wu-field-row"><span class="wu-field-row__label">Date</span><input class="wu-field" name="date" type="date" required value="${entryDate}"></label></details>
           <p id="ledgerFormError" class="wu-field-row__error" role="alert">${transferUnavailable ? "Add at least two accounts before recording a transfer." : ""}</p>
           <button class="wu-btn wu-btn--primary wu-btn--block" type="submit"${transferUnavailable ? " disabled" : ""}>${editing ? "Save Changes" : "Save Transaction"}</button>
+          ${editing
+            ? ""
+            : `<button class="wu-btn wu-btn--secondary wu-btn--block" type="submit" data-ledger-save-another${transferUnavailable ? " disabled" : ""}>Save &amp; add another</button>`}
         </form>
       </section>
 
@@ -687,9 +690,32 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
     const id = transaction.id;
     const exists = state.ledgerTransactions.some((item) => item.id === id);
     const ledgerTransactions = exists ? state.ledgerTransactions.map((item) => item.id === id ? transaction : item) : [...state.ledgerTransactions, transaction];
-    resetLedgerEntry();
-    // Saved: the form folds away again, so the page returns to what happened.
-    ledgerEntryOpen = false;
+    const submitter = (event as SubmitEvent).submitter;
+    const another = submitter instanceof HTMLElement && submitter.dataset.ledgerSaveAnother !== undefined;
+    if (another) {
+      // Most days here carry more than one expense, and often several at the
+      // same shop in one sitting. So the run continues: same type, category,
+      // account, date and funding, with only the two things that actually
+      // differ — the amount and the note — cleared. The next note is a tag
+      // away, and the strip below has just been recomputed with this row in it.
+      ledgerEditingId = "";
+      ledgerEntryDraft = {
+        ...ledgerEntryDraft,
+        amount: "",
+        note: "",
+        accountId: transaction.accountId ?? ledgerEntryDraft.accountId,
+        fromAccountId: transaction.fromAccountId ?? ledgerEntryDraft.fromAccountId,
+        toAccountId: transaction.toAccountId ?? ledgerEntryDraft.toAccountId,
+        categoryId: transaction.categoryId ?? "",
+        date: field("date"),
+        fundingSource: transaction.fundingSource === "sponsored" ? "sponsored" : "personal",
+      };
+      focusLedgerAmountNext = true;
+    } else {
+      resetLedgerEntry();
+      // Saved: the form folds away again, so the page returns to what happened.
+      ledgerEntryOpen = false;
+    }
     refresh({ ...state, ledgerTransactions }, exists ? "Edit ledger transaction" : "Add ledger transaction");
   });
 
