@@ -508,23 +508,12 @@
 
 .assistant-share {
   display: flex;
-  /* The label now carries a second line under it, so the box sits with the
-     first line rather than in the middle of both. */
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-2);
   color: var(--text-muted);
   font: var(--weight-regular) var(--text-caption) / var(--leading-normal) var(--font-sans);
   cursor: pointer;
   margin: 0;
-}
-/* Where the figures go, under the choice to send them. Quieter than the label
-   and allowed to wrap onto as many lines as a narrow phone needs. */
-.assistant-share__note {
-  display: block;
-  color: var(--text-faint);
-  font-size: var(--text-overline);
-  line-height: var(--leading-normal);
-  margin-top: 2px;
 }
 .assistant-share--static {
   cursor: default;

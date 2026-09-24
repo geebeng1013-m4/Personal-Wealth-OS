@@ -278,13 +278,10 @@ function panelHtml(): string {
     `<button class="assistant-tab${mode === id ? " is-active" : ""}" type="button" data-assistant-mode="${id}"${mode === id ? ' aria-current="true"' : ""}>${label}</button>`;
 
   const hasHistory = mode === "fill" ? recordEntries().length > 0 : askMessages().length > 0;
-  // The checkbox says what it does; the line under it says where the figures
-  // go. Someone deciding whether to tick it should not have to remember the
-  // notice at the top of the panel, which they dismissed weeks ago.
   const figures = mode === "help"
     ? `<label class="assistant-share">
         <input type="checkbox" data-assistant-action="share"${shareFigures() ? " checked" : ""}>
-        <span>Share my figures for a specific answer<small class="assistant-share__note">Sends a summary of your figures to DeepSeek, in China. Off again next time you open this panel.</small></span>
+        <span>Share my figures for a specific answer</span>
       </label>`
     : `<p class="assistant-share assistant-share--static">Sends your category and account names to DeepSeek, in China — never amounts.</p>`;
 
