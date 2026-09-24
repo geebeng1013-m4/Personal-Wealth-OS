@@ -3500,6 +3500,33 @@
     .wu-budget-months {
       grid-column: 1 / -1;
     }
+    /* what a layer caught once every layer above it filled — a figure tile of
+       its own on a desktop, one line under this month's card here */
+    .wu-budget-caught {
+      padding-top: var(--space-3);
+      border-top: 1px solid var(--border-subtle);
+    }
+    /* the fill bar is a table column on a desktop; a phone has no room for it
+       beside the figures, so it sits under the row instead of squeezing it.
+       Its caption — "100% filled · what the layer is for" — stays folded away
+       as a goal's note does: the row keeps one height, and opening it shows
+       the layer's own words in "What it is for". */
+    .wu-budget-layers .wu-budget-row:not(.wu-budget-row--plain) {
+      grid-template-areas:
+        "dot title got chev"
+        ".   fill fill .";
+      row-gap: var(--space-2);
+      padding-block: var(--space-2);
+    }
+    /* grid, not block: it is what blockifies the bar, which is a span */
+    .wu-budget-layers .wu-budget-row__fill {
+      grid-area: fill;
+      display: grid;
+      min-width: 0;
+    }
+    .wu-budget-layers .wu-budget-row__fill small {
+      display: none;
+    }
   }
   @media (min-width: 901px) {
     .wu-budget-month,
