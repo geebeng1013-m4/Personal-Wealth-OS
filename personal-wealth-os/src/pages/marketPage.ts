@@ -223,6 +223,7 @@ export function marketTemplate(state: WealthState): string {
           <div class="wu-market-price wu-market-phone">
             <p class="wu-money"><span class="wu-money__cur">USD</span><span data-market="price">--</span></p>
             <span data-market="dropChip"></span>
+            <p class="wu-dash__note wu-market-dropnote" data-market="dropNote">Checking price history&hellip;</p>
           </div>
           <div class="wu-segmented market-intervals" role="group" aria-label="Chart period">
             <button class="wu-segmented__option interval-btn" data-interval="D" type="button">1D</button>
@@ -243,8 +244,8 @@ export function marketTemplate(state: WealthState): string {
         <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-market-position wu-market-phone" aria-labelledby="mktPhonePosLabel">
           <div class="wu-tc__top"><span class="wu-label" id="mktPhonePosLabel">Your position</span><span data-market="weightChip"></span></div>
           <div class="wu-three">
-            <div><span>Value</span><b data-market="value">--</b></div>
-            <div><span>Weight</span><b data-market="weight">--</b></div>
+            <div><span>Value</span><b data-market="value">--</b><small data-market="valueNote">--</small></div>
+            <div><span>Weight</span><b data-market="weight">--</b><small data-market="driftPlain"></small></div>
             <div><span>Target</span><b data-market="targetPlain">--</b></div>
           </div>
         </section>
@@ -477,6 +478,7 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       setAll("targetPlain", target > 0 ? percent(target) : UNKNOWN);
       setAll("weightNote", "Not part of your plan");
       setAll("weightChip", "");
+      setAll("driftPlain", "");
       return;
     }
     const drift = holding.drift;
@@ -488,7 +490,10 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       : '<span class="wu-chip wu-chip--warning">' + (drift > 0 ? "Above" : "Below") + " target</span>";
     setAll("weightChip", target > 0 ? chip : "");
     const status = Math.abs(drift) <= 0.005 ? "On target" : (drift > 0 ? "Above" : "Below") + " target";
-    setAll("weightNote", target > 0 ? status + " · " + (drift >= 0 ? "+" : "−") + percent(Math.abs(drift), 1) : "No target set");
+    const driftText = (drift >= 0 ? "+" : "−") + percent(Math.abs(drift), 1);
+    setAll("weightNote", target > 0 ? status + " · " + driftText : "No target set");
+    // Beside the chip on a phone, so only the size is left to say.
+    setAll("driftPlain", target > 0 && Math.abs(drift) > 0.005 ? driftText : "");
   }
 
   /**
