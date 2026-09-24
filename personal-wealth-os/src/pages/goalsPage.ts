@@ -120,6 +120,20 @@ function timeToGoal(snapshot: GoalSnapshot): string {
 }
 
 /**
+ * The same figure as a table cell for the desktop row: "13 mo".
+ *
+ * A dash where there is no figure to give — a goal that is done, or one with
+ * no target or nothing going in each month, where the Monthly column beside it
+ * already shows the 0 that explains the dash.
+ */
+function timeLeftCell(snapshot: GoalSnapshot): string {
+  const dash = `<span class="t-faint">&mdash;</span>`;
+  if (snapshot.isSpent || snapshot.isComplete) return dash;
+  const months = snapshot.estimatedMonthsToTarget;
+  return months ? `${months} mo` : dash;
+}
+
+/**
  * What an open goal shows before any editing: its note, how long until it is
  * reached, and an Edit button. The row above already carries the figures, so
  * they are not repeated, and the form only appears behind Edit.
@@ -159,6 +173,14 @@ function goalRow(state: WealthState, snapshot: GoalSnapshot, featuredId: string)
     : snapshot.estimatedMonthsToTarget
       ? `${snapshot.estimatedMonthsToTarget} months left`
       : snapshot.targetAmount <= 0 ? "No target yet" : "Nothing put in each month";
+  // The phone now shows the percentage (or a Reached chip) at the end of the
+  // bar, so the caption under the name carries only what that cannot: the pace
+  // of an open goal, or the date a finished one was used.
+  const caption = spentLabel
+    ? escapeHtml(spentLabel)
+    : snapshot.isComplete
+      ? ""
+      : `${amt(`+${amountOf(snapshot.monthlyContribution)}`)} / mo · ${escapeHtml(pace)}`;
   const monthly = snapshot.isSpent
     ? `<span class="t-positive">Done</span>`
     : snapshot.isComplete
@@ -166,10 +188,11 @@ function goalRow(state: WealthState, snapshot: GoalSnapshot, featuredId: string)
     : snapshot.monthlyContribution > 0 ? amt(`+${amountOf(snapshot.monthlyContribution)}`) : `<span class="t-faint">0</span>`;
   return `<li class="wu-goal${open ? " is-open" : ""}${snapshot.isComplete ? " is-done" : ""}">
       <button class="wu-goal__row goal-row" type="button" data-index="${snapshot.index}" aria-expanded="${open}">
-        <span class="wu-goal__title">${escapeHtml(snapshot.label || snapshot.name)}${featured ? ` <span class="wu-chip wu-chip--muted wu-goal__pin">On Dashboard</span>` : ""}<small>${spentLabel ? escapeHtml(spentLabel) : `${snapshot.isComplete ? escapeHtml(pace) : `${amt(`+${amountOf(snapshot.monthlyContribution)}`)} / mo · ${escapeHtml(pace)}`}`}</small></span>
+        <span class="wu-goal__title">${escapeHtml(snapshot.label || snapshot.name)}${featured ? ` <span class="wu-chip wu-chip--muted wu-goal__pin">On Dashboard</span>` : ""}${caption ? `<small>${caption}</small>` : ""}</span>
         <span class="wu-goal__monthly">${monthly}</span>
         <span class="wu-goal__bar"><span class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(ratio * 100)}%"></span></span></span>
         <span class="wu-goal__pct">${snapshot.isSpent ? `<span class="wu-chip">Done</span>` : snapshot.isComplete ? `<span class="wu-chip">Reached</span>` : percent(ratio)}</span>
+        <span class="wu-goal__left">${timeLeftCell(snapshot)}</span>
         <span class="wu-goal__amount t-amt">${amountOf(snapshot.currentAmount)} / ${amountOf(snapshot.targetAmount)}</span>
         <span class="wu-goal__chev" aria-hidden="true">›</span>
       </button>
@@ -237,7 +260,7 @@ export function goalsTemplate(state: WealthState): string {
         <!-- GOALS — a table on a desktop, rows with a bar on a phone -->
         <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-goals-list" aria-labelledby="goalsListLabel">
           <div class="wu-tc__top"><span class="wu-label" id="goalsListLabel">Goals · tap one to open</span></div>
-          <div class="wu-goal__row wu-goal__head" aria-hidden="true"><span>Goal</span><span>Monthly</span><span>Progress</span><span>%</span><span>Saved</span><span></span></div>
+          <div class="wu-goal__row wu-goal__head" aria-hidden="true"><span>Goal</span><span>Monthly</span><span>Progress</span><span>%</span><span>Time left</span><span>Saved</span><span></span></div>
           <ul class="wu-goal-list">${rows}</ul>
           ${addButton(" wu-btn--block wu-goals-add-phone")}
         </section>`}

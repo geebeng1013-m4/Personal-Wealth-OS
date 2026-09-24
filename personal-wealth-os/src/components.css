@@ -3569,7 +3569,7 @@
     grid-template-columns: minmax(0, 1fr) auto 10px;
     grid-template-areas:
       "title amount chev"
-      "bar bar bar";
+      "bar pct chev";
     align-items: center;
     column-gap: var(--space-3);
     row-gap: var(--space-2);
@@ -3629,9 +3629,18 @@
     white-space: nowrap;
   }
   .wu-goal__monthly,
-  .wu-goal__pct,
+  .wu-goal__left,
   .wu-goal__head {
     display: none;
+  }
+  /* closes the bar's line, right-aligned under the amount it belongs to */
+  .wu-goal__pct {
+    grid-area: pct;
+    display: block;
+    text-align: right;
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   .wu-goal__chev {
     grid-area: chev;
@@ -3744,6 +3753,10 @@
     .wu-goal-detail__eta {
       display: none;
     }
+    .wu-goal__pct {
+      font-size: var(--text-body-sm);
+      color: var(--text-muted);
+    }
     .wu-goal-editor__cancel {
       margin-left: auto;
     }
@@ -3759,10 +3772,10 @@
     .wu-goals-add-phone {
       display: none;
     }
-    /* the goals become a table: name, monthly, bar, %, saved line up down the rows */
+    /* the goals become a table: name, monthly, bar, %, time left, saved line up down the rows */
     .wu-goal__row {
-      grid-template-columns: minmax(0, 1.6fr) 90px minmax(0, 2fr) 64px 150px 10px;
-      grid-template-areas: "title monthly bar pct amount chev";
+      grid-template-columns: minmax(0, 1.9fr) 90px minmax(0, 1.1fr) 68px 84px 150px 10px;
+      grid-template-areas: "title monthly bar pct left amount chev";
       column-gap: var(--space-4);
       min-height: var(--row-h);
       padding: var(--space-1) 0;
@@ -3772,12 +3785,13 @@
       display: block;
       font-variant-numeric: tabular-nums;
     }
-    .wu-goal__pct {
-      grid-area: pct;
+    .wu-goal__left {
+      grid-area: left;
       display: block;
       text-align: right;
-      font-weight: var(--weight-semibold);
+      color: var(--text-muted);
       font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
     .wu-goal__title small {
       display: none;
@@ -3795,9 +3809,28 @@
     .wu-goal__head > span:nth-child(2) { grid-area: monthly; }
     .wu-goal__head > span:nth-child(3) { grid-area: bar; }
     .wu-goal__head > span:nth-child(4) { grid-area: pct; text-align: right; }
-    .wu-goal__head > span:nth-child(5) { grid-area: amount; text-align: right; }
+    .wu-goal__head > span:nth-child(5) { grid-area: left; text-align: right; }
+    .wu-goal__head > span:nth-child(6) { grid-area: amount; text-align: right; }
     .wu-goal__head + .wu-goal-list {
       margin-top: 0;
+    }
+  }
+  /* Between the phone and a roomy desktop there is no room for seven columns:
+     names start colliding with Monthly. So the name carries the pace in its
+     caption, as it does on a phone, and Monthly and Time left step out. */
+  @media (min-width: 901px) and (max-width: 1100px) {
+    .wu-goal__row {
+      grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 68px 150px 10px;
+      grid-template-areas: "title bar pct amount chev";
+    }
+    .wu-goal__monthly,
+    .wu-goal__left,
+    .wu-goal__head > span:nth-child(2),
+    .wu-goal__head > span:nth-child(5) {
+      display: none;
+    }
+    .wu-goal__title small {
+      display: block;
     }
   }
 
