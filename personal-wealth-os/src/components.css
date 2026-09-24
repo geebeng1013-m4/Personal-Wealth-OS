@@ -3150,6 +3150,11 @@
     justify-self: end;
     margin-left: auto;
   }
+  .wu-review-month__note {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
   @media (max-width: 900px) {
     .wu-review-tiles,
     .wu-review-page .wu-page-header__actions {
