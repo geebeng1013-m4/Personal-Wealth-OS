@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "./testHarness";
-import { migrateState } from "../src/state";
+import { loadState, migrateState, STORAGE_KEY } from "../src/state";
 import type { Trade, WealthState } from "../src/models";
 
 /**
@@ -129,4 +129,30 @@ test("migrateState: the legacy seed portfolio is still restored from the sample 
   const result = migrateState({ deviceId: "device-1", version: 14, trades: seeded } as Partial<WealthState>);
   assert.ok(result.trades.length > 18, "the seeded portfolio is completed from the sample set");
   assert.ok(result.trades.some((trade) => trade.id === "csv-022"), "including the trades recorded after the seed");
+});
+
+test("loadState: a device with nothing stored opens empty, not on the sample portfolio", () => {
+  // What a real user meets on a new phone: signed in, nothing saved here yet,
+  // and main.ts renders this copy while the cloud document is still loading.
+  localStorage.clear();
+  const state = loadState("new-device-user");
+  assert.deepEqual(state.trades, [], "22 sample trades would be someone else's portfolio");
+  assert.deepEqual(state.goals, []);
+  assert.deepEqual(state.buckets, []);
+  assert.equal(state.emergency.current, 0);
+  assert.equal(state.dca.monthly, 0);
+  localStorage.clear();
+});
+
+test("loadState: an unreadable stored state opens empty and keeps the stored text", () => {
+  // The state is unreadable, not absent. Opening empty is safe; throwing away
+  // the raw text would not be, so loadState only reads.
+  localStorage.clear();
+  const key = `${STORAGE_KEY}-corrupt-user`;
+  localStorage.setItem(key, "{not json at all");
+  const state = loadState("corrupt-user");
+  assert.equal(state.emergency.current, 0, "and not the sample fund");
+  assert.deepEqual(state.trades, []);
+  assert.equal(localStorage.getItem(key), "{not json at all", "the unreadable copy is still there to recover");
+  localStorage.clear();
 });

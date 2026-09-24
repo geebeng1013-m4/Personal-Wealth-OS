@@ -799,15 +799,28 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   return merged;
 }
 
+/**
+ * The state this device holds for a user, or an empty one.
+ *
+ * Empty, never the sample state: main.ts shows this immediately on sign-in,
+ * before the cloud document arrives, so on a new device — or when the cloud
+ * read fails or the app is offline — the demo portfolio would otherwise be
+ * what the user sees, and what an edit would then save as theirs.
+ *
+ * An unreadable stored state is reported rather than swallowed, and its raw
+ * text is left where it is: this function only reads, so a state that fails
+ * to parse here can still be recovered by hand or replaced from the cloud.
+ */
 export function loadState(uid?: string): WealthState {
   const key = getUserStorageKey(uid);
   const raw = localStorage.getItem(key);
-  if (!raw) return cloneDefaultState();
+  if (!raw) return emptyState();
 
   try {
     return migrateState(JSON.parse(raw) as Partial<WealthState>);
-  } catch {
-    return cloneDefaultState();
+  } catch (err) {
+    console.error("[loadState] stored state could not be read; starting empty and keeping the stored copy:", err);
+    return emptyState();
   }
 }
 
