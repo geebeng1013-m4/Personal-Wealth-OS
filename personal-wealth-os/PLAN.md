@@ -43,6 +43,10 @@
 用户要求：电脑版有的手机版也要有，手机版有的电脑版也要有。审计结果与逐页对照见
 https://claude.ai/artifact/3URvhvbo6ND7gyp8GcdhwY（14 页，1280×900 vs 390×844）。
 
+**第二轮复查**（2026-09-24，`main` = `0c258bc`）：同样 14 页两个宽度重渲染一次，确认 T1、T2
+已上线，剩下的缺口一个没少，也没有查出新的——T3 到 T8 的清单仍然准确。复查页：
+https://claude.ai/artifact/3uoFsByaG57zV92owoFA73
+
 每个任务都要：两端排版整齐、保持 iOS 液态玻璃感（玻璃只给 chrome）、两个主题各看一次、
 **从 main 开分支**（不叠 PR）。
 
@@ -52,7 +56,7 @@ https://claude.ai/artifact/3URvhvbo6ND7gyp8GcdhwY（14 页，1280×900 vs 390×8
 ### T4 — Goals：手机补百分比，电脑补「还要几个月」  `[ ]`
 ### T5 — Market 手机版：下一档加仓价位、持有单位数、超配幅度  `[ ]`
 ### T6 — Review 手机版：DCA 明细、历史收入列、「已记录未复盘」注脚  `[ ]`
-### T7 — Me 手机版加仓档位那一行；Settings 手机版危险区说明  `[ ]`
+### T7 — Me 手机版加仓档位那一行；Settings 手机版危险区说明  `[x]`（PR #154）
 ### T8 — 收尾：Budget 电脑版月份名、Growth 手机版投入拆解、Money Leaks 类别数  `[ ]`
 
 待你决定：
