@@ -3506,9 +3506,11 @@
       padding-top: var(--space-3);
       border-top: 1px solid var(--border-subtle);
     }
-    /* the fill bar and the layer's description are a table column on a
-       desktop; a phone has no room beside the figures, so they sit under the
-       row instead of squeezing it */
+    /* the fill bar is a table column on a desktop; a phone has no room for it
+       beside the figures, so it sits under the row instead of squeezing it.
+       Its caption — "100% filled · what the layer is for" — stays folded away
+       as a goal's note does: the row keeps one height, and opening it shows
+       the layer's own words in "What it is for". */
     .wu-budget-layers .wu-budget-row:not(.wu-budget-row--plain) {
       grid-template-areas:
         "dot title got chev"
@@ -3516,19 +3518,14 @@
       row-gap: var(--space-2);
       padding-block: var(--space-2);
     }
+    /* grid, not block: it is what blockifies the bar, which is a span */
     .wu-budget-layers .wu-budget-row__fill {
       grid-area: fill;
       display: grid;
-      gap: var(--space-2);
       min-width: 0;
     }
-    /* the description is the point of showing this at all, so it wraps rather
-       than truncating — two lines is the ceiling, to keep the rows even */
     .wu-budget-layers .wu-budget-row__fill small {
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-      white-space: normal;
+      display: none;
     }
   }
   @media (min-width: 901px) {
