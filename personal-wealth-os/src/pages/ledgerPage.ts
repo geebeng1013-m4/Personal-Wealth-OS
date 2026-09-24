@@ -209,7 +209,7 @@ export function ledgerTemplate(state: WealthState): string {
     const tone = transaction.type === "income" ? " t-positive" : transaction.type === "expense" ? " t-negative" : "";
     return `<li class="wu-ledger-row">
       <span class="wu-ledger-row__title">${escapeHtml(title)}<small>${escapeHtml(facts)}</small></span>
-      <span class="wu-ledger-row__amount${tone}">${prefix}${money(transaction.amount, "").trim()}</span>
+      <span class="wu-ledger-row__amount t-amt${tone}">${prefix}${money(transaction.amount, "").trim()}</span>
       <span class="wu-row wu-row--tight">
         <button class="wu-btn wu-btn--ghost wu-btn--icon edit-ledger" data-id="${escapeHtml(transaction.id)}" type="button" aria-label="Edit transaction">✎</button>
         <button class="wu-btn wu-btn--ghost wu-btn--icon delete-ledger" data-id="${escapeHtml(transaction.id)}" type="button" aria-label="Delete transaction">✕</button>
@@ -294,25 +294,25 @@ export function ledgerTemplate(state: WealthState): string {
       <div class="wu-dash__full wu-dash__tiles">
         <section class="wu-card wu-dash__tile" aria-labelledby="ledgerIncomeLabel">
           <div class="wu-tc__top"><span class="wu-label" id="ledgerIncomeLabel">Income</span></div>
-          <p class="wu-money wu-money--md t-positive"><span class="wu-money__cur">MYR</span><span>${amountOf(totals.income)}</span></p>
+          <p class="wu-money wu-money--md t-positive"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(totals.income)}</span></p>
           <p class="wu-dash__note">${escapeHtml(presetLabel[ledgerFilters.preset] ?? "Selected range")}</p>
         </section>
         <section class="wu-card wu-dash__tile" aria-labelledby="ledgerSpentLabel">
           <div class="wu-tc__top"><span class="wu-label" id="ledgerSpentLabel">Spent</span></div>
-          <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(totals.expense)}</span></p>
+          <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(totals.expense)}</span></p>
           <p class="wu-dash__note">${personalExpenseTotal < totals.expense ? `${amountOf(totals.expense - personalExpenseTotal)} sponsored` : "All personal money"}</p>
         </section>
         <section class="wu-card wu-dash__tile" aria-labelledby="ledgerNetLabel">
           <div class="wu-tc__top"><span class="wu-label" id="ledgerNetLabel">Net</span></div>
-          <p class="wu-money wu-money--md ${netTotal >= 0 ? "t-positive" : "t-negative"}"><span class="wu-money__cur">MYR</span><span>${netTotal >= 0 ? "+" : "−"}${amountOf(Math.abs(netTotal))}</span></p>
+          <p class="wu-money wu-money--md ${netTotal >= 0 ? "t-positive" : "t-negative"}"><span class="wu-money__cur">MYR</span><span class="t-amt">${netTotal >= 0 ? "+" : "−"}${amountOf(Math.abs(netTotal))}</span></p>
           <p class="wu-dash__note">${totals.income > 0 ? `${Math.round(keptShare * 100)}% of income kept` : "No income recorded yet"}</p>
           <div class="wu-bar" role="progressbar" aria-valuenow="${Math.round(keptShare * 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="Share of income kept">
             <span class="wu-bar__fill" style="width:${Math.round(keptShare * 100)}%"></span>
           </div>
         </section>
         <section class="wu-card wu-dash__tile" aria-labelledby="ledgerAssetsLabel">
-          <div class="wu-tc__top"><span class="wu-label" id="ledgerAssetsLabel">Net assets</span><span class="wu-chip wu-chip--muted">Liquid ${amountOf(liquidNetAssets)}</span></div>
-          <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(totalNetAssets)}</span></p>
+          <div class="wu-tc__top"><span class="wu-label" id="ledgerAssetsLabel">Net assets</span><span class="wu-chip wu-chip--muted">Liquid <span class="t-amt">${amountOf(liquidNetAssets)}</span></span></div>
+          <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(totalNetAssets)}</span></p>
           <p class="wu-dash__note">Across ${state.ledgerAccounts.length} ${state.ledgerAccounts.length === 1 ? "account" : "accounts"}</p>
         </section>
       </div>
@@ -361,7 +361,7 @@ export function ledgerTemplate(state: WealthState): string {
 
       <!-- ROW 3 — every account, grouped -->
       <section class="wu-card wu-dash__full wu-stack wu-stack--sm" aria-labelledby="ledgerAccountsLabel2">
-        <div class="wu-tc__top"><span class="wu-label" id="ledgerAccountsLabel2">Accounts</span><span class="wu-chip wu-chip--muted">Opening ${amountOf(totalOpeningFunds)}</span></div>
+        <div class="wu-tc__top"><span class="wu-label" id="ledgerAccountsLabel2">Accounts</span><span class="wu-chip wu-chip--muted">Opening <span class="t-amt">${amountOf(totalOpeningFunds)}</span></span></div>
         <!-- Grouped by kind and laid out across the card: a flat list of a
              dozen accounts is a long scroll that says nothing about which
              money is spendable. -->
@@ -374,10 +374,10 @@ export function ledgerTemplate(state: WealthState): string {
             return `<section class="wu-acct-group" aria-label="${escapeHtml(meta.label)}">
               <div class="wu-acct-group__head">
                 <span class="wu-label">${escapeHtml(meta.icon)} ${escapeHtml(type === "bank" ? "Bank" : type === "wallet" ? "E-wallet" : "Investment")}</span>
-                <span class="wu-acct-group__total${subtotal < 0 ? " t-negative" : ""}">${subtotal < 0 ? "−" : ""}${amountOf(Math.abs(subtotal))}</span>
+                <span class="wu-acct-group__total t-amt${subtotal < 0 ? " t-negative" : ""}">${subtotal < 0 ? "−" : ""}${amountOf(Math.abs(subtotal))}</span>
               </div>
               <ul class="wu-facts wu-facts--plain">
-                ${group.map(({ account, balance }: AccountBalance) => `<li><span>${escapeHtml(account.icon ?? meta.icon)} ${escapeHtml(account.name)}</span><span class="${balance < 0 ? "t-negative" : ""}">${balance < 0 ? "−" : ""}${amountOf(Math.abs(balance))}</span></li>`).join("")}
+                ${group.map(({ account, balance }: AccountBalance) => `<li><span>${escapeHtml(account.icon ?? meta.icon)} ${escapeHtml(account.name)}</span><span class="t-amt${balance < 0 ? " t-negative" : ""}">${balance < 0 ? "−" : ""}${amountOf(Math.abs(balance))}</span></li>`).join("")}
               </ul>
       </section>`;
           }).join("")}
@@ -428,7 +428,7 @@ export function ledgerTemplate(state: WealthState): string {
                 <p class="wu-field-row__error ledger-inline-edit__error" role="alert"></p>
                 <div class="wu-row wu-row--tight"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button><button class="wu-btn wu-btn--ghost wu-btn--sm cancel-inline-edit" type="button">Cancel</button></div>
               </form>`
-            : `<div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-stack wu-stack--sm"><div class="wu-row wu-row--between"><div class="wu-stack wu-stack--sm"><strong class="t-subheading">${escapeHtml(account.icon ?? "•")} ${escapeHtml(account.name)}</strong><span class="t-caption t-faint">${accountTypeMeta(account.type).label}</span></div><div class="wu-row wu-row--tight"><button class="wu-btn wu-btn--ghost wu-btn--sm edit-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Edit ${escapeHtml(account.name)}">Edit</button><button class="wu-btn wu-btn--ghost wu-btn--icon delete-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Delete ${escapeHtml(account.name)}">&times;</button></div></div><div class="wu-row wu-row--between"><span class="t-caption t-muted">Opening ${money(account.openingBalance)}</span><span class="t-caption t-muted">Current ${money2(balance)}</span></div>${account.type === "investment" ? `<label class="wu-switch account-portfolio-link"><input type="checkbox" class="toggle-portfolio-link" data-id="${escapeHtml(account.id)}"${account.holdsTrackedPortfolio ? " checked" : ""}><span class="wu-switch__track"></span><span class="wu-switch__label">This account holds my tracked portfolio</span></label>` : ""}</div></div>`).join("")}</div>
+            : `<div class="wu-card wu-card--inset wu-card--pad-sm"><div class="wu-stack wu-stack--sm"><div class="wu-row wu-row--between"><div class="wu-stack wu-stack--sm"><strong class="t-subheading">${escapeHtml(account.icon ?? "•")} ${escapeHtml(account.name)}</strong><span class="t-caption t-faint">${accountTypeMeta(account.type).label}</span></div><div class="wu-row wu-row--tight"><button class="wu-btn wu-btn--ghost wu-btn--sm edit-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Edit ${escapeHtml(account.name)}">Edit</button><button class="wu-btn wu-btn--ghost wu-btn--icon delete-account" data-id="${escapeHtml(account.id)}" type="button" aria-label="Delete ${escapeHtml(account.name)}">&times;</button></div></div><div class="wu-row wu-row--between"><span class="t-caption t-muted">Opening <span class="t-amt">${money(account.openingBalance)}</span></span><span class="t-caption t-muted">Current ${money2(balance)}</span></div>${account.type === "investment" ? `<label class="wu-switch account-portfolio-link"><input type="checkbox" class="toggle-portfolio-link" data-id="${escapeHtml(account.id)}"${account.holdsTrackedPortfolio ? " checked" : ""}><span class="wu-switch__track"></span><span class="wu-switch__label">This account holds my tracked portfolio</span></label>` : ""}</div></div>`).join("")}</div>
         </div></details>
       </div>
     </div>`;

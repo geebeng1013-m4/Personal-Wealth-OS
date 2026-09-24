@@ -16,7 +16,7 @@
 import type { Dividend, Market, TradeType, WealthState } from "../models";
 import { createId } from "../state";
 import { money, percent, tradeUnits } from "../rules";
-import { escapeHtml } from "../html";
+import { amt, escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import { livePriceInputs, quoteAgeLabel } from "../livePrices";
 import {
@@ -347,7 +347,7 @@ function signedAmount(value: number | null): string {
 function moneyFigure(value: number | null, sign = false, toneClass = ""): string {
   if (value == null) return `<p class="wu-money wu-money--md"><span>${UNKNOWN}</span></p>`;
   const prefix = sign ? (value >= 0 ? "+" : "−") : "";
-  return `<p class="wu-money wu-money--md${toneClass ? ` ${toneClass}` : ""}"><span class="wu-money__cur">MYR</span><span>${prefix}${amountOf(sign ? Math.abs(value) : value)}</span></p>`;
+  return `<p class="wu-money wu-money--md${toneClass ? ` ${toneClass}` : ""}"><span class="wu-money__cur">MYR</span><span class="t-amt">${prefix}${amountOf(sign ? Math.abs(value) : value)}</span></p>`;
 }
 
 /**
@@ -427,13 +427,13 @@ function positionRowHtml(position: PortfolioHolding): string {
   return '<tr>' +
     '<td><strong>' + escapeHtml(position.ticker) + '</strong></td>' +
     '<td>' + position.units.toFixed(position.currency === "USD" ? 5 : 0) + (lots ? ' · ' + lots : '') + '</td>' +
-    '<td>' + local(position.averageCostLocal) + '</td>' +
-    '<td>' + local(position.priceLocal) + '</td>' +
-    '<td>' + local(position.investedLocal) + '</td>' +
-    '<td>' + local(position.marketValueLocal) + '</td>' +
-    '<td>' + money(position.investedMyr) + '</td>' +
-    '<td>' + moneyOrUnknown(position.marketValueMyr) + '</td>' +
-    '<td class="' + pnlToneClass + '">' + pnlText(position.unrealizedPnlMyr, position.unrealizedPnlPercentMyr) + '</td>' +
+    '<td class="t-amt">' + local(position.averageCostLocal) + '</td>' +
+    '<td class="t-amt">' + local(position.priceLocal) + '</td>' +
+    '<td class="t-amt">' + local(position.investedLocal) + '</td>' +
+    '<td class="t-amt">' + local(position.marketValueLocal) + '</td>' +
+    '<td class="t-amt">' + money(position.investedMyr) + '</td>' +
+    '<td class="t-amt">' + moneyOrUnknown(position.marketValueMyr) + '</td>' +
+    '<td class="t-amt ' + pnlToneClass + '">' + pnlText(position.unrealizedPnlMyr, position.unrealizedPnlPercentMyr) + '</td>' +
     '<td>' + percent(position.actualAllocation) + ' / ' + percent(position.targetAllocation) + '</td>' +
     '<td class="' + driftToneClass + '">' + driftSign + percent(position.drift, 1) + '</td>' +
     '</tr>';
@@ -482,7 +482,7 @@ function feesNote(portfolio: PortfolioSnapshot, tradeCount: number): string {
     const amount = portfolio.unrealizedPnlMyrExFees;
     const sign = amount >= 0 ? "+" : "−";
     const ratio = portfolio.unrealizedPnlPercentMyrExFees;
-    return `Before fees ${sign}${amountOf(Math.abs(amount))}${ratio == null ? "" : ` (${sign}${percent(Math.abs(ratio), 2)})`}`;
+    return `Before fees ${amt(`${sign}${amountOf(Math.abs(amount))}`)}${ratio == null ? "" : ` (${sign}${percent(Math.abs(ratio), 2)})`}`;
   }
   return `Across ${tradeCount} ${tradeCount === 1 ? "contribution" : "contributions"}`;
 }
@@ -492,13 +492,16 @@ function feesNote(portfolio: PortfolioSnapshot, tradeCount: number): string {
  * unrealised figure counts only the fees already paid to buy. Empty when there
  * is no estimate, so an unchecked broker never gets a made-up fee.
  */
-function sellFeesNote(portfolio: PortfolioSnapshot): { afterSale: string; fees: string } | null {
+function sellFeesNote(portfolio: PortfolioSnapshot): { afterSale: string; fees: string; feesAmount: string } | null {
   const fees = portfolio.estimatedSellFeesMyr;
   const after = portfolio.unrealizedPnlMyrAfterSellFees;
   if (fees === null || after === null) return null;
+  // Markup, not text: the figures carry the .t-amt mark privacy mode blurs.
+  // feesAmount is the bare figure, for the phone's one-line version.
   return {
-    afterSale: `If sold today ≈ ${after >= 0 ? "+" : "−"}${amountOf(Math.abs(after))}`,
-    fees: `Est. sell fees ${amountOf(fees)}`,
+    afterSale: `If sold today ≈ ${amt(`${after >= 0 ? "+" : "−"}${amountOf(Math.abs(after))}`)}`,
+    fees: `Est. sell fees ${amt(amountOf(fees))}`,
+    feesAmount: amt(amountOf(fees)),
   };
 }
 
@@ -522,12 +525,14 @@ function portfolioTilesBody(portfolio: PortfolioSnapshot, tradeCount: number): s
   const pnl = portfolio.unrealizedPnlMyr;
   const pnlTone = pnl == null ? "" : pnl >= 0 ? "t-positive" : "t-negative";
   const sellNote = sellFeesNote(portfolio);
-  const noteHtml = (text: string): string => `<p class="wu-dash__note">${escapeHtml(text)}</p>`;
+  // feesNote and sellFeesNote already return markup (their figures carry the
+  // .t-amt mark privacy mode blurs), so this must not escape them.
+  const noteHtml = (html: string): string => `<p class="wu-dash__note">${html}</p>`;
   // Desktop splits it across the two tiles it belongs to; the phone's single
   // card carries both halves on one line.
   const afterSaleHtml = sellNote ? noteHtml(sellNote.afterSale) : "";
   const sellFeesHtml = sellNote ? noteHtml(sellNote.fees) : "";
-  const sellSummaryHtml = sellNote ? noteHtml(`${sellNote.afterSale} (${sellNote.fees.toLowerCase()})`) : "";
+  const sellSummaryHtml = sellNote ? noteHtml(`${sellNote.afterSale} (est. sell fees ${sellNote.feesAmount})`) : "";
   return `
         <section class="wu-card wu-dash__tile wu-portfolio-tile wu-valuation" data-valuation-status="${portfolio.valuationStatus}" aria-labelledby="pfValueLabel">
           <div class="wu-tc__top"><span class="wu-label" id="pfValueLabel">Market value</span>${returnChip}</div>
@@ -548,7 +553,7 @@ function portfolioTilesBody(portfolio: PortfolioSnapshot, tradeCount: number): s
         <section class="wu-card wu-dash__tile wu-portfolio-tile" aria-labelledby="pfFeesLabel">
           <div class="wu-tc__top"><span class="wu-label" id="pfFeesLabel">Fees</span></div>
           ${moneyFigure(portfolio.feesInCostBasisMyr)}
-          <p class="wu-dash__note">${escapeHtml(feesNote(portfolio, tradeCount))}</p>
+          <p class="wu-dash__note">${feesNote(portfolio, tradeCount)}</p>
           ${sellFeesHtml}
         </section>
         <section class="wu-card wu-dash__tile wu-portfolio-summary" aria-labelledby="pfSummaryLabel">
@@ -556,11 +561,11 @@ function portfolioTilesBody(portfolio: PortfolioSnapshot, tradeCount: number): s
           ${moneyFigure(portfolio.totalInvestmentValueMyr)}
           <p class="wu-dash__note">${escapeHtml(valuationText)}</p>
           <div class="wu-three wu-portfolio-summary__stats">
-            <div><span>Invested</span><b>${amountOf(portfolio.totalInvestedMyr)}</b></div>
-            <div><span>Unrealised</span><b${pnlTone ? ` class="${pnlTone}"` : ""}>${signedAmount(pnl)}</b></div>
-            <div><span>Fees</span><b>${amountOf(portfolio.feesInCostBasisMyr)}</b></div>
+            <div><span>Invested</span><b class="t-amt">${amountOf(portfolio.totalInvestedMyr)}</b></div>
+            <div><span>Unrealised</span><b class="t-amt${pnlTone ? ` ${pnlTone}` : ""}">${signedAmount(pnl)}</b></div>
+            <div><span>Fees</span><b class="t-amt">${amountOf(portfolio.feesInCostBasisMyr)}</b></div>
           </div>
-          ${portfolio.feesInCostBasisMyr > 0.005 && portfolio.unrealizedPnlMyrExFees !== null ? `<p class="wu-dash__note">${escapeHtml(feesNote(portfolio, tradeCount))}</p>` : ""}
+          ${portfolio.feesInCostBasisMyr > 0.005 && portfolio.unrealizedPnlMyrExFees !== null ? `<p class="wu-dash__note">${feesNote(portfolio, tradeCount)}</p>` : ""}
           ${sellSummaryHtml}
         </section>`;
 }
@@ -590,7 +595,7 @@ function holdingsBody(portfolio: PortfolioSnapshot): string {
               <span class="wu-weight" role="img" aria-label="${percent(position.actualAllocation)} of portfolio, target ${percent(position.targetAllocation)}"><span style="width:${actual}%"></span><i style="left:${target}%"></i></span>
               <span class="wu-hold__meta"><span>${percent(position.actualAllocation)}</span><span>Target ${percent(position.targetAllocation)}</span></span>
             </span>
-            <span class="wu-hold__value">${allocationAmount(portfolio, position)}<small class="${driftTone}">${position.drift >= 0 ? "+" : "−"}${percent(Math.abs(position.drift), 1)} drift</small></span>
+            <span class="wu-hold__value"><span class="t-amt">${allocationAmount(portfolio, position)}</span><small class="${driftTone}">${position.drift >= 0 ? "+" : "−"}${percent(Math.abs(position.drift), 1)} drift</small></span>
           </div>`;
           }).join("")}
         </div>`;
@@ -672,12 +677,12 @@ function dividendsBody(state: WealthState, portfolio: PortfolioSnapshot): string
           <span class="t-subheading">To confirm</span>
           <p class="wu-dash__note">Worked out from each fund's payout history and the units you held before the ex-date. Check them against your statement.</p>
           <ul class="wu-ledger-list">${suggestions.map((suggestion) => `<li class="wu-ledger-row wu-ledger-row--plain wu-dividend">
-            <span class="wu-ledger-row__title">${escapeHtml(suggestion.ticker)}<small>${escapeHtml(joinNotes(
+            <span class="wu-ledger-row__title">${escapeHtml(suggestion.ticker)}<small>${joinNotes(
               `ex ${shortDate(suggestion.exDate)}`,
-              `${suggestion.units.toFixed(4)} × ${payout(suggestion.currency, suggestion.perShare)}`,
+              `${suggestion.units.toFixed(4)} × ${amt(payout(suggestion.currency, suggestion.perShare))}`,
               suggestion.taxRate > 0 ? `tax ${percent(suggestion.taxRate, 0)}` : "no tax withheld",
-            ))}</small>${suggestion.caution ? `<small class="wu-dividend__caution">${escapeHtml(suggestion.caution)}</small>` : ""}</span>
-            <span class="wu-ledger-row__amount">${escapeHtml(payout(suggestion.currency, netDividend({ gross: suggestion.gross, withholdingTax: suggestion.withholdingTax })))}<small>${escapeHtml(suggestion.rateToMyr === undefined ? "no rate on file" : `≈ ${payout("MYR", netDividend({ gross: suggestion.gross, withholdingTax: suggestion.withholdingTax }) * suggestion.rateToMyr)}`)}</small></span>
+            )}</small>${suggestion.caution ? `<small class="wu-dividend__caution">${escapeHtml(suggestion.caution)}</small>` : ""}</span>
+            <span class="wu-ledger-row__amount"><span class="t-amt">${escapeHtml(payout(suggestion.currency, netDividend({ gross: suggestion.gross, withholdingTax: suggestion.withholdingTax })))}</span><small>${suggestion.rateToMyr === undefined ? "no rate on file" : amt(`≈ ${payout("MYR", netDividend({ gross: suggestion.gross, withholdingTax: suggestion.withholdingTax }) * suggestion.rateToMyr)}`)}</small></span>
             <span class="wu-row wu-row--tight wu-dividend__actions">
               <button class="wu-btn wu-btn--primary wu-btn--sm div-confirm" data-id="${escapeHtml(suggestion.id)}" type="button">Confirm</button>
               <button class="wu-btn wu-btn--ghost wu-btn--sm div-edit" data-id="${escapeHtml(suggestion.id)}" type="button">Edit</button>
@@ -694,12 +699,12 @@ function dividendsBody(state: WealthState, portfolio: PortfolioSnapshot): string
             const rate = dividendRateToMyr(dividend, state.currencyExchanges ?? []);
             const net = netDividend(dividend);
             return `<li class="wu-ledger-row wu-dividend-received__row">
-            <span class="wu-ledger-row__title">${escapeHtml(dividend.ticker)}<small>${escapeHtml(joinNotes(
+            <span class="wu-ledger-row__title">${escapeHtml(dividend.ticker)}<small>${joinNotes(
               `ex ${shortDate(dividend.exDate)}`,
-              dividend.withholdingTax > 0 ? `tax ${payout(dividend.currency, dividend.withholdingTax)}` : "no tax withheld",
+              dividend.withholdingTax > 0 ? `tax ${amt(payout(dividend.currency, dividend.withholdingTax))}` : "no tax withheld",
               rate === null ? "no rate to ringgit" : "",
-            ))}</small></span>
-            <span class="wu-ledger-row__amount">${escapeHtml(payout(dividend.currency, net))}<small>${escapeHtml(rate === null ? UNKNOWN : `≈ ${payout("MYR", net * rate)}`)}</small></span>
+            )}</small></span>
+            <span class="wu-ledger-row__amount"><span class="t-amt">${escapeHtml(payout(dividend.currency, net))}</span><small>${rate === null ? UNKNOWN : amt(`≈ ${payout("MYR", net * rate)}`)}</small></span>
             <button class="wu-btn wu-btn--ghost wu-btn--icon div-delete" data-id="${escapeHtml(dividend.id)}" type="button" aria-label="Remove this dividend">✕</button>
           </li>`;
           }).join("")}</ul>
@@ -720,11 +725,11 @@ function nextContributionBody(state: WealthState, portfolio: PortfolioSnapshot):
   const sentence = lead.kind === "none"
     ? "No monthly contribution is set yet."
     : lead.kind === "one"
-      ? `Put this month's ${b(money(lead.amount))} into ${b(lead.ticker)}${lead.onlyBelowTarget ? " — it's the only holding below target." : "."}`
-      : `Split this month's ${b(money(lead.amount))} across ${list(lead.tickers)}.`;
+      ? `Put this month's <b>${amt(money(lead.amount))}</b> into ${b(lead.ticker)}${lead.onlyBelowTarget ? " — it's the only holding below target." : "."}`
+      : `Split this month's <b>${amt(money(lead.amount))}</b> across ${list(lead.tickers)}.`;
   return `<div class="wu-tc__top"><span class="wu-label" id="pfNextLabel">Next contribution</span><span class="wu-chip${health === "Aligned" ? "" : " wu-chip--warning"}">${health}</span></div>
         <p class="wu-portfolio-lead">${sentence}</p>
-        ${plan.length ? `<ul class="wu-facts wu-facts--plain">${plan.map((item) => `<li><span>${escapeHtml(item.ticker)}</span><span class="${item.amount > 0.005 ? "t-positive" : ""}">${item.amount > 0.005 ? "+" : ""}${amountOf(item.amount)}</span></li>`).join("")}</ul>` : ""}
+        ${plan.length ? `<ul class="wu-facts wu-facts--plain">${plan.map((item) => `<li><span>${escapeHtml(item.ticker)}</span><span class="t-amt${item.amount > 0.005 ? " t-positive" : ""}">${item.amount > 0.005 ? "+" : ""}${amountOf(item.amount)}</span></li>`).join("")}</ul>` : ""}
         <p class="wu-dash__note wu-dash__actions">New money only — no selling required</p>`;
 }
 
@@ -828,7 +833,7 @@ export function portfolioTemplate(state: WealthState): string {
         <div class="wu-tc__top"><span class="wu-label" id="pfRecentLabel">Recent activity</span></div>
         ${recentTrades.length === 0
           ? `<p class="wu-empty">No transactions yet. Record your first trade to begin tracking.</p>`
-          : `<ul class="wu-ledger-list">${recentTrades.map((trade) => `<li class="wu-ledger-row wu-ledger-row--plain"><span class="wu-ledger-row__title">${escapeHtml(trade.ticker)}<small>${escapeHtml(joinNotes(trade.type, shortDate(trade.date), trade.platform))}</small></span><span class="wu-ledger-row__amount">${trade.type === "Sell" ? "−" : ""}${amountOf(trade.amountMyr)}</span></li>`).join("")}</ul>`}
+          : `<ul class="wu-ledger-list">${recentTrades.map((trade) => `<li class="wu-ledger-row wu-ledger-row--plain"><span class="wu-ledger-row__title">${escapeHtml(trade.ticker)}<small>${escapeHtml(joinNotes(trade.type, shortDate(trade.date), trade.platform))}</small></span><span class="wu-ledger-row__amount t-amt">${trade.type === "Sell" ? "−" : ""}${amountOf(trade.amountMyr)}</span></li>`).join("")}</ul>`}
         ${state.trades.length > 0
           ? `<button class="wu-btn wu-btn--ghost wu-btn--sm wu-self-end wu-portfolio-see-all" id="pfSeeAll" type="button" aria-expanded="${historyOpen}" aria-controls="pfHistoryPanel">${historyOpen ? "Hide full history" : `See all ${state.trades.length}`}</button>`
           : ""}

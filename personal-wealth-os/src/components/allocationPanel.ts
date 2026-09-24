@@ -23,7 +23,7 @@ import type { BudgetBucketSnapshot, BudgetSnapshot, OutlookMonth } from "../budg
 import type { AllocationRow, PlanWarning } from "../allocation";
 import type { AllocationPlan } from "../models";
 import { money } from "../rules";
-import { escapeHtml } from "../html";
+import { amt, escapeHtml } from "../html";
 
 /** Which row is open, carried by the page across re-renders. */
 export interface BudgetView {
@@ -41,6 +41,16 @@ function amountOf(value: number): string {
   return money(value, "").trim();
 }
 
+/**
+ * The same figure, marked as money so privacy mode blurs it.
+ *
+ * The sentence builders below return markup for this reason, and escape the
+ * layer names they quote themselves — a layer is named by the user.
+ */
+function figure(value: number): string {
+  return amt(amountOf(value));
+}
+
 /** "2026-08" → "August 2026", falling back to the raw key. */
 function monthLabel(monthKey: string): string {
   const [year, month] = monthKey.split("-").map(Number);
@@ -56,7 +66,7 @@ function shortMonth(monthKey: string): string {
 }
 
 function ruleText(row: AllocationRow): string {
-  if (row.stepKind === "fill") return `Fill to ${amountOf(row.value)}`;
+  if (row.stepKind === "fill") return `Fill to ${figure(row.value)}`;
   if (row.stepKind === "gross") return `${row.value}% of all income`;
   return `${row.value}% of what is left`;
 }
@@ -88,7 +98,7 @@ function warningText(warning: PlanWarning): string {
 function assumptionNote(budget: BudgetSnapshot): string {
   const { emergencyBasis, emergencyHeldBack } = budget.allocation;
   return emergencyBasis === "assumed-in-cash"
-    ? ` This assumes your ${money(emergencyHeldBack)} emergency fund sits in your bank; link the Emergency Fund goal to its account to make it exact.`
+    ? ` This assumes your ${amt(money(emergencyHeldBack))} emergency fund sits in your bank; link the Emergency Fund goal to its account to make it exact.`
     : "";
 }
 
@@ -96,8 +106,8 @@ function assumptionNote(budget: BudgetSnapshot): string {
 function cashSentence(budget: BudgetSnapshot): string {
   const { spendableCash, cashMonths, emergencyBasis } = budget.allocation;
   const base = emergencyBasis === "none"
-    ? `Cash on hand is ${money(spendableCash)}`
-    : `Cash outside your emergency fund is ${money(spendableCash)}`;
+    ? `Cash on hand is ${amt(money(spendableCash))}`
+    : `Cash outside your emergency fund is ${amt(money(spendableCash))}`;
   return `${base}, about ${cashMonths.toFixed(1)} months of living costs.${assumptionNote(budget)}`;
 }
 
@@ -105,23 +115,23 @@ function cashSentence(budget: BudgetSnapshot): string {
 function outcomeText(month: OutlookMonth): string {
   const { result } = month;
   if (result.shortfall > 0.005) {
-    return `${result.rows[0]?.name ?? "The first layer"} short ${amountOf(result.shortfall)} — nothing below it funded`;
+    return `${escapeHtml(result.rows[0]?.name ?? "The first layer")} short ${figure(result.shortfall)} — nothing below it funded`;
   }
   const caught = result.rows.find((row) => row.overflow > 0.005);
-  if (caught) return `Every layer filled · +${amountOf(caught.overflow)} to ${caught.name}`;
-  if (result.unassigned > 0.005) return `Every layer filled · ${amountOf(result.unassigned)} left unassigned`;
+  if (caught) return `Every layer filled · ${amt(`+${amountOf(caught.overflow)}`)} to ${escapeHtml(caught.name)}`;
+  if (result.unassigned > 0.005) return `Every layer filled · ${figure(result.unassigned)} left unassigned`;
   return "Every layer filled";
 }
 
 /** A layer's state as a word or two, and its tone. */
 function layerStatus(row: AllocationRow): { text: string; tone: string } {
-  if (row.overflow > 0.005) return { text: `+${amountOf(row.overflow)} extra`, tone: "t-positive" };
+  if (row.overflow > 0.005) return { text: `${amt(`+${amountOf(row.overflow)}`)} extra`, tone: "t-positive" };
   // A layer set to zero asked for nothing and got nothing. Saying "not
   // reached" would blame the month for a choice the user made.
   if (row.want < 0.005) return { text: "Not set", tone: "t-faint" };
   if (row.got < 0.005) return { text: "Not reached", tone: "t-faint" };
   if (row.got >= row.want - 0.005) return { text: "Filled", tone: "t-positive" };
-  return { text: `${amountOf(row.got)} of ${amountOf(row.want)}`, tone: "wu-budget-part" };
+  return { text: `${figure(row.got)} of ${figure(row.want)}`, tone: "wu-budget-part" };
 }
 
 /** The rule editor under an open layer row. */
@@ -156,10 +166,10 @@ function layerRow(row: AllocationRow, index: number, total: number, view: Budget
   return `<li class="wu-budget-layer${open ? " is-open" : ""}">
       <button class="wu-budget-row layer-row" type="button" data-index="${index}" aria-expanded="${open}">
         <i class="wu-budget-row__dot" style="background:${layerColor(index)}" aria-hidden="true"></i>
-        <span class="wu-budget-row__title">${escapeHtml(row.name)}<small>${escapeHtml(ruleText(row))}</small></span>
+        <span class="wu-budget-row__title">${escapeHtml(row.name)}<small>${ruleText(row)}</small></span>
         <span class="wu-budget-row__fill" aria-hidden="true"><span class="wu-bar"><span class="wu-bar__fill${status.tone === "wu-budget-part" ? " is-part" : ""}" style="width:${filled}%"></span></span><small>${row.want > 0 ? `${Math.round(filled)}% filled` : "No amount set"}${row.note ? ` · ${escapeHtml(row.note)}` : ""}</small></span>
-        <span class="wu-budget-row__got">${amountOf(row.got)}<small class="${status.tone}">${escapeHtml(status.text)}</small></span>
-        <span class="wu-budget-row__status ${status.tone}">${escapeHtml(status.text)}</span>
+        <span class="wu-budget-row__got">${figure(row.got)}<small class="${status.tone}">${status.text}</small></span>
+        <span class="wu-budget-row__status ${status.tone}">${status.text}</span>
         <span class="wu-budget-row__chev" aria-hidden="true">›</span>
       </button>
       ${open ? layerEditor(row, index, total) : ""}
@@ -189,7 +199,7 @@ function bucketRow(bucket: BudgetBucketSnapshot, view: BudgetView): string {
   return `<li class="wu-budget-layer${open ? " is-open" : ""}">
       <button class="wu-budget-row wu-budget-row--plain bucket-row" type="button" data-index="${bucket.index}" aria-expanded="${open}">
         <span class="wu-budget-row__title">${escapeHtml(bucket.label || bucket.name)}<small>${escapeHtml(bucket.note || "Used only when the market falls")}</small></span>
-        <span class="wu-budget-row__got">${amountOf(bucket.amount)}</span>
+        <span class="wu-budget-row__got">${figure(bucket.amount)}</span>
         <span class="wu-budget-row__chev" aria-hidden="true">›</span>
       </button>
       ${open ? `<form class="wu-stack wu-stack--sm bucketForm wu-budget-editor" data-index="${bucket.index}">
@@ -211,8 +221,8 @@ function bucketRow(bucket: BudgetBucketSnapshot, view: BudgetView): string {
 
 function monthRow(label: string, month: OutlookMonth, bad: boolean): string {
   return `<li class="wu-budget-layer"><div class="wu-budget-row wu-budget-row--plain wu-budget-row--static">
-      <span class="wu-budget-row__title">${label} · ${escapeHtml(shortMonth(month.monthKey))}<small>${escapeHtml(outcomeText(month))}</small></span>
-      <span class="wu-budget-row__got${bad ? " t-negative" : ""}">${amountOf(month.income)}</span>
+      <span class="wu-budget-row__title">${label} · ${escapeHtml(shortMonth(month.monthKey))}<small>${outcomeText(month)}</small></span>
+      <span class="wu-budget-row__got${bad ? " t-negative" : ""}">${figure(month.income)}</span>
     </div></li>`;
 }
 
@@ -233,7 +243,7 @@ function monthsCard(budget: BudgetSnapshot): string {
   }
   const short = outlook.worst.result.shortfall > 0.005;
   const cover = short
-    ? `${money(spendableCash)} outside your emergency fund covers ${outlook.worstMonthsCovered} ${outlook.worstMonthsCovered === 1 ? "month" : "months"} that lean.${assumptionNote(budget)}`
+    ? `${amt(money(spendableCash))} outside your emergency fund covers ${outlook.worstMonthsCovered} ${outlook.worstMonthsCovered === 1 ? "month" : "months"} that lean.${assumptionNote(budget)}`
     : "Even your leanest month covered living costs.";
   // With only two months on record the middle one IS the leanest or the best,
   // and printing it again says the same thing twice.
@@ -245,7 +255,7 @@ function monthsCard(budget: BudgetSnapshot): string {
         ${typical ? monthRow("Typical", outlook.median, false) : ""}
         ${outlook.best.monthKey !== outlook.worst.monthKey ? monthRow("Best", outlook.best, false) : ""}
       </ul>
-      <p class="wu-dash__note wu-dash__actions">${outlook.history.length} months recorded. ${escapeHtml(cover)}</p>
+      <p class="wu-dash__note wu-dash__actions">${outlook.history.length} months recorded. ${cover}</p>
     </section>`;
 }
 
@@ -261,23 +271,23 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
   const statusChip = nothingIn
     ? `<span class="wu-chip wu-chip--muted">No income yet</span>`
     : short
-      ? `<span class="wu-chip wu-chip--negative">Short ${amountOf(allocation.actual.shortfall)}</span>`
+      ? `<span class="wu-chip wu-chip--negative">Short ${figure(allocation.actual.shortfall)}</span>`
       : `<span class="wu-chip">On plan</span>`;
   const split = rows.some((row) => row.got > 0.005)
     ? `<div class="wu-split" aria-hidden="true">${rows.map((row, index) => row.got > 0.005 ? `<span style="flex:${row.got};background:${layerColor(index)}"></span>` : "").join("")}${allocation.planned.income > allocation.actual.income ? `<span style="flex:${allocation.planned.income - allocation.actual.income};background:transparent"></span>` : ""}</div>`
     : `<div class="wu-split" aria-hidden="true"></div>`;
   const planLine = nothingIn
     ? "No income recorded yet this month. Record one in the Ledger and it will flow through these layers."
-    : `Plan ${amountOf(allocation.planned.income)} a month · routed top to bottom`;
+    : `Plan ${figure(allocation.planned.income)} a month · routed top to bottom`;
 
   const caught = rows.find((row) => row.overflow > 0.005);
   const outlook = allocation.outlook;
 
   const shortfallBlock = short
-    ? `<div class="wu-budget-alert" role="status"><b>${escapeHtml(rows[0].name)} is ${amountOf(allocation.actual.shortfall)} short</b><span>${escapeHtml(cashSentence(budget))} Nothing below this layer is funded this month.</span></div>`
+    ? `<div class="wu-budget-alert" role="status"><b>${escapeHtml(rows[0].name)} is ${figure(allocation.actual.shortfall)} short</b><span>${cashSentence(budget)} Nothing below this layer is funded this month.</span></div>`
     : "";
   const notes = [
-    allocation.actual.unassigned > 0.005 ? `${money(allocation.actual.unassigned)} reached the end with no layer set to catch it.` : "",
+    allocation.actual.unassigned > 0.005 ? `${amt(money(allocation.actual.unassigned))} reached the end with no layer set to catch it.` : "",
     ...allocation.warnings.map(warningText),
   ].filter(Boolean);
   const needsNormalizing = allocation.warnings.some((warning) => warning.code === "percent-total-not-100");
@@ -297,23 +307,23 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
     <div class="wu-dash__full wu-dash__tiles wu-budget-tiles">
       <section class="wu-card wu-dash__tile" aria-labelledby="budMonthLabel">
         <div class="wu-tc__top"><span class="wu-label" id="budMonthLabel">This month</span>${statusChip}</div>
-        <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(allocation.actual.income)}</span></p>
-        <p class="wu-dash__note">Plan ${amountOf(allocation.planned.income)} a month</p>
+        <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(allocation.actual.income)}</span></p>
+        <p class="wu-dash__note">Plan ${figure(allocation.planned.income)} a month</p>
         ${split}
       </section>
       <section class="wu-card wu-dash__tile" aria-labelledby="budExtraLabel">
         <div class="wu-tc__top"><span class="wu-label" id="budExtraLabel">Extra caught</span></div>
-        <p class="wu-money wu-money--md${caught ? " t-positive" : ""}"><span class="wu-money__cur">MYR</span><span>${caught ? `+${amountOf(caught.overflow)}` : "0"}</span></p>
+        <p class="wu-money wu-money--md${caught ? " t-positive" : ""}"><span class="wu-money__cur">MYR</span><span class="t-amt">${caught ? `+${amountOf(caught.overflow)}` : "0"}</span></p>
         <p class="wu-dash__note">${caught ? `Went to ${escapeHtml(caught.name)} after every layer filled` : "Nothing left over after the layers"}</p>
       </section>
       <section class="wu-card wu-dash__tile" aria-labelledby="budSwingLabel">
         <div class="wu-tc__top"><span class="wu-label" id="budSwingLabel">Swing</span>${outlook ? `<span class="wu-chip wu-chip--muted">${outlook.history.length} months</span>` : ""}</div>
         <p class="wu-money wu-money--md"><span>${outlook ? `${Math.round(outlook.spread * 100)}%` : "--"}</span></p>
-        <p class="wu-dash__note">${outlook ? `Leanest ${amountOf(outlook.worst.income)} · best ${amountOf(outlook.best.income)}` : "Needs two recorded months"}</p>
+        <p class="wu-dash__note">${outlook ? `Leanest ${figure(outlook.worst.income)} · best ${figure(outlook.best.income)}` : "Needs two recorded months"}</p>
       </section>
       <section class="wu-card wu-dash__tile" aria-labelledby="budAsideLabel">
         <div class="wu-tc__top"><span class="wu-label" id="budAsideLabel">Set aside</span></div>
-        <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(setAside)}</span></p>
+        <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(setAside)}</span></p>
         <p class="wu-dash__note">${oneTime.length ? `${escapeHtml(oneTime.map((bucket) => bucket.label || bucket.name).join(", "))}, outside the layers` : "Nothing set aside"}</p>
       </section>
     </div>
@@ -321,17 +331,17 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
     <!-- phone — this month in one card -->
     <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-budget-month" aria-labelledby="budPhoneMonthLabel">
       <div class="wu-tc__top"><span class="wu-label" id="budPhoneMonthLabel">This month · ${escapeHtml(month)}</span>${statusChip}</div>
-      <p class="wu-money"><span class="wu-money__cur">MYR</span><span>${amountOf(allocation.actual.income)}</span></p>
+      <p class="wu-money"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(allocation.actual.income)}</span></p>
       ${split}
-      <p class="wu-dash__note">${escapeHtml(planLine)}</p>
+      <p class="wu-dash__note">${planLine}</p>
     </section>
 
     <!-- LAYERS — a table on a desktop, a grouped list on a phone -->
     <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-budget-layers" aria-labelledby="budLayersLabel">
-      <div class="wu-tc__top"><span class="wu-label" id="budLayersLabel">Layers · filled top to bottom</span>${nothingIn ? "" : short ? `<span class="wu-chip wu-chip--negative">${escapeHtml(rows[0]?.name ?? "")} ${amountOf(allocation.actual.shortfall)} short</span>` : `<span class="wu-chip">All filled</span>`}</div>
+      <div class="wu-tc__top"><span class="wu-label" id="budLayersLabel">Layers · filled top to bottom</span>${nothingIn ? "" : short ? `<span class="wu-chip wu-chip--negative">${escapeHtml(rows[0]?.name ?? "")} ${figure(allocation.actual.shortfall)} short</span>` : `<span class="wu-chip">All filled</span>`}</div>
       ${shortfallBlock}
       ${layers}
-      ${notes.map((text) => `<p class="wu-dash__note wu-budget-note">${escapeHtml(text)}</p>`).join("")}
+      ${notes.map((note) => `<p class="wu-dash__note wu-budget-note">${note}</p>`).join("")}
       ${needsNormalizing ? `<div><button class="wu-btn wu-btn--secondary wu-btn--sm" id="normalizeLayersBtn" type="button">Make them add to 100%</button></div>` : ""}
       <button class="wu-budget-add add-layer" type="button">+ Add a layer</button>
     </section>
