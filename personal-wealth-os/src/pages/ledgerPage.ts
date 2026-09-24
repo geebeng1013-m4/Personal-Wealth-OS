@@ -8,8 +8,8 @@
  *
  * The page carries real cross-render state — the active filter, which panels
  * are expanded, the row being edited, a draft of the entry form kept across a
- * type switch, and a flag that suppresses the amount-field autofocus after an
- * in-place refresh. All of it was module-level state in ui.ts and is
+ * type switch, and a flag that asks for the amount field to take focus on the
+ * next render. All of it was module-level state in ui.ts and is
  * module-level here, with the same lifetime: it lives until the tab closes.
  */
 
@@ -36,7 +36,17 @@ import type { Navigate, RenderApp, Setter } from "./pageTypes";
 let ledgerFilters: LedgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "", fundingSource: "all" };
 let ledgerEditingId = "";
 let ledgerEntryType: LedgerTransactionType = "expense";
-let suppressLedgerAmountFocus = false;
+/**
+ * Set for exactly one render when something has already chosen the category,
+ * account and note and the amount is all that is left to type.
+ *
+ * The form does NOT focus the amount on its own any more. Amount now sits
+ * below the category grid and the note, so focusing it on open scrolls the
+ * form past those and raises the keyboard over them — on a phone the user
+ * would be typing into the one field they had not chosen yet, with everything
+ * they still had to pick hidden behind the keyboard.
+ */
+let focusLedgerAmountNext = false;
 let ledgerEntryDraft = {
   amount: "",
   accountId: "",
@@ -115,7 +125,7 @@ export function applyLedgerDraft(draft: LedgerDraft): void {
   ledgerEntryOpen = true;
   // A filled amount is for checking, not retyping, so the caret stays out of
   // it; an empty one is where the user starts.
-  suppressLedgerAmountFocus = draft.amount > 0;
+  focusLedgerAmountNext = draft.amount <= 0;
 }
 
 function defaultAccountIcon(type: LedgerAccountType): string {
@@ -257,12 +267,12 @@ export function ledgerTemplate(state: WealthState): string {
             <button type="button" data-ledger-type="transfer" class="wu-segmented__option${entryType === "transfer" ? " is-active" : ""}">&harr; Transfer</button>
           </div>
           <input name="type" type="hidden" value="${entryType}">
-          <label class="wu-field-row"><span class="wu-field-row__label">Amount (MYR)</span><input id="ledgerAmount" class="wu-field" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required value="${escapeHtml(entryAmount)}" placeholder="0.00"></label>
           ${entryType === "transfer"
             ? `<div class="wu-grid wu-grid--2"><label class="wu-field-row"><span class="wu-field-row__label">From account</span><select class="wu-field" name="fromAccountId" required>${accountOptions(selectedFromAccountId)}</select></label><label class="wu-field-row"><span class="wu-field-row__label">To account</span><select class="wu-field" name="toAccountId" required>${accountOptions(selectedToAccountId)}</select></label></div>`
-            : `<label class="wu-field-row"><span class="wu-field-row__label">Account</span><select class="wu-field" name="accountId" required>${accountOptions(selectedAccountId)}</select></label>
-          <fieldset class="wu-choice wu-choice--glass"><legend class="wu-field-row__label">Category</legend><div class="wu-choice__opts">${entryCategories.map((category, index) => `<label class="wu-choice__opt"><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === editing?.categoryId || (!editing && (draftCategoryId ? category.id === draftCategoryId : index === 0)) ? " checked" : ""}><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)}</span></label>`).join("")}</div></fieldset>
-          <label class="wu-switch"><input type="checkbox" name="fundingSource" value="sponsored"${entryFundingSource === "sponsored" ? " checked" : ""}><span class="wu-switch__track"></span><span class="wu-switch__label">Sponsored / earmarked money — not part of my budget</span></label>`}
+            : `<fieldset class="wu-choice wu-choice--glass"><legend class="wu-field-row__label">Category</legend><div class="wu-choice__opts">${entryCategories.map((category, index) => `<label class="wu-choice__opt"><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === editing?.categoryId || (!editing && (draftCategoryId ? category.id === draftCategoryId : index === 0)) ? " checked" : ""}><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)}</span></label>`).join("")}</div></fieldset>
+          <label class="wu-field-row"><span class="wu-field-row__label">Account</span><select class="wu-field" name="accountId" required>${accountOptions(selectedAccountId)}</select></label>`}
+          <label class="wu-field-row"><span class="wu-field-row__label">Note</span><input class="wu-field" name="note" maxlength="500" value="${escapeHtml(entryNote)}" placeholder="${entryType === "expense" ? "shop name-what you bought" : "Optional"}"></label>
+          <label class="wu-field-row"><span class="wu-field-row__label">Amount (MYR)</span><input id="ledgerAmount" class="wu-field" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required value="${escapeHtml(entryAmount)}" placeholder="0.00"></label>
           ${entryType === "income"
             ? `<div id="ledgerRoutingHint" aria-live="polite">${incomeRoutingHint(state, {
               amount: Number(entryAmount),
@@ -271,7 +281,10 @@ export function ledgerTemplate(state: WealthState): string {
               ...(editing ? { excludeTransactionId: editing.id } : {}),
             })}</div>`
             : ""}
-          <details class="wu-details"${editing ? " open" : ""}><summary class="wu-details__summary"><span class="t-subheading">Date &amp; note</span></summary><div class="wu-grid wu-grid--2"><label class="wu-field-row"><span class="wu-field-row__label">Date</span><input class="wu-field" name="date" type="date" required value="${entryDate}"></label><label class="wu-field-row"><span class="wu-field-row__label">Note</span><input class="wu-field" name="note" maxlength="500" value="${escapeHtml(entryNote)}" placeholder="Optional"></label></div></details>
+          ${entryType === "transfer"
+            ? ""
+            : `<label class="wu-switch"><input type="checkbox" name="fundingSource" value="sponsored"${entryFundingSource === "sponsored" ? " checked" : ""}><span class="wu-switch__track"></span><span class="wu-switch__label">Sponsored / earmarked money — not part of my budget</span></label>`}
+          <details class="wu-details"${editing ? " open" : ""}><summary class="wu-details__summary"><span class="t-subheading">Date</span></summary><label class="wu-field-row"><span class="wu-field-row__label">Date</span><input class="wu-field" name="date" type="date" required value="${entryDate}"></label></details>
           <p id="ledgerFormError" class="wu-field-row__error" role="alert">${transferUnavailable ? "Add at least two accounts before recording a transfer." : ""}</p>
           <button class="wu-btn wu-btn--primary wu-btn--block" type="submit"${transferUnavailable ? " disabled" : ""}>${editing ? "Save Changes" : "Save Transaction"}</button>
         </form>
@@ -463,7 +476,6 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
     const scrollPosition = preserveScroll
       ? { x: window.scrollX, y: window.scrollY, documentY: document.scrollingElement?.scrollTop ?? 0 }
       : null;
-    if (preserveScroll) suppressLedgerAmountFocus = true;
     if (next !== state) setState(next, label);
     rerender(root, next, setState, "ledger", navigate);
     if (!scrollPosition) return;
@@ -500,9 +512,8 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
     });
   });
 
-  if (suppressLedgerAmountFocus) {
-    suppressLedgerAmountFocus = false;
-  } else {
+  if (focusLedgerAmountNext) {
+    focusLedgerAmountNext = false;
     root.querySelector<HTMLInputElement>("#ledgerAmount")?.focus({ preventScroll: true });
   }
   root.querySelectorAll<HTMLButtonElement>("[data-ledger-type]").forEach((button) => button.addEventListener("click", () => {
