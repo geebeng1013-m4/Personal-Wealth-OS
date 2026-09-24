@@ -5241,4 +5241,57 @@
       animation: none;
     }
   }
+
+  /* Quick-entry tags (K-3): notes already written, offered back under the note
+     field. These are actions, not a choice between options, so they carry no
+     selected state and no tick — tapping one fills the form and the strip is
+     done with. */
+  .wu-tags {
+    display: grid;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+  .wu-tags__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+  .wu-tags__tag,
+  .wu-tags__more {
+    max-width: 100%;
+    /* 8px either side of a ~19px line reaches a 36px target, and the wrap gap
+       keeps neighbouring rows from sharing an edge. */
+    padding: 8px 13px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    color: var(--text-muted);
+    font: var(--weight-medium, 500) var(--text-body-sm) / 1.3 var(--font-sans);
+    text-align: left;
+    /* A long note wraps inside its own pill; it never widens the form. */
+    overflow-wrap: anywhere;
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard),
+      background var(--dur-fast) var(--ease-standard);
+  }
+  .wu-tags__tag:hover,
+  .wu-tags__more:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+  .wu-tags__tag:active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .wu-tags__tag:focus-visible,
+  .wu-tags__more:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  /* Dashed, so "More" reads as a way in rather than as another note. */
+  .wu-tags__more {
+    border-style: dashed;
+  }
 }
