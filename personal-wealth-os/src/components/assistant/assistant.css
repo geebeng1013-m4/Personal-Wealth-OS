@@ -477,6 +477,35 @@
   font: var(--weight-medium) var(--text-subheading) / var(--leading-tight) var(--font-sans);
 }
 
+/* "Take me there" under an answer that points at a page. Quiet enough not to
+   compete with the answer, big enough for a thumb (44px is the tap target the
+   rest of the app uses). */
+.assistant-goto {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.assistant-goto__btn {
+  min-height: 32px;
+  padding: 6px var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: var(--weight-medium) var(--text-caption) / var(--leading-normal) var(--font-sans);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.assistant-goto__btn:hover {
+  background: var(--surface-2, rgba(127, 127, 127, 0.08));
+  border-color: var(--accent);
+}
+.assistant-goto__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .assistant-share {
   display: flex;
   /* The label now carries a second line under it, so the box sits with the
