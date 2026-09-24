@@ -1758,7 +1758,17 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--space-2);
   }
-  .wu-three span {
+  /* each cell stacks label, figure and (where there is one) its sub-line, so
+     the sub-lines sit on the same baseline across the three columns */
+  .wu-three > * {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  /* the cell's own label, not a span inside the figure — a money figure is
+     wrapped in <span class="t-amt">, and styling that as a label shrank and
+     greyed the amount */
+  .wu-three > * > span {
     display: block;
     font-size: var(--text-caption);
     color: var(--text-faint);
@@ -1767,6 +1777,15 @@
     font: var(--weight-semibold) var(--text-subheading) / 1.2 var(--font-sans);
     letter-spacing: -0.01em;
     font-variant-numeric: tabular-nums;
+  }
+  /* one detail under a figure — units under a value, drift under a weight */
+  .wu-three small {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--text-caption);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
   }
   /* Status list: every row the same height, value short enough to stay on one
      line. Long explanations belong on the page the row links to. */
@@ -4492,6 +4511,12 @@
       flex-wrap: wrap;
       gap: var(--space-2) var(--space-3);
     }
+    /* under the chip it explains, not stranded at the left under the price */
+    .wu-market-price .wu-market-dropnote {
+      flex: 1 0 100%;
+      margin: 0;
+      text-align: right;
+    }
     .wu-market-chart .market-intervals {
       display: flex;
       width: 100%;
@@ -4515,6 +4540,23 @@
     }
     .wu-market-position.wu-market-phone {
       display: grid;
+    }
+    /* two halves, not three columns: what you hold on the left, how it sits
+       against the target on the right, each three lines deep so neither
+       corner of the card is left empty */
+    .wu-three.wu-market-pos {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+    .wu-market-pos > :nth-child(2) {
+      align-items: flex-end;
+      text-align: right;
+    }
+    /* the weight and its target read as one figure, as they do on a desktop */
+    .wu-market-pos__pair {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-1);
     }
   }
   @media (min-width: 901px) {
