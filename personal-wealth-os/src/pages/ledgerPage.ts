@@ -325,11 +325,13 @@ export function ledgerTemplate(state: WealthState): string {
           <input name="type" type="hidden" value="${entryType}">
           ${entryType === "transfer"
             ? `<div class="wu-grid wu-grid--2"><label class="wu-field-row"><span class="wu-field-row__label">From account</span><select class="wu-field" name="fromAccountId" required>${accountOptions(selectedFromAccountId)}</select></label><label class="wu-field-row"><span class="wu-field-row__label">To account</span><select class="wu-field" name="toAccountId" required>${accountOptions(selectedToAccountId)}</select></label></div>`
-            : `<fieldset class="wu-choice wu-choice--glass"><legend class="wu-field-row__label">Category</legend><div class="wu-choice__opts">${entryCategories.map((category) => `<label class="wu-choice__opt"><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === selectedCategoryId ? " checked" : ""}><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)}</span></label>`).join("")}</div></fieldset>
-          <label class="wu-field-row"><span class="wu-field-row__label">Account</span><select class="wu-field" name="accountId" required>${accountOptions(selectedAccountId)}</select></label>`}
-          <label class="wu-field-row"><span class="wu-field-row__label">Note</span><input id="ledgerNote" class="wu-field" name="note" maxlength="500" value="${escapeHtml(entryNote)}" placeholder="${entryType === "expense" ? "shop name-what you bought" : "Optional"}"></label>
-          ${quickTagsMarkup}
+            : `<fieldset class="wu-choice wu-choice--glass"><legend class="wu-field-row__label">Category</legend><div class="wu-choice__opts">${entryCategories.map((category) => `<label class="wu-choice__opt"><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === selectedCategoryId ? " checked" : ""}><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)}</span></label>`).join("")}</div></fieldset>`}
           <label class="wu-field-row"><span class="wu-field-row__label">Amount (MYR)</span><input id="ledgerAmount" class="wu-field" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required value="${escapeHtml(entryAmount)}" placeholder="0.00"></label>
+          ${entryType === "transfer"
+            ? ""
+            : `<label class="wu-field-row"><span class="wu-field-row__label">Account</span><select class="wu-field" name="accountId" required>${accountOptions(selectedAccountId)}</select></label>`}
+          ${quickTagsMarkup}
+          <label class="wu-field-row"><span class="wu-field-row__label">Note</span><input id="ledgerNote" class="wu-field" name="note" maxlength="500" value="${escapeHtml(entryNote)}" placeholder="${entryType === "expense" ? "shop name-what you bought" : "Optional"}"></label>
           ${entryType === "income"
             ? `<div id="ledgerRoutingHint" aria-live="polite">${incomeRoutingHint(state, {
               amount: Number(entryAmount),
@@ -608,10 +610,12 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
         note: button.dataset.ledgerTag ?? "",
         accountId: button.dataset.ledgerTagAccount ?? current.accountId,
       };
-      // A whole note is finished, so the amount is all that is left. A
-      // merchant prefix is half a note, so the caret stays in it.
+      // A merchant prefix is half a note, so the caret stays in it. A whole
+      // note is finished — and since the amount sits above the strip, the
+      // caret only travels back up to it when it is still empty; yanking
+      // focus off an amount already typed would undo the user's own order.
       if (button.dataset.ledgerTagKind === "prefix") focusLedgerNoteNext = true;
-      else focusLedgerAmountNext = true;
+      else focusLedgerAmountNext = current.amount.trim() === "";
       refresh(state, undefined, true);
     });
   });
