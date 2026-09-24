@@ -215,7 +215,7 @@ function shellTemplate(activePage: string, state: WealthState): string {
       <section id="pageMount"></section>
     </main>
     ${tabbarTemplate(activePage, checkinsDue)}
-    ${assistantTemplate()}
+    ${assistantTemplate(state)}
   `;
 }
 

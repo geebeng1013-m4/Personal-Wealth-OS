@@ -19,6 +19,7 @@ import {
   assistantMode,
   setShareFigures,
   shareFigures,
+  sharesFigures,
   noticeDismissed,
   updateRecord,
 } from "../src/components/assistant/assistantStore";
@@ -332,4 +333,14 @@ test("assistant store: switching account drops sharing, the open panel and a req
   assert.equal(shareFigures(), false);
   assert.equal(isSending(), false);
   assert.equal(controller.signal.aborted, true, "alice's answer never lands in bob's history");
+});
+
+test("assistant store: privacy mode keeps figures off the wire whatever the switch says", () => {
+  clearAssistantKeys();
+  __resetAssistantStore("alice");
+  setShareFigures(true);
+  assert.equal(sharesFigures(false), true, "asked for figures, mask down");
+  assert.equal(sharesFigures(true), false, "mask up wins over the switch");
+  setShareFigures(false);
+  assert.equal(sharesFigures(false), false, "never without being asked");
 });

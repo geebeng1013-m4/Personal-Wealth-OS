@@ -219,6 +219,19 @@ export function setAssistantMode(mode: AssistantMode): void {
 }
 
 export function shareFigures(): boolean { return sharingFigures; }
+
+/**
+ * Whether a send may carry figures.
+ *
+ * Two switches, one answer: the user asked for figures in this turn, and the
+ * screen mask is down. Privacy mode is the stronger statement of the two —
+ * amounts the user does not want on their own screen have no business on
+ * someone else's server — so it wins, and the panel disables the switch to say
+ * so rather than leave a control that does nothing.
+ */
+export function sharesFigures(maskAmounts: boolean): boolean {
+  return sharingFigures && !maskAmounts;
+}
 export function setShareFigures(value: boolean): void {
   sharingFigures = value;
 }
