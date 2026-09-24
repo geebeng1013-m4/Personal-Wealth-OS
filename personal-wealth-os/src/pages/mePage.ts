@@ -191,7 +191,7 @@ export function meTemplate(state: WealthState, user?: SessionUser): string {
       num("annualYield", "Annual yield %", pct(state.emergency.annualYield), "0.01") +
       emergencySuggestion(state))),
     row("opportunity", "Opportunity reserve", amt(amountOf(state.opportunity.total)), "", () => opportunityEditor(state)),
-    staticRow("Dip-buy tranches", tranches.length ? `${tranches.map((tranche) => `−${tranche.drawdown}`).join(" / ")}%` : "Not set", "desk"),
+    staticRow("Dip-buy tranches", tranches.length ? `${tranches.map((tranche) => `−${tranche.drawdown}`).join(" / ")}%` : "Not set"),
     cashflowRow("desk"),
   ].join("");
 

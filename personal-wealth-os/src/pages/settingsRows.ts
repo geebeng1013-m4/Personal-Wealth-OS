@@ -59,9 +59,13 @@ export function row(key: string, title: string, value: string, sub: string, edit
     </li>`;
 }
 
-/** A row that shows a value and does nothing else. */
+/**
+ * A row that shows a value and does nothing else. It carries a hidden chevron
+ * so its value sits on the same edge as the rows above it that open an editor —
+ * without it the column jogs right on the one row that cannot be tapped.
+ */
 export function staticRow(title: string, value: string, only: "" | "phone" | "desk" = ""): string {
-  return `<li class="wu-set__item${only ? ` wu-set__item--${only}` : ""}"><div class="wu-set__row wu-set__row--static"><span class="wu-set__title">${title}</span><span class="wu-set__value">${value}</span></div></li>`;
+  return `<li class="wu-set__item${only ? ` wu-set__item--${only}` : ""}"><div class="wu-set__row wu-set__row--static"><span class="wu-set__title">${title}</span><span class="wu-set__value">${value}<span class="wu-set__chev wu-set__chev--ghost" aria-hidden="true">›</span></span></div></li>`;
 }
 
 /** A group: its name above the list on a phone, inside the card's top-left on a desktop. */
