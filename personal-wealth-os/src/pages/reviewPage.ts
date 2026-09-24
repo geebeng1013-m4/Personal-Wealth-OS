@@ -16,7 +16,7 @@
 import type { WealthState } from "../models";
 import { createId } from "../state";
 import { money } from "../rules";
-import { escapeHtml } from "../html";
+import { amt, amtIn, escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import { getFinancialSnapshot, monthlyClose } from "../financialHealth";
 import { ledgerMonthTotals } from "../ledgerSummary";
@@ -35,6 +35,11 @@ const HISTORY_LIMIT = 5;
 const SCORE_MONTHS = 9;
 
 /** A figure without its currency prefix. */
+/** The line under the score, shared by the first paint and the repaint. */
+function calcNoteHtml(income: number, expenses: number, dcaInvested: number): string {
+  return `Calculated from ${amt(money(income))} income, ${amt(money(expenses))} spending and ${amt(money(dcaInvested))} invested that month.`;
+}
+
 function amountOf(value: number): string {
   return money(value, "").trim();
 }
@@ -53,7 +58,7 @@ function monthName(monthKey: string, long = false): string {
  */
 function checkinButton(item: Checkin): string {
   if (item.status !== "due") return "";
-  if (item.kind === "pay") return `<button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-checkin-pay="${escapeHtml(item.recurring?.id ?? "")}">Record ${escapeHtml(money(item.recurring?.amount ?? 0))}</button>`;
+  if (item.kind === "pay") return `<button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-checkin-pay="${escapeHtml(item.recurring?.id ?? "")}">Record ${amt(money(item.recurring?.amount ?? 0))}</button>`;
   if (item.kind === "weekly") return `<button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-checkin-weekly>Looks right</button><button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-checkin-spend>Add missing spending</button>`;
   return `<button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-checkin-review="${escapeHtml(item.month ?? "")}">Start review</button>`;
 }
@@ -78,13 +83,13 @@ function checkinsCard(board: CheckinBoard): string {
       <div class="wu-tc__top"><span class="wu-label" id="checkinsLabel">Check-ins</span>${due.length ? `<span class="wu-chip wu-chip--warning">${due.length} due</span>` : ""}</div>
       ${acknowledged ? `<p class="wu-checkins__done" role="status"><span aria-hidden="true">✓</span> ${escapeHtml(acknowledged)}</p>` : ""}
       ${prompt ? `<div class="wu-checkins__prompt">
-        <p>You recorded ${escapeHtml(money(prompt.amount))} on ${escapeHtml(new Date(prompt.date + "T00:00").toLocaleDateString("en-MY", { day: "numeric", month: "short" }))}. Is ${escapeHtml(prompt.label.toLowerCase())} paid around the ${prompt.dayOfMonth}${prompt.dayOfMonth % 10 === 1 && prompt.dayOfMonth !== 11 ? "st" : prompt.dayOfMonth % 10 === 2 && prompt.dayOfMonth !== 12 ? "nd" : prompt.dayOfMonth % 10 === 3 && prompt.dayOfMonth !== 13 ? "rd" : "th"} every month?</p>
+        <p>You recorded ${amt(money(prompt.amount))} on ${escapeHtml(new Date(prompt.date + "T00:00").toLocaleDateString("en-MY", { day: "numeric", month: "short" }))}. Is ${escapeHtml(prompt.label.toLowerCase())} paid around the ${prompt.dayOfMonth}${prompt.dayOfMonth % 10 === 1 && prompt.dayOfMonth !== 11 ? "st" : prompt.dayOfMonth % 10 === 2 && prompt.dayOfMonth !== 12 ? "nd" : prompt.dayOfMonth % 10 === 3 && prompt.dayOfMonth !== 13 ? "rd" : "th"} every month?</p>
         <div class="wu-row wu-row--tight"><button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-pay-prompt="yes">Yes, save as monthly income</button><button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-pay-prompt="no">It changes</button></div>
       </div>` : ""}
       ${due.length ? `<ul class="wu-checkins__list">
         ${due.map((item) => `<li class="wu-checkin is-due">
           <span class="wu-checkin__mark" aria-hidden="true"></span>
-          <span class="wu-checkin__text"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.detail)}</small></span>
+          <span class="wu-checkin__text"><strong>${escapeHtml(item.title)}</strong><small>${amtIn(item.detail)}</small></span>
           <span class="wu-checkin__actions">${checkinButton(item)}</span>
         </li>`).join("")}
       </ul>` : ""}
@@ -125,17 +130,17 @@ export function reviewTemplate(state: WealthState): string {
     const note = review.notes || "No notes";
     return `<li class="wu-review${open ? " is-open" : ""}">
         <button class="wu-review__row review-row" type="button" data-review-id="${escapeHtml(review.id)}" aria-expanded="${open}">
-          <span class="wu-review__month">${escapeHtml(monthName(review.month))}<small>Spent ${amountOf(review.spending)} · ${escapeHtml(note)}</small></span>
-          <span class="wu-review__num wu-review__col">${amountOf(review.income)}</span>
-          <span class="wu-review__num wu-review__col">${amountOf(review.spending)}</span>
+          <span class="wu-review__month">${escapeHtml(monthName(review.month))}<small>Spent ${amt(amountOf(review.spending))} · ${amtIn(note)}</small></span>
+          <span class="wu-review__num wu-review__col t-amt">${amountOf(review.income)}</span>
+          <span class="wu-review__num wu-review__col t-amt">${amountOf(review.spending)}</span>
           <span class="wu-review__col ${review.dcaDone ? "t-positive" : "t-faint"}">${review.dcaDone ? "Done" : "Missed"}</span>
           <span class="wu-review__score">${formatScore(review.disciplineScore)}<small>/10</small></span>
-          <span class="wu-review__note wu-review__col">${escapeHtml(note)}</span>
+          <span class="wu-review__note wu-review__col">${amtIn(note)}</span>
           <span class="wu-review__chev" aria-hidden="true">›</span>
         </button>
         ${open ? `<div class="wu-review__detail wu-stack wu-stack--sm">
-          <p class="wu-dash__note">${escapeHtml(note)}</p>
-          <p class="wu-dash__note">Income ${money(review.income)} · spent ${money(review.spending)} · DCA ${review.dcaDone ? "done" : "missed"} · score ${formatScore(review.disciplineScore)}/10</p>
+          <p class="wu-dash__note">${amtIn(note)}</p>
+          <p class="wu-dash__note">Income ${amt(money(review.income))} · spent ${amt(money(review.spending))} · DCA ${review.dcaDone ? "done" : "missed"} · score ${formatScore(review.disciplineScore)}/10</p>
           <div class="wu-row wu-row--tight"><button class="wu-btn wu-btn--ghost wu-btn--sm delete-review" data-id="${escapeHtml(review.id)}" type="button">Delete review</button></div>
         </div>` : ""}
       </li>`;
@@ -155,18 +160,18 @@ export function reviewTemplate(state: WealthState): string {
         <div class="wu-dash__full wu-dash__tiles wu-review-tiles">
           <section class="wu-card wu-dash__tile" aria-labelledby="revIncomeLabel">
             <div class="wu-tc__top"><span class="wu-label" id="revIncomeLabel">${escapeHtml(monthName(month, true).split(" ")[0])} income</span></div>
-            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(snapshot.currentMonthIncome)}</span></p>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(snapshot.currentMonthIncome)}</span></p>
             <p class="wu-dash__note">Recorded so far · ${reviewed ? "reviewed" : "not reviewed yet"}</p>
           </section>
           <section class="wu-card wu-dash__tile" aria-labelledby="revSpentLabel">
             <div class="wu-tc__top"><span class="wu-label" id="revSpentLabel">${escapeHtml(monthName(month, true).split(" ")[0])} spent</span></div>
-            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(snapshot.currentMonthExpenses)}</span></p>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(snapshot.currentMonthExpenses)}</span></p>
             <p class="wu-dash__note">Recorded so far</p>
           </section>
           <section class="wu-card wu-dash__tile" aria-labelledby="revDcaLabel">
             <div class="wu-tc__top"><span class="wu-label" id="revDcaLabel">DCA</span>${close.dcaDone ? `<span class="wu-chip">Done</span>` : `<span class="wu-chip wu-chip--warning">Pending</span>`}</div>
             <p class="wu-money wu-money--md"><span>${dcaText}</span></p>
-            <p class="wu-dash__note">${amountOf(close.dcaInvested)} of ${amountOf(state.dca.monthly)} invested</p>
+            <p class="wu-dash__note">${amt(amountOf(close.dcaInvested))} of ${amt(amountOf(state.dca.monthly))} invested</p>
           </section>
           <section class="wu-card wu-dash__tile" aria-labelledby="revScoreLabel">
             <div class="wu-tc__top"><span class="wu-label" id="revScoreLabel">Average score</span></div>
@@ -180,8 +185,8 @@ export function reviewTemplate(state: WealthState): string {
         <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-review-month" aria-labelledby="revMonthLabel">
           <div class="wu-tc__top"><span class="wu-label" id="revMonthLabel">${escapeHtml(monthName(month, true))}</span>${statusChip}</div>
           <div class="wu-three">
-            <div><span>Income</span><b>${amountOf(snapshot.currentMonthIncome)}</b></div>
-            <div><span>Spent</span><b>${amountOf(snapshot.currentMonthExpenses)}</b></div>
+            <div><span>Income</span><b class="t-amt">${amountOf(snapshot.currentMonthIncome)}</b></div>
+            <div><span>Spent</span><b class="t-amt">${amountOf(snapshot.currentMonthExpenses)}</b></div>
             <div><span>DCA</span><b class="${close.dcaDone ? "t-positive" : ""}">${dcaText}</b></div>
           </div>
           ${toggle(" wu-btn--block")}
@@ -196,7 +201,7 @@ export function reviewTemplate(state: WealthState): string {
             <label class="wu-field-row"><span class="wu-field-row__label">Income MYR</span><input class="wu-field" name="income" type="number" min="0" step="1" value="${snapshot.currentMonthIncome}"></label>
             <label class="wu-field-row"><span class="wu-field-row__label">Spending MYR</span><input class="wu-field" name="spending" type="number" min="0" step="1" value="${snapshot.currentMonthExpenses}"></label>
             <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Discipline score (out of 10)</span><input class="wu-field" name="disciplineScore" type="number" min="0" max="10" step="0.1" value="${scoreOutOfTen(close.disciplineScore)}"></label>
-            <p class="wu-field-row--wide t-caption t-faint" id="reviewCalcNote">Calculated from ${money(snapshot.currentMonthIncome)} income, ${money(snapshot.currentMonthExpenses)} spending and ${money(close.dcaInvested)} invested that month.</p>
+            <p class="wu-field-row--wide t-caption t-faint" id="reviewCalcNote">${calcNoteHtml(snapshot.currentMonthIncome, snapshot.currentMonthExpenses, close.dcaInvested)}</p>
             <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Notes</span><textarea class="wu-field" name="notes" rows="4" placeholder="This month's cash flow, investment discipline, and next month's actions"></textarea></label>
             <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save review</button></div>
           </form>
@@ -327,7 +332,7 @@ export function bindReview(root: HTMLElement, state: WealthState, setState: Sett
     const dcaSelect = form.querySelector<HTMLSelectElement>('select[name="dcaDone"]');
     if (dcaSelect) dcaSelect.value = close.dcaDone ? "true" : "false";
     const note = root.querySelector<HTMLElement>("#reviewCalcNote");
-    if (note) note.textContent = `Calculated from ${money(totals.income)} income, ${money(totals.expenses)} spending and ${money(close.dcaInvested)} invested that month.`;
+    if (note) note.innerHTML = calcNoteHtml(totals.income, totals.expenses, close.dcaInvested);
   });
 
   form?.addEventListener("submit", (event) => {

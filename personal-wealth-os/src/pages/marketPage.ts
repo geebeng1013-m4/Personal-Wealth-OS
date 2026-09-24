@@ -14,7 +14,7 @@
  */
 
 import type { WealthState } from "../models";
-import { escapeHtml, getTheme } from "../html";
+import { amt, escapeHtml, getTheme } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import { UNKNOWN } from "./valuationFormat";
 import { money, percent } from "../rules";
@@ -465,7 +465,7 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
     setAll("price", price == null ? UNKNOWN : price.toFixed(2));
     setAll("priceNote", price == null ? "No live quote for this symbol" : "Market data may be delayed");
     const held = holding != null && holding.units > 0;
-    setAll("value", held && holding.marketValueMyr != null ? escapeHtml(money(holding.marketValueMyr, "").trim()) : UNKNOWN);
+    setAll("value", held && holding.marketValueMyr != null ? amt(money(holding.marketValueMyr, "").trim()) : UNKNOWN);
     setAll("valueNote", held ? holding.units.toFixed(4) + " units" : "Not held");
     const target = holding?.targetAllocation ?? state.dca.targets[symbol] ?? 0;
     if (!holding || (!held && target <= 0)) {
