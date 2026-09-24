@@ -31,7 +31,7 @@ import {
   type LedgerFilters,
 } from "../ledger";
 import { getLedgerSnapshot } from "../ledgerSummary";
-import { ledgerTagsByCategory, type LedgerTag } from "../ledgerTags";
+import { categoryDrift, ledgerTagsByCategory, type LedgerTag } from "../ledgerTags";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
 let ledgerFilters: LedgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "", fundingSource: "all" };
@@ -155,6 +155,24 @@ function readEntryForm(form: HTMLFormElement | null): typeof ledgerEntryDraft {
     categoryId: form ? (new FormData(form).get("categoryId") as string | null) ?? "" : "",
     fundingSource: (field("fundingSource") as HTMLInputElement | null)?.checked ? "sponsored" : "personal",
   };
+}
+
+/**
+ * "toll usually goes under Transport" — one line, when a merchant has a
+ * settled home and this entry puts it somewhere else.
+ *
+ * A remark, not a correction: nothing is changed and nothing is blocked. The
+ * category the user picked is the one that gets saved.
+ */
+function categoryDriftHint(state: WealthState, note: string, categoryId: string): string {
+  const drift = categoryDrift(state.ledgerTransactions, note, categoryId, {
+    ...(ledgerEditingId ? { excludeTransactionId: ledgerEditingId } : {}),
+  });
+  if (!drift) return "";
+  const label = state.ledgerCategories.find((category) => category.id === drift.categoryId)?.label;
+  if (!label) return "";
+  const merchant = note.trim().split("-")[0]?.trim() || note.trim();
+  return `<span class="t-caption t-faint">“${escapeHtml(merchant)}” usually goes under ${escapeHtml(label)} — ${drift.underExpected} of the last ${drift.uses}.</span>`;
 }
 
 function defaultAccountIcon(type: LedgerAccountType): string {
@@ -332,6 +350,7 @@ export function ledgerTemplate(state: WealthState): string {
             : `<label class="wu-field-row"><span class="wu-field-row__label">Account</span><select class="wu-field" name="accountId" required>${accountOptions(selectedAccountId)}</select></label>`}
           ${quickTagsMarkup}
           <label class="wu-field-row"><span class="wu-field-row__label">Note</span><input id="ledgerNote" class="wu-field" name="note" maxlength="500" value="${escapeHtml(entryNote)}" placeholder="${entryType === "expense" ? "shop name-what you bought" : "Optional"}"></label>
+          ${entryType === "expense" ? `<p id="ledgerCategoryHint" aria-live="polite">${categoryDriftHint(state, entryNote, selectedCategoryId)}</p>` : ""}
           ${entryType === "income"
             ? `<div id="ledgerRoutingHint" aria-live="polite">${incomeRoutingHint(state, {
               amount: Number(entryAmount),
@@ -583,6 +602,17 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
     note?.setSelectionRange(note.value.length, note.value.length);
   }
 
+  // The drift line depends on the note and the category, and both change
+  // without a re-render, so it is redrawn in place like the income hint above.
+  const driftHint = root.querySelector<HTMLElement>("#ledgerCategoryHint");
+  const noteField = root.querySelector<HTMLInputElement>("#ledgerNote");
+  const redrawDrift = () => {
+    if (!driftHint) return;
+    const picked = root.querySelector<HTMLInputElement>('#ledgerForm input[name="categoryId"]:checked');
+    driftHint.innerHTML = categoryDriftHint(state, noteField?.value ?? "", picked?.value ?? "");
+  };
+  noteField?.addEventListener("input", redrawDrift);
+
   // Swapping which category's tags are on screen. Toggling `hidden` rather
   // than re-rendering keeps whatever the user has already typed in the form.
   root.querySelectorAll<HTMLInputElement>('#ledgerForm input[name="categoryId"]').forEach((radio) => {
@@ -590,6 +620,7 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
       root.querySelectorAll<HTMLElement>("[data-ledger-tags]").forEach((strip) => {
         strip.hidden = strip.dataset.ledgerTags !== radio.value;
       });
+      redrawDrift();
     });
   });
   root.querySelectorAll<HTMLButtonElement>("[data-ledger-tags-more]").forEach((button) => {
