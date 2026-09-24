@@ -42,3 +42,35 @@ export function numberInput(name: string, label: string, value = "", step = "0.0
 export function getTheme(): string {
   return document.documentElement.getAttribute("data-theme") ?? "light";
 }
+
+/**
+ * Mark a formatted figure as money, so privacy mode can blur it.
+ *
+ * Privacy mode (Settings → "Mask amounts on screen") blurs `.t-amt` and
+ * nothing else in new markup, which is why this wraps the figure rather than
+ * the sentence around it: "Assets 12,000 · liabilities 3,000" keeps its words
+ * readable and hides only the two numbers.
+ *
+ * Takes the already-formatted string — `money()`, `percent()` and the pages'
+ * own prefix-less variants all stay the single formatters — and escapes it,
+ * because a figure that ever carries a symbol from remote data must not become
+ * markup. Only for text positions: an attribute needs the bare string.
+ */
+export function amt(figure: string): string {
+  return `<span class="t-amt">${escapeHtml(figure)}</span>`;
+}
+
+/** Currency-prefixed figures: "MYR 1,234.56", "RM20,000", "USD 0.31". */
+const CURRENCY_FIGURE = /(?:MYR|RM|USD|HKD|SGD|GBP|EUR|JPY)\s?-?[\d,]+(?:\.\d+)?/g;
+
+/**
+ * Escape a sentence, then mark the money inside it.
+ *
+ * For text a domain module wrote — a stage reason, an advisor line — where the
+ * figures are baked into the sentence and the module has no business returning
+ * markup. Only currency-prefixed figures match, so dates, counts and
+ * percentages in the same sentence stay as they are.
+ */
+export function amtIn(text: string): string {
+  return escapeHtml(text).replace(CURRENCY_FIGURE, (figure) => `<span class="t-amt">${figure}</span>`);
+}

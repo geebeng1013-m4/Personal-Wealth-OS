@@ -15,7 +15,7 @@
 import type { WealthState } from "../models";
 import { MAX_FINANCIAL_GOAL_CHARS, createId, normalizeFinancialGoal } from "../state";
 import { money, percent } from "../rules";
-import { escapeHtml } from "../html";
+import { amt, escapeHtml } from "../html";
 import { accountBalances } from "../ledger";
 import { pageHeader } from "../components/pageHeader";
 import { getGoalsSnapshot, type GoalSnapshot } from "../goalSummary";
@@ -73,7 +73,7 @@ function spentDate(day: string): string {
 
 /** What the linked account puts in the Current slot, e.g. "28 · from MAE wallet". */
 function linkedCurrentText(balance: number, accountName: string): string {
-  return `${escapeHtml(amountOf(balance))} · from ${escapeHtml(accountName)}`;
+  return `${amt(amountOf(balance))} · from ${escapeHtml(accountName)}`;
 }
 
 function goalEditor(state: WealthState, snapshot: GoalSnapshot, featured: boolean): string {
@@ -163,14 +163,14 @@ function goalRow(state: WealthState, snapshot: GoalSnapshot, featuredId: string)
     ? `<span class="t-positive">Done</span>`
     : snapshot.isComplete
     ? `<span class="t-positive">Reached</span>`
-    : snapshot.monthlyContribution > 0 ? `+${amountOf(snapshot.monthlyContribution)}` : `<span class="t-faint">0</span>`;
+    : snapshot.monthlyContribution > 0 ? amt(`+${amountOf(snapshot.monthlyContribution)}`) : `<span class="t-faint">0</span>`;
   return `<li class="wu-goal${open ? " is-open" : ""}${snapshot.isComplete ? " is-done" : ""}">
       <button class="wu-goal__row goal-row" type="button" data-index="${snapshot.index}" aria-expanded="${open}">
-        <span class="wu-goal__title">${escapeHtml(snapshot.label || snapshot.name)}${featured ? ` <span class="wu-chip wu-chip--muted wu-goal__pin">On Dashboard</span>` : ""}<small>${spentLabel ? escapeHtml(spentLabel) : `${snapshot.isComplete ? escapeHtml(pace) : `+${amountOf(snapshot.monthlyContribution)} / mo · ${escapeHtml(pace)}`}`}</small></span>
+        <span class="wu-goal__title">${escapeHtml(snapshot.label || snapshot.name)}${featured ? ` <span class="wu-chip wu-chip--muted wu-goal__pin">On Dashboard</span>` : ""}<small>${spentLabel ? escapeHtml(spentLabel) : `${snapshot.isComplete ? escapeHtml(pace) : `${amt(`+${amountOf(snapshot.monthlyContribution)}`)} / mo · ${escapeHtml(pace)}`}`}</small></span>
         <span class="wu-goal__monthly">${monthly}</span>
         <span class="wu-goal__bar"><span class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(ratio * 100)}%"></span></span></span>
         <span class="wu-goal__pct">${snapshot.isSpent ? `<span class="wu-chip">Done</span>` : snapshot.isComplete ? `<span class="wu-chip">Reached</span>` : percent(ratio)}</span>
-        <span class="wu-goal__amount">${amountOf(snapshot.currentAmount)} / ${amountOf(snapshot.targetAmount)}</span>
+        <span class="wu-goal__amount t-amt">${amountOf(snapshot.currentAmount)} / ${amountOf(snapshot.targetAmount)}</span>
         <span class="wu-goal__chev" aria-hidden="true">›</span>
       </button>
       ${open ? (editingGoal ? goalEditor(state, snapshot, featured) : goalDetails(snapshot)) : ""}
@@ -205,18 +205,18 @@ export function goalsTemplate(state: WealthState): string {
         <div class="wu-dash__full wu-dash__tiles wu-goals-tiles">
           <section class="wu-card wu-dash__tile" aria-labelledby="goalsSavedLabel">
             <div class="wu-tc__top"><span class="wu-label" id="goalsSavedLabel">Saved</span></div>
-            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(goals.totalFunded)}</span></p>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(goals.totalFunded)}</span></p>
             <p class="wu-dash__note">${percent(overall)} of all targets</p>
             <div class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(overall * 100)}%"></span></div>
           </section>
           <section class="wu-card wu-dash__tile" aria-labelledby="goalsTargetLabel">
             <div class="wu-tc__top"><span class="wu-label" id="goalsTargetLabel">All targets</span></div>
-            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(goals.totalTarget)}</span></p>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(goals.totalTarget)}</span></p>
             <p class="wu-dash__note">Across ${state.goals.length} ${state.goals.length === 1 ? "goal" : "goals"}</p>
           </section>
           <section class="wu-card wu-dash__tile" aria-labelledby="goalsMonthLabel">
             <div class="wu-tc__top"><span class="wu-label" id="goalsMonthLabel">Each month</span></div>
-            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(goals.totalMonthlyContribution)}</span></p>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(goals.totalMonthlyContribution)}</span></p>
             <p class="wu-dash__note">Into ${goals.activeCount} open ${goals.activeCount === 1 ? "goal" : "goals"}</p>
           </section>
           <section class="wu-card wu-dash__tile" aria-labelledby="goalsDoneLabel">
@@ -229,9 +229,9 @@ export function goalsTemplate(state: WealthState): string {
         <!-- phone — overall progress in one card -->
         <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-goals-summary" aria-labelledby="goalsAllLabel">
           <div class="wu-tc__top"><span class="wu-label" id="goalsAllLabel">All goals</span>${doneCount ? `<span class="wu-chip">${doneCount} done</span>` : reachedCount ? `<span class="wu-chip">${reachedCount} reached</span>` : ""}</div>
-          <p class="wu-money"><span>${amountOf(goals.totalFunded)}</span><span class="wu-money__of">of ${amountOf(goals.totalTarget)} MYR</span></p>
+          <p class="wu-money"><span class="t-amt">${amountOf(goals.totalFunded)}</span><span class="wu-money__of">of <span class="t-amt">${amountOf(goals.totalTarget)}</span> MYR</span></p>
           <div class="wu-bar"><span class="wu-bar__fill" style="width:${Math.round(overall * 100)}%"></span></div>
-          <p class="wu-dash__note">Putting away MYR ${amountOf(goals.totalMonthlyContribution)} a month across ${goals.activeCount} open ${goals.activeCount === 1 ? "goal" : "goals"}.</p>
+          <p class="wu-dash__note">Putting away MYR ${amt(amountOf(goals.totalMonthlyContribution))} a month across ${goals.activeCount} open ${goals.activeCount === 1 ? "goal" : "goals"}.</p>
         </section>
 
         <!-- GOALS — a table on a desktop, rows with a bar on a phone -->

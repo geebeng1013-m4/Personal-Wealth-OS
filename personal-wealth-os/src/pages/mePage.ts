@@ -14,7 +14,7 @@ import { bindLiabilityForm, liabilityFields, readLiabilityForm } from "../compon
 import { createId } from "../state";
 import { syncPlanningRules } from "../financialRules";
 import { DEFAULT_EMERGENCY_MONTHS, money, suggestedEmergencyTarget } from "../rules";
-import { escapeHtml } from "../html";
+import { amt, escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import { planTickers, tradedTickers, withPlannedCustomTickers } from "../planTickers";
 import { amountOf, bindRowPage, editorForm, field, group, num, pct, row, staticRow } from "./settingsRows";
@@ -34,7 +34,7 @@ function emergencySuggestion(state: WealthState): string {
   }
   const already = state.emergency.target === suggestion.target;
   return `<div class="wu-field-row--wide settings-suggest">
-    <p class="t-caption t-muted">Suggested target: <strong>${money(suggestion.target)}</strong> &mdash; ${suggestion.months} months of your essential spending (${money(suggestion.monthlyEssential)}/month). WealthUp's standard is 3&ndash;6 months.</p>
+    <p class="t-caption t-muted">Suggested target: <strong>${amt(money(suggestion.target))}</strong> &mdash; ${suggestion.months} months of your essential spending (${amt(money(suggestion.monthlyEssential))}/month). WealthUp's standard is 3&ndash;6 months.</p>
     ${already
       ? `<span class="t-caption t-faint">Your target already matches.</span>`
       : `<button class="wu-btn wu-btn--secondary wu-btn--sm" type="button" data-suggest-emergency="${suggestion.target}">Use ${DEFAULT_EMERGENCY_MONTHS} months</button>`}
@@ -168,7 +168,7 @@ export function meTemplate(state: WealthState, user?: SessionUser): string {
   const tickers = planTickers(state);
   const tranches = state.opportunity.tranches ?? [];
 
-  const cashflowRow = (only: "phone" | "desk") => row("cashflow", "Monthly cash flow", amountOf(state.cashflow.allowance), "Allowance, fixed costs, irregular income", () => editorForm("cashflow",
+  const cashflowRow = (only: "phone" | "desk") => row("cashflow", "Monthly cash flow", amt(amountOf(state.cashflow.allowance)), "Allowance, fixed costs, irregular income", () => editorForm("cashflow",
     num("allowance", "Monthly allowance MYR", String(state.cashflow.allowance), "1") +
     num("transport", "Transport MYR", String(state.cashflow.transport), "1") +
     num("food", "Food MYR", String(state.cashflow.food), "1") +
@@ -176,21 +176,21 @@ export function meTemplate(state: WealthState, user?: SessionUser): string {
     num("irregularIncome", "Irregular income MYR", String(state.cashflow.irregularIncome), "1")), only);
 
   const moneyRows = [
-    row("recurring", "Recurring items", String(state.recurringTransactions.length), activeRecurring.length ? `+${amountOf(recurringIn)} in · −${amountOf(recurringOut)} out` : "None yet", () => recurringEditor(state)),
-    row("liabilities", "Liabilities", amountOf(liabilityTotal), state.liabilities.length ? escapeHtml(state.liabilities.map((item) => item.name).join(", ")) : "None recorded", () => liabilitiesEditor(state)),
+    row("recurring", "Recurring items", String(state.recurringTransactions.length), activeRecurring.length ? `${amt(`+${amountOf(recurringIn)}`)} in · ${amt(`−${amountOf(recurringOut)}`)} out` : "None yet", () => recurringEditor(state)),
+    row("liabilities", "Liabilities", amt(amountOf(liabilityTotal)), state.liabilities.length ? escapeHtml(state.liabilities.map((item) => item.name).join(", ")) : "None recorded", () => liabilitiesEditor(state)),
     cashflowRow("phone"),
   ].join("");
 
   const planRows = [
-    row("dca", "Monthly DCA", amountOf(state.dca.monthly), "", () => editorForm("dca", num("dcaMonthly", "DCA monthly MYR", String(state.dca.monthly), "1"))),
+    row("dca", "Monthly DCA", amt(amountOf(state.dca.monthly)), "", () => editorForm("dca", num("dcaMonthly", "DCA monthly MYR", String(state.dca.monthly), "1"))),
     row("targets", "DCA targets", tickers.map((ticker) => pct(state.dca.targets[ticker] ?? 0)).join(" / "), escapeHtml(tickers.join(" · ")), () => targetsEditor(state)),
-    row("emergency", "Emergency fund", `${amountOf(state.emergency.current)} / ${amountOf(state.emergency.target)}`, "", () => editorForm("emergency",
+    row("emergency", "Emergency fund", `${amt(amountOf(state.emergency.current))} / ${amt(amountOf(state.emergency.target))}`, "", () => editorForm("emergency",
       num("current", "Current emergency MYR", String(state.emergency.current), "1") +
       num("target", "Target emergency MYR", String(state.emergency.target), "1") +
       num("monthlyTopUp", "Monthly top-up MYR", String(state.emergency.monthlyTopUp), "1") +
       num("annualYield", "Annual yield %", pct(state.emergency.annualYield), "0.01") +
       emergencySuggestion(state))),
-    row("opportunity", "Opportunity reserve", amountOf(state.opportunity.total), "", () => opportunityEditor(state)),
+    row("opportunity", "Opportunity reserve", amt(amountOf(state.opportunity.total)), "", () => opportunityEditor(state)),
     staticRow("Dip-buy tranches", tranches.length ? `${tranches.map((tranche) => `−${tranche.drawdown}`).join(" / ")}%` : "Not set", "desk"),
     cashflowRow("desk"),
   ].join("");

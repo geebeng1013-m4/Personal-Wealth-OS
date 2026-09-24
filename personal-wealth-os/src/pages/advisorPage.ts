@@ -24,7 +24,7 @@ import type { WealthState, OpportunityTranche } from "../models";
 import type { AdvisorRecommendation } from "../models";
 import { createId } from "../state";
 import { money } from "../rules";
-import { escapeHtml } from "../html";
+import { amt, amtIn, escapeHtml } from "../html";
 import { getAdvisorSnapshot } from "../advisor";
 import { isRecommendationCompleted, markRecommendationDone, undoRecommendationDone } from "../actionRecords";
 import { assetDrawdownBelow } from "../drawdowns";
@@ -95,8 +95,8 @@ function priorityCard(state: WealthState, priority: AdvisorRecommendation | null
         : `<span class="wu-chip">On track</span>`;
   return `<section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-advisor-priority" aria-labelledby="advPriorityLabel">
       <div class="wu-tc__top"><span class="wu-label" id="advPriorityLabel">Priority</span>${chip}</div>
-      <h3 class="wu-advisor-heading">${escapeHtml(priority.action)}</h3>
-      <p class="wu-dash__note">${escapeHtml(priority.fact)}</p>
+      <h3 class="wu-advisor-heading">${amtIn(priority.action)}</h3>
+      <p class="wu-dash__note">${amtIn(priority.fact)}</p>
       <div class="wu-row wu-row--tight wu-dash__actions">${destinationButton(priority, true)}${done ? undoDoneButton(priority) : markDoneButton(priority)}</div>
     </section>`;
 }
@@ -108,13 +108,13 @@ function guidanceRow(state: WealthState, recommendation: AdvisorRecommendation):
   return `<li class="wu-advice${open ? " is-open" : ""}${done ? " is-done" : ""}" data-recommendation-id="${escapeHtml(recommendation.id)}">
       <button class="wu-advice__row advice-row" type="button" data-advice-id="${escapeHtml(recommendation.id)}" aria-expanded="${open}">
         <i class="wu-advice__dot ${severityDot(recommendation.severity)}" aria-hidden="true"></i>
-        <span class="wu-advice__title">${escapeHtml(recommendation.title)}<small>${escapeHtml(recommendation.fact)}</small></span>
-        <span class="wu-advice__value">${escapeHtml(value)}${done ? `<small class="t-positive">Done</small>` : ""}</span>
+        <span class="wu-advice__title">${amtIn(recommendation.title)}<small>${amtIn(recommendation.fact)}</small></span>
+        <span class="wu-advice__value">${amtIn(value)}${done ? `<small class="t-positive">Done</small>` : ""}</span>
         <span class="wu-advice__chev" aria-hidden="true">›</span>
       </button>
       ${open ? `<div class="wu-advice__detail wu-stack wu-stack--sm">
-        <p class="wu-advice__text"><span class="wu-label">What we see</span>${escapeHtml(recommendation.fact)}</p>
-        <p class="wu-advice__text"><span class="wu-label">Next step</span>${escapeHtml(recommendation.action)}</p>
+        <p class="wu-advice__text"><span class="wu-label">What we see</span>${amtIn(recommendation.fact)}</p>
+        <p class="wu-advice__text"><span class="wu-label">Next step</span>${amtIn(recommendation.action)}</p>
         <div class="wu-row wu-row--tight">${destinationButton(recommendation, false)}${markDoneControl(state, recommendation)}</div>
       </div>` : ""}
     </li>`;
@@ -127,11 +127,11 @@ function trancheRow(tranche: OpportunityTranche, index: number): string {
       <button class="wu-step__row dip-row" type="button" data-tranche="${index}" aria-expanded="${open}">
         <b class="wu-step__drop">−${tranche.drawdown}%</b>
         <span class="wu-step__bar" aria-hidden="true"><i class="dip-bar" data-tranche="${index}" style="width:${tranche.deployed ? 100 : 0}%"></i></span>
-        <span class="wu-step__amount">${amountOf(tranche.amount)}<small class="dip-status${tranche.deployed ? " t-positive" : ""}" data-tranche="${index}">${tranche.deployed ? "Deployed" : "—"}</small></span>
+        <span class="wu-step__amount"><span class="t-amt">${amountOf(tranche.amount)}</span><small class="dip-status${tranche.deployed ? " t-positive" : ""}" data-tranche="${index}">${tranche.deployed ? "Deployed" : "—"}</small></span>
         <span class="wu-step__chev" aria-hidden="true">›</span>
       </button>
       ${open ? `<div class="wu-step__detail wu-stack wu-stack--sm">
-        <p class="wu-dash__note">Deploy ${money(tranche.amount)} when VOO or QQQM is ${tranche.drawdown}% below its high · VOO ${money(half)} / QQQM ${money(half)}. Marking it deployed moves the amount into the reserve's Used total — you decide when you actually buy.</p>
+        <p class="wu-dash__note">Deploy ${amt(money(tranche.amount))} when VOO or QQQM is ${tranche.drawdown}% below its high · VOO ${amt(money(half))} / QQQM ${amt(money(half))}. Marking it deployed moves the amount into the reserve's Used total — you decide when you actually buy.</p>
         <div class="wu-row wu-row--tight">${tranche.deployed
           ? `<button class="wu-btn wu-btn--ghost wu-btn--sm dip-undo" data-tranche="${index}" type="button">Undo</button>`
           : `<button class="wu-btn wu-btn--secondary wu-btn--sm dip-deploy" data-tranche="${index}" type="button">Mark deployed</button>`}</div>
@@ -144,11 +144,11 @@ function ladderCard(state: WealthState): string {
   const deployed = opportunity.tranches.filter((tranche) => tranche.deployed).length;
   const split = Object.entries(opportunity.allocation)
     .filter(([, amount]) => amount > 0)
-    .map(([ticker, amount]) => `${escapeHtml(ticker)} ${amountOf(amount)}`)
+    .map(([ticker, amount]) => `${escapeHtml(ticker)} ${amt(amountOf(amount))}`)
     .join(" · ");
   return `<section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-advisor-ladder" aria-labelledby="advLadderLabel">
       <div class="wu-tc__top"><span class="wu-label" id="advLadderLabel">Dip-buy ladder</span><span class="wu-chip wu-chip--muted">${deployed} / ${opportunity.tranches.length} deployed</span></div>
-      <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(opportunity.total - opportunity.used)}</span><span class="wu-money__of">left of ${amountOf(opportunity.total)}</span></p>
+      <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(opportunity.total - opportunity.used)}</span><span class="wu-money__of">left of ${amt(amountOf(opportunity.total))}</span></p>
       ${opportunity.tranches.length
         ? `<ul class="wu-steps">${opportunity.tranches.map((tranche, index) => trancheRow(tranche, index)).join("")}</ul>`
         : `<p class="wu-empty">No drawdown steps set.</p>`}

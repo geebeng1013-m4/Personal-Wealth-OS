@@ -21,7 +21,7 @@
 
 import type { RuleCardId, RuleNote, WealthState } from "../models";
 import { money, percent, projectedAnnualEmergencyYield } from "../rules";
-import { escapeHtml } from "../html";
+import { amt, amtIn, escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import { getBudgetSnapshot } from "../budgetSummary";
 import { rulesGuideTemplate } from "./rulesGuide";
@@ -64,7 +64,7 @@ function amountOf(value: number): string {
 function ruleItems(state: WealthState): RuleItem[] {
   const budget = getBudgetSnapshot(state);
   const targets = Object.entries(state.dca.targets)
-    .map(([ticker, weight]) => `${ticker} ${percent(weight)}`);
+    .map(([ticker, weight]) => `${escapeHtml(ticker)} ${percent(weight)}`);
   const split = Object.entries(state.opportunity.allocation)
     .filter(([, amount]) => amount > 0)
     .map(([ticker, amount]) => `${money(amount)} ${ticker}`);
@@ -74,31 +74,31 @@ function ruleItems(state: WealthState): RuleItem[] {
       id: "monthly-cashflow",
       title: "Monthly Cashflow",
       body: `${money(budget.plannedAllowance)} allowance, ${money(budget.plannedSpending)} basic spending, ${money(budget.plannedSurplus)} assignable surplus.`,
-      sub: `${amountOf(budget.plannedAllowance)} allowance · ${amountOf(budget.plannedSpending)} basics`,
-      value: `${budget.plannedSurplus >= 0 ? "+" : "−"}${amountOf(Math.abs(budget.plannedSurplus))}`,
+      sub: `${amt(amountOf(budget.plannedAllowance))} allowance · ${amt(amountOf(budget.plannedSpending))} basics`,
+      value: amt(`${budget.plannedSurplus >= 0 ? "+" : "−"}${amountOf(Math.abs(budget.plannedSurplus))}`),
     },
     {
       id: "dca-mandate",
       title: "DCA Mandate",
       body: `${money(state.dca.monthly)} per month.${targets.length ? ` ${targets.join(" / ")}.` : ""}`,
       sub: targets.join(" · ") || "No targets set",
-      value: `${amountOf(state.dca.monthly)} / mo`,
+      value: `${amt(amountOf(state.dca.monthly))} / mo`,
     },
     {
       id: "emergency-fund",
       title: "Emergency Fund",
       body: `${money(state.emergency.current)} / ${money(state.emergency.target)}. Estimated annual yield: ${money(projectedAnnualEmergencyYield(state))}.`,
-      sub: `Est. yield ${money(projectedAnnualEmergencyYield(state))} a year`,
-      value: amountOf(state.emergency.current),
+      sub: `Est. yield ${amt(money(projectedAnnualEmergencyYield(state)))} a year`,
+      value: amt(amountOf(state.emergency.current)),
     },
     {
       id: "opportunity-reserve",
       title: "Opportunity Reserve",
       body: `${money(state.opportunity.total)} one-time reserve.${split.length ? ` Split ${split.join(" / ")}.` : ""}`,
       sub: split.length
-        ? Object.entries(state.opportunity.allocation).filter(([, amount]) => amount > 0).map(([ticker, amount]) => `${ticker} ${amountOf(amount)}`).join(" · ")
+        ? Object.entries(state.opportunity.allocation).filter(([, amount]) => amount > 0).map(([ticker, amount]) => `${escapeHtml(ticker)} ${amt(amountOf(amount))}`).join(" · ")
         : "Not split yet",
-      value: amountOf(state.opportunity.total),
+      value: amt(amountOf(state.opportunity.total)),
     },
     {
       id: "bear-market-deployment",
@@ -137,9 +137,9 @@ function ruleItems(state: WealthState): RuleItem[] {
 /** A note's lines as a numbered list when it has several, or one paragraph. */
 function noteBody(body: string): string {
   const lines = body.split("\n").map((line) => line.trim()).filter(Boolean);
-  if (lines.length <= 1) return `<p class="wu-rule-note__text">${escapeHtml(lines[0] ?? "")}</p>`;
+  if (lines.length <= 1) return `<p class="wu-rule-note__text">${amtIn(lines[0] ?? "")}</p>`;
   // Numbering the user typed ("1.", "-", "•") is dropped, since the list numbers itself.
-  return `<ol class="wu-rule-note__list">${lines.map((line) => `<li>${escapeHtml(line.replace(/^(\d+[.)]|[-•*])\s+/, ""))}</li>`).join("")}</ol>`;
+  return `<ol class="wu-rule-note__list">${lines.map((line) => `<li>${amtIn(line.replace(/^(\d+[.)]|[-•*])\s+/, ""))}</li>`).join("")}</ol>`;
 }
 
 function noteForm(id: string, title: string, body: string): string {
@@ -169,13 +169,16 @@ export function rulesTemplate(state: WealthState): string {
   const visible = items.filter((item) => !state.hiddenRuleIds.includes(item.id));
   const hidden = items.filter((item) => state.hiddenRuleIds.includes(item.id));
 
+  /** sub/value are markup when generated, the user's own words when edited. */
+  const line = (item: RuleItem, text: string): string => item.edited ? escapeHtml(text) : text;
+
   const ruleRows = visible.map((item) => {
     const open = openRuleId === item.id;
     const editing = editingRuleId === item.id;
     return `<li class="wu-rule${open ? " is-open" : ""}">
         <button class="wu-rule__row rule-row" type="button" data-rule-id="${item.id}" aria-expanded="${open}">
-          <span class="wu-rule__title">${escapeHtml(item.title)}<small>${escapeHtml(item.sub)}</small></span>
-          <span class="wu-rule__value${item.edited ? " t-faint" : ""}">${escapeHtml(item.value)}</span>
+          <span class="wu-rule__title">${escapeHtml(item.title)}<small>${line(item, item.sub)}</small></span>
+          <span class="wu-rule__value${item.edited ? " t-faint" : ""}">${line(item, item.value)}</span>
           <span class="wu-rule__chev" aria-hidden="true">›</span>
         </button>
         ${open ? `<div class="wu-rule__detail wu-stack wu-stack--sm">
@@ -186,7 +189,7 @@ export function rulesTemplate(state: WealthState): string {
               <p class="form-error wu-field-row__error" role="alert"></p>
               <div class="wu-row wu-row--tight"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button><button class="wu-btn wu-btn--ghost wu-btn--sm cancel-rule-edit" type="button">Cancel</button></div>
             </form>`
-            : `<p class="wu-dash__note t-prewrap">${escapeHtml(item.body)}</p>
+            : `<p class="wu-dash__note t-prewrap">${amtIn(item.body)}</p>
           <div class="wu-row wu-row--tight">
             <button class="wu-btn wu-btn--secondary wu-btn--sm edit-rule" data-rule-id="${item.id}" type="button">Edit</button>
             <button class="wu-btn wu-btn--ghost wu-btn--sm hide-rule" data-rule-id="${item.id}" type="button">Hide</button>
@@ -198,7 +201,7 @@ export function rulesTemplate(state: WealthState): string {
   const hiddenBlock = hidden.length
     ? `<div class="wu-rule-hidden">
         <button class="wu-btn wu-btn--ghost wu-btn--sm" id="toggleHiddenRules" type="button" aria-expanded="${showHiddenRules}">${hidden.length} hidden · ${showHiddenRules ? "Hide list" : "Show"}</button>
-        ${showHiddenRules ? `<ul class="wu-rule-list">${hidden.map((item) => `<li class="wu-rule"><div class="wu-rule__row wu-rule__row--static"><span class="wu-rule__title t-faint">${escapeHtml(item.title)}<small>${escapeHtml(item.sub)}</small></span><button class="wu-btn wu-btn--secondary wu-btn--sm restore-rule" data-rule-id="${item.id}" type="button">Restore</button></div></li>`).join("")}</ul>` : ""}
+        ${showHiddenRules ? `<ul class="wu-rule-list">${hidden.map((item) => `<li class="wu-rule"><div class="wu-rule__row wu-rule__row--static"><span class="wu-rule__title t-faint">${escapeHtml(item.title)}<small>${line(item, item.sub)}</small></span><button class="wu-btn wu-btn--secondary wu-btn--sm restore-rule" data-rule-id="${item.id}" type="button">Restore</button></div></li>`).join("")}</ul>` : ""}
       </div>`
     : "";
 

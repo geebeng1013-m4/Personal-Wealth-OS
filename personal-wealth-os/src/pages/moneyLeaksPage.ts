@@ -15,7 +15,7 @@
 import type { AdvisorRecommendation, WealthState } from "../models";
 import { detectMoneyLeaks, getAdvisorSnapshot, type MoneyLeak } from "../advisor";
 import { money } from "../rules";
-import { escapeHtml } from "../html";
+import { amt, amtIn, escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import { isRecommendationCompleted, markRecommendationDone, undoRecommendationDone } from "../actionRecords";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
@@ -118,15 +118,15 @@ function leakDoneNote(state: WealthState, recommendation: AdvisorRecommendation 
  */
 export function leakDetailContent(state: WealthState, leak: MoneyLeak, advice: AdvisorRecommendation | undefined, compact = false): string {
   const severity = severityText(leak.severity);
-  const evidence = leak.evidence.length ? `<ul class="wu-facts wu-facts--plain wu-leak-evidence">${leak.evidence.map((item) => `<li><span>${escapeHtml(item.label)}</span><span>${escapeHtml(item.value)}</span></li>`).join("")}</ul>` : "";
+  const evidence = leak.evidence.length ? `<ul class="wu-facts wu-facts--plain wu-leak-evidence">${leak.evidence.map((item) => `<li><span>${escapeHtml(item.label)}</span><span>${amtIn(item.value)}</span></li>`).join("")}</ul>` : "";
   const reasoning = advice
-    ? `<p class="wu-leak-advice"><span class="wu-label">Why it matters</span>${escapeHtml(advice.impact)}</p>
-    <p class="wu-leak-advice"><span class="wu-label">Next move</span>${escapeHtml(advice.action)}</p>`
+    ? `<p class="wu-leak-advice"><span class="wu-label">Why it matters</span>${amtIn(advice.impact)}</p>
+    <p class="wu-leak-advice"><span class="wu-label">Next move</span>${amtIn(advice.action)}</p>`
     : `<p class="wu-leak-advice"><span class="wu-label">Next move</span>No recommendation applies to this finding yet. The observation above is the full picture.</p>`;
   const primary = `<button class="wu-btn wu-btn--primary wu-btn--sm leak-primary-action" data-action="${leak.primaryAction}" type="button">${escapeHtml(leak.actionLabel)}</button>`;
   const askAdvisor = `<button class="wu-btn wu-btn--secondary wu-btn--sm leak-advisor-action" type="button">Ask Advisor</button>`;
-  const head = `<p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(leak.annualImpact)}</span><span class="wu-money__of">${leak.impactBasis === "one-time" ? "observed once" : "a year"}</span></p>
-    <p class="wu-dash__note">${escapeHtml(leak.summary)}</p>`;
+  const head = `<p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(leak.annualImpact)}</span><span class="wu-money__of">${leak.impactBasis === "one-time" ? "observed once" : "a year"}</span></p>
+    <p class="wu-dash__note">${amtIn(leak.summary)}</p>`;
 
   if (compact) {
     return `<div class="leak-detail-content wu-stack wu-stack--sm" data-leak-detail="${escapeHtml(leak.id)}">
@@ -171,11 +171,11 @@ export function moneyLeaksTemplate(state: WealthState): string {
     const isSelected = leak.id === selected?.id;
     const open = isSelected && leakDetailOpen;
     const severity = severityText(leak.severity);
-    const basis = leak.impactBasis === "one-time" ? "observed once" : `${amountOf(leak.monthlyImpact)} / mo`;
+    const basis = leak.impactBasis === "one-time" ? "observed once" : `${amt(amountOf(leak.monthlyImpact))} / mo`;
     return `<li class="wu-leak${isSelected ? " is-selected" : ""}${open ? " is-open" : ""}">
         <button class="wu-leak__row leak-row" type="button" data-leak-id="${escapeHtml(leak.id)}" aria-pressed="${isSelected}" aria-expanded="${open}">
-          <span class="wu-leak__title">${escapeHtml(leak.title)}<small>${leakCategoryLabels[leak.category]} · ${basis}</small></span>
-          <span class="wu-leak__value">${amountOf(leak.annualImpact)}<small class="${severity.tone}">${severity.label}</small></span>
+          <span class="wu-leak__title">${amtIn(leak.title)}<small>${leakCategoryLabels[leak.category]} · ${basis}</small></span>
+          <span class="wu-leak__value"><span class="t-amt">${amountOf(leak.annualImpact)}</span><small class="${severity.tone}">${severity.label}</small></span>
           <span class="wu-leak__chev" aria-hidden="true">›</span>
         </button>
         ${open ? `<div class="wu-leak__inline">${leakDetailContent(state, leak, leakAdvice(leakRecommendations, leak.id), true)}</div>` : ""}
@@ -201,12 +201,12 @@ export function moneyLeaksTemplate(state: WealthState): string {
         <div class="wu-dash__full wu-dash__tiles wu-leak-tiles">
           <section class="wu-card wu-dash__tile" aria-labelledby="leakMonthLabel">
             <div class="wu-tc__top"><span class="wu-label" id="leakMonthLabel">Each month</span></div>
-            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(summary.monthlyImpact)}</span></p>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(summary.monthlyImpact)}</span></p>
             <p class="wu-dash__note">Potential monthly drag</p>
           </section>
           <section class="wu-card wu-dash__tile" aria-labelledby="leakYearLabel">
             <div class="wu-tc__top"><span class="wu-label" id="leakYearLabel">Each year</span></div>
-            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span>${amountOf(summary.annualImpact)}</span></p>
+            <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(summary.annualImpact)}</span></p>
             <p class="wu-dash__note">${oneTime ? "Includes one-time findings" : "If nothing changes"}</p>
           </section>
           <section class="wu-card wu-dash__tile" aria-labelledby="leakFindingsLabel">
@@ -224,8 +224,8 @@ export function moneyLeaksTemplate(state: WealthState): string {
         <!-- phone — one summary card carries the same figures -->
         <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-leak-summary" aria-labelledby="leakSummaryLabel">
           <div class="wu-tc__top"><span class="wu-label" id="leakSummaryLabel">Leaking each month</span>${highChip}</div>
-          <p class="wu-money"><span class="wu-money__cur">MYR</span><span>${amountOf(summary.monthlyImpact)}</span><span class="wu-money__of">/ mo</span></p>
-          <p class="wu-dash__note">About ${money(summary.annualImpact)} a year across ${findingsText}.</p>
+          <p class="wu-money"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(summary.monthlyImpact)}</span><span class="wu-money__of">/ mo</span></p>
+          <p class="wu-dash__note">About ${amt(money(summary.annualImpact))} a year across ${findingsText}.</p>
           <div class="wu-row wu-row--tight">
             <button class="wu-btn wu-btn--secondary wu-btn--sm dashboard-nav" data-page="buckets" type="button">Review budget</button>
             <button class="wu-btn wu-btn--ghost wu-btn--sm dashboard-nav" data-page="ledger" type="button">Open transactions</button>
@@ -250,7 +250,7 @@ export function moneyLeaksTemplate(state: WealthState): string {
         <aside class="wu-card wu-dash__half wu-stack wu-stack--sm leak-detail-panel" aria-live="polite" aria-labelledby="leakDetailLabel">
           ${selected && selectedSeverity
             ? `<div class="wu-tc__top"><span class="wu-label" id="leakDetailLabel">${escapeHtml(leakCategoryLabels[selected.category])}</span><span class="${selectedSeverity.chip}">${selectedSeverity.label}</span></div>
-          <h3 class="wu-leak__heading">${escapeHtml(selected.title)}</h3>
+          <h3 class="wu-leak__heading">${amtIn(selected.title)}</h3>
           ${leakDetailContent(state, selected, leakAdvice(leakRecommendations, selected.id))}`
             : `<div class="wu-tc__top"><span class="wu-label" id="leakDetailLabel">Details</span></div><p class="wu-empty">No money leaks detected. Your recent spending is within the current leak-detection rules.</p>`}
         </aside>

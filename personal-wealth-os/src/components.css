@@ -1223,8 +1223,16 @@
   }
 
   /* Privacy mode: main.ts / ui.ts toggle .mask-financial-amounts on <body>.
-     Every headline figure is a wu-metric__value and every inline amount is a
-     .t-num, so blurring those covers the money on screen. */
+
+     .t-amt is the marker for "this is money": it carries no styling of its
+     own, so a template can wrap a single figure inside a sentence without
+     changing how the line looks. Wrap the digits, not the words — the label
+     around an amount stays readable while the amount itself blurs.
+
+     The class names below it are the older markup that is all-figure anyway
+     (a metric value, a mono .t-num run, a definition-list amount). Prefer
+     .t-amt for anything new; these stay so existing pages keep working. */
+  .mask-financial-amounts .t-amt,
   .mask-financial-amounts .wu-metric__value,
   .mask-financial-amounts .wu-metric__note,
   .mask-financial-amounts .t-num,

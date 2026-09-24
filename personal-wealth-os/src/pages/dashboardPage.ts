@@ -11,7 +11,7 @@
 import type { WealthState } from "../models";
 import { createId } from "../state";
 import { money, percent, suggestedEmergencyTarget } from "../rules";
-import { escapeHtml } from "../html";
+import { amt, amtIn, escapeHtml } from "../html";
 import { buildOverviewModel } from "../overview";
 import { buildNextSteps, type NextStep, type NextStepId, type NextSteps } from "../onboarding";
 import { queueGuide, type GuideId } from "../onboardingGuide";
@@ -81,6 +81,10 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
   // Figures print without the "MYR" prefix so the currency can be set small
   // beside them; money() stays the single formatter.
   const amount = (value: number): string => money(value, "").trim();
+  // Same figure, marked as money so privacy mode blurs it (see amt in html.ts).
+  // Attributes (title=, aria-label=) keep the bare amount(): markup there would
+  // print as text.
+  const figure = (value: number): string => amt(amount(value));
   const factorTone = (status: string): string => status === "healthy" || status === "positive" ? "" : status === "watch" ? "is-watch" : "is-alert";
   const watchCount = overview.wealthHealth.factors.filter((factor) => factor.status !== "healthy").length;
   const assetsShare = overview.totalAssets + overview.totalLiabilities > 0
@@ -91,7 +95,6 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
     : 0;
   const pnl = portfolio.unrealizedPnlMyr ?? 0;
   const pnlKnown = portfolio.unrealizedPnlMyr !== null;
-  const investedNote = pnlKnown ? `Unrealised ${pnl >= 0 ? "+" : "−"}${amount(Math.abs(pnl))}` : "No market price yet";
   const pnlChip = portfolio.unrealizedPnlPercentMyr === null || !pnlKnown
     ? ""
     : `<span class="wu-chip${pnl >= 0 ? "" : " wu-chip--negative"}">${pnl >= 0 ? "+" : "−"}${percent(Math.abs(portfolio.unrealizedPnlPercentMyr))}</span>`;
@@ -126,8 +129,8 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
       <!-- 1 — NET WORTH -->
       <section class="wu-card wu-dash__tile" aria-labelledby="ovNetWorthLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ovNetWorthLabel">Net worth</span></div>
-        <p class="wu-money"><span class="wu-money__cur">MYR</span><span id="ovNetWorth">${amount(overview.netWorth)}</span></p>
-        <p class="wu-dash__note" id="ovNetWorthNote">Assets ${amount(overview.totalAssets)} · liabilities ${amount(overview.totalLiabilities)}</p>
+        <p class="wu-money"><span class="wu-money__cur">MYR</span><span class="t-amt" id="ovNetWorth">${amount(overview.netWorth)}</span></p>
+        <p class="wu-dash__note" id="ovNetWorthNote">${netWorthNoteHtml(overview.totalAssets, overview.totalLiabilities)}</p>
         <div class="wu-split" aria-hidden="true" id="ovNetWorthSplit"><span style="flex:${Math.max(assetsShare, 0.02)};background:var(--accent)"></span><span style="flex:${Math.max(1 - assetsShare, 0.02)};background:var(--highlight)"></span></div>
       </section>
 
@@ -136,8 +139,8 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
         <div class="wu-tc__top"><span class="wu-label" id="ovMonthLabel">This month</span>${expenseChange !== null
           ? `<span class="wu-chip${expenseChange <= 0 ? "" : " wu-chip--warning"}">${expenseChange <= 0 ? "↓" : "↑"} ${percent(Math.abs(expenseChange), 0)}</span>`
           : ""}</div>
-        <p class="wu-money ${overview.cashFlow.surplus >= 0 ? "t-positive" : "t-negative"}"><span class="wu-money__cur">MYR</span><span>${overview.cashFlow.surplus >= 0 ? "+" : "−"}${amount(Math.abs(overview.cashFlow.surplus))}</span></p>
-        <p class="wu-dash__note">Income ${amount(overview.cashFlow.income)} · spent ${amount(overview.cashFlow.expenses)}</p>
+        <p class="wu-money ${overview.cashFlow.surplus >= 0 ? "t-positive" : "t-negative"}"><span class="wu-money__cur">MYR</span><span class="t-amt">${overview.cashFlow.surplus >= 0 ? "+" : "−"}${amount(Math.abs(overview.cashFlow.surplus))}</span></p>
+        <p class="wu-dash__note">Income ${figure(overview.cashFlow.income)} · spent ${figure(overview.cashFlow.expenses)}</p>
         <div class="wu-bar" role="progressbar" aria-valuenow="${Math.round(keptRatio * 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="Share of income kept this month">
           <span class="wu-bar__fill" style="width:${Math.round(keptRatio * 100)}%"></span>
         </div>
@@ -146,9 +149,9 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
       <!-- 3 — INVESTED -->
       <section class="wu-card wu-dash__tile" aria-labelledby="ovInvestedLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ovInvestedLabel">Invested</span>${pnlChip}</div>
-        <p class="wu-money"><span class="wu-money__cur">MYR</span><span>${amount(portfolio.totalInvestedMyr)}</span></p>
-        <p class="wu-dash__note" id="ovInvestedNote">${escapeHtml(investedNote)}</p>
-        <p class="t-caption t-faint" id="ovValuationNote">${escapeHtml(dashboardValuationNote(portfolio))}</p>
+        <p class="wu-money"><span class="wu-money__cur">MYR</span><span class="t-amt">${amount(portfolio.totalInvestedMyr)}</span></p>
+        <p class="wu-dash__note" id="ovInvestedNote">${investedNoteHtml(portfolio.unrealizedPnlMyr)}</p>
+        <p class="t-caption t-faint" id="ovValuationNote">${dashboardValuationNote(portfolio)}</p>
         <div class="wu-split" aria-label="Tracked capital split">
           <span style="flex:${Math.max(investedShare, 0.02)};background:var(--accent)" title="Invested ${amount(portfolio.totalInvestedMyr)}"></span>
           <span style="flex:${Math.max(safetyShare, 0.02)};background:var(--highlight)" title="Safety ${amount(state.emergency.current)}"></span>
@@ -156,9 +159,9 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
         </div>
         <!-- the bar's three colours, named: a colour on its own is a riddle -->
         <div class="wu-legend wu-legend--tight">
-          <span><i style="background:var(--accent)"></i>Invested <b>${amount(portfolio.totalInvestedMyr)}</b></span>
-          <span><i style="background:var(--highlight)"></i>Safety <b>${amount(state.emergency.current)}</b></span>
-          <span><i style="background:var(--text-faint)"></i>Reserve <b>${amount(tracked.reserve)}</b></span>
+          <span><i style="background:var(--accent)"></i>Invested <b>${figure(portfolio.totalInvestedMyr)}</b></span>
+          <span><i style="background:var(--highlight)"></i>Safety <b>${figure(state.emergency.current)}</b></span>
+          <span><i style="background:var(--text-faint)"></i>Reserve <b>${figure(tracked.reserve)}</b></span>
         </div>
       </section>
 
@@ -166,8 +169,8 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
       <section class="wu-card wu-dash__tile" aria-labelledby="ovGoalLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ovGoalLabel">Next goal</span></div>
         ${nextGoal ? `
-          <p class="wu-money"><span class="wu-money__cur">MYR</span><span>${amount(nextGoalCurrent)}</span></p>
-          <p class="wu-dash__note">${escapeHtml(nextGoal.name)} · of ${amount(nextGoal.targetAmount)}${nextGoal.estimatedMonthsToTarget !== null ? ` · ~${nextGoal.estimatedMonthsToTarget} mo left` : ""}</p>
+          <p class="wu-money"><span class="wu-money__cur">MYR</span><span class="t-amt">${amount(nextGoalCurrent)}</span></p>
+          <p class="wu-dash__note">${escapeHtml(nextGoal.name)} · of ${figure(nextGoal.targetAmount)}${nextGoal.estimatedMonthsToTarget !== null ? ` · ~${nextGoal.estimatedMonthsToTarget} mo left` : ""}</p>
           <div class="wu-bar" role="progressbar" aria-valuenow="${Math.round(nextGoalRatio * 100)}" aria-valuemin="0" aria-valuemax="100" aria-label="${escapeHtml(nextGoal.name)} progress">
             <span class="wu-bar__fill" style="width:${Math.round(Math.min(nextGoalRatio, 1) * 100)}%"></span>
           </div>
@@ -204,7 +207,7 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
         <ul class="wu-facts">
           ${overview.wealthHealth.factors.map((factor) => `<li><i class="${factorTone(factor.status)}" aria-hidden="true"></i><span>${escapeHtml(factor.label)}</span><span>${escapeHtml(factor.detail)}</span><span class="visually-hidden">Status: ${escapeHtml(factor.status)}</span></li>`).join("")}
           ${overview.planStatus.progress !== null
-            ? `<li><i class="${overview.planStatus.onTrack ? "" : "is-watch"}" aria-hidden="true"></i><span>Monthly plan</span><span>${amount(overview.planStatus.actualAmount)} / ${amount(overview.planStatus.plannedAmount)}</span></li>`
+            ? `<li><i class="${overview.planStatus.onTrack ? "" : "is-watch"}" aria-hidden="true"></i><span>Monthly plan</span><span>${figure(overview.planStatus.actualAmount)} / ${figure(overview.planStatus.plannedAmount)}</span></li>`
             : ""}
         </ul>
       </section>
@@ -216,7 +219,7 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
         <span class="wu-label" id="ovMoreLabel">More detail</span>
         <ul class="wu-navlist wu-navlist--inline">
           <li><button class="dashboard-nav" data-page="advisor" type="button"><span>Guidance<small>What to do next</small></span><span aria-hidden="true">›</span></button></li>
-          <li><button class="dashboard-nav" data-page="money-leaks" type="button"><span>Money leaks<small>${leakSummary.leaks.length} found · ${amount(leakSummary.monthlyImpact)}/mo</small></span><span aria-hidden="true">›</span></button></li>
+          <li><button class="dashboard-nav" data-page="money-leaks" type="button"><span>Money leaks<small>${leakSummary.leaks.length} found · ${figure(leakSummary.monthlyImpact)}/mo</small></span><span aria-hidden="true">›</span></button></li>
           <li><button class="dashboard-nav" data-page="ledger" type="button"><span>This month's activity<small>Income, spending and accounts</small></span><span aria-hidden="true">›</span></button></li>
           <li><button class="dashboard-nav" data-page="portfolio" type="button"><span>Portfolio<small>Holdings, market value and costs</small></span><span aria-hidden="true">›</span></button></li>
         </ul>
@@ -252,7 +255,7 @@ function stageLine(stage: MoneyStage): string {
   const help = stage.debt?.tight
     ? ` <span class="wu-stage__why">Can't keep up with the payments? <a href="https://www.akpk.org.my" target="_blank" rel="noopener noreferrer">AKPK</a>, set up by Bank Negara, helps for free.</span>`
     : "";
-  return `<p class="wu-stage">${segments}<span class="wu-stage__text"><strong>${label} · ${escapeHtml(stage.title)}</strong> <span class="wu-stage__why">${escapeHtml(stage.reason)}</span>${help}</span></p>`;
+  return `<p class="wu-stage">${segments}<span class="wu-stage__text"><strong>${label} · ${escapeHtml(stage.title)}</strong> <span class="wu-stage__why">${amtIn(stage.reason)}</span>${help}</span></p>`;
 }
 
 /* One line of status (P-6a): the check-ins themselves live on Review. */
@@ -284,6 +287,21 @@ function planCardShown(next: NextSteps): boolean {
 
 const plainAmount = (value: number): string => money(value, "").trim();
 
+/*
+ * The two Overview lines that a live quote repaints. Built in one place so the
+ * first paint and the patch cannot drift apart — and so the patch cannot drop
+ * the .t-amt marks that privacy mode blurs, which a plain textContent write
+ * would. Numbers and literals only, so they are safe as markup.
+ */
+function netWorthNoteHtml(assets: number, liabilities: number): string {
+  return `Assets ${amt(plainAmount(assets))} · liabilities ${amt(plainAmount(liabilities))}`;
+}
+
+function investedNoteHtml(unrealizedPnlMyr: number | null): string {
+  if (unrealizedPnlMyr === null) return "No market price yet";
+  return `Unrealised ${unrealizedPnlMyr >= 0 ? "+" : "−"}${amt(plainAmount(Math.abs(unrealizedPnlMyr)))}`;
+}
+
 function planCard(next: NextSteps): string {
   const plan = next.plan;
   if (!next.visible || !plan) return "";
@@ -294,9 +312,9 @@ function planCard(next: NextSteps): string {
     const pct = Math.min(100, Math.round((plan.bufferCurrent / target) * 100));
     rows.push(`<div class="wu-plan__row">
       <span class="wu-plan__name">${plan.bufferHold !== null ? "Emergency money, for now" : "Safety buffer"}</span>
-      <span class="wu-plan__value">${plainAmount(Math.min(plan.bufferCurrent, target))} <small>/ ${plainAmount(target)}</small></span>
+      <span class="wu-plan__value">${amt(plainAmount(Math.min(plan.bufferCurrent, target)))} <small>/ ${amt(plainAmount(target))}</small></span>
       <span class="wu-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="${plan.bufferHold !== null ? "Emergency money" : "Safety buffer"} ${pct}% funded"><span class="wu-bar__fill wu-bar__fill--warning" style="width:${pct}%"></span></span>
-      ${plan.bufferHold !== null && target < plan.bufferTarget ? `<span class="wu-plan__note">The full ${plainAmount(plan.bufferTarget)} buffer comes after the debt.</span>` : ""}
+      ${plan.bufferHold !== null && target < plan.bufferTarget ? `<span class="wu-plan__note">The full ${amt(plainAmount(plan.bufferTarget))} buffer comes after the debt.</span>` : ""}
     </div>`);
   }
   if (plan.goalName) {
@@ -304,8 +322,8 @@ function planCard(next: NextSteps): string {
     const debt = plan.goalKind === "debt";
     // A debt reads as what is left to pay; the bar still fills as it is paid off.
     const value = debt
-      ? `${plainAmount(Math.max(0, plan.goalTarget - plan.goalCurrent))} left <small>of ${plainAmount(plan.goalTarget)}</small>`
-      : `${plainAmount(plan.goalCurrent)} <small>/ ${plainAmount(plan.goalTarget)}</small>`;
+      ? `${amt(plainAmount(Math.max(0, plan.goalTarget - plan.goalCurrent)))} left <small>of ${amt(plainAmount(plan.goalTarget))}</small>`
+      : `${amt(plainAmount(plan.goalCurrent))} <small>/ ${amt(plainAmount(plan.goalTarget))}</small>`;
     rows.push(`<div class="wu-plan__row">
       <span class="wu-plan__name">${escapeHtml(plan.goalName)}</span>
       <span class="wu-plan__value">${value}</span>
@@ -316,7 +334,7 @@ function planCard(next: NextSteps): string {
         : debt
           ? `<span class="wu-plan__note">No end date yet: what's left over each month doesn't cover more than the interest.</span>`
           : `<button class="wu-plan__link dashboard-nav" data-page="goals" type="button">Give it a monthly amount to get a date <span aria-hidden="true">→</span></button>`}
-      ${debt && plan.debtInterest ? `<span class="wu-plan__note">About <strong>${money(plan.debtInterest)}</strong> of interest a month</span>` : ""}
+      ${debt && plan.debtInterest ? `<span class="wu-plan__note">About <strong>${amt(money(plan.debtInterest))}</strong> of interest a month</span>` : ""}
     </div>`);
   }
   if (!rows.length) return "";
@@ -589,7 +607,10 @@ function openBufferSheet(state: WealthState): void {
  */
 function dashboardValuationNote(portfolio: PortfolioSnapshot): string {
   const status = portfolio.valuationStatus === "complete" ? "" : valuationNote(portfolio);
-  return joinNotes(status, usdPnlNote(portfolio));
+  // Markup: the USD gain is money, so it carries the .t-amt mark privacy mode
+  // blurs, while the status half stays readable. Both halves are generated.
+  const usd = usdPnlNote(portfolio);
+  return joinNotes(escapeHtml(status), usd === "" ? "" : amt(usd));
 }
 
 function getGreeting(): string {
@@ -730,7 +751,7 @@ export function bindDashboard(
     const netWorthSplitEl = root.querySelector<HTMLElement>("#ovNetWorthSplit");
     if (netWorthEl) netWorthEl.textContent = plain(updated.netWorth);
     if (netWorthNoteEl) {
-      netWorthNoteEl.textContent = `Assets ${plain(updated.totalAssets)} · liabilities ${plain(updated.totalLiabilities)}`;
+      netWorthNoteEl.innerHTML = netWorthNoteHtml(updated.totalAssets, updated.totalLiabilities);
     }
     if (netWorthSplitEl) {
       const total = updated.totalAssets + updated.totalLiabilities;
@@ -740,12 +761,9 @@ export function bindDashboard(
     const investedNoteEl = root.querySelector<HTMLElement>("#ovInvestedNote");
     const noteEl = root.querySelector<HTMLElement>("#ovValuationNote");
     if (investedNoteEl) {
-      const livePnl = portfolio.unrealizedPnlMyr;
-      investedNoteEl.textContent = livePnl === null
-        ? "No market price yet"
-        : `Unrealised ${livePnl >= 0 ? "+" : "−"}${plain(Math.abs(livePnl))}`;
+      investedNoteEl.innerHTML = investedNoteHtml(portfolio.unrealizedPnlMyr);
     }
-    if (noteEl) noteEl.textContent = dashboardValuationNote(portfolio);
+    if (noteEl) noteEl.innerHTML = dashboardValuationNote(portfolio);
   };
   // The dip-buy watch below reads the same live quote, so it is re-checked
   // whenever the valuation is.
@@ -796,7 +814,7 @@ export function bindDashboard(
       dipAlert.innerHTML = `<div class="wu-row wu-row--between" style="align-items:flex-start;gap:var(--space-4)">
         <div class="wu-stack wu-stack--sm">
           <span class="wu-label">Dip-buy plan</span>
-          <strong class="t-subheading">${reached.length === 1 ? "A tranche is" : `${reached.length} tranches are`} in range — deploy ${money(amount)}</strong>
+          <strong class="t-subheading">${reached.length === 1 ? "A tranche is" : `${reached.length} tranches are`} in range — deploy ${amt(money(amount))}</strong>
           <span class="t-caption t-muted">${steps} reached · ${levels} below all-time highs</span>
         </div>
         <button class="wu-btn wu-btn--secondary wu-btn--sm dashboard-nav" data-page="advisor" type="button">Open Advisor →</button>
