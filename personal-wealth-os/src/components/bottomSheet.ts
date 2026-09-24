@@ -16,7 +16,14 @@ export interface BottomSheetOptions {
   title: string;
   /** Where the data lands, shown as "Saves to Ledger". */
   destination: string;
-  /** One plain-text line under the title, e.g. where a prefilled number came from. */
+  /**
+   * One line under the title, e.g. where a prefilled number came from.
+   *
+   * Trusted markup, like `body`: the caller escapes what it interpolates, and
+   * marks a figure with `amt()` so privacy mode blurs it. The fields below stay
+   * readable either way — a number you are being asked to check or change has
+   * to be legible.
+   */
   intro?: string;
   /** The fields. Trusted markup: the caller escapes every value it interpolates. */
   body: string;
@@ -55,7 +62,7 @@ export function openBottomSheet(options: BottomSheetOptions): void {
         <h2 class="wu-sheet__title" id="wuSheetTitle">${escapeHtml(options.title)}</h2>
         <p class="wu-sheet__dest">Saves to <strong>${escapeHtml(options.destination)}</strong></p>
       </header>
-      ${options.intro ? `<p class="wu-sheet__intro">${escapeHtml(options.intro)}</p>` : ""}
+      ${options.intro ? `<p class="wu-sheet__intro">${options.intro}</p>` : ""}
       <div class="wu-sheet__body">${options.body}</div>
       <p class="wu-sheet__error" role="alert" hidden></p>
       <div class="wu-sheet__actions">
