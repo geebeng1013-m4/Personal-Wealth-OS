@@ -224,7 +224,7 @@ function conversionCoverageNote(state: WealthState): string {
   const average = coverage.averageRecordedRate;
   const rate = average === null ? "" : ` Average ${rateText(average)}.`;
   const leftover = coverage.unspentUsd > 0.01
-    ? ` USD ${coverage.unspentUsd.toFixed(2)} converted but not yet invested.`
+    ? ` ${amt(`USD ${coverage.unspentUsd.toFixed(2)}`)} converted but not yet invested.`
     : "";
   if (coverage.totalBuyUsd <= 0) {
     return `${records.length} conversions recorded.${rate}${leftover}`;
@@ -270,7 +270,7 @@ function currencyConversionsPanel(state: WealthState): string {
           : ""}</div>
       </div>
       <div class="wu-stack">
-        <p class="t-body-sm t-muted">${escapeHtml(conversionCoverageNote(state))}</p>
+        <p class="t-body-sm t-muted">${conversionCoverageNote(state)}</p>
         <label class="wu-field-row"><span class="wu-field-row__label">Paste your broker's exchange history</span>
           <textarea class="wu-field" id="fxPaste" rows="4" placeholder="MYR&#10;USD&#10;Aug 9, 2026 22:06 MYT&#10;Completed&#10;4.85 USD&#10;20.00 MYR"></textarea>
         </label>
