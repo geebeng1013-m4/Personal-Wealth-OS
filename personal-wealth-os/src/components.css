@@ -2353,6 +2353,11 @@
     color: var(--text-faint);
     transition: transform var(--dur-fast) var(--ease-standard);
   }
+  /* holds the chevron's width on a row that cannot be opened, so the values
+     stay on one edge down the list */
+  .wu-set__chev--ghost {
+    visibility: hidden;
+  }
   .wu-set__item.is-open .wu-set__chev {
     transform: rotate(90deg);
   }
@@ -2433,13 +2438,28 @@
       background: var(--surface);
     }
     .wu-set__item--desk,
-    .wu-set--danger .wu-set__head,
-    .wu-set__danger-note,
     .wu-set__danger-desk {
       display: none;
     }
     .wu-set .wu-set__danger-phone {
       display: grid;
+    }
+    /* Reset is the one row that cannot be undone, so the phone keeps the
+       heading above it and the note under it — the footer note an iOS grouped
+       list puts there — instead of a bare red row. */
+    .wu-set--danger {
+      display: flex;
+      flex-direction: column;
+    }
+    .wu-set--danger .wu-set__head {
+      order: 0;
+    }
+    .wu-set--danger .wu-set__danger-phone {
+      order: 1;
+    }
+    .wu-set--danger .wu-set__danger-note {
+      order: 2;
+      padding: var(--space-2) var(--space-1) 0;
     }
     /* the source order pairs groups for the desktop rows; the phone preview
        reads Profile, Money in & out, Plan, Privacy, Data, Reset */
