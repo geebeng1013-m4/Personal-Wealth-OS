@@ -32,6 +32,7 @@ import { askAssistant, assistantSignedIn } from "./assistantClient";
 import { syncAssistantHistoryNow } from "./assistantSync";
 import { buildAssistantContext } from "./assistantContext";
 import { describeDraft, draftPage, parseAssistantAction } from "./assistantActions";
+import { parseAnswerLinks } from "./assistantLinks";
 import {
   appendAskMessage,
   askMessages,
@@ -137,8 +138,21 @@ function emptyStateHtml(mode: "help" | "fill"): string {
 
 function messageHtml(message: AssistantMessage): string {
   const tone = message.failed ? " assistant-msg--error" : "";
+  // Only an answer carries page markers. What the user typed is shown as
+  // typed, marker-looking text and all: those are their words, not ours to
+  // rewrite. A failed turn holds one of our own error sentences, not the
+  // model's, so it has nothing to parse either.
+  const { text, links } = message.role === "assistant" && !message.failed
+    ? parseAnswerLinks(message.content)
+    : { text: message.content, links: [] };
+  const buttons = links.length === 0
+    ? ""
+    : `<div class="assistant-goto">${links
+        .map((link) => `<button class="assistant-goto__btn" type="button" data-assistant-go="${escapeHtml(link.page)}">Open ${escapeHtml(link.label)}<span aria-hidden="true"> &rarr;</span></button>`)
+        .join("")}</div>`;
   return `<div class="assistant-msg assistant-msg--${message.role}${tone}">`
-    + `<div class="assistant-msg__bubble">${escapeHtml(message.content).replace(/\n/g, "<br>")}</div>`
+    + `<div class="assistant-msg__bubble">${escapeHtml(text).replace(/\n/g, "<br>")}</div>`
+    + buttons
     + `</div>`;
 }
 
@@ -560,6 +574,15 @@ function bind(): void {
     event.preventDefault();
     row.scrollLeft += event.deltaY;
   }, { passive: false });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-assistant-go]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const page = button.dataset.assistantGo ?? "";
+      // The panel survives a page change by design (see the module comment),
+      // so the answer is still on screen to read once they arrive.
+      if (page) ctx?.navigate(page);
+    });
+  });
 
   root.querySelectorAll<HTMLButtonElement>("[data-assistant-apply]").forEach((button) => {
     button.addEventListener("click", () => applyDraft(button.dataset.assistantApply ?? ""));
