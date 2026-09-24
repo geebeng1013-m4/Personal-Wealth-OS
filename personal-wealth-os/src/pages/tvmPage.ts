@@ -22,7 +22,7 @@
 
 import type { WealthState } from "../models";
 import { money, percent } from "../rules";
-import { amt, amtIn, escapeHtml } from "../html";
+import { escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import {
   calculateInflationAdjustedValue,
@@ -148,17 +148,17 @@ function tvmResultTemplate(): string {
   const periodsLabel = `${Math.round(v.periods * 100) / 100} ${COMPOUNDING_LABELS[tvmFrequency].toLowerCase()} periods`;
   const value = tvmFormat(variable, v.value);
   const currency = variable !== "annualRatePercent" && variable !== "periods";
-  return `<div class="wu-tc__top"><span class="wu-label">Solved for ${escapeHtml(TVM_LABELS[variable])}</span>${v.totalInterest > 0.005 ? `<span class="wu-chip">${amt(`+${amountOf(v.totalInterest)}`)} interest</span>` : ""}</div>
-      <p class="wu-money">${currency ? `<span class="wu-money__cur">MYR</span><span class="t-amt">${escapeHtml(value.replace(/^MYR\s*/, ""))}</span>` : `<span>${escapeHtml(value)}</span>`}</p>
+  return `<div class="wu-tc__top"><span class="wu-label">Solved for ${escapeHtml(TVM_LABELS[variable])}</span>${v.totalInterest > 0.005 ? `<span class="wu-chip">+${amountOf(v.totalInterest)} interest</span>` : ""}</div>
+      <p class="wu-money">${currency ? `<span class="wu-money__cur">MYR</span><span>${escapeHtml(value.replace(/^MYR\s*/, ""))}</span>` : `<span>${escapeHtml(value)}</span>`}</p>
       ${showSplit ? `<div class="wu-split wu-tvm-split" aria-hidden="true"><span style="flex:${putIn};background:var(--text-faint)"></span><span style="flex:${v.totalInterest};background:var(--accent)"></span></div>
-      <div class="wu-legend"><span><i style="background:var(--text-faint)"></i>You put in <b>${amt(amountOf(putIn))}</b></span><span><i style="background:var(--accent)"></i>Interest <b>${amt(amountOf(v.totalInterest))}</b></span></div>` : ""}
+      <div class="wu-legend"><span><i style="background:var(--text-faint)"></i>You put in <b>${amountOf(putIn)}</b></span><span><i style="background:var(--accent)"></i>Interest <b>${amountOf(v.totalInterest)}</b></span></div>` : ""}
       <ul class="wu-facts wu-facts--plain">
-        <li><span>Present value</span><span class="t-amt">${money(v.presentValue)}</span></li>
-        <li><span>Payment</span><span class="t-amt">${money(v.payment)}</span></li>
-        <li><span>Future value</span><span class="t-amt">${money(v.futureValue)}</span></li>
+        <li><span>Present value</span><span>${money(v.presentValue)}</span></li>
+        <li><span>Payment</span><span>${money(v.payment)}</span></li>
+        <li><span>Future value</span><span>${money(v.futureValue)}</span></li>
         <li><span>Annual rate</span><span>${Math.round(v.annualRatePercent * 1000) / 1000}% ${escapeHtml(tvmRateKind)}</span></li>
         <li><span>Periods</span><span>${escapeHtml(periodsLabel)}</span></li>
-        <li><span>Total payments</span><span class="t-amt">${money(v.totalPayments)}</span></li>
+        <li><span>Total payments</span><span>${money(v.totalPayments)}</span></li>
       </ul>
       <p class="wu-dash__note wu-dash__actions">Based on your own assumptions: ${escapeHtml(COMPOUNDING_LABELS[tvmFrequency].toLowerCase())} compounding, payments at the ${tvmTiming === "end" ? "end" : "beginning"} of each period, ${escapeHtml(tvmRateKind)} rate. Projections only — not guaranteed returns or investment advice.</p>`;
 }
@@ -219,9 +219,9 @@ function tvmInflationResult(): string {
   const kept = result.value.todaysPurchasingPower;
   const lost = result.value.purchasingPowerLoss;
   return `<div class="wu-tc__top"><span class="wu-label">Today's purchasing power</span><span class="wu-chip wu-chip--warning">−${percent(result.value.purchasingPowerLossPercent, 1)}</span></div>
-      <p class="wu-money"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(kept)}</span></p>
+      <p class="wu-money"><span class="wu-money__cur">MYR</span><span>${amountOf(kept)}</span></p>
       ${kept > 0 && lost > 0 ? `<div class="wu-split wu-tvm-split" aria-hidden="true"><span style="flex:${kept};background:var(--accent)"></span><span style="flex:${lost};background:var(--highlight)"></span></div>
-      <div class="wu-legend"><span><i style="background:var(--accent)"></i>Still worth <b>${amt(amountOf(kept))}</b></span><span><i style="background:var(--highlight)"></i>Lost to inflation <b>${amt(amountOf(lost))}</b></span></div>` : ""}
+      <div class="wu-legend"><span><i style="background:var(--accent)"></i>Still worth <b>${amountOf(kept)}</b></span><span><i style="background:var(--highlight)"></i>Lost to inflation <b>${amountOf(lost)}</b></span></div>` : ""}
       <p class="wu-dash__note wu-dash__actions">Assumes a constant ${escapeHtml(tvmInflation.inflationRatePercent || "0")}% inflation a year.</p>`;
 }
 
@@ -312,11 +312,11 @@ function tvmWhatIfResultTemplate(impact: SpendingImpact, opportunity: ReturnType
       <p class="wu-dash__note">Enter an amount to see the impact.</p>`;
   }
   return `<div class="wu-tc__top"><span class="wu-label">Impact</span></div>
-      <p class="wu-tvm-lead">${amtIn(tvmWhatIfSummary(impact, opportunity))}</p>
+      <p class="wu-tvm-lead">${escapeHtml(tvmWhatIfSummary(impact, opportunity))}</p>
       <ul class="wu-facts wu-facts--plain">
         <li><span>Emergency Fund</span><span>${tvmMonthsLabel(impact.emergency.monthsToTargetNow)} → ${tvmMonthsLabel(impact.emergency.monthsToTargetAfter)}</span></li>
         ${impact.goal ? `<li><span>${escapeHtml(impact.goal.name)}</span><span>${tvmMonthsLabel(impact.goal.monthsToTargetNow)} → ${tvmMonthsLabel(impact.goal.monthsToTargetAfter)}</span></li>` : ""}
-        ${opportunity?.ok ? `<li><span>Invested instead</span><span class="t-amt">${money(opportunity.value.value)}</span></li>` : ""}
+        ${opportunity?.ok ? `<li><span>Invested instead</span><span>${money(opportunity.value.value)}</span></li>` : ""}
       </ul>
       ${impact.goal ? "" : `<p class="wu-dash__note">No goal is currently being actively funded, so only the Emergency Fund is shown.</p>`}
       ${!opportunity ? `<p class="wu-dash__note">Set Annual rate and Periods in TVM to see the opportunity cost.</p>` : ""}

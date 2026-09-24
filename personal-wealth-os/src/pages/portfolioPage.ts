@@ -254,8 +254,8 @@ function currencyConversionsPanel(state: WealthState): string {
       + '<td>' + escapeHtml(`${sides.fromCurrency} → ${sides.toCurrency}`) + '</td>'
       // Statement amounts, so both columns keep two decimals: money() drops a
       // trailing .00 and made a MYR column of exact figures look rounded.
-      + '<td>MYR ' + leg.myrAmount.toFixed(2) + '</td>'
-      + '<td>' + escapeHtml(leg.currency) + ' ' + leg.foreignAmount.toFixed(2) + '</td>'
+      + '<td class="t-amt">MYR ' + leg.myrAmount.toFixed(2) + '</td>'
+      + '<td class="t-amt">' + escapeHtml(leg.currency) + ' ' + leg.foreignAmount.toFixed(2) + '</td>'
       + '<td>' + exchangeRateOf(record).toFixed(4) + '</td>'
       + '<td><button class="wu-btn wu-btn--ghost wu-btn--icon delete-exchange" data-id="' + escapeHtml(record.id) + '" type="button" aria-label="Delete conversion on ' + escapeHtml(record.date) + '">✕</button></td>'
       + '</tr>';
@@ -428,7 +428,7 @@ function positionRowHtml(position: PortfolioHolding): string {
     '<td><strong>' + escapeHtml(position.ticker) + '</strong></td>' +
     '<td>' + position.units.toFixed(position.currency === "USD" ? 5 : 0) + (lots ? ' · ' + lots : '') + '</td>' +
     '<td class="t-amt">' + local(position.averageCostLocal) + '</td>' +
-    '<td class="t-amt">' + local(position.priceLocal) + '</td>' +
+    '<td>' + local(position.priceLocal) + '</td>' +
     '<td class="t-amt">' + local(position.investedLocal) + '</td>' +
     '<td class="t-amt">' + local(position.marketValueLocal) + '</td>' +
     '<td class="t-amt">' + money(position.investedMyr) + '</td>' +
@@ -679,7 +679,7 @@ function dividendsBody(state: WealthState, portfolio: PortfolioSnapshot): string
           <ul class="wu-ledger-list">${suggestions.map((suggestion) => `<li class="wu-ledger-row wu-ledger-row--plain wu-dividend">
             <span class="wu-ledger-row__title">${escapeHtml(suggestion.ticker)}<small>${joinNotes(
               `ex ${shortDate(suggestion.exDate)}`,
-              `${suggestion.units.toFixed(4)} × ${amt(payout(suggestion.currency, suggestion.perShare))}`,
+              `${suggestion.units.toFixed(4)} × ${escapeHtml(payout(suggestion.currency, suggestion.perShare))}`,
               suggestion.taxRate > 0 ? `tax ${percent(suggestion.taxRate, 0)}` : "no tax withheld",
             )}</small>${suggestion.caution ? `<small class="wu-dividend__caution">${escapeHtml(suggestion.caution)}</small>` : ""}</span>
             <span class="wu-ledger-row__amount"><span class="t-amt">${escapeHtml(payout(suggestion.currency, netDividend({ gross: suggestion.gross, withholdingTax: suggestion.withholdingTax })))}</span><small>${suggestion.rateToMyr === undefined ? "no rate on file" : amt(`≈ ${payout("MYR", netDividend({ gross: suggestion.gross, withholdingTax: suggestion.withholdingTax }) * suggestion.rateToMyr)}`)}</small></span>
@@ -761,8 +761,8 @@ export function portfolioTemplate(state: WealthState): string {
         '<td>' + escapeHtml(trade.platform) + '</td>' +
         '<td><strong>' + escapeHtml(trade.ticker) + '</strong></td>' +
         '<td>' + escapeHtml(trade.type) + '</td>' +
-        '<td>' + money(trade.amountMyr) + '</td>' +
-        '<td>' + escapeHtml(currency) + ' ' + amount.toFixed(2) + '</td>' +
+        '<td class="t-amt">' + money(trade.amountMyr) + '</td>' +
+        '<td class="t-amt">' + escapeHtml(currency) + ' ' + amount.toFixed(2) + '</td>' +
         '<td>' + escapeHtml(currency) + ' ' + price.toFixed(2) + '</td>' +
         '<td>' + (rate > 0 ? rate.toFixed(4) : UNKNOWN) + '</td>' +
         '<td>' + tradeUnits(trade).toFixed(5) + '</td>' +

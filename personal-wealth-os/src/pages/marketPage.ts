@@ -148,8 +148,11 @@ export function etfTopHoldingsTemplate(selected: EtfHoldingsSymbol = "VOO"): str
 export function marketTemplate(state: WealthState): string {
   // One figure as a list row: label (with a quiet note) on the left, the value
   // on the right. bindMarket fills the value by id.
-  const stat = (id: string, label: string, note = ""): string =>
-    `<li><span class="wu-market-stat__label">${label}${note ? `<small>${note}</small>` : ""}</span><span class="wu-market-stat__value" id="${id}">--</span></li>`;
+  // `money` marks the value as the user's own figure, so privacy mode blurs it.
+  // The market's own numbers — a quote, a drawdown, a yield — are not theirs
+  // and stay readable.
+  const stat = (id: string, label: string, note = "", money = false): string =>
+    `<li><span class="wu-market-stat__label">${label}${note ? `<small>${note}</small>` : ""}</span><span class="wu-market-stat__value${money ? " t-amt" : ""}" id="${id}">--</span></li>`;
 
   // T-7b: the research views are one list; each row opens its section in place.
   const section = (id: string, title: string, sub: string, body: string): string =>
@@ -254,12 +257,12 @@ export function marketTemplate(state: WealthState): string {
           ${section("pnl", "Your position", "Cost, value, profit and every trade", `
             <div id="pnlPanel" style="display:none;">
               <ul class="wu-facts wu-facts--plain wu-market-stats">
-                ${stat("pnl-invested", "Invested")}
+                ${stat("pnl-invested", "Invested", "", true)}
                 ${stat("pnl-units", "Units")}
-                ${stat("pnl-cost", "Average cost")}
-                ${stat("pnl-value", "Market value")}
-                <li><span class="wu-market-stat__label">Unrealised P&amp;L<small id="pnl-pct">--</small></span><span class="wu-market-stat__value" id="pnl-amount">--</span></li>
-                ${stat("pnl-fees", "Fees")}
+                ${stat("pnl-cost", "Average cost", "", true)}
+                ${stat("pnl-value", "Market value", "", true)}
+                <li><span class="wu-market-stat__label">Unrealised P&amp;L<small id="pnl-pct">--</small></span><span class="wu-market-stat__value t-amt" id="pnl-amount">--</span></li>
+                ${stat("pnl-fees", "Fees", "", true)}
               </ul>
               <div id="pnl-trades-list"></div>
             </div>
