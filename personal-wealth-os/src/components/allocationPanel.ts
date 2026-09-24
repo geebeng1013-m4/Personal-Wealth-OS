@@ -167,7 +167,7 @@ function layerRow(row: AllocationRow, index: number, total: number, view: Budget
       <button class="wu-budget-row layer-row" type="button" data-index="${index}" aria-expanded="${open}">
         <i class="wu-budget-row__dot" style="background:${layerColor(index)}" aria-hidden="true"></i>
         <span class="wu-budget-row__title">${escapeHtml(row.name)}<small>${ruleText(row)}</small></span>
-        <span class="wu-budget-row__fill" aria-hidden="true"><span class="wu-bar"><span class="wu-bar__fill${status.tone === "wu-budget-part" ? " is-part" : ""}" style="width:${filled}%"></span></span><small>${row.want > 0 ? `${Math.round(filled)}% filled` : "No amount set"}${row.note ? ` · ${escapeHtml(row.note)}` : ""}</small></span>
+        <span class="wu-budget-row__fill"><span class="wu-bar" aria-hidden="true"><span class="wu-bar__fill${status.tone === "wu-budget-part" ? " is-part" : ""}" style="width:${filled}%"></span></span><small>${row.want > 0 ? `${Math.round(filled)}% filled` : "No amount set"}${row.note ? ` · ${escapeHtml(row.note)}` : ""}</small></span>
         <span class="wu-budget-row__got">${figure(row.got)}<small class="${status.tone}">${status.text}</small></span>
         <span class="wu-budget-row__status ${status.tone}">${status.text}</span>
         <span class="wu-budget-row__chev" aria-hidden="true">›</span>
@@ -294,12 +294,27 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
   const percentWarning = allocation.warnings.find((warning) => warning.code === "percent-total-not-100");
   const hasPercent = rows.some((row) => row.stepKind !== "fill");
 
+  // Rendered twice: in the plan's rules card on a desktop, and inside the
+  // layers card on a phone, which has no rules card of its own.
+  const percentRow = (extraClass = ""): string => `<li class="wu-budget-layer${extraClass ? ` ${extraClass}` : ""}"><div class="wu-budget-row wu-budget-row--plain wu-budget-row--static">
+        <span class="wu-budget-row__title">Percent layers add up to<small>${hasPercent ? "Shares of what is left and of all income" : "Every layer is a fixed amount"}</small></span>
+        <span class="wu-budget-row__got wu-budget-row__muted${percentWarning ? " wu-budget-part" : ""}">${hasPercent ? (percentWarning ? `${percentWarning.value}%` : "100%") : "No % layers"}</span>
+      </div></li>`;
+
+  // What a layer caught after every layer above it filled. The desktop says it
+  // in its own figure tile; the phone has one card for the month, so it is a
+  // line there.
+  const caughtLine = caught
+    ? `Extra caught <b class="t-positive">+${figure(caught.overflow)}</b> · went to ${escapeHtml(caught.name)}`
+    : "Nothing left over after the layers";
+
   const layers = rows.length === 0
     ? `<p class="wu-empty">No layers yet. Add one and it becomes the first place your income flows into.</p>`
     : `<div class="wu-budget-row wu-budget-row--head" aria-hidden="true"><span></span><span>Layer</span><span>Filled</span><span>Got</span><span>Status</span><span></span></div>
       <ul class="wu-budget-list">
         ${rows.map((row, index) => layerRow(row, index, rows.length, view)).join("")}
         ${overflowRow(budget, plan, view, "wu-budget-phone-only")}
+        ${percentRow("wu-budget-phone-only")}
       </ul>`;
 
   return `
@@ -334,6 +349,7 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
       <p class="wu-money"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(allocation.actual.income)}</span></p>
       ${split}
       <p class="wu-dash__note">${planLine}</p>
+      <p class="wu-dash__note wu-budget-caught">${caughtLine}</p>
     </section>
 
     <!-- LAYERS — a table on a desktop, a grouped list on a phone -->
@@ -352,10 +368,7 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
       <div class="wu-tc__top"><span class="wu-label" id="budRulesLabel">Plan rules</span></div>
       <ul class="wu-budget-list">
         ${rows.length ? overflowRow(budget, plan, view) : ""}
-        <li class="wu-budget-layer"><div class="wu-budget-row wu-budget-row--plain wu-budget-row--static">
-          <span class="wu-budget-row__title">Percent layers add up to<small>${hasPercent ? "Shares of what is left and of all income" : "Every layer is a fixed amount"}</small></span>
-          <span class="wu-budget-row__got wu-budget-row__muted${percentWarning ? " wu-budget-part" : ""}">${hasPercent ? (percentWarning ? `${percentWarning.value}%` : "100%") : "No % layers"}</span>
-        </div></li>
+        ${percentRow()}
         ${oneTime.map((bucket) => bucketRow(bucket, view)).join("")}
       </ul>
     </section>
