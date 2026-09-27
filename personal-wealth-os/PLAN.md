@@ -38,10 +38,14 @@ Preview：https://claude.ai/artifact/BReLMykggYtANYvfRWcmXv
   坏条目逐条丢弃、不影响其他月份，补测试。页面上看不到变化。
 - MP-2 `[x]` Budget 页：「本月 / 下个月」切换、预计收入输入、Save；各层照规则显示该月数额。
 - MP-3 `[x]` 本月的计划 vs 实际并排对照，写清哪一层少了多少。
-- MP-4 `[~]` （用户 2026-09-27 追加）在 Plan ahead 点某一层，就地打开**同一个**规则编辑器改规则。
+- MP-4 `[x]` （用户 2026-09-27 追加）在 Plan ahead 点某一层，就地打开**同一个**规则编辑器改规则。
   改的是规则本身，每个月都跟着变，编辑器写明这一点；同一时间只开一个编辑器；不加新资料。
 
-MP-1..MP-3 在分支 `feat/budget-month-plan`（`2d56dfa` `2e00b33` `f3ece0e`），MP-4 做完后一起开 PR。
+- MP-5 `[x]` （用户 2026-09-27 指出重复）Plan ahead 和 Layers 列同样的层、同样的编辑器，合成**一张**卡片，
+  标题叫 Plan ahead（用户定的名字）。本月：Plan / Got / 差额 / 进度条；下个月：计划数 + 每层的 note，不显示 Got / Status。
+  note（What it is for）保留。桌面和手机功能一致。
+
+MP-1..MP-5 全在 PR #160（分支 `feat/budget-month-plan`），等用户检查后合并。
 
 ---
 
