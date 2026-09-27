@@ -16,7 +16,7 @@
 
 ---
 
-## Budget 月计划：钱到账前先写预计收入（M 系列）  `[~]`（2026-09-27 定稿）
+## Budget 月计划：钱到账前先写预计收入（MP 系列）  `[~]`（2026-09-27 定稿）
 
 Preview：https://claude.ai/artifact/BReLMykggYtANYvfRWcmXv
 
@@ -34,10 +34,10 @@ Preview：https://claude.ai/artifact/BReLMykggYtANYvfRWcmXv
 - 某个月没存过预计收入时，默认用 Me 页的数字，所以现有行为不变。
 
 **Tasks**：
-- M-1 `[~]` 资料：`WealthState.monthPlans`（`{ "2026-10": { expectedIncome } }`），v30 → v31 迁移，
+- MP-1 `[~]` 资料：`WealthState.monthPlans`（`{ "2026-10": { expectedIncome } }`），v30 → v31 迁移，
   坏条目逐条丢弃、不影响其他月份，补测试。页面上看不到变化。
-- M-2 `[ ]` Budget 页：「本月 / 下个月」切换、预计收入输入、Save；各层照规则显示该月数额。
-- M-3 `[ ]` 本月的计划 vs 实际并排对照，写清哪一层少了多少。
+- MP-2 `[ ]` Budget 页：「本月 / 下个月」切换、预计收入输入、Save；各层照规则显示该月数额。
+- MP-3 `[ ]` 本月的计划 vs 实际并排对照，写清哪一层少了多少。
 
 ---
 
@@ -950,7 +950,7 @@ MM-1..MM-7 开 PR #75（未合并）。
 
 ---
 
-## 手机比例打磨（M 系列）
+## 手机比例打磨（MP 系列）
 
 目标：手机页面「看起来不乱、用起来直接知道 use for 什么」。约束：全部改动在
 `@media (max-width: 720px)`，不碰页面逻辑；每步 STOP 汇报。
