@@ -102,6 +102,16 @@ export interface AllocationPlan {
   overflowStepId?: string;
 }
 
+/**
+ * What the user expects one month to bring in, written before the money
+ * arrives. Kept per month so planning the next one never rewrites the plan the
+ * current month is being measured against. (v31)
+ */
+export interface MonthPlan {
+  /** Base currency. The whole month's income, fixed and irregular together. */
+  expectedIncome: number;
+}
+
 export interface Goal {
   id: string;
   name: string;
@@ -437,6 +447,11 @@ export interface WealthState {
   opportunity: OpportunityReserve;
   buckets: Bucket[];
   allocation: AllocationPlan;
+  /**
+   * Expected income by "YYYY-MM". A month with no entry falls back to the
+   * cashflow figures set on the Me page. (v31)
+   */
+  monthPlans: Record<string, MonthPlan>;
   goals: Goal[];
   overviewGoalId: string;
   trades: Trade[];

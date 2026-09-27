@@ -1,4 +1,4 @@
-import type { AllocationPlan, AllocationStep, Bucket, Goal, LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, Liability, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
+import type { AllocationPlan, AllocationStep, Bucket, Goal, MonthPlan, LedgerAccount, LedgerAccountType, LedgerCategory, LedgerTransaction, LedgerTransactionType, Liability, RuleCardContent, RuleCardId, RuleNote, Trade, WealthState } from "./models";
 import { isDebtKind, isMonth } from "./debtPriority";
 import { buildOnboardingChecklist } from "./onboarding";
 import { linkedGoalCurrent } from "./financialHealth";
@@ -16,7 +16,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 30;
+export const CURRENT_VERSION = 31;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -164,6 +164,24 @@ function normalizeAllocationPlan(input: unknown, buckets: Bucket[]): AllocationP
   return { incomeType, steps, overflowStepId };
 }
 
+/**
+ * v31: expected income per month. Purely additive — older data has none, and
+ * every month then falls back to the Me page's figures exactly as before.
+ * Entries are judged one by one: a bad month key or amount drops that month
+ * only, never the others the user wrote.
+ */
+function normalizeMonthPlans(input: unknown): Record<string, MonthPlan> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const plans: Record<string, MonthPlan> = {};
+  for (const [monthKey, value] of Object.entries(input as Record<string, unknown>)) {
+    if (!isMonth(monthKey) || !value || typeof value !== "object") continue;
+    const expectedIncome = (value as Record<string, unknown>).expectedIncome;
+    if (typeof expectedIncome !== "number" || !Number.isFinite(expectedIncome) || expectedIncome < 0) continue;
+    plans[monthKey] = { expectedIncome };
+  }
+  return plans;
+}
+
 export const defaultState: WealthState = {
   version: CURRENT_VERSION,
   profile: {
@@ -209,6 +227,7 @@ export const defaultState: WealthState = {
   },
   buckets: DEFAULT_BUCKETS,
   allocation: allocationPlanFromBuckets(DEFAULT_BUCKETS),
+  monthPlans: {},
   goals: [
     { id: "emergency", name: "Emergency Fund", label: "5-Month Safety Buffer ✅", current: 4000, target: 4000, monthlyContribution: 0, note: "The five-month safety-buffer goal is complete at MYR 4,000." },
     { id: "travel", name: "Travel Fund", label: "Travel Fund", current: 0, target: 1000, monthlyContribution: 30, note: "Start with the suggested target and adjust it later if needed." },
@@ -359,6 +378,7 @@ function emptyStateBase(): WealthState {
     },
     buckets: [],
     allocation: allocationPlanFromBuckets([]),
+    monthPlans: {},
     goals: [],
     overviewGoalId: "",
     trades: [],
@@ -795,6 +815,7 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   }
 
   merged.allocation = normalizeAllocationPlan(candidate.allocation, merged.buckets);
+  merged.monthPlans = normalizeMonthPlans(candidate.monthPlans);
 
   return merged;
 }
