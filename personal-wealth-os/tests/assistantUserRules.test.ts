@@ -87,7 +87,7 @@ test("user rules: a bear-market reserve is the user's own choice, and not the as
 
 test("user rules: the plan is described as rules, not as amounts nobody chose", () => {
   const text = buildUserRulesContext(stateWith(), NOW);
-  assert.match(text, /Allocation plan, money flows top to bottom \(planned income MYR 3,000\/month\):/);
+  assert.match(text, /Allocation plan, money flows top to bottom \(planned income MYR 3,000 this month\):/);
   assert.match(text, /Survival: fill to MYR 750 — MYR 750 in a planned month/);
   // Growth is the layer the plan catches the surplus in, and says so rather
   // than reporting MYR 2,250 as if the user had set that figure.

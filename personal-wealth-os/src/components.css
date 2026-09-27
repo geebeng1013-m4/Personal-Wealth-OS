@@ -3381,6 +3381,34 @@
     grid-template-areas: "title got";
     cursor: default;
   }
+  /* Plan ahead: a layer, its rule and what the plan gives it — no editor */
+  .wu-budget-row--static.wu-budget-row--ahead {
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+    grid-template-areas: "dot title got";
+  }
+  .wu-budget-ahead__top {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .wu-budget-ahead__months {
+    max-width: 100%;
+  }
+  .wu-budget-ahead__form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-3);
+  }
+  .wu-budget-ahead__form .wu-field-row {
+    flex: 0 1 300px;
+    min-width: 0;
+  }
+  .wu-budget-ahead__form .wu-field[aria-invalid="true"] {
+    border-color: var(--negative);
+  }
+  .wu-budget-ahead:has(.wu-field[aria-invalid="true"]) #planAheadHint {
+    color: var(--negative);
+  }
   button.wu-budget-row:hover .wu-budget-row__title {
     color: var(--accent);
   }

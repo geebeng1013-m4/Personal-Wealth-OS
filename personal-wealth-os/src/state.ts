@@ -182,6 +182,24 @@ function normalizeMonthPlans(input: unknown): Record<string, MonthPlan> {
   return plans;
 }
 
+/**
+ * An expected-income field's text as an amount, or null when it is not one.
+ * Empty is not zero: a cleared field means nothing was entered yet, and saving
+ * it as a month of no income would be a figure the user never wrote.
+ */
+export function parseExpectedIncomeInput(raw: string): number | null {
+  const text = raw.trim();
+  if (text === "") return null;
+  const amount = Number(text);
+  return Number.isFinite(amount) && amount >= 0 ? amount : null;
+}
+
+/** The state with one month's expected income written; other months untouched. */
+export function withExpectedIncome(state: WealthState, monthKey: string, expectedIncome: number): WealthState {
+  if (!isMonth(monthKey) || !Number.isFinite(expectedIncome) || expectedIncome < 0) return state;
+  return { ...state, monthPlans: { ...state.monthPlans, [monthKey]: { expectedIncome } } };
+}
+
 export const defaultState: WealthState = {
   version: CURRENT_VERSION,
   profile: {

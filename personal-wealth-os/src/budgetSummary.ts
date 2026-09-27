@@ -11,7 +11,8 @@
  * These are different things and are deliberately never merged:
  *
  *   PLAN    what the user intends to allocate. Comes from state.cashflow,
- *           state.buckets and state.dca. Prefixed `planned*`.
+ *           state.buckets, state.dca and state.monthPlans. Prefixed
+ *           `planned*`, or held in allocation.ahead.
  *
  *   ACTUAL  what the ledger actually recorded this month. Comes from
  *           getLedgerSnapshot(). Prefixed `actual*`.
@@ -25,7 +26,7 @@
  * module reports what was spent, and the Advisor compares the two.
  */
 import type { AllocationPlan, WealthState } from "./models";
-import { getLedgerSnapshot, recentMonthlyIncome, type LedgerSnapshot } from "./ledgerSummary";
+import { getLedgerSnapshot, monthKeyOf, recentMonthlyIncome, type LedgerSnapshot } from "./ledgerSummary";
 import { monthlyBasicExpense, monthlySurplus } from "./rules";
 import { allocateMonth, cashMonths, validatePlan, type AllocationResult, type PlanWarning } from "./allocation";
 
@@ -86,9 +87,50 @@ export interface BudgetOutlook {
   worstMonthsCovered: number;
 }
 
+/**
+ * Where a month's expected income came from.
+ *
+ *   month-plan  the user wrote it for this month on the Budget page
+ *   me-page     nothing written for this month, so the Me page's allowance
+ *               plus irregular income stands in — what every month used
+ *               before month plans existed
+ */
+export type ExpectedIncomeSource = "month-plan" | "me-page";
+
+/** One month planned ahead: what the user expects in, and where the plan sends it. */
+export interface MonthAhead {
+  /** "YYYY-MM". */
+  monthKey: string;
+  expectedIncome: number;
+  source: ExpectedIncomeSource;
+  /** The plan routed over expectedIncome. A plan, never a recorded figure. */
+  result: AllocationResult;
+}
+
+/**
+ * What the user expects a month to bring in. A month they wrote a figure for
+ * uses it, zero included; any other month falls back to the Me page.
+ */
+export function expectedIncomeFor(state: WealthState, monthKey: string): { income: number; source: ExpectedIncomeSource } {
+  const written = state.monthPlans?.[monthKey];
+  if (written) return { income: written.expectedIncome, source: "month-plan" };
+  return { income: state.cashflow.allowance + state.cashflow.irregularIncome, source: "me-page" };
+}
+
+/** "YYYY-MM" of the month after `now`. */
+export function nextMonthKeyOf(now: Date): string {
+  return monthKeyOf(new Date(now.getFullYear(), now.getMonth() + 1, 1));
+}
+
 export interface BudgetAllocationSnapshot {
-  /** The plan routed over plannedIncome — what a normal month looks like. */
+  /**
+   * The plan routed over this month's expected income: the figure written for
+   * this month on the Budget page, or the Me page's when there is none. The
+   * same result as ahead[0].
+   */
   planned: AllocationResult;
+  /** This month and next, planned before the money arrives. */
+  ahead: [MonthAhead, MonthAhead];
   /** The plan routed over the income the ledger recorded this month. */
   actual: AllocationResult;
   /** Facts about a plan the user could have mis-configured. Wording is the UI's. */
@@ -131,7 +173,10 @@ export interface BudgetSnapshot {
   // --- PLAN (from state.cashflow / state.dca) ---
   /** Monthly allowance alone. */
   plannedAllowance: number;
-  /** allowance + irregular income. */
+  /**
+   * allowance + irregular income: the Me page's usual month. A month the user
+   * planned on the Budget page may expect something else — see allocation.ahead.
+   */
   plannedIncome: number;
   /** Planned fixed outgoings: transport + food + otherFixed. */
   plannedSpending: number;
@@ -216,8 +261,14 @@ export function getBudgetSnapshot(
   // parent's dinner money never reads as income the plan may invest.
   const plan: AllocationPlan = state.allocation ?? { incomeType: "fixed", steps: [] };
   const cash = spendableCashOf(state, ledger);
+  const monthAhead = (monthKey: string): MonthAhead => {
+    const expected = expectedIncomeFor(state, monthKey);
+    return { monthKey, expectedIncome: expected.income, source: expected.source, result: allocateMonth(plan, expected.income) };
+  };
+  const ahead: [MonthAhead, MonthAhead] = [monthAhead(ledger.currentMonth.key), monthAhead(nextMonthKeyOf(now))];
   const allocation: BudgetAllocationSnapshot = {
-    planned: allocateMonth(plan, plannedIncome),
+    planned: ahead[0].result,
+    ahead,
     actual: allocateMonth(plan, ledger.currentMonth.personalIncome),
     warnings: validatePlan(plan),
     spendableCash: cash.spendableCash,

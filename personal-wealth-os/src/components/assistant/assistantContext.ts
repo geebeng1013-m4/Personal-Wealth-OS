@@ -180,7 +180,9 @@ export function buildUserRulesContext(state: WealthState, now: Date): string {
   // Described as the rules the user set, not as the amounts they happen to
   // produce: a percentage layer has no fixed monthly figure, and reporting it
   // as one would have the assistant advise on a number nobody chose.
-  const income = budget.plannedIncome;
+  // This month's own expected income when the user wrote one, so the header
+  // and the layer amounts below it describe the same month.
+  const income = budget.allocation.planned.income;
   const layers = budget.allocation.planned.rows
     // A layer that asks for nothing and gets nothing is noise to reason about.
     .filter((row) => row.want > 0.005 || row.got > 0.005)
@@ -195,7 +197,7 @@ export function buildUserRulesContext(state: WealthState, now: Date): string {
       return `  - ${row.name}: ${rule} — ${money(row.got)} in a planned month${catches}`;
     });
   if (layers.length > 0) {
-    lines.push(`Allocation plan, money flows top to bottom (planned income ${money(income)}/month):`, ...layers);
+    lines.push(`Allocation plan, money flows top to bottom (planned income ${money(income)} this month):`, ...layers);
   }
 
   const oneTime = budget.buckets
