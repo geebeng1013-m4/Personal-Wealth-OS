@@ -122,6 +122,32 @@ export function nextMonthKeyOf(now: Date): string {
   return monthKeyOf(new Date(now.getFullYear(), now.getMonth() + 1, 1));
 }
 
+/** One layer this month: what the plan expected it to get, and what it got. */
+export interface LayerVersusPlan {
+  stepId: string;
+  name: string;
+  /** From this month's expected income. A plan, not money. */
+  planned: number;
+  /** From the income the ledger recorded this month. */
+  actual: number;
+  /** actual - planned. Negative means the layer got less than planned. */
+  difference: number;
+}
+
+/**
+ * Pair this month's planned and actual layers. Both come from the same plan,
+ * so the layers match one to one; they are paired by id all the same, so a
+ * mismatch drops a layer rather than comparing two different ones.
+ */
+export function layersVersusPlan(planned: AllocationResult, actual: AllocationResult): LayerVersusPlan[] {
+  return actual.rows.flatMap((row) => {
+    const plan = planned.rows.find((entry) => entry.stepId === row.stepId);
+    return plan
+      ? [{ stepId: row.stepId, name: row.name, planned: plan.got, actual: row.got, difference: row.got - plan.got }]
+      : [];
+  });
+}
+
 export interface BudgetAllocationSnapshot {
   /**
    * The plan routed over this month's expected income: the figure written for
@@ -131,6 +157,8 @@ export interface BudgetAllocationSnapshot {
   planned: AllocationResult;
   /** This month and next, planned before the money arrives. */
   ahead: [MonthAhead, MonthAhead];
+  /** This month's layers, planned against received, in plan order. */
+  versusPlan: LayerVersusPlan[];
   /** The plan routed over the income the ledger recorded this month. */
   actual: AllocationResult;
   /** Facts about a plan the user could have mis-configured. Wording is the UI's. */
@@ -266,10 +294,12 @@ export function getBudgetSnapshot(
     return { monthKey, expectedIncome: expected.income, source: expected.source, result: allocateMonth(plan, expected.income) };
   };
   const ahead: [MonthAhead, MonthAhead] = [monthAhead(ledger.currentMonth.key), monthAhead(nextMonthKeyOf(now))];
+  const actual = allocateMonth(plan, ledger.currentMonth.personalIncome);
   const allocation: BudgetAllocationSnapshot = {
     planned: ahead[0].result,
     ahead,
-    actual: allocateMonth(plan, ledger.currentMonth.personalIncome),
+    actual,
+    versusPlan: layersVersusPlan(ahead[0].result, actual),
     warnings: validatePlan(plan),
     spendableCash: cash.spendableCash,
     emergencyBasis: cash.emergencyBasis,

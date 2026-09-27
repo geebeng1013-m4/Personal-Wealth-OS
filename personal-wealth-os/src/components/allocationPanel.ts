@@ -19,7 +19,7 @@
  * figures the snapshot already holds.
  */
 
-import type { BudgetBucketSnapshot, BudgetSnapshot, OutlookMonth } from "../budgetSummary";
+import type { BudgetBucketSnapshot, BudgetSnapshot, LayerVersusPlan, OutlookMonth } from "../budgetSummary";
 import type { AllocationResult, AllocationRow, PlanWarning } from "../allocation";
 import type { AllocationPlan } from "../models";
 import { money } from "../rules";
@@ -161,7 +161,36 @@ function layerEditor(row: AllocationRow, index: number, total: number): string {
     </form>`;
 }
 
-function layerRow(row: AllocationRow, index: number, total: number, view: BudgetView): string {
+/** "−480" or "+200", signed in text so the difference never rests on colour alone. */
+function signedFigure(value: number): string {
+  return amt(`${value < 0 ? "−" : "+"}${amountOf(Math.abs(value))}`);
+}
+
+/**
+ * Under a layer's received figure: how far it is from plan. A phone has no
+ * Plan column, so it also reads the planned figure here; a desktop hides that
+ * part and keeps only the difference beside its own column.
+ */
+function versusPlanLine(vs: LayerVersusPlan): string {
+  const off = Math.abs(vs.difference) > 0.005;
+  const tone = !off ? "" : vs.difference < 0 ? " wu-budget-part" : " t-positive";
+  return `<small class="wu-budget-row__vs${tone}"><span class="wu-budget-row__vs-plan">Plan ${figure(vs.planned)}${off ? " · " : ""}</span>${off ? `${signedFigure(vs.difference)} vs plan` : ""}</small>`;
+}
+
+/**
+ * This month against its plan, in one sentence: how much came in against how
+ * much was planned, and which layers got less for it.
+ */
+export function versusPlanSummary(received: number, planned: number, layers: LayerVersusPlan[]): string {
+  const gap = received - planned;
+  if (Math.abs(gap) < 0.005) return `Received the ${figure(planned)} you planned.`;
+  if (gap > 0) return `Received ${figure(gap)} more than the ${figure(planned)} you planned.`;
+  const below = layers.filter((layer) => layer.difference < -0.005);
+  const named = below.map((layer) => `${escapeHtml(layer.name)} ${signedFigure(layer.difference)}`).join(", ");
+  return `Received ${figure(received)} of the ${figure(planned)} you planned.${named ? ` Below plan: ${named}.` : ""}`;
+}
+
+function layerRow(row: AllocationRow, index: number, total: number, view: BudgetView, vs: LayerVersusPlan | undefined, compare: boolean): string {
   const open = view.openLayer === index;
   const status = layerStatus(row);
   const filled = row.want > 0 ? Math.min(100, (Math.min(row.got, row.want) / row.want) * 100) : 0;
@@ -170,7 +199,8 @@ function layerRow(row: AllocationRow, index: number, total: number, view: Budget
         <i class="wu-budget-row__dot" style="background:${layerColor(index)}" aria-hidden="true"></i>
         <span class="wu-budget-row__title">${escapeHtml(row.name)}<small>${ruleText(row)}</small></span>
         <span class="wu-budget-row__fill"><span class="wu-bar" aria-hidden="true"><span class="wu-bar__fill${status.tone === "wu-budget-part" ? " is-part" : ""}" style="width:${filled}%"></span></span><small>${row.want > 0 ? `${Math.round(filled)}% filled` : "No amount set"}${row.note ? ` · ${escapeHtml(row.note)}` : ""}</small></span>
-        <span class="wu-budget-row__got">${figure(row.got)}<small class="${status.tone}">${status.text}</small></span>
+        <span class="wu-budget-row__plan">${vs ? figure(vs.planned) : ""}</span>
+        <span class="wu-budget-row__got">${figure(row.got)}<small class="${status.tone}">${status.text}</small>${vs && compare ? versusPlanLine(vs) : ""}</span>
         <span class="wu-budget-row__status ${status.tone}">${status.text}</span>
         <span class="wu-budget-row__chev" aria-hidden="true">›</span>
       </button>
@@ -360,6 +390,8 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
     allocation.actual.unassigned > 0.005 ? `${amt(money(allocation.actual.unassigned))} reached the end with no layer set to catch it.` : "",
     ...allocation.warnings.map(warningText),
   ].filter(Boolean);
+  const versusPlan = new Map(allocation.versusPlan.map((entry) => [entry.stepId, entry]));
+  const planSummary = nothingIn ? "" : versusPlanSummary(allocation.actual.income, allocation.planned.income, allocation.versusPlan);
   const needsNormalizing = allocation.warnings.some((warning) => warning.code === "percent-total-not-100");
   const percentWarning = allocation.warnings.find((warning) => warning.code === "percent-total-not-100");
   const hasPercent = rows.some((row) => row.stepKind !== "fill");
@@ -380,9 +412,9 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
 
   const layers = rows.length === 0
     ? `<p class="wu-empty">No layers yet. Add one and it becomes the first place your income flows into.</p>`
-    : `<div class="wu-budget-row wu-budget-row--head" aria-hidden="true"><span></span><span>Layer</span><span>Filled</span><span>Got</span><span>Status</span><span></span></div>
+    : `<div class="wu-budget-row wu-budget-row--head" aria-hidden="true"><span></span><span>Layer</span><span>Filled</span><span>Plan</span><span>Got</span><span>Status</span><span></span></div>
       <ul class="wu-budget-list">
-        ${rows.map((row, index) => layerRow(row, index, rows.length, view)).join("")}
+        ${rows.map((row, index) => layerRow(row, index, rows.length, view, versusPlan.get(row.stepId), !nothingIn)).join("")}
         ${overflowRow(budget, plan, view, "wu-budget-phone-only")}
         ${percentRow("wu-budget-phone-only")}
       </ul>`;
@@ -430,6 +462,7 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
       <div class="wu-tc__top"><span class="wu-label" id="budLayersLabel">Layers · filled top to bottom</span>${nothingIn ? "" : short ? `<span class="wu-chip wu-chip--negative">${escapeHtml(rows[0]?.name ?? "")} ${figure(allocation.actual.shortfall)} short</span>` : `<span class="wu-chip">All filled</span>`}</div>
       ${shortfallBlock}
       ${layers}
+      ${planSummary ? `<p class="wu-dash__note wu-budget-vs-summary">${planSummary}</p>` : ""}
       ${notes.map((note) => `<p class="wu-dash__note wu-budget-note">${note}</p>`).join("")}
       ${needsNormalizing ? `<div><button class="wu-btn wu-btn--secondary wu-btn--sm" id="normalizeLayersBtn" type="button">Make them add to 100%</button></div>` : ""}
       <button class="wu-budget-add add-layer" type="button">+ Add a layer</button>

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "./testHarness";
-import { expectedIncomeFor, getBudgetSnapshot, nextMonthKeyOf } from "../src/budgetSummary";
+import { expectedIncomeFor, getBudgetSnapshot, layersVersusPlan, nextMonthKeyOf } from "../src/budgetSummary";
 import { migrateState, parseExpectedIncomeInput, withExpectedIncome } from "../src/state";
 import { allocateMonth } from "../src/allocation";
-import { planAheadRows } from "../src/components/allocationPanel";
+import { planAheadRows, versusPlanSummary } from "../src/components/allocationPanel";
 import type { AllocationPlan, WealthState } from "../src/models";
 
 // MP-2: plan this month or next before the money arrives.
@@ -162,4 +162,58 @@ test("plan ahead: a layer the user named is escaped before it reaches the page",
 
 test("plan ahead: no layers says so instead of an empty list", () => {
   assert.match(planAheadRows(allocateMonth({ incomeType: "fixed", steps: [] }, 1000)), /No layers yet/);
+});
+
+// --- MP-3: this month's plan against what arrived ----------------------------
+
+const bank = { id: "acc-bank", name: "Bank", type: "bank" as const, openingBalance: 0 };
+function receivedThisMonth(amount: number, overrides: Partial<WealthState> = {}): WealthState {
+  return stateWith({
+    ledgerAccounts: [bank],
+    ledgerTransactions: amount > 0
+      ? [{ id: "pay", amount, type: "income", categoryId: "income-salary", accountId: "acc-bank", date: new Date(2026, 8, 5, 12, 0, 0).toISOString() }]
+      : [],
+    ...overrides,
+  });
+}
+const layer = (budget: ReturnType<typeof getBudgetSnapshot>, id: string) =>
+  budget.allocation.versusPlan.find((entry) => entry.stepId === id);
+
+test("plan vs actual: a thin month shows which layers got less, and by how much", () => {
+  // Planned 3,200 (Me page); received 2,600. 2,600 - 1,200 = 1,400 left: 700 / 420 / 280.
+  const budget = getBudgetSnapshot(receivedThisMonth(2600), NOW);
+  assert.deepEqual(layer(budget, "survival"), { stepId: "survival", name: "Survival", planned: 1200, actual: 1200, difference: 0 });
+  assert.deepEqual(layer(budget, "growth"), { stepId: "growth", name: "Growth", planned: 1000, actual: 700, difference: -300 });
+  assert.equal(layer(budget, "freedom")?.difference, -180);
+  assert.equal(layer(budget, "learning")?.difference, -120);
+});
+
+test("plan vs actual: this month's own written figure is what it is measured against", () => {
+  const budget = getBudgetSnapshot(receivedThisMonth(2600, { monthPlans: { "2026-09": { expectedIncome: 2600 } } }), NOW);
+  assert.ok(budget.allocation.versusPlan.every((entry) => entry.difference === 0));
+});
+
+test("plan vs actual: next month's plan never enters this month's comparison", () => {
+  const plain = getBudgetSnapshot(receivedThisMonth(2600), NOW).allocation.versusPlan;
+  const withNext = getBudgetSnapshot(receivedThisMonth(2600, { monthPlans: { "2026-10": { expectedIncome: 9999 } } }), NOW).allocation.versusPlan;
+  assert.deepEqual(withNext, plain);
+});
+
+test("plan vs actual: a layer missing from one side is dropped, never compared with another", () => {
+  const planned = allocateMonth(plan, 3200);
+  const actual = allocateMonth({ ...plan, steps: plan.steps.filter((step) => step.id !== "freedom") }, 3200);
+  assert.deepEqual(layersVersusPlan(planned, actual).map((entry) => entry.stepId), ["survival", "growth", "learning"]);
+});
+
+test("plan vs actual: the sentence names the layers below plan, with signs in text", () => {
+  const budget = getBudgetSnapshot(receivedThisMonth(2600), NOW);
+  const text = versusPlanSummary(budget.allocation.actual.income, budget.allocation.planned.income, budget.allocation.versusPlan)
+    .replace(/<[^>]+>/g, "");
+  assert.equal(text, "Received 2,600 of the 3,200 you planned. Below plan: Growth −300, Freedom −180, Learning −120.");
+});
+
+test("plan vs actual: more than planned, and exactly as planned, each say so", () => {
+  const strip = (html: string) => html.replace(/<[^>]+>/g, "");
+  assert.equal(strip(versusPlanSummary(3500, 3200, [])), "Received 300 more than the 3,200 you planned.");
+  assert.equal(strip(versusPlanSummary(3200, 3200, [])), "Received the 3,200 you planned.");
 });

@@ -3462,6 +3462,7 @@
     color: var(--warning);
   }
   .wu-budget-row__fill,
+  .wu-budget-row__plan,
   .wu-budget-row__status {
     display: none;
   }
@@ -3605,8 +3606,8 @@
     }
     /* the layers become a table: every column lines up down the rows */
     .wu-budget-layers .wu-budget-row:not(.wu-budget-row--plain) {
-      grid-template-columns: 10px minmax(0, 1.1fr) minmax(0, 1.6fr) 96px 140px 10px;
-      grid-template-areas: "dot title fill got status chev";
+      grid-template-columns: 10px minmax(0, 1.1fr) minmax(0, 1.4fr) 96px 110px 140px 10px;
+      grid-template-areas: "dot title fill plan got status chev";
       gap: var(--space-4);
     }
     .wu-budget-layers .wu-budget-row--head {
@@ -3620,8 +3621,23 @@
     }
     .wu-budget-row--head > span:nth-child(2) { grid-area: title; }
     .wu-budget-row--head > span:nth-child(3) { grid-area: fill; }
-    .wu-budget-row--head > span:nth-child(4) { grid-area: got; text-align: right; }
-    .wu-budget-row--head > span:nth-child(5) { grid-area: status; display: block; text-align: right; }
+    .wu-budget-row--head > span:nth-child(4) { grid-area: plan; text-align: right; }
+    .wu-budget-row--head > span:nth-child(5) { grid-area: got; text-align: right; }
+    .wu-budget-row--head > span:nth-child(6) { grid-area: status; display: block; text-align: right; }
+    /* this month's plan beside what arrived; the difference sits under Got */
+    .wu-budget-layers .wu-budget-row__plan {
+      grid-area: plan;
+      display: block;
+      text-align: right;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .wu-budget-layers .wu-budget-row__got small.wu-budget-row__vs {
+      display: block;
+    }
+    .wu-budget-row__vs-plan {
+      display: none;
+    }
     .wu-budget-layers .wu-budget-row__fill {
       grid-area: fill;
       display: grid;
