@@ -22,7 +22,7 @@ import { setAssistantTokenProvider } from "./components/assistant/assistantClien
 import { fetchUsdToMyr, pruneMarketCache } from "./market";
 import type { User } from "firebase/auth";
 import { isDemoMode } from "./demo";
-import { demoStateFor, DEMO_USER_DISPLAY_NAME, DEMO_USER_EMAIL, DEMO_USER_PHOTO } from "./demoData";
+import { demoPersonaFor, demoStateFor, DEMO_USER_PHOTO } from "./demoData";
 import { initSaveErrorToasts } from "./components/toast";
 import { initLiquidGlass } from "./liquidGlass";
 import { applyOnboardingAnswers, shouldShowOnboardingQuiz, skipOnboardingQuiz } from "./onboardingQuiz";
@@ -564,12 +564,14 @@ if (isDemoMode()) {
   console.log("[Demo] Design Review mode — Firebase auth and writes are disabled.");
   // `?fresh` starts an empty account, to walk the new-user Q&A (O-2). It keeps
   // its own storage so it never touches the fixture the plain demo shows.
-  const fresh = new URLSearchParams(window.location.search).has("fresh");
+  const params = new URLSearchParams(window.location.search);
+  const fresh = params.has("fresh");
+  const persona = demoPersonaFor(params);
   // Create a minimal mock user so the UI renders normally without real auth.
   const demoUser = {
-    uid: fresh ? "demo-fresh-user" : "demo-user",
-    displayName: DEMO_USER_DISPLAY_NAME,
-    email: DEMO_USER_EMAIL,
+    uid: fresh ? "demo-fresh-user" : persona.uid,
+    displayName: persona.displayName,
+    email: persona.email,
     photoURL: DEMO_USER_PHOTO,
   } as unknown as User;
 
@@ -578,8 +580,8 @@ if (isDemoMode()) {
 
   // Keep edits made in the preview deployment across rerenders and refreshes.
   // The demo user is isolated from real accounts by its dedicated uid.
-  const demoStorageKey = "personal-wealth-os-state-demo-user";
-  state = fresh ? emptyState() : localStorage.getItem(demoStorageKey) ? loadState(demoUser.uid) : demoStateFor(new Date());
+  const demoStorageKey = `personal-wealth-os-state-${persona.uid}`;
+  state = fresh ? emptyState() : localStorage.getItem(demoStorageKey) ? loadState(persona.uid) : demoStateFor(new Date(), persona.state);
 
   quizAllowed = true;
   renderSignedIn(demoUser);

@@ -8,6 +8,7 @@
 
 import type { WealthState } from "./models";
 import { getDefaultFinancialRules } from "./financialRules";
+import { danielDemoState, DANIEL_DISPLAY_NAME, DANIEL_EMAIL } from "./demoDaniel";
 
 export const DEMO_USER_DISPLAY_NAME = "Alex Chen";
 export const DEMO_USER_EMAIL = "demo@wealthup.cc";
@@ -352,8 +353,27 @@ function shiftDates<T>(value: T, months: number): T {
  * Shifting by whole months keeps every relative gap, so all the figures the
  * demo is known for stay exactly the same.
  */
-export function demoStateFor(now: Date = new Date()): WealthState {
+export function demoStateFor(now: Date = new Date(), fixture: WealthState = demoState): WealthState {
   const months = monthsFromAnchor(now);
-  const base = structuredClone(demoState);
+  const base = structuredClone(fixture);
   return months === 0 ? base : shiftDates(base, months);
+}
+
+/**
+ * Who the demo shows. Daniel (an advisor's client) is what visitors see;
+ * Alex, the original student fixture, opens only with `?persona=alex`.
+ * Each keeps its own uid, so edits made in one never appear in the other.
+ */
+export interface DemoPersona {
+  uid: string;
+  displayName: string;
+  email: string;
+  state: WealthState;
+}
+
+export function demoPersonaFor(params: URLSearchParams): DemoPersona {
+  if (params.get("persona") === "alex") {
+    return { uid: "demo-user", displayName: DEMO_USER_DISPLAY_NAME, email: DEMO_USER_EMAIL, state: demoState };
+  }
+  return { uid: "demo-daniel", displayName: DANIEL_DISPLAY_NAME, email: DANIEL_EMAIL, state: danielDemoState };
 }
