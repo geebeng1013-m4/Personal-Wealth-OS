@@ -3381,11 +3381,6 @@
     grid-template-areas: "title got";
     cursor: default;
   }
-  /* Plan ahead: a layer, its rule and what the plan gives it — no editor */
-  .wu-budget-row--static.wu-budget-row--ahead {
-    grid-template-columns: 10px minmax(0, 1fr) auto;
-    grid-template-areas: "dot title got";
-  }
   .wu-budget-ahead__top {
     flex-wrap: wrap;
     gap: var(--space-2);

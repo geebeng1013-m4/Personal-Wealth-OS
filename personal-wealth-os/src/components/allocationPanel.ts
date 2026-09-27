@@ -32,6 +32,13 @@ export interface BudgetView {
   overflowOpen: boolean;
   /** Which month "Plan ahead" shows: 0 this month, 1 next month. */
   planMonth: 0 | 1;
+  /**
+   * Where the open layer's editor shows. One layer is open at a time, and in
+   * one place: Plan ahead and the layers table never both show an editor.
+   */
+  layerOpenIn: "ahead" | "table";
+  /** An expected income typed but not saved, kept so a re-render does not lose it. */
+  aheadDraft: { monthKey: string; text: string } | null;
 }
 
 /** One colour per layer, in plan order, shared by the split bar and the rows. */
@@ -137,7 +144,7 @@ function layerStatus(row: AllocationRow): { text: string; tone: string } {
 }
 
 /** The rule editor under an open layer row. */
-function layerEditor(row: AllocationRow, index: number, total: number): string {
+function layerEditor(row: AllocationRow, index: number, total: number, inPlanAhead = false): string {
   const kindButton = (kind: string, label: string) =>
     `<button type="button" class="wu-segmented__option layer-kind${row.stepKind === kind ? " is-active" : ""}" data-kind="${kind}" aria-pressed="${row.stepKind === kind}">${label}</button>`;
   return `<form class="wu-stack wu-stack--sm layerForm wu-budget-editor" data-index="${index}">
@@ -150,6 +157,7 @@ function layerEditor(row: AllocationRow, index: number, total: number): string {
         <label class="wu-field-row"><span class="wu-field-row__label js-value-label">${row.stepKind === "fill" ? "Amount MYR" : "Share %"}</span><input class="wu-field" name="value" type="number" min="0" step="${row.stepKind === "fill" ? "1" : "0.1"}" value="${row.value}"></label>
         <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">What it is for</span><input class="wu-field" name="note" type="text" value="${escapeHtml(row.note ?? "")}" placeholder="What this money is allowed to do"></label>
       </div>
+      ${inPlanAhead ? `<p class="wu-dash__note wu-budget-note">Changes this layer for every month, not only the one you are planning.</p>` : ""}
       <div class="wu-row wu-row--tight wu-budget-editor__actions">
         <button class="wu-btn wu-btn--ghost wu-btn--icon move-layer" data-index="${index}" data-dir="up" type="button" aria-label="Move up"${index === 0 ? " disabled" : ""}>↑</button>
         <button class="wu-btn wu-btn--ghost wu-btn--icon move-layer" data-index="${index}" data-dir="down" type="button" aria-label="Move down"${index === total - 1 ? " disabled" : ""}>↓</button>
@@ -191,7 +199,7 @@ export function versusPlanSummary(received: number, planned: number, layers: Lay
 }
 
 function layerRow(row: AllocationRow, index: number, total: number, view: BudgetView, vs: LayerVersusPlan | undefined, compare: boolean): string {
-  const open = view.openLayer === index;
+  const open = view.openLayer === index && view.layerOpenIn === "table";
   const status = layerStatus(row);
   const filled = row.want > 0 ? Math.min(100, (Math.min(row.got, row.want) / row.want) * 100) : 0;
   return `<li class="wu-budget-layer${open ? " is-open" : ""}">
@@ -256,7 +264,7 @@ function bucketRow(bucket: BudgetBucketSnapshot, view: BudgetView): string {
  * expected income. The page also calls this while the user types, so the
  * figures follow the field before anything is saved.
  */
-export function planAheadRows(result: AllocationResult): string {
+export function planAheadRows(result: AllocationResult, view: BudgetView): string {
   if (result.rows.length === 0) {
     return `<p class="wu-empty">No layers yet. Add one and this shows what each would get.</p>`;
   }
@@ -270,11 +278,16 @@ export function planAheadRows(result: AllocationResult): string {
       : row.overflow > 0.005
         ? `<small class="t-positive">incl. ${amt(`+${amountOf(row.overflow)}`)} leftover</small>`
         : "";
-    return `<li class="wu-budget-layer"><div class="wu-budget-row wu-budget-row--static wu-budget-row--ahead">
+    const open = view.openLayer === index && view.layerOpenIn === "ahead";
+    return `<li class="wu-budget-layer${open ? " is-open" : ""}">
+      <button class="wu-budget-row wu-budget-row--ahead ahead-layer-row" type="button" data-index="${index}" aria-expanded="${open}">
         <i class="wu-budget-row__dot" style="background:${layerColor(index)}" aria-hidden="true"></i>
         <span class="wu-budget-row__title">${escapeHtml(row.name)}<small>${ruleText(row)}</small></span>
         <span class="wu-budget-row__got">${figure(row.got)}${detail}</span>
-      </div></li>`;
+        <span class="wu-budget-row__chev" aria-hidden="true">›</span>
+      </button>
+      ${open ? layerEditor(row, index, result.rows.length, true) : ""}
+    </li>`;
   }).join("");
   const notes = [
     shortTotal > 0.005 ? `<p class="wu-dash__note wu-budget-part">Fixed layers need ${figure(shortTotal)} more than this income. You can still save it.</p>` : "",
@@ -292,13 +305,16 @@ function inputValue(value: number): string {
  * Plan a month before its money arrives: this month or next, one expected
  * income, routed through the same layers. Saving writes that month only.
  */
-function planAheadCard(budget: BudgetSnapshot, view: BudgetView): string {
+function planAheadCard(budget: BudgetSnapshot, view: BudgetView, draftResult: AllocationResult | null): string {
   const [thisMonth, nextMonth] = budget.allocation.ahead;
   const month = budget.allocation.ahead[view.planMonth];
   const name = monthLabel(month.monthKey);
+  const draft = view.aheadDraft?.monthKey === month.monthKey ? view.aheadDraft : null;
   const tab = (index: 0 | 1, label: string): string =>
     `<button type="button" class="wu-segmented__option plan-month${view.planMonth === index ? " is-active" : ""}" data-month="${index}" aria-pressed="${view.planMonth === index}">${label}</button>`;
-  const hint = month.source === "month-plan"
+  const hint = draft
+    ? (draftResult ? "Not saved yet." : "Enter an amount of 0 or more.")
+    : month.source === "month-plan"
     ? `Saved for ${escapeHtml(name)}.`
     : `Nothing saved for ${escapeHtml(name)} yet, so this starts from your Me page income.`;
   return `<section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-budget-ahead" aria-labelledby="budAheadLabel">
@@ -310,11 +326,11 @@ function planAheadCard(budget: BudgetSnapshot, view: BudgetView): string {
       </div>
       <form class="wu-budget-ahead__form" id="planAheadForm" data-month="${escapeHtml(month.monthKey)}" novalidate>
         <label class="wu-field-row"><span class="wu-field-row__label">Expected income for ${escapeHtml(name)}, MYR</span>
-          <input class="wu-field" id="planAheadIncome" name="expectedIncome" type="number" min="0" step="1" inputmode="decimal" value="${inputValue(month.expectedIncome)}" aria-describedby="planAheadHint"></label>
+          <input class="wu-field" id="planAheadIncome" name="expectedIncome" type="number" min="0" step="1" inputmode="decimal" value="${draft ? escapeHtml(draft.text) : inputValue(month.expectedIncome)}" aria-describedby="planAheadHint"${draft && !draftResult ? ' aria-invalid="true"' : ""}></label>
         <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save</button>
       </form>
       <p class="wu-dash__note" id="planAheadHint" role="status">${hint}</p>
-      <div id="planAheadRows">${planAheadRows(month.result)}</div>
+      <div id="planAheadRows">${planAheadRows(draftResult ?? month.result, view)}</div>
       <p class="wu-dash__note wu-budget-note">A plan, not money received. The layers below show where income actually went once it arrives.</p>
     </section>`;
 }
@@ -359,7 +375,11 @@ function monthsCard(budget: BudgetSnapshot): string {
     </section>`;
 }
 
-export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view: BudgetView): string {
+/**
+ * `draftResult` is the plan routed over an expected income typed into Plan
+ * ahead but not saved yet — null when there is none, or it is not an amount.
+ */
+export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view: BudgetView, draftResult: AllocationResult | null = null): string {
   const { allocation } = budget;
   const month = monthLabel(budget.monthKey);
   const rows = allocation.actual.rows;
@@ -455,7 +475,7 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
     </section>
 
     <!-- PLAN AHEAD — this month or next, before the money arrives -->
-    ${planAheadCard(budget, view)}
+    ${planAheadCard(budget, view, draftResult)}
 
     <!-- LAYERS — a table on a desktop, a grouped list on a phone -->
     <section class="wu-card wu-dash__full wu-stack wu-stack--sm wu-budget-layers" aria-labelledby="budLayersLabel">

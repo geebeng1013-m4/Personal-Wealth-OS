@@ -26,7 +26,7 @@ import { getBudgetSnapshot } from "../budgetSummary";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
 /** Which layer, bucket or picker is open — kept across re-renders. */
-const view: BudgetView = { openLayer: null, openBucket: null, overflowOpen: false, planMonth: 0 };
+const view: BudgetView = { openLayer: null, openBucket: null, overflowOpen: false, planMonth: 0, layerOpenIn: "table", aheadDraft: null };
 
 function isStepKind(value: string): value is AllocationStepKind {
   return value === "fill" || value === "pct" || value === "gross";
@@ -36,6 +36,10 @@ export function bucketsTemplate(state: WealthState): string {
   // One snapshot for the whole page: the layers and the one-time rows must
   // never be built from two different reads of the same state.
   const budget = getBudgetSnapshot(state);
+  // An expected income typed but not saved still drives the figures it shows.
+  const planning = budget.allocation.ahead[view.planMonth];
+  const draftAmount = view.aheadDraft?.monthKey === planning.monthKey ? parseExpectedIncomeInput(view.aheadDraft.text) : null;
+  const draftResult = draftAmount === null ? null : allocateMonth(state.allocation, draftAmount);
   return `
     <div class="wu wu-budget-page">
       ${pageHeader({
@@ -45,7 +49,7 @@ export function bucketsTemplate(state: WealthState): string {
         actions: `<button class="wu-btn wu-btn--secondary wu-btn--sm add-layer" type="button">+ Add layer</button>`,
       })}
       <div class="wu-dash">
-        ${budgetContent(budget, state.allocation, view)}
+        ${budgetContent(budget, state.allocation, view, draftResult)}
       </div>
     </div>
   `;
@@ -81,12 +85,19 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
   };
 
   // --- Opening and closing rows --------------------------------------------
-  root.querySelectorAll<HTMLButtonElement>(".layer-row").forEach((button) => button.addEventListener("click", () => {
-    const index = Number(button.dataset.index);
-    view.openLayer = view.openLayer === index ? null : index;
+  /** Open a layer's editor in one place, or close it if it is already open there. */
+  const toggleLayer = (index: number, place: BudgetView["layerOpenIn"]): void => {
+    view.openLayer = view.openLayer === index && view.layerOpenIn === place ? null : index;
+    view.layerOpenIn = place;
     view.openBucket = null;
     view.overflowOpen = false;
     repaint();
+  };
+  root.querySelectorAll<HTMLButtonElement>(".layer-row").forEach((button) => button.addEventListener("click", () => {
+    toggleLayer(Number(button.dataset.index), "table");
+  }));
+  root.querySelectorAll<HTMLButtonElement>(".ahead-layer-row").forEach((button) => button.addEventListener("click", () => {
+    toggleLayer(Number(button.dataset.index), "ahead");
   }));
   root.querySelectorAll<HTMLButtonElement>(".bucket-row").forEach((button) => button.addEventListener("click", () => {
     const index = Number(button.dataset.index);
@@ -111,6 +122,7 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
 
   root.querySelectorAll<HTMLButtonElement>(".plan-month").forEach((button) => button.addEventListener("click", () => {
     view.planMonth = button.dataset.month === "1" ? 1 : 0;
+    if (view.layerOpenIn === "ahead") view.openLayer = null;
     repaint();
   }));
 
@@ -124,8 +136,27 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
   };
   const invalidAmount = "Enter an amount of 0 or more.";
 
+  /**
+   * Put new figures into the rows already on screen. Typing an income changes
+   * what each layer gets, never which layers there are, so the rows — and a
+   * layer editor open among them, with whatever is typed in it — stay put.
+   */
+  const refreshAheadFigures = (amount: number): void => {
+    if (!aheadRows) return;
+    const fresh = document.createElement("div");
+    fresh.innerHTML = planAheadRows(allocateMonth(state.allocation, amount), view);
+    fresh.querySelectorAll<HTMLElement>(".ahead-layer-row").forEach((row) => {
+      const shown = aheadRows.querySelector(`.ahead-layer-row[data-index="${row.dataset.index}"] .wu-budget-row__got`);
+      const figures = row.querySelector(".wu-budget-row__got");
+      if (shown && figures) shown.innerHTML = figures.innerHTML;
+    });
+    aheadRows.querySelectorAll(":scope > p").forEach((note) => note.remove());
+    aheadRows.append(...fresh.querySelectorAll(":scope > p"));
+  };
+
   // The figures follow the field as it is typed; only Save writes anything.
   aheadInput?.addEventListener("input", () => {
+    view.aheadDraft = { monthKey: aheadForm?.dataset.month ?? "", text: aheadInput.value };
     const amount = parseExpectedIncomeInput(aheadInput.value);
     if (amount === null) {
       showAheadError(invalidAmount);
@@ -133,7 +164,7 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
     }
     showAheadError(null);
     if (aheadHint) aheadHint.textContent = "Not saved yet.";
-    if (aheadRows) aheadRows.innerHTML = planAheadRows(allocateMonth(state.allocation, amount));
+    refreshAheadFigures(amount);
   });
 
   aheadForm?.addEventListener("submit", (event) => {
@@ -144,6 +175,7 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
       aheadInput?.focus();
       return;
     }
+    view.aheadDraft = null;
     repaint(withExpectedIncome(state, aheadForm.dataset.month ?? "", amount));
   });
 
@@ -219,6 +251,7 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
     // A new layer starts claiming nothing, so adding one cannot quietly change
     // where this month's money already went. It opens ready to be named.
     view.openLayer = state.allocation.steps.length;
+    view.layerOpenIn = "table";
     view.openBucket = null;
     view.overflowOpen = false;
     savePlan([...state.allocation.steps, {
