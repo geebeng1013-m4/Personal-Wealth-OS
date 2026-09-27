@@ -873,6 +873,28 @@
 .login-pitch {
   text-align: center;
 }
+/* Secondary to the sign-in button: a text link, still a full-size tap target. */
+.login-demo-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  border-radius: 10px;
+  color: rgba(102, 183, 158, 0.95);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.login-demo-link:hover {
+  color: #8fd0bb;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.login-demo-link:focus-visible {
+  outline: 2px solid rgba(87, 167, 143, 0.9);
+  outline-offset: 2px;
+}
 .login-pitch h2 {
   margin: 0;
   color: rgba(255, 255, 255, 0.94);
