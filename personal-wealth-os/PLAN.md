@@ -16,7 +16,7 @@
 
 ---
 
-## Budget 月计划：钱到账前先写预计收入（MP 系列）  `[~]`（2026-09-27 定稿）
+## Budget 月计划：钱到账前先写预计收入（MP 系列）  `[x]`（2026-09-28，PR #160 已合并上线，`main` = `39cb406`）
 
 Preview：https://claude.ai/artifact/BReLMykggYtANYvfRWcmXv
 
@@ -45,7 +45,11 @@ Preview：https://claude.ai/artifact/BReLMykggYtANYvfRWcmXv
   标题叫 Plan ahead（用户定的名字）。本月：Plan / Got / 差额 / 进度条；下个月：计划数 + 每层的 note，不显示 Got / Status。
   note（What it is for）保留。桌面和手机功能一致。
 
-MP-1..MP-5 全在 PR #160（分支 `feat/budget-month-plan`），等用户检查后合并。
+MP-1..MP-5 以 PR #160 squash 合并为 `39cb406`（分支上的逐个 commit 不再存在于 main）。
+线上核对：www.wealthup.cc 引用 `index-DlWYofC0.js` / `index-DIsEM1Wf.css`，与本地构建一致。
+
+**未覆盖的风险**：没有用真实账号（5174）验证；云端合并写入意味着本地删掉的月份会留在云端，
+现在没有删除月份的功能所以无影响，以后若加删除要先处理。
 
 ---
 
