@@ -3381,6 +3381,30 @@
     grid-template-areas: "title got";
     cursor: default;
   }
+  .wu-budget-ahead__top {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .wu-budget-ahead__months {
+    max-width: 100%;
+  }
+  .wu-budget-ahead__form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-3);
+  }
+  .wu-budget-ahead__form .wu-field-row {
+    flex: 1 1 160px;
+    max-width: 320px;
+    min-width: 0;
+  }
+  .wu-budget-ahead__form .wu-field[aria-invalid="true"] {
+    border-color: var(--negative);
+  }
+  .wu-budget-layers:has(.wu-field[aria-invalid="true"]) #planAheadHint {
+    color: var(--negative);
+  }
   button.wu-budget-row:hover .wu-budget-row__title {
     color: var(--accent);
   }
@@ -3426,6 +3450,17 @@
     font-weight: var(--weight-medium);
     color: var(--text-muted);
   }
+  .wu-budget-row__plan {
+    grid-area: plan;
+    gap: 2px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .wu-budget-row__plan small {
+    font-size: var(--text-body-sm);
+    font-weight: var(--weight-regular);
+  }
   .wu-budget-row__got small.t-positive {
     color: var(--positive);
   }
@@ -3434,6 +3469,7 @@
     color: var(--warning);
   }
   .wu-budget-row__fill,
+  .wu-budget-row__plan,
   .wu-budget-row__status {
     display: none;
   }
@@ -3567,6 +3603,17 @@
     .wu-budget-layers .wu-budget-row__fill small {
       display: none;
     }
+    .wu-budget-layers--ahead .wu-budget-row:not(.wu-budget-row--plain) {
+      grid-template-areas: "dot title plan chev";
+    }
+    .wu-budget-layers--ahead .layer-row .wu-budget-row__fill,
+    .wu-budget-layers--ahead .layer-row .wu-budget-row__got {
+      display: none;
+    }
+    .wu-budget-layers--ahead .wu-budget-row__plan {
+      display: grid;
+      font-weight: var(--weight-semibold);
+    }
   }
   @media (min-width: 901px) {
     .wu-budget-month,
@@ -3577,8 +3624,8 @@
     }
     /* the layers become a table: every column lines up down the rows */
     .wu-budget-layers .wu-budget-row:not(.wu-budget-row--plain) {
-      grid-template-columns: 10px minmax(0, 1.1fr) minmax(0, 1.6fr) 96px 140px 10px;
-      grid-template-areas: "dot title fill got status chev";
+      grid-template-columns: 10px minmax(0, 1.1fr) minmax(0, 1.4fr) 96px 110px 140px 10px;
+      grid-template-areas: "dot title fill plan got status chev";
       gap: var(--space-4);
     }
     .wu-budget-layers .wu-budget-row--head {
@@ -3592,8 +3639,39 @@
     }
     .wu-budget-row--head > span:nth-child(2) { grid-area: title; }
     .wu-budget-row--head > span:nth-child(3) { grid-area: fill; }
-    .wu-budget-row--head > span:nth-child(4) { grid-area: got; text-align: right; }
-    .wu-budget-row--head > span:nth-child(5) { grid-area: status; display: block; text-align: right; }
+    .wu-budget-row--head > span:nth-child(4) { grid-area: plan; text-align: right; }
+    .wu-budget-row--head > span:nth-child(5) { grid-area: got; text-align: right; }
+    .wu-budget-row--head > span:nth-child(6) { grid-area: status; display: block; text-align: right; }
+    /* this month's plan beside what arrived; the difference sits under Got */
+    .wu-budget-layers .wu-budget-row__plan {
+      display: grid;
+      color: var(--text-muted);
+    }
+    /* next month: no Got, Status or bar yet. Their columns go, so the plan
+       sits at the right edge where the row's figure always sits, and the
+       note keeps its place in the middle column */
+    .wu-budget-layers--ahead .wu-budget-row:not(.wu-budget-row--plain) {
+      grid-template-columns: 10px minmax(0, 1.1fr) minmax(0, 2fr) 140px 10px;
+      grid-template-areas: "dot title fill plan chev";
+    }
+    /* doubled class: must outweigh the table's column rules further down */
+    .wu-budget-layers.wu-budget-layers--ahead .wu-bar,
+    .wu-budget-layers.wu-budget-layers--ahead .layer-row .wu-budget-row__got,
+    .wu-budget-layers.wu-budget-layers--ahead .wu-budget-row__status,
+    .wu-budget-layers.wu-budget-layers--ahead .wu-budget-row--head > span:nth-child(5),
+    .wu-budget-layers.wu-budget-layers--ahead .wu-budget-row--head > span:nth-child(6) {
+      display: none;
+    }
+    .wu-budget-layers--ahead .wu-budget-row__plan {
+      color: var(--text);
+      font-weight: var(--weight-semibold);
+    }
+    .wu-budget-layers .wu-budget-row__got small.wu-budget-row__vs {
+      display: block;
+    }
+    .wu-budget-row__vs-plan {
+      display: none;
+    }
     .wu-budget-layers .wu-budget-row__fill {
       grid-area: fill;
       display: grid;

@@ -288,6 +288,7 @@ export const demoState: WealthState = {
   onboardingDone: false,
   onboardingAnswers: null,
   checkins: { weeklyCheckedOn: "", payPromptAnswered: false },
+  monthPlans: {},
 };
 
 // Seeded from the demo user's own planning config, exactly as a real upgrading

@@ -18,24 +18,32 @@
  */
 
 import type { AllocationStep, AllocationStepKind, WealthState } from "../models";
-import { bucketsFromPlan, createId } from "../state";
-import { normalizePercentSteps } from "../allocation";
+import { bucketsFromPlan, createId, parseExpectedIncomeInput, withExpectedIncome } from "../state";
+import { allocateMonth, normalizePercentSteps } from "../allocation";
 import { pageHeader } from "../components/pageHeader";
 import { budgetContent, type BudgetView } from "../components/allocationPanel";
 import { getBudgetSnapshot } from "../budgetSummary";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
 /** Which layer, bucket or picker is open — kept across re-renders. */
-const view: BudgetView = { openLayer: null, openBucket: null, overflowOpen: false };
+const view: BudgetView = { openLayer: null, openBucket: null, overflowOpen: false, planMonth: 0, aheadDraft: null };
 
 function isStepKind(value: string): value is AllocationStepKind {
   return value === "fill" || value === "pct" || value === "gross";
 }
 
-export function bucketsTemplate(state: WealthState): string {
+/** The page's figures: the budget snapshot, plus the plan an unsaved income would give. */
+function budgetBody(state: WealthState): string {
   // One snapshot for the whole page: the layers and the one-time rows must
   // never be built from two different reads of the same state.
   const budget = getBudgetSnapshot(state);
+  const planning = budget.allocation.ahead[view.planMonth];
+  const draftAmount = view.aheadDraft?.monthKey === planning.monthKey ? parseExpectedIncomeInput(view.aheadDraft.text) : null;
+  const draftResult = draftAmount === null ? null : allocateMonth(state.allocation, draftAmount);
+  return budgetContent(budget, state.allocation, view, draftResult);
+}
+
+export function bucketsTemplate(state: WealthState): string {
   return `
     <div class="wu wu-budget-page">
       ${pageHeader({
@@ -45,7 +53,7 @@ export function bucketsTemplate(state: WealthState): string {
         actions: `<button class="wu-btn wu-btn--secondary wu-btn--sm add-layer" type="button">+ Add layer</button>`,
       })}
       <div class="wu-dash">
-        ${budgetContent(budget, state.allocation, view)}
+        ${budgetBody(state)}
       </div>
     </div>
   `;
@@ -106,6 +114,62 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
     view.openBucket = null;
     repaint();
   }));
+
+  // --- Plan ahead -----------------------------------------------------------
+
+  root.querySelectorAll<HTMLButtonElement>(".plan-month").forEach((button) => button.addEventListener("click", () => {
+    view.planMonth = button.dataset.month === "1" ? 1 : 0;
+    repaint();
+  }));
+
+  const aheadForm = root.querySelector<HTMLFormElement>("#planAheadForm");
+  const aheadInput = root.querySelector<HTMLInputElement>("#planAheadIncome");
+  const aheadHint = root.querySelector<HTMLElement>("#planAheadHint");
+  const showAheadError = (message: string | null): void => {
+    aheadInput?.setAttribute("aria-invalid", String(message !== null));
+    if (aheadHint && message !== null) aheadHint.textContent = message;
+  };
+  const invalidAmount = "Enter an amount of 0 or more.";
+
+  /**
+   * Put new figures into what is already on screen. Typing an income changes
+   * what each layer is planned to get, never which layers there are, so only
+   * the cells marked data-live are replaced — the rows, and a layer editor open
+   * among them with whatever is typed in it, stay put.
+   */
+  const refreshPlanFigures = (): void => {
+    const fresh = document.createElement("div");
+    fresh.innerHTML = budgetBody(state);
+    fresh.querySelectorAll<HTMLElement>("[data-live]").forEach((cell) => {
+      const shown = root.querySelector<HTMLElement>(`[data-live="${cell.dataset.live}"]`);
+      if (shown) shown.innerHTML = cell.innerHTML;
+    });
+  };
+
+  // The figures follow the field as it is typed; only Save writes anything.
+  aheadInput?.addEventListener("input", () => {
+    view.aheadDraft = { monthKey: aheadForm?.dataset.month ?? "", text: aheadInput.value };
+    const amount = parseExpectedIncomeInput(aheadInput.value);
+    if (amount === null) {
+      showAheadError(invalidAmount);
+      return;
+    }
+    showAheadError(null);
+    if (aheadHint) aheadHint.textContent = "Not saved yet.";
+    refreshPlanFigures();
+  });
+
+  aheadForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const amount = parseExpectedIncomeInput(aheadInput?.value ?? "");
+    if (amount === null) {
+      showAheadError(invalidAmount);
+      aheadInput?.focus();
+      return;
+    }
+    view.aheadDraft = null;
+    repaint(withExpectedIncome(state, aheadForm.dataset.month ?? "", amount));
+  });
 
   // --- Layers ---------------------------------------------------------------
 
