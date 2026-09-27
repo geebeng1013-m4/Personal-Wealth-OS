@@ -1,12 +1,13 @@
 import type { WealthState } from "./models";
 import { ALL_PAGES, PAGE_GROUPS, PHONE_TABS, type Page } from "./pageDirectory";
-import { emptyState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, IMPORT_SNAPSHOT_LABEL, type Snapshot } from "./state";
+import { emptyState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, forgetLocalState, IMPORT_SNAPSHOT_LABEL, type Snapshot } from "./state";
 import { refreshLivePrices, priceRefreshCleanup, PRICE_POLL_INTERVAL_MS } from "./livePrices";
 import { bindTvmCalculator, tvmCalculatorTemplate } from "./pages/tvmPage";
 import { escapeHtml } from "./html";
 import { pageHeader } from "./components/pageHeader";
 import { assistantTemplate, mountAssistant } from "./components/assistant/assistantWidget";
 import { DISCLAIMER_SHORT } from "./components/disclaimer";
+import { isDemoMode } from "./demo";
 import { createSideRays, type SideRays } from "./sideRays";
 
 import type { Navigate, Setter } from "./pages/pageTypes";
@@ -212,10 +213,11 @@ function shellTemplate(activePage: string, state: WealthState): string {
         <strong class="titlebar__title">${active?.[1] ?? "Overview"}</strong>
         <span class="titlebar__sub">${active?.[2] ?? "Dashboard"}</span>
       </div>
+      ${isDemoMode() ? demoBannerTemplate() : ""}
       <section id="pageMount"></section>
     </main>
     ${tabbarTemplate(activePage, checkinsDue)}
-    ${assistantTemplate(state)}
+    ${isDemoMode() ? "" : assistantTemplate(state)}
   `;
 }
 
@@ -327,7 +329,11 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   // Last: the assistant can navigate and pre-fill, so it binds against a page
   // that is already wired up. It lives outside #pageMount and is re-mounted on
   // every render, with its conversation held in module state.
-  mountAssistant(root, state, navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user, onLogout)), activePage);
+  // Not in the demo: it needs a signed-in account, and a visitor should not
+  // see sample figures sent to an AI service.
+  if (!isDemoMode()) {
+    mountAssistant(root, state, navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user, onLogout)), activePage);
+  }
 
   // A "Get started" step picked on the Dashboard points at its field here,
   // once this page is fully wired (F-7).
@@ -348,8 +354,23 @@ function keepActiveNavigationVisible(root: HTMLElement): void {
   }
 }
 
+/** Says the figures are samples, on every page, with a way back to the untouched demo. */
+function demoBannerTemplate(): string {
+  return `<div class="demo-banner" role="note">
+    <p class="demo-banner__text"><strong>Demo</strong> · Sample data for a fictional client. Nothing you change here is saved online.</p>
+    <button class="wu-btn wu-btn--secondary wu-btn--sm demo-banner__reset" id="demoReset" type="button">Reset demo</button>
+  </div>`;
+}
+
 function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate, user?: AppUser, onLogout?: () => void): void {
   const doNavigate = navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user));
+
+  root.querySelector<HTMLButtonElement>("#demoReset")?.addEventListener("click", () => {
+    const uid = user?.uid;
+    if (!uid || !confirm("Reset the demo? Changes made here are cleared and the sample data comes back.")) return;
+    forgetLocalState(uid);
+    window.location.reload();
+  });
 
   root.querySelectorAll<HTMLButtonElement>(".nav-item").forEach((button) => {
     button.addEventListener("click", () => {

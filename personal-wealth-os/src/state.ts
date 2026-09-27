@@ -1275,6 +1275,12 @@ export function clearSnapshots(uid?: string): void {
   localStorage.removeItem(key);
 }
 
+/** Drop everything this device keeps for `uid`: its saved state and its snapshots. */
+export function forgetLocalState(uid: string): void {
+  localStorage.removeItem(getUserStorageKey(uid));
+  clearSnapshots(uid);
+}
+
 export function exportState(state: WealthState): void {
   const payload = JSON.stringify({ ...state, version: CURRENT_VERSION }, null, 2);
   const blob = new Blob([payload], { type: "application/json" });
