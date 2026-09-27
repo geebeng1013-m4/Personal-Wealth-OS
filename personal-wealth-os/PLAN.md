@@ -34,10 +34,14 @@ Preview：https://claude.ai/artifact/BReLMykggYtANYvfRWcmXv
 - 某个月没存过预计收入时，默认用 Me 页的数字，所以现有行为不变。
 
 **Tasks**：
-- MP-1 `[~]` 资料：`WealthState.monthPlans`（`{ "2026-10": { expectedIncome } }`），v30 → v31 迁移，
+- MP-1 `[x]` 资料：`WealthState.monthPlans`（`{ "2026-10": { expectedIncome } }`），v30 → v31 迁移，
   坏条目逐条丢弃、不影响其他月份，补测试。页面上看不到变化。
-- MP-2 `[ ]` Budget 页：「本月 / 下个月」切换、预计收入输入、Save；各层照规则显示该月数额。
-- MP-3 `[ ]` 本月的计划 vs 实际并排对照，写清哪一层少了多少。
+- MP-2 `[x]` Budget 页：「本月 / 下个月」切换、预计收入输入、Save；各层照规则显示该月数额。
+- MP-3 `[x]` 本月的计划 vs 实际并排对照，写清哪一层少了多少。
+- MP-4 `[~]` （用户 2026-09-27 追加）在 Plan ahead 点某一层，就地打开**同一个**规则编辑器改规则。
+  改的是规则本身，每个月都跟着变，编辑器写明这一点；同一时间只开一个编辑器；不加新资料。
+
+MP-1..MP-3 在分支 `feat/budget-month-plan`（`2d56dfa` `2e00b33` `f3ece0e`），MP-4 做完后一起开 PR。
 
 ---
 
