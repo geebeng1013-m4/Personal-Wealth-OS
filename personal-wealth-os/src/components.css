@@ -3395,13 +3395,14 @@
     gap: var(--space-3);
   }
   .wu-budget-ahead__form .wu-field-row {
-    flex: 0 1 300px;
+    flex: 1 1 160px;
+    max-width: 320px;
     min-width: 0;
   }
   .wu-budget-ahead__form .wu-field[aria-invalid="true"] {
     border-color: var(--negative);
   }
-  .wu-budget-ahead:has(.wu-field[aria-invalid="true"]) #planAheadHint {
+  .wu-budget-layers:has(.wu-field[aria-invalid="true"]) #planAheadHint {
     color: var(--negative);
   }
   button.wu-budget-row:hover .wu-budget-row__title {
@@ -3448,6 +3449,17 @@
   .wu-budget-row__muted {
     font-weight: var(--weight-medium);
     color: var(--text-muted);
+  }
+  .wu-budget-row__plan {
+    grid-area: plan;
+    gap: 2px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .wu-budget-row__plan small {
+    font-size: var(--text-body-sm);
+    font-weight: var(--weight-regular);
   }
   .wu-budget-row__got small.t-positive {
     color: var(--positive);
@@ -3591,6 +3603,17 @@
     .wu-budget-layers .wu-budget-row__fill small {
       display: none;
     }
+    .wu-budget-layers--ahead .wu-budget-row:not(.wu-budget-row--plain) {
+      grid-template-areas: "dot title plan chev";
+    }
+    .wu-budget-layers--ahead .layer-row .wu-budget-row__fill,
+    .wu-budget-layers--ahead .layer-row .wu-budget-row__got {
+      display: none;
+    }
+    .wu-budget-layers--ahead .wu-budget-row__plan {
+      display: grid;
+      font-weight: var(--weight-semibold);
+    }
   }
   @media (min-width: 901px) {
     .wu-budget-month,
@@ -3621,11 +3644,27 @@
     .wu-budget-row--head > span:nth-child(6) { grid-area: status; display: block; text-align: right; }
     /* this month's plan beside what arrived; the difference sits under Got */
     .wu-budget-layers .wu-budget-row__plan {
-      grid-area: plan;
-      display: block;
-      text-align: right;
+      display: grid;
       color: var(--text-muted);
-      font-variant-numeric: tabular-nums;
+    }
+    /* next month: no Got, Status or bar yet. Their columns go, so the plan
+       sits at the right edge where the row's figure always sits, and the
+       note keeps its place in the middle column */
+    .wu-budget-layers--ahead .wu-budget-row:not(.wu-budget-row--plain) {
+      grid-template-columns: 10px minmax(0, 1.1fr) minmax(0, 2fr) 140px 10px;
+      grid-template-areas: "dot title fill plan chev";
+    }
+    /* doubled class: must outweigh the table's column rules further down */
+    .wu-budget-layers.wu-budget-layers--ahead .wu-bar,
+    .wu-budget-layers.wu-budget-layers--ahead .layer-row .wu-budget-row__got,
+    .wu-budget-layers.wu-budget-layers--ahead .wu-budget-row__status,
+    .wu-budget-layers.wu-budget-layers--ahead .wu-budget-row--head > span:nth-child(5),
+    .wu-budget-layers.wu-budget-layers--ahead .wu-budget-row--head > span:nth-child(6) {
+      display: none;
+    }
+    .wu-budget-layers--ahead .wu-budget-row__plan {
+      color: var(--text);
+      font-weight: var(--weight-semibold);
     }
     .wu-budget-layers .wu-budget-row__got small.wu-budget-row__vs {
       display: block;

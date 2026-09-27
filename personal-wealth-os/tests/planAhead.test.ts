@@ -3,7 +3,7 @@ import { test } from "./testHarness";
 import { expectedIncomeFor, getBudgetSnapshot, layersVersusPlan, nextMonthKeyOf } from "../src/budgetSummary";
 import { migrateState, parseExpectedIncomeInput, withExpectedIncome } from "../src/state";
 import { allocateMonth } from "../src/allocation";
-import { budgetContent, planAheadRows, versusPlanSummary, type BudgetView } from "../src/components/allocationPanel";
+import { budgetContent, versusPlanSummary, type BudgetView } from "../src/components/allocationPanel";
 import type { AllocationPlan, WealthState } from "../src/models";
 
 // MP-2: plan this month or next before the money arrives.
@@ -49,7 +49,13 @@ function stateWith(overrides: Partial<WealthState> = {}): WealthState {
   });
 }
 
-const closed: BudgetView = { openLayer: null, openBucket: null, overflowOpen: false, planMonth: 0, layerOpenIn: "table", aheadDraft: null };
+const closed: BudgetView = { openLayer: null, openBucket: null, overflowOpen: false, planMonth: 0, aheadDraft: null };
+const nextMonthView: BudgetView = { ...closed, planMonth: 1 };
+
+/** The Budget page's content for a state, as the page renders it. */
+function card(state: WealthState, view: BudgetView = closed, draftIncome: number | null = null): string {
+  return budgetContent(getBudgetSnapshot(state, NOW), state.allocation, view, draftIncome === null ? null : allocateMonth(state.allocation, draftIncome));
+}
 
 const got = (result: ReturnType<typeof allocateMonth>, id: string): number =>
   result.rows.find((row) => row.stepId === id)?.got ?? Number.NaN;
@@ -146,24 +152,25 @@ test("plan ahead: the field accepts 0 or more, and an empty field is not zero", 
 // --- what the card says ------------------------------------------------------
 
 test("plan ahead: fixed layers that need more than the income are named, in words", () => {
-  const html = planAheadRows(allocateMonth(plan, 1000), closed);
+  const html = card(stateWith(), nextMonthView, 1000);
   assert.match(html, /200<\/span> short/);
-  assert.match(html, /Fixed layers need .*200.* more than this income\. You can still save it\./);
+  assert.match(html, /Fixed layers need .*200.* more than the expected income\. You can still save it\./);
 });
 
 test("plan ahead: an income that covers the fixed layers raises no warning", () => {
-  assert.doesNotMatch(planAheadRows(allocateMonth(plan, 3200), closed), /short|more than this income/);
+  assert.doesNotMatch(card(stateWith(), nextMonthView, 3200), /short<|more than the expected income/);
 });
 
 test("plan ahead: a layer the user named is escaped before it reaches the page", () => {
-  const named: AllocationPlan = { ...plan, steps: [{ id: "x", name: "<img src=x onerror=alert(1)>", kind: "fill", value: 100 }] };
-  const html = planAheadRows(allocateMonth(named, 500), closed);
-  assert.doesNotMatch(html, /<img/);
+  const named: AllocationPlan = { ...plan, steps: [{ id: "x", name: "<img src=x onerror=alert(1)>", kind: "fill", value: 100, note: "<b>trip</b>" }] };
+  const html = card(stateWith({ allocation: named }), nextMonthView);
+  assert.doesNotMatch(html, /<img|<b>trip/);
   assert.match(html, /&lt;img/);
+  assert.match(html, /&lt;b&gt;trip/);
 });
 
 test("plan ahead: no layers says so instead of an empty list", () => {
-  assert.match(planAheadRows(allocateMonth({ incomeType: "fixed", steps: [] }, 1000), closed), /No layers yet/);
+  assert.match(card(stateWith({ allocation: { incomeType: "fixed", steps: [] } })), /No layers yet/);
 });
 
 // --- MP-3: this month's plan against what arrived ----------------------------
@@ -220,51 +227,79 @@ test("plan vs actual: more than planned, and exactly as planned, each say so", (
   assert.equal(strip(versusPlanSummary(3200, 3200, [])), "Received the 3,200 you planned.");
 });
 
-// --- MP-4: edit a layer's rule from Plan ahead --------------------------------
+// --- MP-5: one card, one list, one editor -------------------------------------
 
-const openAt = (index: number, place: BudgetView["layerOpenIn"]): BudgetView => ({ ...closed, openLayer: index, layerOpenIn: place });
 const editorsIn = (html: string): number => (html.match(/class="wu-stack wu-stack--sm layerForm/g) ?? []).length;
+const layerButtons = (html: string): number => (html.match(/<button class="wu-budget-row layer-row"/g) ?? []).length;
 
-test("plan ahead: each layer is a button that opens its rule", () => {
-  const html = planAheadRows(allocateMonth(plan, 3200), closed);
-  assert.equal((html.match(/<button class="wu-budget-row wu-budget-row--ahead ahead-layer-row" type="button"/g) ?? []).length, 4);
-  assert.match(html, /data-index="2" aria-expanded="false"/);
-  assert.equal(editorsIn(html), 0);
+test("one card: each layer appears once, in both months", () => {
+  for (const view of [closed, nextMonthView]) {
+    const html = card(receivedThisMonth(2600), view);
+    assert.equal(layerButtons(html), 4);
+    assert.doesNotMatch(html, /ahead-layer-row|wu-budget-ahead"/, "the separate Plan ahead card is gone");
+    assert.equal((html.match(/id="budLayersLabel">Plan ahead</g) ?? []).length, 1);
+  }
 });
 
-test("plan ahead: an open layer shows the shared editor, and says it changes every month", () => {
-  const html = planAheadRows(allocateMonth(plan, 3200), openAt(1, "ahead"));
+test("one card: an open layer shows the one editor, which says rules are for every month", () => {
+  const html = card(stateWith(), { ...closed, openLayer: 1 });
   assert.equal(editorsIn(html), 1);
   assert.match(html, /layerForm wu-budget-editor" data-index="1"/);
-  assert.match(html, /Changes this layer for every month/);
-  assert.match(html, /data-index="1" aria-expanded="true"/);
+  assert.match(html, /A layer's rule applies to every month\. Only the expected income is set month by month\./);
 });
 
-test("plan ahead: one layer opens in one place, never in both", () => {
-  const budget = getBudgetSnapshot(stateWith(), NOW);
-  const inAhead = budgetContent(budget, plan, openAt(1, "ahead"));
-  const inTable = budgetContent(budget, plan, openAt(1, "table"));
-  assert.equal(editorsIn(inAhead), 1);
-  assert.equal(editorsIn(inTable), 1);
-  // The table's editor never carries Plan ahead's every-month note.
-  assert.match(inAhead, /Changes this layer for every month/);
-  assert.doesNotMatch(inTable, /Changes this layer for every month/);
+test("one card: the editor keeps the layer's note", () => {
+  const noted: AllocationPlan = { ...plan, steps: plan.steps.map((step) => step.id === "freedom" ? { ...step, note: "Japan trip" } : step) };
+  const html = card(stateWith({ allocation: noted }), { ...closed, openLayer: 2 });
+  assert.match(html, /name="note" type="text" value="Japan trip"/);
 });
 
-test("plan ahead: an unsaved figure is kept through a re-render, marked as not saved", () => {
-  const budget = getBudgetSnapshot(stateWith(), NOW);
-  const draft: BudgetView = { ...closed, aheadDraft: { monthKey: "2026-09", text: "2600" } };
-  const html = budgetContent(budget, plan, draft, allocateMonth(plan, 2600));
+test("one card: this month shows Plan beside Got, and how far each is off", () => {
+  const html = card(receivedThisMonth(2600));
+  assert.doesNotMatch(html, /wu-budget-layers--ahead/);
+  assert.match(html, /<span>Filled<\/span><span>Plan<\/span><span>Got<\/span>/);
+  // Growth: planned 1,000 from 3,200; got 700 from 2,600.
+  assert.match(html, /data-live="plan-1">[^<]*<span[^>]*>1,000<\/span>/);
+  assert.match(html, /data-live="got-1">[^<]*<span[^>]*>700<\/span>/);
+  assert.match(html, /−300<\/span> vs plan/);
+  assert.match(html, /Received .*2,600.* of the .*3,200.* you planned\./);
+});
+
+test("one card: next month shows the plan and each layer's note, with no Got yet", () => {
+  const noted: AllocationPlan = { ...plan, steps: plan.steps.map((step) => step.id === "freedom" ? { ...step, note: "Japan trip" } : step) };
+  const state = receivedThisMonth(2600, { allocation: noted, monthPlans: { "2026-10": { expectedIncome: 2500 } } });
+  const html = card(state, nextMonthView);
+  assert.match(html, /wu-budget-layers wu-budget-layers--ahead/);
+  assert.match(html, /<span>What it is for<\/span>/);
+  // The caption is the note alone: no "% filled" for a month nothing has reached.
+  assert.match(html, /<small>Japan trip<\/small>/);
+  assert.doesNotMatch(html, /% filled/);
+  // 2,500 - 1,200 = 1,300: Growth 650.
+  assert.match(html, /data-live="plan-1">[^<]*<span[^>]*>650<\/span>/);
+  assert.doesNotMatch(html, /vs plan/, "next month is never compared with this month's money");
+  assert.match(html, /A plan for October 2026\./);
+});
+
+test("one card: the figures an income changes are all marked for the live swap", () => {
+  const html = card(receivedThisMonth(2600));
+  for (let index = 0; index < 4; index += 1) {
+    assert.match(html, new RegExp(`data-live="plan-${index}"`));
+    assert.match(html, new RegExp(`data-live="got-${index}"`));
+  }
+  assert.match(html, /data-live="plan-notes"/);
+});
+
+test("one card: an unsaved figure is kept through a re-render, marked as not saved", () => {
+  const html = card(stateWith(), { ...closed, aheadDraft: { monthKey: "2026-09", text: "2600" } }, 2600);
   assert.match(html, /id="planAheadIncome"[^>]*value="2600"/);
-  assert.match(html, /Not saved yet./);
+  assert.match(html, /Not saved yet\./);
   // A draft for another month does not leak into this one.
-  const other = budgetContent(budget, plan, { ...closed, aheadDraft: { monthKey: "2026-10", text: "2600" } });
+  const other = card(stateWith(), { ...closed, aheadDraft: { monthKey: "2026-10", text: "2600" } });
   assert.match(other, /id="planAheadIncome"[^>]*value="3200"/);
 });
 
-test("plan ahead: an unsaved figure that is not an amount is shown as it was typed, and flagged", () => {
-  const budget = getBudgetSnapshot(stateWith(), NOW);
-  const html = budgetContent(budget, plan, { ...closed, aheadDraft: { monthKey: "2026-09", text: "" } }, null);
+test("one card: an unsaved figure that is not an amount is shown as it was typed, and flagged", () => {
+  const html = card(stateWith(), { ...closed, aheadDraft: { monthKey: "2026-09", text: "" } });
   assert.match(html, /value="" aria-describedby="planAheadHint" aria-invalid="true"/);
-  assert.match(html, /Enter an amount of 0 or more./);
+  assert.match(html, /Enter an amount of 0 or more\./);
 });
