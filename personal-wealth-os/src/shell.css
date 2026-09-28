@@ -1631,3 +1631,37 @@ button.wu-client__row:hover .wu-client__name {
     text-align: right;
   }
 }
+.wu-client__proposal {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-weight: var(--weight-regular);
+}
+.wu-proposal-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wu-proposal {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-3) 0;
+  min-width: 0;
+}
+.wu-proposal + .wu-proposal {
+  border-top: 1px solid var(--border-subtle);
+}
+.wu-proposal p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.wu-proposal__who {
+  font-weight: var(--weight-semibold);
+}
+.wu-proposal__who small {
+  margin-left: 6px;
+  font-weight: var(--weight-regular);
+  font-size: var(--text-body-sm);
+  color: var(--text-faint);
+}
