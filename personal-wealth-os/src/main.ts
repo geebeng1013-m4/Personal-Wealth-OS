@@ -195,6 +195,8 @@ const appPages = new Set([
   "settings",
   "money-leaks",
   "more",
+  // The advisor preview (D-6) exists only in the demo build.
+  ...(isDemoMode() ? ["clients"] : []),
 ]);
 
 function pageFromLocation(): string {
