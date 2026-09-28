@@ -14,6 +14,7 @@ import { bindLiabilityForm, liabilityFields, readLiabilityForm } from "../compon
 import { createId } from "../state";
 import { syncPlanningRules } from "../financialRules";
 import { DEFAULT_EMERGENCY_MONTHS, money, suggestedEmergencyTarget } from "../rules";
+import { isDemoMode } from "../demo";
 import { amt, escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import { planTickers, tradedTickers, withPlannedCustomTickers } from "../planTickers";
@@ -138,7 +139,10 @@ function accountCard(state: WealthState, user?: SessionUser): string {
           <h2 class="wu-me-card__name t-heading">${escapeHtml(name)}</h2>
           ${email ? `<p class="wu-me-card__email t-caption t-muted">${escapeHtml(email)}</p>` : ""}
         </div>
-        ${user ? `<button class="wu-btn wu-btn--secondary wu-btn--sm logout-btn wu-me-card__signout" type="button">Sign Out</button>` : ""}
+        ${!user ? "" : isDemoMode()
+          // The demo never signed in, so there is nothing to sign out of — leave the demo instead.
+          ? `<a class="wu-btn wu-btn--secondary wu-btn--sm wu-me-card__signout" href="https://wealthup.cc">Exit demo</a>`
+          : `<button class="wu-btn wu-btn--secondary wu-btn--sm logout-btn wu-me-card__signout" type="button">Sign Out</button>`}
       </div>
       <ul class="wu-me-card__facts" aria-label="Investor profile">${facts.map((fact) => `<li class="wu-badge wu-badge--neutral">${escapeHtml(fact)}</li>`).join("")}</ul>
       <p class="wu-me-card__note t-caption t-faint">Your age, stage and risk tolerance shape what the Advisor and Rules suggest.</p>

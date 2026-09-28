@@ -196,13 +196,27 @@ function median(values: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 }
 
+/**
+ * A large expense that comes back every month — rent, a loan instalment,
+ * school fees — is the plan, not an outlier. It "repeats" when another month
+ * holds an expense in the same category within 10% of its amount.
+ */
+function repeatsInAnotherMonth(transaction: LedgerTransaction, expenses: LedgerTransaction[]): boolean {
+  const month = transaction.date.slice(0, 7);
+  return expenses.some((other) =>
+    other.id !== transaction.id
+    && other.categoryId === transaction.categoryId
+    && other.date.slice(0, 7) !== month
+    && Math.abs(other.amount - transaction.amount) <= transaction.amount * 0.1);
+}
+
 function detectUnusualSpending(state: WealthState): MoneyLeakObservation[] {
   const expenses = state.ledgerTransactions.filter((transaction) => transaction.type === "expense");
   if (expenses.length < 6) return [];
   const typicalAmount = median(expenses.map((transaction) => transaction.amount));
   const threshold = Math.max(150, typicalAmount * 3);
   return expenses
-    .filter((transaction) => transaction.amount >= threshold)
+    .filter((transaction) => transaction.amount >= threshold && !repeatsInAnotherMonth(transaction, expenses))
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 2)
     .map((transaction) => ({

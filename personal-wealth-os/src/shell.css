@@ -1471,3 +1471,6 @@
 .demo-banner__reset {
   flex: none;
 }
+a.wu-me-card__signout {
+  text-decoration: none;
+}

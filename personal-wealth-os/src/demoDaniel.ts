@@ -205,7 +205,9 @@ export const danielDemoState: WealthState = {
     { id: "account-gx", name: "GXBank Savings", type: "bank", openingBalance: 19200, icon: "🛟" },
     { id: "account-sspn", name: "SSPN (Sophia)", type: "investment", openingBalance: 17300, icon: "🎓" },
     { id: "account-asb", name: "ASB", type: "investment", openingBalance: 33650, icon: "🏡" },
-    { id: "account-moomoo", name: "Moomoo", type: "investment", openingBalance: 0, icon: "📈", holdsTrackedPortfolio: true },
+    // Three payday transfers bring it to 14,484.04, the Portfolio's "Invested"
+    // (cost with fees, at the converted rates), so both pages show the same money.
+    { id: "account-moomoo", name: "Moomoo", type: "investment", openingBalance: 10884.04, icon: "📈", holdsTrackedPortfolio: true },
   ],
   ledgerTransactions: [
     // Anchor month: in progress — payday and the first week.

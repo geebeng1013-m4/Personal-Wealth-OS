@@ -65,3 +65,40 @@ test("detectMoneyLeakFindings: a linked goal its account already funds is not fl
   const summary = detectMoneyLeakFindings(laptopGoalState(4200, 0));
   assert.equal(summary.leaks.some((item) => item.id === "goal-laptop"), false);
 });
+
+function smallExpenses(): LedgerTransaction[] {
+  return [5, 6, 7, 8, 9, 10].map((day) => ({ id: `small-${day}`, amount: 40, type: "expense" as const, categoryId: "expense-food", date: `2026-08-${String(day).padStart(2, "0")}` }));
+}
+
+test("unusual spending: rent that comes back every month is not an outlier", () => {
+  const state = withTransactions([
+    ...smallExpenses(),
+    { id: "rent-07", amount: 1800, type: "expense", categoryId: "expense-housing", date: "2026-07-03", note: "Rent" },
+    { id: "rent-08", amount: 1800, type: "expense", categoryId: "expense-housing", date: "2026-08-03", note: "Rent" },
+  ]);
+  assert.equal(detectMoneyLeakFindings(state).leaks.some((leak) => leak.category === "unusual"), false);
+});
+
+test("unusual spending: a one-off large expense is still flagged", () => {
+  const state = withTransactions([
+    ...smallExpenses(),
+    { id: "tv", amount: 2400, type: "expense", categoryId: "expense-shopping", date: "2026-08-12", note: "New TV" },
+  ]);
+  const unusual = detectMoneyLeakFindings(state).leaks.filter((leak) => leak.category === "unusual");
+  assert.deepEqual(unusual.map((leak) => leak.transactionIds), [["tv"]]);
+});
+
+test("unusual spending: a repeat only counts when it is in another month and within 10%", () => {
+  const state = withTransactions([
+    ...smallExpenses(),
+    // Same month: two big purchases are not a monthly pattern.
+    { id: "a1", amount: 1500, type: "expense", categoryId: "expense-shopping", date: "2026-08-12" },
+    { id: "a2", amount: 1500, type: "expense", categoryId: "expense-shopping", date: "2026-08-20" },
+    // Another month, but 30% apart: not the same bill.
+    { id: "b1", amount: 1000, type: "expense", categoryId: "expense-health", date: "2026-07-15" },
+    { id: "b2", amount: 1300, type: "expense", categoryId: "expense-health", date: "2026-08-15" },
+  ]);
+  const flagged = detectMoneyLeakFindings(state).leaks.filter((leak) => leak.category === "unusual").flatMap((leak) => leak.transactionIds);
+  assert.equal(flagged.length, 2, "the top two outliers are still reported");
+  assert.ok(flagged.every((id) => ["a1", "a2", "b2"].includes(id)));
+});

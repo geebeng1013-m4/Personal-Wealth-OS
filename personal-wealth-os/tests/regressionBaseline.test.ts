@@ -161,7 +161,8 @@ test("baseline: advisor recommendations, their order and priority", () => {
 });
 
 test("baseline: money leak count is unchanged", () => {
-  assert.equal(detectMoneyLeakFindings(demo()).leaks.length, 5);
+  // 3, not 5, since the monthly food totals (580, 600) stopped counting as unusual spending.
+  assert.equal(detectMoneyLeakFindings(demo()).leaks.length, 3);
 });
 
 // --- Cross-model consistency (§3) ------------------------------------------

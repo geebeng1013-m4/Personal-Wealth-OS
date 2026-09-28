@@ -12,6 +12,7 @@ import type { WealthState } from "../models";
 import { pageHeader } from "../components/pageHeader";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 import { bindRowPage, group } from "./settingsRows";
+import { isDemoMode } from "../demo";
 
 /** A switch row: flipping it saves straight away. */
 function toggleRow(name: "maskAmounts" | "requireExportConfirmation", title: string, checked: boolean): string {
@@ -55,15 +56,21 @@ export function settingsTemplate(state: WealthState): string {
       <div class="wu-dash wu-settings">
         ${group("setPrivacyLabel", "Privacy", privacyRows, "wu-set--privacy")}
         ${group("setDataLabel", "Data", dataRows, "wu-set--data")}
+        ${isDemoMode() ? "" : dangerZone()}
+      </div>
+    </div>
+  `;
+}
+
+/** Not in the demo: its banner's Reset demo already restores the sample data, and there is no cloud copy to clear. */
+function dangerZone(): string {
+  return `
         <section class="wu-card wu-dash__half wu-set wu-set--danger" aria-labelledby="setDangerLabel">
           <div class="wu-tc__top wu-set__head"><span class="wu-label" id="setDangerLabel">Danger zone</span></div>
           <p class="wu-dash__note wu-set__danger-note">Reset clears every record on this device and in the cloud. A copy is saved to Version History first.</p>
           <div class="wu-dash__actions wu-set__danger-desk"><button class="wu-btn wu-btn--danger wu-btn--sm" data-tool="reset" type="button">Reset all data</button></div>
           <ul class="wu-set__list wu-set__danger-phone"><li class="wu-set__item"><button class="wu-set__row" data-tool="reset" type="button"><span class="wu-set__title t-negative">Reset all data</span></button></li></ul>
-        </section>
-      </div>
-    </div>
-  `;
+        </section>`;
 }
 
 export function bindSettings(root: HTMLElement, state: WealthState, setState: Setter, navigate: Navigate | undefined, rerender: RenderApp): void {

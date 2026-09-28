@@ -4,6 +4,7 @@ import { demoPersonaFor, demoStateFor } from "../src/demoData";
 import { danielDemoState } from "../src/demoDaniel";
 import { getGoalsSnapshot } from "../src/goalSummary";
 import { getLedgerSnapshot } from "../src/ledgerSummary";
+import { getPortfolioSnapshot } from "../src/portfolioSummary";
 import { migrateState } from "../src/state";
 
 const ANCHOR = new Date(2026, 7, 15, 12, 0, 0);
@@ -58,4 +59,10 @@ test("demo Daniel: shifted to a later month, the same month is still in progress
   assert.equal(atLater.income, atAnchor.income);
   assert.equal(atLater.expenses, atAnchor.expenses);
   assert.equal(getGoalsSnapshot(daniel(later), later).goals.find((goal) => goal.id === "house")?.currentAmount, 38000);
+});
+
+test("demo Daniel: the Moomoo account shows the Portfolio's Invested figure", () => {
+  const state = daniel();
+  const moomoo = getLedgerSnapshot(state, ANCHOR).accountBalances.find((item) => item.account.id === "account-moomoo");
+  assert.equal(moomoo?.balance.toFixed(2), getPortfolioSnapshot(state).totalInvestedMyr.toFixed(2));
 });
