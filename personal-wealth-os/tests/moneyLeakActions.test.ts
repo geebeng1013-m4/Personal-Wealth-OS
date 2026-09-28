@@ -26,7 +26,8 @@ const demo = (): WealthState => migrateState(JSON.parse(JSON.stringify(demoState
 
 test("leaks: detection output is unchanged and carries no advisory fields", () => {
   const findings = detectMoneyLeakFindings(demo());
-  assert.equal(findings.leaks.length, 5, "the demo baseline still detects 5 leaks");
+  // 3, not 5, since the monthly food totals (580, 600) stopped counting as unusual spending.
+  assert.equal(findings.leaks.length, 3, "the demo baseline still detects 3 leaks");
   const serialized = JSON.stringify(findings);
   for (const advisory of ["why", "recommendation", "primaryAction", "actionLabel", "destination", "ruleId"]) {
     assert.equal(serialized.includes(`"${advisory}"`), false, `${advisory} leaked into the detector`);

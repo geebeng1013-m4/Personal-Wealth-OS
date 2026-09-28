@@ -1,12 +1,14 @@
 import type { WealthState } from "./models";
 import { ALL_PAGES, PAGE_GROUPS, PHONE_TABS, type Page } from "./pageDirectory";
-import { emptyState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, IMPORT_SNAPSHOT_LABEL, type Snapshot } from "./state";
+import { emptyState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, forgetLocalState, IMPORT_SNAPSHOT_LABEL, type Snapshot } from "./state";
 import { refreshLivePrices, priceRefreshCleanup, PRICE_POLL_INTERVAL_MS } from "./livePrices";
 import { bindTvmCalculator, tvmCalculatorTemplate } from "./pages/tvmPage";
 import { escapeHtml } from "./html";
 import { pageHeader } from "./components/pageHeader";
 import { assistantTemplate, mountAssistant } from "./components/assistant/assistantWidget";
 import { DISCLAIMER_SHORT } from "./components/disclaimer";
+import { isDemoMode } from "./demo";
+import { bindClients, clientsTemplate } from "./pages/clientsPage";
 import { createSideRays, type SideRays } from "./sideRays";
 
 import type { Navigate, Setter } from "./pages/pageTypes";
@@ -212,10 +214,11 @@ function shellTemplate(activePage: string, state: WealthState): string {
         <strong class="titlebar__title">${active?.[1] ?? "Overview"}</strong>
         <span class="titlebar__sub">${active?.[2] ?? "Dashboard"}</span>
       </div>
+      ${isDemoMode() ? demoBannerTemplate(activePage) : ""}
       <section id="pageMount"></section>
     </main>
     ${tabbarTemplate(activePage, checkinsDue)}
-    ${assistantTemplate(state)}
+    ${isDemoMode() ? "" : assistantTemplate(state)}
   `;
 }
 
@@ -251,6 +254,8 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   priceRefreshCleanup.delete(root);
 
   root.className = "app-shell";
+  // The advisor preview is not part of the client's app, so it has none of its navigation.
+  root.classList.toggle("is-advisor-view", isDemoMode() && activePage === "clients");
   root.innerHTML = shellTemplate(activePage, state);
   settleTabbarLens(root);
   const sidebarScrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
@@ -303,6 +308,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
     settings: settingsTemplate(state),
     "money-leaks": moneyLeaksTemplate(state),
     more: moreTemplate(buildCheckins(state).dueCount),
+    ...(isDemoMode() ? { clients: clientsTemplate() } : {}),
   };
   mount.innerHTML = templates[activePage] ?? templates.dashboard;
 
@@ -327,7 +333,11 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   // Last: the assistant can navigate and pre-fill, so it binds against a page
   // that is already wired up. It lives outside #pageMount and is re-mounted on
   // every render, with its conversation held in module state.
-  mountAssistant(root, state, navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user, onLogout)), activePage);
+  // Not in the demo: it needs a signed-in account, and a visitor should not
+  // see sample figures sent to an AI service.
+  if (!isDemoMode()) {
+    mountAssistant(root, state, navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user, onLogout)), activePage);
+  }
 
   // A "Get started" step picked on the Dashboard points at its field here,
   // once this page is fully wired (F-7).
@@ -348,8 +358,36 @@ function keepActiveNavigationVisible(root: HTMLElement): void {
   }
 }
 
+/**
+ * Says the figures are samples, on every page, with a way back to the untouched
+ * demo — and switches between the client's app and the advisor preview.
+ */
+function demoBannerTemplate(activePage: string): string {
+  const advisor = activePage === "clients";
+  const view = (page: string, label: string, on: boolean) =>
+    `<button class="wu-segmented__option demo-view${on ? " is-active" : ""}" data-page="${page}" type="button" aria-pressed="${on}">${label}</button>`;
+  return `<div class="demo-banner">
+    <p class="demo-banner__text"><strong>Demo</strong> · Sample data for fictional clients. Nothing you change here is saved online.</p>
+    <div class="wu-segmented demo-banner__views" role="group" aria-label="Demo view">
+      ${view("dashboard", "Client view", !advisor)}${view("clients", "Advisor view", advisor)}
+    </div>
+    <button class="wu-btn wu-btn--secondary wu-btn--sm demo-banner__reset" id="demoReset" type="button">Reset demo</button>
+  </div>`;
+}
+
 function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, navigate?: Navigate, user?: AppUser, onLogout?: () => void): void {
   const doNavigate = navigate ?? ((page: string) => renderApp(root, state, setState, page, navigate, user));
+
+  root.querySelectorAll<HTMLButtonElement>(".demo-view").forEach((button) => button.addEventListener("click", () => {
+    if (!button.classList.contains("is-active")) doNavigate(button.dataset.page ?? "dashboard");
+  }));
+
+  root.querySelector<HTMLButtonElement>("#demoReset")?.addEventListener("click", () => {
+    const uid = user?.uid;
+    if (!uid || !confirm("Reset the demo? Changes made here are cleared and the sample data comes back.")) return;
+    forgetLocalState(uid);
+    window.location.reload();
+  });
 
   root.querySelectorAll<HTMLButtonElement>(".nav-item").forEach((button) => {
     button.addEventListener("click", () => {
@@ -565,6 +603,7 @@ function bindPage(root: HTMLElement, state: WealthState, setState: Setter, activ
   });
 
   if (activePage === "dashboard") bindDashboard(root, state, setState, navigate, renderApp);
+  if (activePage === "clients" && isDemoMode()) bindClients(root, navigate);
   if (activePage === "money-leaks") bindMoneyLeaks(root, state, setState, navigate, renderApp);
   if (activePage === "tvm") bindTvmCalculator(root, state);
   if (activePage === "calculator") {

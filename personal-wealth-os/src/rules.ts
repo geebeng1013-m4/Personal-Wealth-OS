@@ -38,7 +38,11 @@ export type CostBasisTrade = Pick<Trade, "ticker" | "date" | "type" | "amountUsd
   & Partial<Pick<Trade, "currency" | "amount" | "price">>;
 
 export function money(value: number, currency = "MYR"): string {
-  return `${currency} ${Number(value || 0).toLocaleString("en-MY", { maximumFractionDigits: 2 })}`;
+  const amount = Number(value || 0);
+  // Whole amounts stay whole; anything with cents shows both digits, so
+  // 63,466.20 never reads as 63,466.2.
+  const hasCents = Math.round(amount * 100) % 100 !== 0;
+  return `${currency} ${amount.toLocaleString("en-MY", { minimumFractionDigits: hasCents ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
 export function percent(value: number, digits = 0): string {

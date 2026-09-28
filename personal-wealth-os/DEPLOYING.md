@@ -73,3 +73,39 @@ domains**. Google sign-in fails on any origin not in that list.
 `VITE_DEMO_MODE=true` builds the reviewable demo (`npm run build:demo`): a mock
 user, fixture data, and no real Firestore writes. Never set it on the
 production deploy.
+
+## The demo site (`demo.wealthup.cc`)
+
+The login page links to **https://demo.wealthup.cc** ("See a demo with sample
+data"). That is a second Vercel project built from the same repository with
+`VITE_DEMO_MODE=true`, so the production project and its data are never
+involved.
+
+What the demo shows:
+
+- **Daniel Lim**, a fictional advisor's client (`src/demoDaniel.ts`), to every
+  visitor.
+- Alex, the original student fixture, only at `/?persona=alex`.
+- `/?fresh` starts an empty account, to walk the new-user Q&A.
+- A "Demo · sample data" banner with **Reset demo** on every page. Edits live
+  only in that visitor's browser. The AI assistant is not shown.
+
+One-time setup, in the Vercel dashboard:
+
+1. **Add New → Project**, import the same GitHub repository.
+2. **Root Directory**: `personal-wealth-os`. Name it e.g. `wealthup-demo`.
+   Build settings come from `vercel.json`; leave them.
+3. **Environment Variables**: `VITE_DEMO_MODE` = `true`, for Production and
+   Preview. Only on this project — never on the production one.
+4. **Deploy**, then **Settings → Domains** → add `demo.wealthup.cc` and create
+   the DNS record Vercel shows.
+
+A shared link previews differently on each site: `vite.config.ts`
+(`sharePreview`) writes the demo's own title and description when
+`VITE_DEMO_MODE=true`. Both use `public/og-image.jpg`; its source and how to
+regenerate it are in `scripts/og-image/`. WhatsApp caches a link's preview, so
+a changed image may take a while to show on a link already shared.
+
+The demo never signs in, so it needs no Firebase authorized domain. Market
+prices come from its own `/api` routes (same origin), which the origin guard
+already allows.

@@ -131,7 +131,8 @@ test("flow: none of the navigation work moved a financial figure", () => {
   assert.deepEqual(model.wealthHealth, before.wealthHealth);
   assert.deepEqual(getFinancialHealthSnapshot(after, NOW), getFinancialHealthSnapshot(base, NOW));
   assert.deepEqual(detectMoneyLeakFindings(after), detectMoneyLeakFindings(base));
-  assert.equal(detectMoneyLeakFindings(after).leaks.length, 5);
+  // 3, not 5, since the monthly food totals (580, 600) stopped counting as unusual spending.
+  assert.equal(detectMoneyLeakFindings(after).leaks.length, 3);
 });
 
 test("flow: a brand-new user is not told their allocation is broken", () => {

@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 
@@ -108,9 +108,56 @@ function fontsWithoutSwap(): Plugin {
   };
 }
 
-export default defineConfig({
+/**
+ * The preview a chat app shows under a shared link (Open Graph).
+ *
+ * One index.html serves two sites, so the words are chosen at build time: the
+ * demo speaks to the advisors it is sent to, the real site to people who would
+ * sign up. Crawlers do not run JavaScript, so this has to be in the HTML. The
+ * image is the same for both (public/og-image.jpg, source in scripts/og-image)
+ * and must be an absolute URL.
+ */
+function sharePreview(demo: boolean): Plugin {
+  const site = demo
+    ? {
+        url: "https://demo.wealthup.cc",
+        title: "WealthUp demo: what your clients would see",
+        description: "A sample client's goals, budget, investments and their advisor's notes, in one place. Fictional data, nothing to sign up for.",
+      }
+    : {
+        url: "https://www.wealthup.cc",
+        title: "WealthUp: your money, investments and goals in one place",
+        description: "Bank, e-wallet and brokerage in one net worth. Real returns after fees and FX, and a simple plan that tells you what to do next. Free.",
+      };
+  const meta = (key: "name" | "property", id: string, content: string) =>
+    ({ tag: "meta", attrs: { [key]: id, content }, injectTo: "head" as const });
+  return {
+    name: "share-preview",
+    transformIndexHtml: () => [
+      meta("name", "description", site.description),
+      meta("property", "og:type", "website"),
+      meta("property", "og:site_name", "WealthUp"),
+      meta("property", "og:url", `${site.url}/`),
+      meta("property", "og:title", site.title),
+      meta("property", "og:description", site.description),
+      meta("property", "og:image", `${site.url}/og-image.jpg`),
+      meta("property", "og:image:width", "1200"),
+      meta("property", "og:image:height", "630"),
+      meta("property", "og:image:alt", "WealthUp's Overview: net worth, this month, invested and the next goal."),
+      meta("name", "twitter:card", "summary_large_image"),
+    ],
+  };
+}
+
+export default defineConfig(({ mode }) => ({
   root: resolve(__dirname),
-  plugins: [react(), devApiRoutes(), fontsWithoutSwap()],
+  plugins: [
+    react(),
+    devApiRoutes(),
+    fontsWithoutSwap(),
+    // Vercel passes VITE_DEMO_MODE as a process variable; loadEnv also reads .env files.
+    sharePreview(loadEnv(mode, __dirname, "VITE_").VITE_DEMO_MODE === "true"),
+  ],
   build: {
     rollupOptions: {
       output: {
@@ -124,4 +171,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

@@ -22,7 +22,7 @@ import { setAssistantTokenProvider } from "./components/assistant/assistantClien
 import { fetchUsdToMyr, pruneMarketCache } from "./market";
 import type { User } from "firebase/auth";
 import { isDemoMode } from "./demo";
-import { demoStateFor, DEMO_USER_DISPLAY_NAME, DEMO_USER_EMAIL, DEMO_USER_PHOTO } from "./demoData";
+import { demoPersonaFor, demoStateFor, DEMO_USER_PHOTO } from "./demoData";
 import { initSaveErrorToasts } from "./components/toast";
 import { initLiquidGlass } from "./liquidGlass";
 import { applyOnboardingAnswers, shouldShowOnboardingQuiz, skipOnboardingQuiz } from "./onboardingQuiz";
@@ -118,6 +118,8 @@ type Theme = "dark" | "light";
  * does not reach the iOS home-indicator strip.
  */
 const LOGIN_BG = "#050706";
+/** The separate demo deployment (VITE_DEMO_MODE build), linked from the login page. */
+const DEMO_SITE_URL = "https://demo.wealthup.cc";
 
 function getStoredTheme(): Theme {
   const t = localStorage.getItem("pwo-theme");
@@ -193,6 +195,8 @@ const appPages = new Set([
   "settings",
   "money-leaks",
   "more",
+  // The advisor preview (D-6) exists only in the demo build.
+  ...(isDemoMode() ? ["clients"] : []),
 ]);
 
 function pageFromLocation(): string {
@@ -434,6 +438,7 @@ function renderLogin(): void {
             <svg viewBox="0 0 24 24" width="20" height="20"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
             <span>Sign in with Google</span>
           </button>
+          <a class="login-demo-link" href="${DEMO_SITE_URL}">See a demo with sample data <span aria-hidden="true">→</span></a>
           <p class="login-desc">Free. Your data stays private to you.<br>For guidance only, not financial advice.</p>
         </div>
       </div>
@@ -564,12 +569,14 @@ if (isDemoMode()) {
   console.log("[Demo] Design Review mode — Firebase auth and writes are disabled.");
   // `?fresh` starts an empty account, to walk the new-user Q&A (O-2). It keeps
   // its own storage so it never touches the fixture the plain demo shows.
-  const fresh = new URLSearchParams(window.location.search).has("fresh");
+  const params = new URLSearchParams(window.location.search);
+  const fresh = params.has("fresh");
+  const persona = demoPersonaFor(params);
   // Create a minimal mock user so the UI renders normally without real auth.
   const demoUser = {
-    uid: fresh ? "demo-fresh-user" : "demo-user",
-    displayName: DEMO_USER_DISPLAY_NAME,
-    email: DEMO_USER_EMAIL,
+    uid: fresh ? "demo-fresh-user" : persona.uid,
+    displayName: persona.displayName,
+    email: persona.email,
     photoURL: DEMO_USER_PHOTO,
   } as unknown as User;
 
@@ -578,8 +585,8 @@ if (isDemoMode()) {
 
   // Keep edits made in the preview deployment across rerenders and refreshes.
   // The demo user is isolated from real accounts by its dedicated uid.
-  const demoStorageKey = "personal-wealth-os-state-demo-user";
-  state = fresh ? emptyState() : localStorage.getItem(demoStorageKey) ? loadState(demoUser.uid) : demoStateFor(new Date());
+  const demoStorageKey = `personal-wealth-os-state-${persona.uid}`;
+  state = fresh ? emptyState() : localStorage.getItem(demoStorageKey) ? loadState(persona.uid) : demoStateFor(new Date(), persona.state);
 
   quizAllowed = true;
   renderSignedIn(demoUser);
