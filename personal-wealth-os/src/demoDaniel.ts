@@ -20,6 +20,12 @@ import { CURRENT_VERSION } from "./state";
 export const DANIEL_DISPLAY_NAME = "Daniel Lim";
 export const DANIEL_EMAIL = "daniel.demo@wealthup.cc";
 
+/**
+ * Notes written by Daniel's planner. The demo shows them read-only, the way an
+ * advisor system would: the client can read the advice, not rewrite it.
+ */
+export const ADVISOR_NOTE_IDS: ReadonlySet<string> = new Set(["advice-quarterly", "advice-house", "advice-education"]);
+
 const SALARY = 10500;
 const INVEST_MONTHLY = 1200;
 const VOO_SHARE = 0.7;

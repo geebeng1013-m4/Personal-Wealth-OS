@@ -26,6 +26,8 @@ import { pageHeader } from "../components/pageHeader";
 import { getBudgetSnapshot } from "../budgetSummary";
 import { rulesGuideTemplate } from "./rulesGuide";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
+import { isDemoMode } from "../demo";
+import { ADVISOR_NOTE_IDS } from "../demoDaniel";
 
 /**
  * Which category is showing. Module-level, like the Ledger page's filter, so
@@ -157,6 +159,13 @@ function noteForm(id: string, title: string, body: string): string {
 }
 
 function noteCard(id: string, title: string, body: string): string {
+  // Demo only: the planner's advice is not the client's to rewrite.
+  if (isDemoMode() && ADVISOR_NOTE_IDS.has(id)) {
+    return `<section class="wu-card wu-stack wu-stack--sm wu-rule-note" aria-label="${escapeHtml(title)}">
+      <div class="wu-tc__top"><span class="wu-label">${escapeHtml(title)}</span><span class="wu-chip wu-chip--muted">From your advisor · read-only</span></div>
+      ${noteBody(body)}
+    </section>`;
+  }
   const editing = editingNoteId === id;
   return `<section class="wu-card wu-stack wu-stack--sm wu-rule-note" aria-label="${escapeHtml(title)}">
       <div class="wu-tc__top"><span class="wu-label">${escapeHtml(title)}</span>${editing ? "" : `<button class="wu-btn wu-btn--ghost wu-btn--sm edit-rule-notes" data-note-id="${escapeHtml(id)}" type="button" aria-label="Edit ${escapeHtml(title)}">Edit</button>`}</div>
