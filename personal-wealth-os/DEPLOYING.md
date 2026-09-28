@@ -100,6 +100,12 @@ One-time setup, in the Vercel dashboard:
 4. **Deploy**, then **Settings → Domains** → add `demo.wealthup.cc` and create
    the DNS record Vercel shows.
 
+A shared link previews differently on each site: `vite.config.ts`
+(`sharePreview`) writes the demo's own title and description when
+`VITE_DEMO_MODE=true`. Both use `public/og-image.jpg`; its source and how to
+regenerate it are in `scripts/og-image/`. WhatsApp caches a link's preview, so
+a changed image may take a while to show on a link already shared.
+
 The demo never signs in, so it needs no Firebase authorized domain. Market
 prices come from its own `/api` routes (same origin), which the origin guard
 already allows.
