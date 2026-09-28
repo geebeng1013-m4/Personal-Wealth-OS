@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "./testHarness";
 import { demoPersonaFor, demoStateFor } from "../src/demoData";
-import { danielDemoState } from "../src/demoDaniel";
+import { ADVISOR_NOTE_IDS, danielDemoState } from "../src/demoDaniel";
 import { getGoalsSnapshot } from "../src/goalSummary";
 import { getLedgerSnapshot } from "../src/ledgerSummary";
 import { getPortfolioSnapshot } from "../src/portfolioSummary";
@@ -65,4 +65,8 @@ test("demo Daniel: the Moomoo account shows the Portfolio's Invested figure", ()
   const state = daniel();
   const moomoo = getLedgerSnapshot(state, ANCHOR).accountBalances.find((item) => item.account.id === "account-moomoo");
   assert.equal(moomoo?.balance.toFixed(2), getPortfolioSnapshot(state).totalInvestedMyr.toFixed(2));
+});
+
+test("demo Daniel: every planner note is on the read-only list, and only those", () => {
+  assert.deepEqual([...ADVISOR_NOTE_IDS].sort(), danielDemoState.ruleNotesList.map((note) => note.id).sort());
 });
