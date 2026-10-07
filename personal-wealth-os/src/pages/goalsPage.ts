@@ -21,6 +21,7 @@ import { pageHeader } from "../components/pageHeader";
 import { getGoalsSnapshot, type GoalSnapshot } from "../goalSummary";
 import { syncGoalContributionRules } from "../financialRules";
 import { isoDate } from "../checkins";
+import { validateGoalCompletion } from "../goalCompletion";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
 /**
@@ -30,6 +31,7 @@ import type { Navigate, RenderApp, Setter } from "./pageTypes";
 let openGoalIndex: number | null = null;
 let editingGoal = false;
 let editingFinancialGoal = false;
+let recordingCompletion = false;
 
 /** A figure without its currency prefix. */
 function amountOf(value: number): string {
@@ -93,7 +95,7 @@ function goalEditor(state: WealthState, snapshot: GoalSnapshot, featured: boolea
         <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Name</span><input class="wu-field" name="label" type="text" value="${escapeHtml(goal.label)}"></label>
         <label class="wu-field-row"><span class="wu-field-row__label">Progress comes from</span><select class="wu-field goal-account" name="accountId"><option value="">Manual — I type it in</option>${state.ledgerAccounts.map((account) => `<option value="${escapeHtml(account.id)}" data-balance="${balances.get(account.id) ?? 0}"${account.id === goal.accountId ? " selected" : ""}>${escapeHtml(account.name)}</option>`).join("")}</select></label>
         <label class="wu-field-row wu-goal-editor__current goal-current-manual"${linked ? " hidden" : ""}><span class="wu-field-row__label">Current MYR</span><input class="wu-field" name="current" type="number" min="0" step="1" value="${goal.current}"></label>
-        <div class="wu-field-row wu-goal-editor__current goal-current-linked"${linked ? "" : " hidden"}><span class="wu-field-row__label">Current MYR</span><p class="wu-goal-editor__linked">${linked ? linkedCurrentText(snapshot.currentAmount, snapshot.linkedAccountName ?? "") : ""}</p></div>
+        <div class="wu-field-row wu-goal-editor__current goal-current-linked"${linked ? "" : " hidden"}><span class="wu-field-row__label">Current MYR</span><p class="wu-goal-editor__linked">${linked ? linkedCurrentText(snapshot.heldAmount, snapshot.linkedAccountName ?? "") : ""}</p></div>
         <label class="wu-field-row"><span class="wu-field-row__label">Target MYR</span><input class="wu-field" name="target" type="number" min="0" step="1" value="${goal.target}"></label>
         <label class="wu-field-row"><span class="wu-field-row__label">Monthly MYR</span><input class="wu-field" name="monthlyContribution" type="number" min="0" step="1" value="${goal.monthlyContribution}"></label>
         <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Note</span><textarea class="wu-field" name="note" rows="2" placeholder="Why this goal matters, or anything to remember">${escapeHtml(goal.note)}</textarea></label>
@@ -147,8 +149,8 @@ function goalDetails(snapshot: GoalSnapshot): string {
     : `<p class="wu-goal-detail__eta">${timeToGoal(snapshot)}</p>`;
   const spendButton = snapshot.isSpent
     ? `<button class="wu-btn wu-btn--ghost wu-btn--sm undo-goal-spent" data-index="${snapshot.index}" type="button">Undo</button>`
-    : snapshot.isComplete
-      ? `<button class="wu-btn wu-btn--secondary wu-btn--sm mark-goal-spent" data-index="${snapshot.index}" type="button">Mark as done</button>`
+    : snapshot.targetAmount > 0
+      ? `<button class="wu-btn wu-btn--secondary wu-btn--sm mark-goal-spent" data-index="${snapshot.index}" type="button">${snapshot.isComplete ? "Mark as done" : "Already bought / used it"}</button>`
       : "";
   return `<div class="wu-goal-detail">
       ${note ? `<p class="wu-goal-detail__note">${escapeHtml(note)}</p>` : `<p class="wu-goal-detail__note wu-goal-detail__note--empty">No note yet</p>`}
@@ -158,6 +160,23 @@ function goalDetails(snapshot: GoalSnapshot): string {
         ${spendButton}
       </div>
     </div>`;
+}
+
+function completionForm(snapshot: GoalSnapshot): string {
+  const today = isoDate(new Date());
+  return `<form class="wu-stack wu-stack--sm wu-goal-editor goal-completion-form" data-index="${snapshot.index}">
+      <p class="t-body-sm">Record a purchase or a goal you already used the money for, even if the account balance has since fallen.</p>
+      <div class="wu-grid wu-grid--2">
+        <label class="wu-field-row"><span class="wu-field-row__label">Completed on</span><input class="wu-field" name="spentAt" type="date" max="${today}" value="${today}" required></label>
+        <label class="wu-field-row"><span class="wu-field-row__label">Amount used MYR</span><input class="wu-field" name="spentAmount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${snapshot.targetAmount}" required></label>
+      </div>
+      <p class="t-caption t-muted">This keeps the goal done. It does not add a transaction or change your account balance. For an emergency fund, keep tracking the balance instead.</p>
+      <p class="wu-field-row__error goal-completion-error" role="alert" hidden></p>
+      <div class="wu-row wu-row--tight">
+        <button class="wu-btn wu-btn--secondary wu-btn--sm cancel-goal-completion" type="button">Cancel</button>
+        <button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save completion</button>
+      </div>
+    </form>`;
 }
 
 function goalRow(state: WealthState, snapshot: GoalSnapshot, featuredId: string): string {
@@ -196,7 +215,7 @@ function goalRow(state: WealthState, snapshot: GoalSnapshot, featuredId: string)
         <span class="wu-goal__amount t-amt">${amountOf(snapshot.currentAmount)} / ${amountOf(snapshot.targetAmount)}</span>
         <span class="wu-goal__chev" aria-hidden="true">›</span>
       </button>
-      ${open ? (editingGoal ? goalEditor(state, snapshot, featured) : goalDetails(snapshot)) : ""}
+      ${open ? (recordingCompletion ? completionForm(snapshot) : editingGoal ? goalEditor(state, snapshot, featured) : goalDetails(snapshot)) : ""}
     </li>`;
 }
 
@@ -316,10 +335,12 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
     const index = Number(button.dataset.index);
     openGoalIndex = openGoalIndex === index ? null : index;
     editingGoal = false;
+    recordingCompletion = false;
     repaint();
   }));
   root.querySelectorAll<HTMLButtonElement>(".edit-goal").forEach((button) => button.addEventListener("click", () => {
     editingGoal = true;
+    recordingCompletion = false;
     repaint(undefined, undefined, `.goalForm[data-index="${openGoalIndex}"] input[name="label"]`);
   }));
   // Cancel steps back to the goal's details rather than closing it.
@@ -335,23 +356,58 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
     repaint({ ...state, overviewGoalId }, "Changed featured Overview goal");
   }));
 
-  // Mark a reached goal as done (its money used), or undo it. Marking records today and the
-  // target, so the goal stays complete after the purchase empties its account.
-  const setSpent = (button: HTMLButtonElement, spent: boolean): void => {
+  root.querySelectorAll<HTMLButtonElement>(".mark-goal-spent").forEach((button) => button.addEventListener("click", () => {
+    const index = Number(button.dataset.index);
+    const goal = getGoalsSnapshot(state).goals.find((item) => item.index === index);
+    if (!goal || goal.isSpent || goal.targetAmount <= 0) return;
+    openGoalIndex = index;
+    editingGoal = false;
+    recordingCompletion = true;
+    repaint(undefined, undefined, '.goal-completion-form input[name="spentAt"]');
+  }));
+  root.querySelector<HTMLButtonElement>(".cancel-goal-completion")?.addEventListener("click", () => {
+    recordingCompletion = false;
+    repaint();
+  });
+  root.querySelector<HTMLFormElement>(".goal-completion-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    const index = Number(form.dataset.index);
+    const goal = state.goals[index];
+    const error = form.querySelector<HTMLElement>(".goal-completion-error");
+    const showError = (message: string): void => {
+      if (error) { error.textContent = message; error.hidden = false; }
+    };
+    if (!Number.isInteger(index) || !goal || goal.spentAt || goal.target <= 0) {
+      showError("This goal is no longer available to complete. Reopen the Goals page.");
+      return;
+    }
+    const data = new FormData(form);
+    const result = validateGoalCompletion(String(data.get("spentAmount") ?? ""), String(data.get("spentAt") ?? ""), isoDate(new Date()));
+    if (!result.ok) { showError(result.error); return; }
+    if (!confirm(`Record ${goal.label || goal.name} as done on ${result.values.spentAt}, using MYR ${result.values.spentAmount.toFixed(2)}? This keeps the goal done, but does not add a transaction or change account balances.`)) return;
+    const goals = state.goals.map((item, position) => position === index ? { ...item, ...result.values } : item);
+    const next = { ...state, goals };
+    next.financialRules = syncGoalContributionRules(next);
+    recordingCompletion = false;
+    repaint(next, "Recorded goal completion");
+  });
+
+  // Undo returns a completed goal to its current balance without changing transactions.
+  const undoSpent = (button: HTMLButtonElement): void => {
     const index = Number(button.dataset.index);
     const goal = state.goals[index];
-    // Only a reached goal is marked, and only a marked one is undone.
-    if (!goal || (spent ? !(goal.target > 0) || typeof goal.spentAt === "string" : typeof goal.spentAt !== "string")) return;
+    if (!goal || typeof goal.spentAt !== "string") return;
     const { spentAt: _spentAt, spentAmount: _spentAmount, ...unspent } = goal;
     const goals = [...state.goals];
-    goals[index] = spent ? { ...unspent, spentAt: isoDate(new Date()), spentAmount: goal.target } : unspent;
+    goals[index] = unspent;
     const next = { ...state, goals };
     // A spent goal takes no more money each month; undo brings its rule back.
     next.financialRules = syncGoalContributionRules(next);
-    repaint(next, spent ? "Marked goal as done" : "Undid goal done");
+    recordingCompletion = false;
+    repaint(next, "Undid goal done");
   };
-  root.querySelectorAll<HTMLButtonElement>(".mark-goal-spent").forEach((button) => button.addEventListener("click", () => setSpent(button, true)));
-  root.querySelectorAll<HTMLButtonElement>(".undo-goal-spent").forEach((button) => button.addEventListener("click", () => setSpent(button, false)));
+  root.querySelectorAll<HTMLButtonElement>(".undo-goal-spent").forEach((button) => button.addEventListener("click", () => undoSpent(button)));
 
   // Save explicitly on click so the action remains reliable across browsers/PWA shells.
   root.querySelectorAll<HTMLFormElement>(".goalForm").forEach((form) => {
@@ -452,6 +508,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
     next.financialRules = syncGoalContributionRules(next);
     openGoalIndex = goals.length - 1;
     editingGoal = true;
+    recordingCompletion = false;
     repaint(next, undefined, `.goalForm[data-index="${goals.length - 1}"] input[name="label"]`);
   }));
 }
