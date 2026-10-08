@@ -3362,6 +3362,21 @@
   .wu-portfolio-recent .record-trade-exchange {
     justify-self: start;
   }
+  .pf-history-exchange {
+    max-width: 8rem;
+    margin-top: var(--space-1);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .pf-history-exchange:empty {
+    display: none;
+  }
+  .pf-history-exchange small {
+    display: block;
+  }
+  .wu-table td.pf-history-delete {
+    width: 1%;
+  }
   .pf-exchange-toggle {
     display: flex;
     gap: var(--space-2);

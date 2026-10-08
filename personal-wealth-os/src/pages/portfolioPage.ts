@@ -849,9 +849,9 @@ export function portfolioTemplate(state: WealthState): string {
         '<td class="t-amt">' + money(trade.amountMyr) + '</td>' +
         '<td class="t-amt">' + escapeHtml(currency) + ' ' + amount.toFixed(2) + '</td>' +
         '<td>' + escapeHtml(currency) + ' ' + price.toFixed(2) + '</td>' +
-        '<td>' + (rate > 0 ? rate.toFixed(4) : UNKNOWN) + '</td>' +
+        '<td>' + (rate > 0 ? rate.toFixed(4) : UNKNOWN) + '<div class="pf-history-exchange">' + exchangeAction(trade, state) + '</div></td>' +
         '<td>' + tradeUnits(trade).toFixed(5) + '</td>' +
-        '<td>' + exchangeAction(trade, state) + '<button class="wu-btn wu-btn--ghost wu-btn--icon delete-trade" data-id="' + escapeHtml(trade.id) + '" type="button" aria-label="Delete trade" title="Delete trade">✕</button></td>' +
+        '<td class="pf-history-delete"><button class="wu-btn wu-btn--ghost wu-btn--icon delete-trade" data-id="' + escapeHtml(trade.id) + '" type="button" aria-label="Delete trade" title="Delete trade">✕</button></td>' +
         '</tr>';
     }).join("");
 
