@@ -101,6 +101,8 @@ export function validateCurrencyExchange(candidate: unknown): CurrencyExchange |
   return {
     id: record.id.trim().slice(0, 120),
     date: record.date,
+    ...(typeof record.tradeId === "string" && record.tradeId.trim()
+      ? { tradeId: record.tradeId.trim().slice(0, 120) } : {}),
     ...(legacy ?? {}),
     ...(legacy ? exchangeSides(legacy) : sides),
     ...(typeof record.notes === "string" && record.notes.trim()
@@ -137,6 +139,8 @@ export interface ResolvedTradeCost {
   uncovered: number;
   /** MYR per unit of `currency` for the covered part, or null when nothing was covered. */
   effectiveRate: number | null;
+  /** Linked settlements also price the USD fee separately from the shares. */
+  feeMyr?: number;
 }
 
 /** How well recorded conversions explain the buys in one currency. */
@@ -242,6 +246,26 @@ export function resolveExchangeCoverage(
   exchanges: CurrencyExchange[],
   dividends: Dividend[] = [],
 ): ExchangeCoverage {
+  // Explicit settlements belong to their own buy, even if an older order has
+  // an unexplained shortfall. Reserve those units before walking the common
+  // cash pool. Legacy, unlinked conversions keep exactly their old behavior.
+  const linked = new Map<string, { stock: number; stockMyr: number; fee: number; feeMyr: number }>();
+  const reserved = new Map<string, number>();
+  const buys = new Map(trades.filter((trade) => trade.type !== "Sell").map((trade) => [trade.id, normalizeTradeMarket(trade)]));
+  for (const exchange of exchanges) {
+    const trade = exchange.tradeId ? buys.get(exchange.tradeId) : undefined;
+    const sides = sidesOf(exchange);
+    const leg = sides ? ringgitLeg(sides) : null;
+    if (!trade || !leg?.intoForeign || leg.currency !== trade.currency || !Number.isFinite(trade.amount) || !(Number(trade.amount) > 0)) continue;
+    const funding = linked.get(trade.id) ?? { stock: 0, stockMyr: 0, fee: 0, feeMyr: 0 };
+    const feeNeed = trade.feeCurrency === trade.currency && Number.isFinite(trade.fee) ? Math.max(0, trade.fee ?? 0) : 0;
+    const fee = Math.min(leg.foreignAmount, Math.max(0, feeNeed - funding.fee));
+    const stock = Math.min(leg.foreignAmount - fee, Math.max(0, (trade.amount ?? 0) - funding.stock));
+    const rate = leg.myrAmount / leg.foreignAmount;
+    linked.set(trade.id, { stock: funding.stock + stock, stockMyr: funding.stockMyr + stock * rate,
+      fee: funding.fee + fee, feeMyr: funding.feeMyr + fee * rate });
+    reserved.set(exchange.id, stock + fee);
+  }
   const timeline: TimelineEntry[] = [
     ...exchanges.map((exchange, index): TimelineEntry =>
       ({ kind: "exchange", date: exchange.date, order: index, exchange })),
@@ -306,7 +330,7 @@ export function resolveExchangeCoverage(
         pool.recordedMyr += leg.myrAmount;
         const rate = leg.myrAmount / leg.foreignAmount;
         // Settlement first, surplus second.
-        const surplus = settleShortfalls(pool, leg.foreignAmount, rate);
+        const surplus = settleShortfalls(pool, leg.foreignAmount - (reserved.get(entry.exchange.id) ?? 0), rate);
         pool.units += surplus;
         pool.myr += surplus * rate;
         continue;
@@ -372,24 +396,36 @@ export function resolveExchangeCoverage(
     }
 
     const rate = poolRate(pool);
-    const drawn = rate === null ? 0 : Math.min(spent, pool.units);
-    const costMyr = rate === null ? 0 : drawn * rate;
+    const funding = linked.get(trade.id);
+    const assigned = funding?.stock ?? 0;
+    const drawn = rate === null ? 0 : Math.min(spent - assigned, pool.units);
+    const costMyr = (funding?.stockMyr ?? 0) + (rate === null ? 0 : drawn * rate);
     pool.units -= drawn;
-    pool.myr -= costMyr;
+    pool.myr -= rate === null ? 0 : drawn * rate;
+    let feeMyr: number | undefined;
+    if (funding && trade.feeCurrency === currency) {
+      const remainingFee = Math.max(0, (trade.fee ?? 0) - funding.fee);
+      const feeDrawn = rate === null ? 0 : Math.min(remainingFee, pool.units);
+      pool.units -= feeDrawn;
+      pool.myr -= rate === null ? 0 : feeDrawn * rate;
+      const estimate = nearestConversionRate(trade.date, currency, exchanges) ?? trade.exchangeRate ?? 0;
+      feeMyr = funding.feeMyr + (rate ?? 0) * feeDrawn + estimate * (remainingFee - feeDrawn);
+    }
 
     pool.totalBuy += spent;
-    pool.covered += drawn;
+    pool.covered += drawn + assigned;
     costs.set(trade.id, {
       tradeId: trade.id,
       currency,
       spent,
       costMyr,
-      uncovered: spent - drawn,
+      uncovered: spent - drawn - assigned,
+      ...(feeMyr !== undefined ? { feeMyr } : {}),
       // Filled in once the walk is over: a conversion that settles this buy has
       // not necessarily happened yet.
       effectiveRate: null,
     });
-    if (spent - drawn > 1e-9) pool.shortfalls.push({ tradeId: trade.id, amount: spent - drawn });
+    if (spent - drawn - assigned > 1e-9) pool.shortfalls.push({ tradeId: trade.id, amount: spent - drawn - assigned });
   }
 
   // Only now is each buy's funding final, so the rate it actually paid can be
@@ -528,6 +564,7 @@ export function tradesWithExchangeCost(
     if (resolved.effectiveRate === null && nearest === null) return original;
     const amountMyr = resolved.costMyr + uncoveredMyr;
     const rate = amount > 0 ? amountMyr / amount : (resolved.effectiveRate ?? nearest ?? undefined);
-    return withFeeInRinggit({ ...original, amountMyr, exchangeRate: rate }, rate ?? null);
+    const restated = withFeeInRinggit({ ...original, amountMyr, exchangeRate: rate }, rate ?? null);
+    return resolved.feeMyr === undefined ? restated : { ...restated, feeMyr: resolved.feeMyr };
   });
 }

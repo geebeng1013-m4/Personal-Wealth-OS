@@ -8,12 +8,12 @@
  * genuinely unknown. The shared valuation formatters render that snapshot the
  * same way the Dashboard does.
  *
- * The currency-conversion panel is the only place a real MYR/USD rate is
- * recorded — the broker exports none — so its import is a two-step read-then-
- * confirm: a misparse here rewrites the ringgit cost basis behind every holding.
+ * Actual MYR/USD exchanges can be recorded with a buy or pasted from history.
+ * History import is a two-step read-then-confirm: a misparse here rewrites the
+ * ringgit cost basis behind every holding.
  */
 
-import type { Dividend, Market, TradeType, WealthState } from "../models";
+import type { CurrencyExchange, Dividend, Market, Trade, TradeType, WealthState } from "../models";
 import { createId } from "../state";
 import { money, percent, tradeUnits } from "../rules";
 import { amt, escapeHtml } from "../html";
@@ -39,6 +39,7 @@ import { exchangeRateOf, resolveExchangeCoverage, tradesWithExchangeCost } from 
 import { MARKETS, isMarket, lotsText, marketLabel, marketOfTicker, ringgitLeg, sidesOf, tradeAmounts } from "../tradeCurrency";
 import { currenciesFor, tradeFromEntry } from "../tradeEntry";
 import { exchangesFromText, mergeExchanges } from "../exchangeImport";
+import { exchangeFromEntry, exchangeFromTrade, isCalendarDay, withExchangeForTrade, withRecordedExchange, withTradeAndExchange, withoutExchangeLinks, type TradeExchangeInput } from "../tradeExchangeEntry";
 import { rebalanceContributions, tradeExchangeRate } from "../financialHealth";
 import { recordsFromCsv } from "../csvImport";
 import { fetchRatesToMyr, getUsdToMyr, loadDividendSuggestions } from "../market";
@@ -175,6 +176,90 @@ function syncTradeFormMarket(root: HTMLElement): void {
     lotsHint.textContent = lots ? `= ${lots}` : "";
     lotsHint.hidden = !lots;
   }
+  syncTradeExchange(root);
+}
+
+function todayDay(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+function exchangeFields(prefix: string): string {
+  return `<label class="wu-field-row"><span class="wu-field-row__label">Exchange date</span><input class="wu-field" id="${prefix}Date" name="exchangeDate" type="date" value="${todayDay()}" max="${todayDay()}" required></label>
+    <label class="wu-field-row"><span class="wu-field-row__label">MYR paid</span><input class="wu-field" id="${prefix}Myr" name="exchangeMyr" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
+    <label class="wu-field-row"><span class="wu-field-row__label">USD received</span><input class="wu-field" id="${prefix}Usd" name="exchangeUsd" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
+    <p class="wu-dash__note wu-field-row--wide" id="${prefix}Rate" aria-live="polite">Enter the settled amounts to see the exchange rate.</p>
+    <p class="wu-dash__note wu-field-row--wide">Use the actual exchange amounts, including any USD fee covered by the exchange. If you also used existing USD, enter only the newly exchanged part. This records cost; it does not change Ledger balances.</p>`;
+}
+
+function readExchangeInput(form: HTMLFormElement): TradeExchangeInput {
+  const data = new FormData(form);
+  return { date: String(data.get("exchangeDate") ?? ""), myrAmount: String(data.get("exchangeMyr") ?? ""), usdAmount: String(data.get("exchangeUsd") ?? "") };
+}
+
+function updateExchangeRate(form: HTMLFormElement, prefix: string): void {
+  const input = readExchangeInput(form);
+  const myr = Number(input.myrAmount);
+  const usd = Number(input.usdAmount);
+  const output = form.querySelector<HTMLElement>(`#${prefix}Rate`);
+  if (output) output.textContent = Number.isFinite(myr) && Number.isFinite(usd) && myr > 0 && usd > 0
+    ? rateText(myr / usd) : "Enter the settled amounts to see the exchange rate.";
+}
+
+function showExchangeError(form: HTMLFormElement, error: HTMLElement | null, field: keyof TradeExchangeInput, message: string): void {
+  if (error) error.textContent = message;
+  const name = field === "date" ? "exchangeDate" : field === "myrAmount" ? "exchangeMyr" : "exchangeUsd";
+  const input = form.querySelector<HTMLInputElement>(`[name="${name}"]`);
+  input?.setAttribute("aria-invalid", "true");
+  input?.focus();
+}
+
+function syncTradeExchange(root: HTMLElement): void {
+  const form = root.querySelector<HTMLFormElement>("#tradeForm");
+  const toggle = form?.querySelector<HTMLInputElement>("#pfFxToggle");
+  const fields = form?.querySelector<HTMLFieldSetElement>("#pfFxFields");
+  if (!form || !toggle || !fields) return;
+  const currency = form.querySelector<HTMLSelectElement>("#pfCurrency")?.value;
+  const type = form.querySelector<HTMLSelectElement>("[name=type]")?.value;
+  const eligible = currency === "USD" && type !== "Sell";
+  if (!eligible) toggle.checked = false;
+  const wrap = form.querySelector<HTMLElement>("#pfFxOption");
+  if (wrap) wrap.hidden = !eligible;
+  fields.hidden = !toggle.checked;
+  fields.disabled = !toggle.checked;
+  toggle.setAttribute("aria-expanded", String(toggle.checked));
+  const myrWrap = form.querySelector<HTMLElement>("#pfAmountMyrWrap");
+  if (myrWrap) myrWrap.hidden = currency === "MYR" || toggle.checked;
+  const myrInput = form.querySelector<HTMLInputElement>("[name=amountMyr]");
+  if (myrInput) myrInput.disabled = toggle.checked;
+  const date = form.querySelector<HTMLInputElement>("[name=date]")?.value;
+  const fxDate = fields.querySelector<HTMLInputElement>("[name=exchangeDate]");
+  if (fxDate) fxDate.min = date ?? "";
+  const save = form.querySelector<HTMLButtonElement>("#pfSaveTrade");
+  if (save) save.textContent = toggle.checked ? "Save trade & exchange" : "Record contribution";
+  updateExchangeRate(form, "pfFx");
+}
+
+let settlementTradeId: string | null = null;
+
+function exchangeAction(trade: Trade, state: WealthState): string {
+  if (tradeAmounts(trade).currency !== "USD" || trade.type === "Sell") return "";
+  const linked = state.currencyExchanges.find((exchange) => exchange.tradeId === trade.id);
+  return linked ? `<small class="t-caption t-muted">Exchange recorded · ${escapeHtml(linked.date)}</small>`
+    : `<button class="wu-btn wu-btn--ghost wu-btn--sm record-trade-exchange" type="button" data-trade-id="${escapeHtml(trade.id)}">Add exchange</button>`;
+}
+
+function settlementPanel(state: WealthState): string {
+  const trade = state.trades.find((entry) => entry.id === settlementTradeId);
+  if (!trade || trade.type === "Sell" || tradeAmounts(trade).currency !== "USD") return "";
+  return `<section class="wu-card wu-dash__full wu-stack" id="pfSettlementPanel" aria-labelledby="pfSettlementLabel">
+    <div class="wu-tc__top"><span class="wu-label" id="pfSettlementLabel">Record exchange · ${escapeHtml(trade.ticker)} · ${escapeHtml(trade.date)}</span></div>
+    <form id="pfSettlementForm" class="wu-grid wu-grid--2" novalidate>
+      ${exchangeFields("pfLateFx")}
+      <p class="wu-field-row__error wu-field-row--wide" id="pfSettlementError" role="alert"></p>
+      <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save exchange</button><button class="wu-btn wu-btn--ghost wu-btn--sm" id="pfSettlementCancel" type="button">Cancel</button></div>
+    </form>
+  </section>`;
 }
 
 /** A conversion rate, at the precision the difference actually shows up in. */
@@ -218,7 +303,7 @@ function lastUsedPlatform(state: WealthState): string {
 function conversionCoverageNote(state: WealthState): string {
   const records = state.currencyExchanges ?? [];
   if (records.length === 0) {
-    return "No conversions recorded. Ringgit costs currently use the rate that was live when each trade was imported, which is not a rate you paid — the dollar figures are unaffected.";
+    return "No conversions recorded. Ringgit costs use the amounts or estimates saved on your trades; no exchange history is available to verify them. Dollar figures are unaffected.";
   }
   const coverage = resolveExchangeCoverage(state.trades, records, state.dividends ?? []);
   const average = coverage.averageRecordedRate;
@@ -232,7 +317,7 @@ function conversionCoverageNote(state: WealthState): string {
   if (coverage.coverage >= 0.9995) {
     return `Every dollar of your cost basis is backed by a recorded conversion.${rate}${leftover}`;
   }
-  return `${percent(coverage.coverage, 0)} of your cost basis is backed by a recorded conversion.${rate} The remaining ${percent(1 - coverage.coverage, 0)} still uses the rate stamped on those trades at import.${leftover}`;
+  return `${percent(coverage.coverage, 0)} of your cost basis is backed by a recorded conversion.${rate} The remaining ${percent(1 - coverage.coverage, 0)} uses estimated rates, without recorded funding to verify it.${leftover}`;
 }
 
 /**
@@ -271,12 +356,28 @@ function currencyConversionsPanel(state: WealthState): string {
       </div>
       <div class="wu-stack">
         <p class="t-body-sm t-muted">${conversionCoverageNote(state)}</p>
+        <form id="fxEntryForm" class="wu-stack" novalidate>
+          <div class="pf-conversion-fields">
+            <label class="wu-field-row"><span class="wu-field-row__label">Exchange date</span><input class="wu-field" name="exchangeDate" type="date" value="${todayDay()}" max="${todayDay()}" required aria-describedby="fxEntryError"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Direction</span><select class="wu-field" name="direction" id="fxEntryDirection"><option value="myr-to-usd">MYR → USD</option><option value="usd-to-myr">USD → MYR</option></select></label>
+            <label class="wu-field-row"><span class="wu-field-row__label" id="fxEntryMyrLabel">MYR paid</span><input class="wu-field" name="exchangeMyr" type="number" min="0.01" step="0.01" inputmode="decimal" required aria-describedby="fxEntryError"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label" id="fxEntryUsdLabel">USD received</span><input class="wu-field" name="exchangeUsd" type="number" min="0.01" step="0.01" inputmode="decimal" required aria-describedby="fxEntryError"></label>
+          </div>
+          <div class="wu-row"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save conversion</button><span class="t-caption t-muted" id="fxEntryRate" aria-live="polite">Enter the settled amounts to see the exchange rate.</span></div>
+          <p id="fxEntryError" class="wu-field-row__error" role="alert"></p>
+          <small class="t-caption t-faint">Record the actual settled amounts. To link an exchange to a specific buy, use Add exchange in Contribution history.</small>
+        </form>
+        <details class="wu-details">
+          <summary class="wu-details__summary"><strong class="t-subheading">Paste broker history</strong></summary>
+          <div class="wu-stack">
         <label class="wu-field-row"><span class="wu-field-row__label">Paste your broker's exchange history</span>
           <textarea class="wu-field" id="fxPaste" rows="4" placeholder="MYR&#10;USD&#10;Aug 9, 2026 22:06 MYT&#10;Completed&#10;4.85 USD&#10;20.00 MYR"></textarea>
         </label>
         <div class="wu-row"><button class="wu-btn wu-btn--primary wu-btn--sm" id="fxImport" type="button">Read conversions</button></div>
         <small class="t-caption t-faint">Select the whole list in your broker app and paste it here — headings and dates included. Re-pasting a range you have already added updates it instead of duplicating it.</small>
         <p id="fxImportStatus" class="wu-field-row__error" role="alert"></p>
+          </div>
+        </details>
         ${records.length > 0 ? `<details class="wu-details">
           <summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-subheading">Recorded conversions</strong><span class="t-caption t-faint">${records.length}</span></span></summary>
           <div class="wu-table-wrap">
@@ -743,7 +844,7 @@ export function portfolioTemplate(state: WealthState): string {
   const portfolio = getPortfolioSnapshot(state, new Date(), livePriceInputs());
   // Ringgit amounts as the portfolio costs them: a Hong Kong trade's MYR figure
   // comes from its HKD conversions, a Malaysian trade's is its own amount.
-  const sortedTrades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? [], state.dividends ?? [])
+  const sortedTrades = tradesWithExchangeCost(state.trades, state.currencyExchanges ?? [], state.dividends ?? []).slice()
     .sort((a, b) => b.date.localeCompare(a.date));
   const recentTrades = sortedTrades.slice(0, RECENT_LIMIT);
   const conversions = state.currencyExchanges ?? [];
@@ -764,9 +865,9 @@ export function portfolioTemplate(state: WealthState): string {
         '<td class="t-amt">' + money(trade.amountMyr) + '</td>' +
         '<td class="t-amt">' + escapeHtml(currency) + ' ' + amount.toFixed(2) + '</td>' +
         '<td>' + escapeHtml(currency) + ' ' + price.toFixed(2) + '</td>' +
-        '<td>' + (rate > 0 ? rate.toFixed(4) : UNKNOWN) + '</td>' +
+        '<td>' + (rate > 0 ? rate.toFixed(4) : UNKNOWN) + '<div class="pf-history-exchange">' + exchangeAction(trade, state) + '</div></td>' +
         '<td>' + tradeUnits(trade).toFixed(5) + '</td>' +
-        '<td><button class="wu-btn wu-btn--ghost wu-btn--icon delete-trade" data-id="' + escapeHtml(trade.id) + '" type="button" aria-label="Delete trade" title="Delete trade">✕</button></td>' +
+        '<td class="pf-history-delete"><button class="wu-btn wu-btn--ghost wu-btn--icon delete-trade" data-id="' + escapeHtml(trade.id) + '" type="button" aria-label="Delete trade" title="Delete trade">✕</button></td>' +
         '</tr>';
     }).join("");
 
@@ -807,8 +908,8 @@ export function portfolioTemplate(state: WealthState): string {
       <!-- ENTRY FORM — collapsed until asked for -->
       <section class="wu-card wu-dash__full wu-portfolio-entry wu-stack" id="pfEntryPanel" aria-labelledby="pfEntryLabel"${tradeFormOpen ? "" : " hidden"}>
         <div class="wu-tc__top"><span class="wu-label" id="pfEntryLabel">Record trade</span><button class="wu-btn wu-btn--ghost wu-btn--sm" id="pfEntryClose" type="button">Cancel</button></div>
-        <form id="tradeForm" class="wu-grid wu-grid--2">
-          <label class="wu-field-row"><span class="wu-field-row__label">Date</span><input class="wu-field" name="date" type="date" required></label>
+        <form id="tradeForm" class="wu-grid wu-grid--2" novalidate>
+          <label class="wu-field-row"><span class="wu-field-row__label">Date</span><input class="wu-field" name="date" type="date" max="${todayDay()}" required></label>
           <label class="wu-field-row"><span class="wu-field-row__label">Platform</span><select class="wu-field" name="platform" id="platformSelect">${knownPlatforms(state).map((pf) => "<option" + (pf === lastUsedPlatform(state) ? " selected" : "") + ">" + escapeHtml(pf) + "</option>").join("")}<option value="__custom__">+ Custom</option></select></label>
           <div id="customPlatformWrap" class="wu-field-row--wide" style="display:none;"><label class="wu-field-row"><span class="wu-field-row__label">Custom Platform</span><input class="wu-field" name="customPlatform" id="customPlatformInput" type="text" placeholder="e.g. IBKR, Webull, Rakuten Trade"></label></div>
           <label class="wu-field-row"><span class="wu-field-row__label">Market</span><select class="wu-field" name="market" id="pfMarket">${MARKETS.map((info) => `<option value="${info.market}">${escapeHtml(info.label)}</option>`).join("")}</select></label>
@@ -822,8 +923,10 @@ export function portfolioTemplate(state: WealthState): string {
           <label class="wu-field-row" id="pfAmountMyrWrap"><span class="wu-field-row__label">Amount MYR</span><input class="wu-field" name="amountMyr" type="number" min="0" step="0.01"><small class="t-caption t-faint">What it cost in ringgit. Blank = today's rate; your recorded conversions replace it.</small></label>
           <div class="wu-field-row"><span class="wu-field-row__label">Fee</span><div class="wu-field-pair"><input class="wu-field" name="fee" type="number" min="0" step="0.01" aria-label="Fee"><select class="wu-field" name="feeCurrency" id="pfFeeCurrency" aria-label="Fee currency"><option>USD</option><option>MYR</option></select></div></div>
           <label class="wu-field-row"><span class="wu-field-row__label">Notes</span><input class="wu-field" name="notes" type="text" placeholder="Optional"></label>
+          <label class="wu-field-row wu-field-row--wide" id="pfFxOption"><span class="pf-exchange-toggle"><input id="pfFxToggle" name="recordExchange" type="checkbox" aria-controls="pfFxFields" aria-expanded="false"><span>Record actual MYR → USD exchange with this buy</span></span><small class="t-caption t-muted">Already settled? Save both together. Otherwise save the trade and use Add exchange later.</small></label>
+          <fieldset class="wu-grid wu-grid--2 wu-field-row--wide pf-trade-exchange" id="pfFxFields" hidden disabled><legend class="wu-label">Actual exchange</legend>${exchangeFields("pfFx")}</fieldset>
           <p class="wu-field-row__error wu-field-row--wide" id="pfTradeError" role="alert"></p>
-          <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Record contribution</button></div>
+          <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" id="pfSaveTrade" type="submit">Record contribution</button></div>
         </form>
         <small class="t-caption t-faint">Importing instead? Moomoo and custom transaction CSV exports are supported.</small>
       </section>
@@ -833,7 +936,7 @@ export function portfolioTemplate(state: WealthState): string {
         <div class="wu-tc__top"><span class="wu-label" id="pfRecentLabel">Recent activity</span></div>
         ${recentTrades.length === 0
           ? `<p class="wu-empty">No transactions yet. Record your first trade to begin tracking.</p>`
-          : `<ul class="wu-ledger-list">${recentTrades.map((trade) => `<li class="wu-ledger-row wu-ledger-row--plain"><span class="wu-ledger-row__title">${escapeHtml(trade.ticker)}<small>${escapeHtml(joinNotes(trade.type, shortDate(trade.date), trade.platform))}</small></span><span class="wu-ledger-row__amount t-amt">${trade.type === "Sell" ? "−" : ""}${amountOf(trade.amountMyr)}</span></li>`).join("")}</ul>`}
+          : `<ul class="wu-ledger-list">${recentTrades.map((trade) => `<li class="wu-ledger-row wu-ledger-row--plain"><span class="wu-ledger-row__title">${escapeHtml(trade.ticker)}<small>${escapeHtml(joinNotes(trade.type, shortDate(trade.date), trade.platform))}</small>${exchangeAction(trade, state)}</span><span class="wu-ledger-row__amount t-amt">${trade.type === "Sell" ? "−" : ""}${amountOf(trade.amountMyr)}</span></li>`).join("")}</ul>`}
         ${state.trades.length > 0
           ? `<button class="wu-btn wu-btn--ghost wu-btn--sm wu-self-end wu-portfolio-see-all" id="pfSeeAll" type="button" aria-expanded="${historyOpen}" aria-controls="pfHistoryPanel">${historyOpen ? "Hide full history" : `See all ${state.trades.length}`}</button>`
           : ""}
@@ -853,6 +956,7 @@ export function portfolioTemplate(state: WealthState): string {
       </section>
 
       <!-- MORE — the ringgit cost basis and the per-holding numbers, one tap away -->
+      ${settlementPanel(state)}
       <section class="wu-card wu-dash__full wu-dash__more wu-stack wu-stack--sm" aria-labelledby="pfMoreLabel">
         <span class="wu-label" id="pfMoreLabel">More detail</span>
         <ul class="wu-navlist wu-navlist--inline wu-portfolio-links">
@@ -919,6 +1023,15 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
   root.querySelector<HTMLInputElement>('#tradeForm input[name="units"]')
     ?.addEventListener("input", () => syncTradeFormMarket(root));
   syncTradeFormMarket(root);
+
+  const tradeForm = root.querySelector<HTMLFormElement>("#tradeForm");
+  tradeForm?.querySelector<HTMLInputElement>("#pfFxToggle")?.addEventListener("change", () => syncTradeExchange(root));
+  tradeForm?.querySelector<HTMLSelectElement>("[name=type]")?.addEventListener("change", () => syncTradeExchange(root));
+  tradeForm?.querySelector<HTMLInputElement>("[name=date]")?.addEventListener("input", () => syncTradeExchange(root));
+  tradeForm?.addEventListener("input", (event) => {
+    if (event.target instanceof HTMLInputElement) event.target.removeAttribute("aria-invalid");
+    updateExchangeRate(tradeForm, "pfFx");
+  });
 
   // Same "+ Custom" reveal for the broker.
   const platformSelect = root.querySelector<HTMLSelectElement>("#platformSelect");
@@ -1036,6 +1149,23 @@ It will be suggested again if the feed still carries it.`)) return;
     const currencyField = form.elements.namedItem("currency");
     const data = new FormData(form);
     const error = root.querySelector<HTMLElement>("#pfTradeError");
+    if (error) error.textContent = "";
+    const day = String(data.get("date") ?? "");
+    if (!isCalendarDay(day) || day > todayDay()) {
+      if (error) error.textContent = "Choose a valid trade date, today or earlier.";
+      form.querySelector<HTMLInputElement>("[name=date]")?.focus();
+      return;
+    }
+    for (const name of ["amount", "price", "units", "amountMyr", "fee"]) {
+      const field = form.querySelector<HTMLInputElement>(`[name="${name}"]`);
+      const raw = String(data.get(name) ?? "").trim();
+      if ((field && !field.disabled && !field.validity.valid) || (raw && (!Number.isFinite(Number(raw)) || Number(raw) < 0))) {
+        if (error) error.textContent = "Use valid amounts, quantity, price and fees of zero or more, with the field's permitted decimal precision.";
+        field?.setAttribute("aria-invalid", "true");
+        field?.focus();
+        return;
+      }
+    }
     let tickerInput = String(data.get("ticker") ?? "");
     if (tickerInput === "__custom__") {
       tickerInput = String(data.get("customTicker") ?? "");
@@ -1078,6 +1208,17 @@ It will be suggested again if the feed still carries it.`)) return;
       if (error) error.textContent = "Enter the amount, or the price and quantity, so the trade has a value.";
       return;
     }
+    let exchange: CurrencyExchange | undefined;
+    if (form.querySelector<HTMLInputElement>("#pfFxToggle")?.checked) {
+      const result = exchangeFromTrade(trade, readExchangeInput(form), state.currencyExchanges, todayDay());
+      if (!result.ok) {
+        showExchangeError(form, error, result.field, result.error);
+        return;
+      }
+      exchange = result.exchange;
+      if (state.currencyExchanges.some((record) => record.id === exchange?.id)
+        && !confirm("This exchange is already in your history. Link that existing record to this buy instead of adding a duplicate?")) return;
+    }
     const ticker = trade.ticker;
     // Save custom ticker to memory if new
     const customTickers = state.customTickers.includes(ticker)
@@ -1085,9 +1226,9 @@ It will be suggested again if the feed still carries it.`)) return;
       : (ticker !== "VOO" && ticker !== "QQQM")
         ? [...state.customTickers, ticker]
         : state.customTickers;
-    const next = { ...state, trades: [...state.trades, trade], customTickers };
+    const next = { ...withTradeAndExchange(state, trade, exchange), customTickers };
     tradeFormOpen = false;
-    setState(next);
+    setState(next, exchange ? "Recorded trade and actual currency exchange" : "Recorded trade");
     rerender(root, next, setState, "portfolio", navigate);
   });
 
@@ -1137,6 +1278,68 @@ It will be suggested again if the feed still carries it.`)) return;
   root.querySelector<HTMLButtonElement>("#pfPositionsToggle")?.addEventListener("click", () => {
     positionsOpen = !positionsOpen;
     reopen(positionsOpen ? "pfPositionsPanel" : undefined);
+  });
+
+  root.querySelectorAll<HTMLButtonElement>(".record-trade-exchange").forEach((button) => button.addEventListener("click", () => {
+    settlementTradeId = button.dataset.tradeId ?? null;
+    reopen("pfSettlementPanel");
+    root.querySelector<HTMLInputElement>("#pfLateFxMyr")?.focus();
+  }));
+  root.querySelector<HTMLButtonElement>("#pfSettlementCancel")?.addEventListener("click", () => {
+    settlementTradeId = null;
+    reopen();
+  });
+  const settlementForm = root.querySelector<HTMLFormElement>("#pfSettlementForm");
+  settlementForm?.addEventListener("input", (event) => {
+    if (event.target instanceof HTMLInputElement) event.target.removeAttribute("aria-invalid");
+    updateExchangeRate(settlementForm, "pfLateFx");
+  });
+  settlementForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const trade = state.trades.find((entry) => entry.id === settlementTradeId);
+    if (!trade) return;
+    const error = root.querySelector<HTMLElement>("#pfSettlementError");
+    if (error) error.textContent = "";
+    const result = exchangeFromTrade(trade, readExchangeInput(settlementForm), state.currencyExchanges, todayDay());
+    if (!result.ok) {
+      showExchangeError(settlementForm, error, result.field, result.error);
+      return;
+    }
+    if (state.currencyExchanges.some((record) => record.id === result.exchange.id)
+      && !confirm("This exchange is already in your history. Link that existing record to this buy instead of adding a duplicate?")) return;
+    const next = withExchangeForTrade(state, trade.id, result.exchange);
+    settlementTradeId = null;
+    setState(next, "Recorded actual trade settlement");
+    rerender(root, next, setState, "portfolio", navigate);
+  });
+
+  const exchangeForm = root.querySelector<HTMLFormElement>("#fxEntryForm");
+  exchangeForm?.addEventListener("input", (event) => {
+    if (event.target instanceof HTMLInputElement) event.target.removeAttribute("aria-invalid");
+    const error = root.querySelector<HTMLElement>("#fxEntryError");
+    if (error) error.textContent = "";
+    updateExchangeRate(exchangeForm, "fxEntry");
+  });
+  root.querySelector<HTMLSelectElement>("#fxEntryDirection")?.addEventListener("change", (event) => {
+    const back = (event.currentTarget as HTMLSelectElement).value === "usd-to-myr";
+    const myrLabel = root.querySelector<HTMLElement>("#fxEntryMyrLabel");
+    const usdLabel = root.querySelector<HTMLElement>("#fxEntryUsdLabel");
+    if (myrLabel) myrLabel.textContent = back ? "MYR received" : "MYR paid";
+    if (usdLabel) usdLabel.textContent = back ? "USD paid" : "USD received";
+  });
+  exchangeForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const error = root.querySelector<HTMLElement>("#fxEntryError");
+    if (error) error.textContent = "";
+    const direction = new FormData(exchangeForm).get("direction") === "usd-to-myr" ? "usd-to-myr" : "myr-to-usd";
+    const result = exchangeFromEntry(readExchangeInput(exchangeForm), direction, state.currencyExchanges, todayDay());
+    if (!result.ok) {
+      showExchangeError(exchangeForm, error, result.field, result.error);
+      return;
+    }
+    const next = { ...state, currencyExchanges: withRecordedExchange(state.currencyExchanges, result.exchange) };
+    setState(next, "Recorded currency conversion");
+    rerender(root, next, setState, "portfolio", navigate);
   });
 
   // Read a pasted exchange history. Parsing is separated from committing: the
@@ -1189,7 +1392,7 @@ It will be suggested again if the feed still carries it.`)) return;
       if (!leg) return;
       const confirmed = confirm(
         `Delete the ${record.date} conversion of ${money(leg.myrAmount)} and ${leg.currency} ${leg.foreignAmount.toFixed(2)}?\n\n` +
-        "The ringgit cost of any holding it funded will fall back to the rate stamped on those trades at import.",
+        "The ringgit cost of any holding it funded will be recalculated from the remaining exchange records or the stored trade amounts.",
       );
       if (!confirmed) return;
       const next = { ...state, currencyExchanges: (state.currencyExchanges ?? []).filter((item) => item.id !== id) };
@@ -1203,7 +1406,7 @@ It will be suggested again if the feed still carries it.`)) return;
     if (count === 0) return;
     const confirmed = confirm(
       `Delete all ${count} currency ${count === 1 ? "conversion" : "conversions"}?\n\n` +
-      "Every ringgit cost basis goes back to the rate that was live when its trade was imported. Your trades and all dollar figures are untouched. This cannot be undone.",
+      "Ringgit costs will use the amounts saved on your trades, without exchange records to verify them. Your trades and all dollar figures are untouched. This cannot be undone.",
     );
     if (!confirmed) return;
     const next = { ...state, currencyExchanges: [] };
@@ -1223,7 +1426,8 @@ It will be suggested again if the feed still carries it.`)) return;
       "This clears the entire cost-basis history behind your portfolio — units, average cost and realised P&L will all reset. This cannot be undone.",
     );
     if (!confirmed) return;
-    const next = { ...state, trades: [] };
+    const next = { ...state, trades: [], currencyExchanges: withoutExchangeLinks(state.currencyExchanges, new Set(state.trades.map((trade) => trade.id))) };
+    settlementTradeId = null;
     setState(next, "Cleared contribution history");
     rerender(root, next, setState, "portfolio", navigate);
   });
@@ -1231,14 +1435,15 @@ It will be suggested again if the feed still carries it.`)) return;
   root.querySelectorAll<HTMLButtonElement>(".delete-trade").forEach((button) => {
     button.addEventListener("click", () => {
       const id = button.dataset.id;
-      if (!id || !confirm("Delete this trade record?")) return;
+      if (!id || !confirm("Delete this trade record? Any linked exchange will remain in exchange history, without the trade link.")) return;
       const scrollPosition = {
         x: window.scrollX,
         y: window.scrollY,
         documentY: document.scrollingElement?.scrollTop ?? 0,
       };
-      const next = { ...state, trades: state.trades.filter((t) => t.id !== id) };
-      setState(next);
+      const next = { ...state, trades: state.trades.filter((t) => t.id !== id), currencyExchanges: withoutExchangeLinks(state.currencyExchanges, new Set([id])) };
+      if (settlementTradeId === id) settlementTradeId = null;
+      setState(next, "Deleted trade; kept any actual exchange history");
       rerender(root, next, setState, "portfolio", navigate);
 
       const restoreScroll = () => {

@@ -3344,6 +3344,63 @@
     }
   }
 
+  /* Trade and its optional actual settlement share one save action. */
+  .pf-trade-exchange {
+    min-width: 0;
+    margin: 0;
+    padding: var(--space-4);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+  }
+  .pf-trade-exchange[hidden] {
+    display: none;
+  }
+  .pf-trade-exchange legend,
+  #pfSettlementLabel {
+    color: var(--text-muted);
+  }
+  .wu-portfolio-recent .record-trade-exchange {
+    justify-self: start;
+  }
+.pf-conversion-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+@media (max-width: 640px) {
+  .pf-conversion-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.pf-history-exchange {
+    max-width: 8rem;
+    margin-top: var(--space-1);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .pf-history-exchange:empty {
+    display: none;
+  }
+  .pf-history-exchange small {
+    display: block;
+  }
+  .wu-table td.pf-history-delete {
+    width: 1%;
+  }
+  .pf-exchange-toggle {
+    display: flex;
+    gap: var(--space-2);
+    align-items: flex-start;
+  }
+  .pf-exchange-toggle > span {
+    min-width: 0;
+  }
+  #pfFxToggle {
+    flex-shrink: 0;
+    margin-top: 3px;
+  }
+
   /* ---- budget (T-6a) ----------------------------------------------------- */
   /* Desktop: four figures, the layers as one table, then the months beside the
      plan's other rules. Phone: this month's card, the layers as a grouped

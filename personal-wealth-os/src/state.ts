@@ -16,7 +16,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 31;
+export const CURRENT_VERSION = 32;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -771,6 +771,14 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   // state without them keeps whatever ringgit figures its trades already
   // carry. Purely additive: absent means an empty list, never a guessed rate.
   merged.currencyExchanges = normalizeCurrencyExchanges(candidate.currencyExchanges);
+  // v32: settlements may name the buy they funded. Old exchanges remain
+  // unlinked, with the same amounts and pooling behavior; never infer a link.
+  const tradeIds = new Set(merged.trades.map((trade) => trade.id));
+  merged.currencyExchanges = merged.currencyExchanges.map((exchange) => {
+    if (!exchange.tradeId || tradeIds.has(exchange.tradeId)) return exchange;
+    const { tradeId: _removed, ...unlinked } = exchange;
+    return unlinked;
+  });
 
   // v24: dividends. Purely additive — older data has none and starts empty; a
   // stored list is normalized, never replaced.
