@@ -1,4 +1,4 @@
-import type { CurrencyExchange, Trade, WealthState } from "./models";
+import type { CurrencyExchange, ExchangeDirection, Trade, WealthState } from "./models";
 import { exchangeId } from "./exchangeImport";
 import { normalizeTradeMarket, sidesOf } from "./tradeCurrency";
 import { MAX_CURRENCY_EXCHANGES, tradesWithExchangeCost } from "./currencyExchange";
@@ -24,6 +24,32 @@ export function isCalendarDay(day: string): boolean {
   const timestamp = Date.parse(day + "T00:00:00Z");
   return /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(timestamp)
     && new Date(timestamp).toISOString().slice(0, 10) === day;
+}
+
+/** One standalone conversion; matching history is left intact instead of overwritten. */
+export function exchangeFromEntry(input: TradeExchangeInput, direction: ExchangeDirection, existing: CurrencyExchange[], today: string): ExchangeEntryResult {
+  if (!isCalendarDay(input.date) || input.date > today) {
+    return { ok: false, field: "date", error: "Choose the actual exchange date, no later than today." };
+  }
+  const myrAmount = moneyInput(input.myrAmount);
+  const usdAmount = moneyInput(input.usdAmount);
+  if (myrAmount === null) return { ok: false, field: "myrAmount", error: "Enter a MYR amount greater than zero, with at most two decimal places." };
+  if (usdAmount === null) return { ok: false, field: "usdAmount", error: "Enter a USD amount greater than zero, with at most two decimal places." };
+  if (existing.some((record) => {
+    const sides = sidesOf(record);
+    return record.date === input.date && sides?.fromCurrency === (direction === "myr-to-usd" ? "MYR" : "USD")
+      && sides.toCurrency === (direction === "myr-to-usd" ? "USD" : "MYR")
+      && sides.fromAmount === (direction === "myr-to-usd" ? myrAmount : usdAmount)
+      && sides.toAmount === (direction === "myr-to-usd" ? usdAmount : myrAmount);
+  })) return { ok: false, field: "date", error: "These exchange details are already recorded. Check Recorded conversions before adding another." };
+  if (existing.length >= MAX_CURRENCY_EXCHANGES) {
+    return { ok: false, field: "date", error: "Exchange history is at its record limit. Export and review it before adding another conversion." };
+  }
+  // Opposite directions can share amounts and date, but must remain separate records.
+  const id = exchangeId(input.date, myrAmount, usdAmount);
+  let uniqueId = id;
+  for (let occurrence = 2; existing.some((record) => record.id === uniqueId); occurrence++) uniqueId = `${id}-${occurrence}`;
+  return { ok: true, exchange: { id: uniqueId, date: input.date, direction, myrAmount, usdAmount } };
 }
 
 /** Actual MYR→USD settlement, optionally only the shortfall of a mixed-currency buy. */

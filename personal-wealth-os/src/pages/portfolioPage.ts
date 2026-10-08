@@ -39,7 +39,7 @@ import { exchangeRateOf, resolveExchangeCoverage, tradesWithExchangeCost } from 
 import { MARKETS, isMarket, lotsText, marketLabel, marketOfTicker, ringgitLeg, sidesOf, tradeAmounts } from "../tradeCurrency";
 import { currenciesFor, tradeFromEntry } from "../tradeEntry";
 import { exchangesFromText, mergeExchanges } from "../exchangeImport";
-import { exchangeFromTrade, isCalendarDay, withExchangeForTrade, withTradeAndExchange, withoutExchangeLinks, type TradeExchangeInput } from "../tradeExchangeEntry";
+import { exchangeFromEntry, exchangeFromTrade, isCalendarDay, withExchangeForTrade, withRecordedExchange, withTradeAndExchange, withoutExchangeLinks, type TradeExchangeInput } from "../tradeExchangeEntry";
 import { rebalanceContributions, tradeExchangeRate } from "../financialHealth";
 import { recordsFromCsv } from "../csvImport";
 import { fetchRatesToMyr, getUsdToMyr, loadDividendSuggestions } from "../market";
@@ -356,12 +356,28 @@ function currencyConversionsPanel(state: WealthState): string {
       </div>
       <div class="wu-stack">
         <p class="t-body-sm t-muted">${conversionCoverageNote(state)}</p>
+        <form id="fxEntryForm" class="wu-stack" novalidate>
+          <div class="pf-conversion-fields">
+            <label class="wu-field-row"><span class="wu-field-row__label">Exchange date</span><input class="wu-field" name="exchangeDate" type="date" value="${todayDay()}" max="${todayDay()}" required aria-describedby="fxEntryError"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Direction</span><select class="wu-field" name="direction" id="fxEntryDirection"><option value="myr-to-usd">MYR → USD</option><option value="usd-to-myr">USD → MYR</option></select></label>
+            <label class="wu-field-row"><span class="wu-field-row__label" id="fxEntryMyrLabel">MYR paid</span><input class="wu-field" name="exchangeMyr" type="number" min="0.01" step="0.01" inputmode="decimal" required aria-describedby="fxEntryError"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label" id="fxEntryUsdLabel">USD received</span><input class="wu-field" name="exchangeUsd" type="number" min="0.01" step="0.01" inputmode="decimal" required aria-describedby="fxEntryError"></label>
+          </div>
+          <div class="wu-row"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save conversion</button><span class="t-caption t-muted" id="fxEntryRate" aria-live="polite">Enter the settled amounts to see the exchange rate.</span></div>
+          <p id="fxEntryError" class="wu-field-row__error" role="alert"></p>
+          <small class="t-caption t-faint">Record the actual settled amounts. To link an exchange to a specific buy, use Add exchange in Contribution history.</small>
+        </form>
+        <details class="wu-details">
+          <summary class="wu-details__summary"><strong class="t-subheading">Paste broker history</strong></summary>
+          <div class="wu-stack">
         <label class="wu-field-row"><span class="wu-field-row__label">Paste your broker's exchange history</span>
           <textarea class="wu-field" id="fxPaste" rows="4" placeholder="MYR&#10;USD&#10;Aug 9, 2026 22:06 MYT&#10;Completed&#10;4.85 USD&#10;20.00 MYR"></textarea>
         </label>
         <div class="wu-row"><button class="wu-btn wu-btn--primary wu-btn--sm" id="fxImport" type="button">Read conversions</button></div>
         <small class="t-caption t-faint">Select the whole list in your broker app and paste it here — headings and dates included. Re-pasting a range you have already added updates it instead of duplicating it.</small>
         <p id="fxImportStatus" class="wu-field-row__error" role="alert"></p>
+          </div>
+        </details>
         ${records.length > 0 ? `<details class="wu-details">
           <summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-subheading">Recorded conversions</strong><span class="t-caption t-faint">${records.length}</span></span></summary>
           <div class="wu-table-wrap">
@@ -1294,6 +1310,35 @@ It will be suggested again if the feed still carries it.`)) return;
     const next = withExchangeForTrade(state, trade.id, result.exchange);
     settlementTradeId = null;
     setState(next, "Recorded actual trade settlement");
+    rerender(root, next, setState, "portfolio", navigate);
+  });
+
+  const exchangeForm = root.querySelector<HTMLFormElement>("#fxEntryForm");
+  exchangeForm?.addEventListener("input", (event) => {
+    if (event.target instanceof HTMLInputElement) event.target.removeAttribute("aria-invalid");
+    const error = root.querySelector<HTMLElement>("#fxEntryError");
+    if (error) error.textContent = "";
+    updateExchangeRate(exchangeForm, "fxEntry");
+  });
+  root.querySelector<HTMLSelectElement>("#fxEntryDirection")?.addEventListener("change", (event) => {
+    const back = (event.currentTarget as HTMLSelectElement).value === "usd-to-myr";
+    const myrLabel = root.querySelector<HTMLElement>("#fxEntryMyrLabel");
+    const usdLabel = root.querySelector<HTMLElement>("#fxEntryUsdLabel");
+    if (myrLabel) myrLabel.textContent = back ? "MYR received" : "MYR paid";
+    if (usdLabel) usdLabel.textContent = back ? "USD paid" : "USD received";
+  });
+  exchangeForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const error = root.querySelector<HTMLElement>("#fxEntryError");
+    if (error) error.textContent = "";
+    const direction = new FormData(exchangeForm).get("direction") === "usd-to-myr" ? "usd-to-myr" : "myr-to-usd";
+    const result = exchangeFromEntry(readExchangeInput(exchangeForm), direction, state.currencyExchanges, todayDay());
+    if (!result.ok) {
+      showExchangeError(exchangeForm, error, result.field, result.error);
+      return;
+    }
+    const next = { ...state, currencyExchanges: withRecordedExchange(state.currencyExchanges, result.exchange) };
+    setState(next, "Recorded currency conversion");
     rerender(root, next, setState, "portfolio", navigate);
   });
 

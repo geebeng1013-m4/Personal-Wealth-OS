@@ -3,7 +3,7 @@ import { test } from "./testHarness";
 import type { CurrencyExchange, Trade, WealthState } from "../src/models";
 import { CURRENT_VERSION, emptyState, importStateFromFile, migrateState } from "../src/state";
 import { tradeFromEntry } from "../src/tradeEntry";
-import { exchangeFromTrade, withExchangeForTrade, withTradeAndExchange, withoutExchangeLinks } from "../src/tradeExchangeEntry";
+import { exchangeFromEntry, exchangeFromTrade, withExchangeForTrade, withRecordedExchange, withTradeAndExchange, withoutExchangeLinks } from "../src/tradeExchangeEntry";
 import { exchangesFromText, mergeExchanges } from "../src/exchangeImport";
 import { resolveExchangeCoverage, tradesWithExchangeCost, validateCurrencyExchange } from "../src/currencyExchange";
 import { calculatePositionCostBasis } from "../src/rules";
@@ -14,6 +14,51 @@ function buy(overrides: Partial<Trade> = {}): Trade {
     amountUsd: 100, priceUsd: 100, units: 1, amountMyr: 425, feeMyr: 0, ...overrides };
 }
 const input = { date: "2026-10-06", myrAmount: "410.00", usdAmount: "100.00" };
+
+test("standalone conversion: both directions keep statement amounts and survive JSON migration", () => {
+  for (const direction of ["myr-to-usd", "usd-to-myr"] as const) {
+    const result = exchangeFromEntry(input, direction, [], TODAY);
+    assert.ok(result.ok);
+    assert.equal(result.exchange.direction, direction);
+    assert.equal(result.exchange.myrAmount, 410);
+    assert.equal(result.exchange.usdAmount, 100);
+    assert.equal(result.exchange.tradeId, undefined);
+    const next = { ...emptyState(), currencyExchanges: [result.exchange] };
+    assert.deepEqual(migrateState(JSON.parse(JSON.stringify(next))).currencyExchanges, [validateCurrencyExchange(result.exchange)]);
+    const headers = direction === "myr-to-usd" ? "MYR\nUSD" : "USD\nMYR";
+    const pasted = exchangesFromText(`${headers}\nOct 6, 2026 12:00 MYT\nCompleted\n100.00 USD\n410.00 MYR`);
+    assert.equal(mergeExchanges(next.currencyExchanges, pasted).length, 1);
+  }
+});
+
+test("standalone conversion: rejects invalid amounts, dates and record limit", () => {
+  for (const amount of ["", "0", "-1", "Infinity", "NaN", "1.001", "9007199254740992"]) {
+    assert.equal(exchangeFromEntry({ ...input, myrAmount: amount }, "myr-to-usd", [], TODAY).ok, false);
+    assert.equal(exchangeFromEntry({ ...input, usdAmount: amount }, "myr-to-usd", [], TODAY).ok, false);
+  }
+  for (const date of ["", "2026-02-30", "2026-10-09"]) assert.equal(exchangeFromEntry({ ...input, date }, "myr-to-usd", [], TODAY).ok, false);
+  const records = Array.from({ length: 2000 }, (_,i) => ({ id: String(i), date: "2025-01-01", direction: "myr-to-usd" as const, myrAmount: 10, usdAmount: 2 }));
+  assert.equal(exchangeFromEntry(input, "myr-to-usd", records, TODAY).ok, false);
+});
+
+test("standalone conversion: protects matching linked history and preserves opposite directions", () => {
+  const first = exchangeFromEntry(input, "myr-to-usd", [], TODAY);
+  assert.ok(first.ok);
+  const existing = [{ ...first.exchange, tradeId: "old-buy" }];
+  const original = JSON.stringify(existing);
+  assert.equal(exchangeFromEntry(input, "myr-to-usd", existing, TODAY).ok, false);
+  const reverse = exchangeFromEntry(input, "usd-to-myr", existing, TODAY);
+  assert.ok(reverse.ok);
+  const records = withRecordedExchange(existing, reverse.exchange);
+  assert.equal(records.length, 2);
+  assert.equal(records.find((record) => record.id === first.exchange.id)?.tradeId, "old-buy");
+  const pasted = exchangesFromText("USD\nMYR\nOct 6, 2026 12:00 MYT\nCompleted\n410.00 MYR\n100.00 USD\nMYR\nUSD\nOct 6, 2026 11:00 MYT\nCompleted\n100.00 USD\n410.00 MYR");
+  const merged = mergeExchanges(records, pasted);
+  assert.equal(merged.length, 2);
+  assert.equal(merged.find((record) => record.direction === "myr-to-usd")?.tradeId, "old-buy");
+  assert.equal(merged.filter((record) => record.direction === "usd-to-myr").length, 1);
+  assert.equal(JSON.stringify(existing), original);
+});
 const close = (actual: number, expected: number) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
 function settlement(trade: Trade, myr = "410.00", usd = "100.00", existing: CurrencyExchange[] = []): CurrencyExchange {
   const result = exchangeFromTrade(trade, { ...input, myrAmount: myr, usdAmount: usd }, existing, TODAY);
