@@ -68,7 +68,7 @@ function isCurrencyLine(line: string): boolean {
  * collide, so a counter separates them — and stays stable as long as the paste
  * covers them in the same order, which it does, being a statement.
  */
-function exchangeId(date: string, myr: number, usd: number, occurrence: number): string {
+export function exchangeId(date: string, myr: number, usd: number, occurrence = 0): string {
   const suffix = occurrence > 0 ? `-${occurrence + 1}` : "";
   return `fx-${date}-${myr.toFixed(2)}-${usd.toFixed(2)}${suffix}`;
 }
@@ -144,6 +144,17 @@ export function mergeExchanges(
   incoming: CurrencyExchange[],
 ): CurrencyExchange[] {
   const byId = new Map(existing.map((record) => [record.id, record]));
-  for (const record of incoming) byId.set(record.id, record);
+  const matchedLinks = new Set<string>();
+  for (const record of incoming) {
+    const previous = byId.get(record.id) ?? existing.find((candidate) => candidate.tradeId && !matchedLinks.has(candidate.id)
+      && candidate.date === record.date && candidate.direction === record.direction
+      && candidate.myrAmount === record.myrAmount && candidate.usdAmount === record.usdAmount);
+    // Re-pasting the broker history must not detach a settlement recorded with
+    // a buy. The parser has no order reference, so the stored link wins.
+    if (previous?.tradeId) {
+      matchedLinks.add(previous.id);
+      byId.set(previous.id, { ...previous, ...record, id: previous.id, tradeId: previous.tradeId });
+    } else byId.set(record.id, record);
+  }
   return [...byId.values()].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 }

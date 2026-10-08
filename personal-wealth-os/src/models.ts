@@ -185,6 +185,8 @@ export type ExchangeDirection = "myr-to-usd" | "usd-to-myr";
 export interface CurrencyExchange {
   id: string;
   date: string;
+  /** v32: an actual settlement recorded with this buy; absent for pooled history. */
+  tradeId?: string;
   /** Ringgit ↔ dollar conversions only. */
   direction?: ExchangeDirection;
   /** Ringgit side of a ringgit ↔ dollar conversion. Always positive. */

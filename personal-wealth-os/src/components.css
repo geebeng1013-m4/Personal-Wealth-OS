@@ -3344,6 +3344,33 @@
     }
   }
 
+  /* Trade and its optional actual settlement share one save action. */
+  .pf-trade-exchange {
+    min-width: 0;
+    margin: 0;
+    padding: var(--space-4);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+  }
+  .pf-trade-exchange[hidden] {
+    display: none;
+  }
+  .pf-trade-exchange legend,
+  #pfSettlementLabel {
+    color: var(--text-muted);
+  }
+  .wu-portfolio-recent .record-trade-exchange {
+    justify-self: start;
+  }
+  #pfFxOption .wu-row {
+    white-space: normal;
+    align-items: flex-start;
+  }
+  #pfFxToggle {
+    flex-shrink: 0;
+    margin-top: 3px;
+  }
+
   /* ---- budget (T-6a) ----------------------------------------------------- */
   /* Desktop: four figures, the layers as one table, then the months beside the
      plan's other rules. Phone: this month's card, the layers as a grouped

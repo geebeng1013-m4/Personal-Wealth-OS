@@ -85,7 +85,7 @@ export function tradeFromEntry(entry: TradeEntry, rateToMyr: number | null): Tra
   const price = positive(entry.price);
   // A blank amount is the fill: price times quantity, as a contract note adds it up.
   const amount = positive(entry.amount) || (price > 0 && units > 0 ? price * units : 0);
-  if (amount <= 0) return null;
+  if (amount <= 0 || !Number.isFinite(amount)) return null;
 
   const isMyr = currency === "MYR";
   const usableRate = rateToMyr !== null && Number.isFinite(rateToMyr) && rateToMyr > 0 ? rateToMyr : null;
@@ -100,6 +100,7 @@ export function tradeFromEntry(entry: TradeEntry, rateToMyr: number | null): Tra
   // feeMyr is what every older build reads, so it always holds a ringgit figure:
   // a fee in the trade's currency is converted at the trade's own rate.
   const feeMyr = feeCurrency === "MYR" ? fee : entryRate !== null ? fee * entryRate : 0;
+  if (!Number.isFinite(amountMyr) || !Number.isFinite(feeMyr)) return null;
 
   const isUsd = currency === "USD";
   return normalizeTradeMarket({

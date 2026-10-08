@@ -7,7 +7,7 @@ import type { WealthState } from "../src/models";
 // rewrite the plan this month is measured against.
 
 test("v31: the state version records the month plans", () => {
-  assert.equal(CURRENT_VERSION, 31);
+  assert.ok(CURRENT_VERSION >= 31);
 });
 
 test("v31: a v30 document gains an empty set of month plans and loses nothing", () => {
