@@ -2,6 +2,8 @@
 
 ## GitHub授权已完成（2026-10-08）
 
+- **已推送并创建PR #163**：https://github.com/geebeng1013-m4/Personal-Wealth-OS/pull/163 ，base main / head fix/goals-current-review，等待用户审查和合并。AI未合并、未发布生产；旧的认证阻碍已解决。
+
 - GitHub CLI确认已登录 `geebeng1013-m4`，HTTPS Git可使用凭据；下方缺少认证的记录仅为历史。
 - 继续发布工作分支 `fix/goals-current-review` 并创建代码PR供用户审查；AI不自行合并或部署。Goals本地验证仍为1528/1528测试及typecheck/build通过。
 - Task2 Budget尚未开始。本轮不沿用前次一次性关机请求。

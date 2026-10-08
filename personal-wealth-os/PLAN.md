@@ -2,6 +2,8 @@
 
 ## 当前任务完成：购买后补记目标完成（2026-10-08）
 
+- **PR #163 已创建，待用户审查/合并**：https://github.com/geebeng1013-m4/Personal-Wealth-OS/pull/163 。分支已推送，尚未上线；不自动开始Task2。
+
 - [x] 用户明确批准在当前 Goals Task 内实现“先买了、余额下降后仍可记录完成”。
 - [x] 未标 Done 且目标金额大于零的目标始终有完成入口；已达标显示 Mark as done，余额不足显示 Already bought / used it。
 - [x] 记录完成日期与 Amount used MYR；校验真实日期、非未来、有限正金额及最多两位小数。保存前明确确认；取消不写状态。
