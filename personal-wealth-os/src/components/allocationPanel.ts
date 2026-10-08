@@ -128,15 +128,14 @@ function outcomeText(month: OutlookMonth): string {
   return "Every layer filled";
 }
 
-/** A layer's state as a word or two, and its tone. */
-function layerStatus(row: AllocationRow): { text: string; tone: string } {
-  if (row.overflow > 0.005) return { text: `${amt(`+${amountOf(row.overflow)}`)} extra`, tone: "t-positive" };
-  // A layer set to zero asked for nothing and got nothing. Saying "not
-  // reached" would blame the month for a choice the user made.
-  if (row.want < 0.005) return { text: "Not set", tone: "t-faint" };
-  if (row.got < 0.005) return { text: "Not reached", tone: "t-faint" };
-  if (row.got >= row.want - 0.005) return { text: "Filled", tone: "t-positive" };
-  return { text: `${figure(row.got)} of ${figure(row.want)}`, tone: "wu-budget-part" };
+/** Status and the bar compare the same planned allocation, not the rule's want. */
+function layerStatus(row: AllocationRow, planned: AllocationRow | undefined): { text: string; tone: string } {
+  if (!planned) return { text: "No planned amount", tone: "t-faint" };
+  const difference = row.got - planned.got;
+  if (difference > 0.005) return { text: "Above plan", tone: "t-positive" };
+  if (planned.got < 0.005) return { text: "No planned amount", tone: "t-faint" };
+  if (difference < -0.005) return { text: "Below plan", tone: "wu-budget-part" };
+  return { text: "On plan", tone: "t-positive" };
 }
 
 /** The rule editor under an open layer row. */
@@ -204,30 +203,35 @@ export function versusPlanSummary(received: number, planned: number, layers: Lay
 /**
  * One layer. `row` is what arrived this month; `planned` is what the plan
  * gives it in the month on screen. Next month has no money yet, so its rows
- * carry the plan and the layer's note, and leave out Got, Status and the bar.
+ * carry the plan and the layer's note, and leave out Allocated, Status and the bar.
  *
  * Cells marked data-live are the ones an expected income changes; the page
  * swaps just those while the user types, so an open editor is never rebuilt
  * under them.
  */
-function layerRow(row: AllocationRow, index: number, total: number, view: BudgetView, planned: AllocationRow | undefined, compare: boolean): string {
+function layerRow(row: AllocationRow, index: number, total: number, view: BudgetView, planned: AllocationRow | undefined): string {
   const open = view.openLayer === index;
   const thisMonth = view.planMonth === 0;
-  const status = layerStatus(row);
-  const filled = row.want > 0 ? Math.min(100, (Math.min(row.got, row.want) / row.want) * 100) : 0;
+  const status = layerStatus(row, planned);
+  // A zero plan has no percentage denominator. Extra allocations still read
+  // as Above plan, with the signed amount, rather than an invented 100%.
+  const progress = planned && planned.got > 0.005
+    ? (status.text === "On plan" ? 100 : row.got / planned.got * 100)
+    : null;
+  const filled = progress === null ? 0 : Math.min(100, progress);
   const note = row.note ? escapeHtml(row.note) : "";
   const caption = thisMonth
-    ? `${row.want > 0 ? `${Math.round(filled)}% filled` : "No amount set"}${note ? ` · ${note}` : ""}`
+    ? `${progress === null ? "No planned amount" : `${Math.floor(progress)}% of plan`}${note ? `<span class="wu-budget-layer-note"> · ${note}</span>` : ""}`
     : note;
   const short = planned ? plannedShort(planned) : 0;
   return `<li class="wu-budget-layer${open ? " is-open" : ""}">
       <button class="wu-budget-row layer-row" type="button" data-index="${index}" aria-expanded="${open}">
         <i class="wu-budget-row__dot" style="background:${layerColor(index)}" aria-hidden="true"></i>
         <span class="wu-budget-row__title">${escapeHtml(row.name)}<small>${ruleText(row)}</small></span>
-        <span class="wu-budget-row__fill"><span class="wu-bar" aria-hidden="true"><span class="wu-bar__fill${status.tone === "wu-budget-part" ? " is-part" : ""}" style="width:${filled}%"></span></span>${caption ? `<small>${caption}</small>` : ""}</span>
+        <span class="wu-budget-row__fill" data-live="progress-${index}"><span class="wu-bar" aria-hidden="true"><span class="wu-bar__fill${status.tone === "wu-budget-part" ? " is-part" : ""}" style="width:${filled}%"></span></span>${caption ? `<small>${caption}</small>` : ""}</span>
         <span class="wu-budget-row__plan" data-live="plan-${index}">${planned ? `${figure(planned.got)}${short > 0.005 ? `<small class="wu-budget-part">${figure(short)} short</small>` : ""}` : ""}</span>
-        <span class="wu-budget-row__got" data-live="got-${index}">${figure(row.got)}<small class="${status.tone}">${status.text}</small>${planned && compare ? versusPlanLine(planned, row.got) : ""}</span>
-        <span class="wu-budget-row__status ${status.tone}">${status.text}</span>
+        <span class="wu-budget-row__got" data-live="got-${index}"><small>Allocated</small>${figure(row.got)}<small class="${status.tone}">${status.text}</small>${planned && thisMonth ? versusPlanLine(planned, row.got) : ""}</span>
+        <span class="wu-budget-row__status" data-live="status-${index}"><span class="${status.tone}">${status.text}</span></span>
         <span class="wu-budget-row__chev" aria-hidden="true">›</span>
       </button>
       ${open ? layerEditor(row, index, total) : ""}
@@ -388,7 +392,9 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
     ? `<span class="wu-chip wu-chip--muted">No income yet</span>`
     : short
       ? `<span class="wu-chip wu-chip--negative">Short ${figure(allocation.actual.shortfall)}</span>`
-      : `<span class="wu-chip">On plan</span>`;
+      : allocation.actual.income < allocation.planned.income - 0.005
+        ? `<span class="wu-chip wu-chip--muted">Below plan</span>`
+        : `<span class="wu-chip">${allocation.actual.income > allocation.planned.income + 0.005 ? "Above plan" : "On plan"}</span>`;
   const split = rows.some((row) => row.got > 0.005)
     ? `<div class="wu-split" aria-hidden="true">${rows.map((row, index) => row.got > 0.005 ? `<span style="flex:${row.got};background:${layerColor(index)}"></span>` : "").join("")}${allocation.planned.income > allocation.actual.income ? `<span style="flex:${allocation.planned.income - allocation.actual.income};background:transparent"></span>` : ""}</div>`
     : `<div class="wu-split" aria-hidden="true"></div>`;
@@ -430,9 +436,9 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
 
   const layers = rows.length === 0
     ? `<p class="wu-empty">No layers yet. Add one and it becomes the first place your income flows into.</p>`
-    : `<div class="wu-budget-row wu-budget-row--head" aria-hidden="true"><span></span><span>Layer</span><span>${thisMonth ? "Filled" : "What it is for"}</span><span>Plan</span><span>Got</span><span>Status</span><span></span></div>
+    : `<div class="wu-budget-row wu-budget-row--head" aria-hidden="true"><span></span><span>Layer</span><span>${thisMonth ? "Progress" : "What it is for"}</span><span>Plan</span><span>Allocated</span><span>Status</span><span></span></div>
       <ul class="wu-budget-list">
-        ${rows.map((row, index) => layerRow(row, index, rows.length, view, plannedById.get(row.stepId), thisMonth && !nothingIn)).join("")}
+        ${rows.map((row, index) => layerRow(row, index, rows.length, view, plannedById.get(row.stepId))).join("")}
         ${overflowRow(budget, plan, view, "wu-budget-phone-only")}
         ${percentRow("wu-budget-phone-only")}
       </ul>`;
@@ -478,6 +484,7 @@ export function budgetContent(budget: BudgetSnapshot, plan: AllocationPlan, view
       <div class="wu-tc__top wu-budget-ahead__top"><span class="wu-label" id="budLayersLabel">Plan ahead</span>${monthTabs(budget, view)}</div>
       ${planControls(budget, view, draftResult)}
       ${thisMonth ? shortfallBlock : ""}
+      ${thisMonth ? `<p class="wu-dash__note">Allocated is calculated from recorded income, not confirmed transfers or account balances. Progress compares it with Plan.</p>` : ""}
       ${layers}
       <div class="wu-stack wu-stack--sm" data-live="plan-notes">${planNotes(budget, view, shown)}</div>
       ${(thisMonth ? notes : allocation.warnings.map(warningText).filter(Boolean)).map((note) => `<p class="wu-dash__note wu-budget-note">${note}</p>`).join("")}

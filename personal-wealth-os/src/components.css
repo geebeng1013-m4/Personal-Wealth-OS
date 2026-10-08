@@ -3461,6 +3461,10 @@
     font-size: var(--text-body-sm);
     font-weight: var(--weight-regular);
   }
+  .wu-budget-layers .wu-budget-row__fill small,
+  .wu-budget-layers .wu-budget-row__got > small:first-child {
+    color: var(--text-muted);
+  }
   .wu-budget-row__got small.t-positive {
     color: var(--positive);
   }
@@ -3582,11 +3586,7 @@
       padding-top: var(--space-3);
       border-top: 1px solid var(--border-subtle);
     }
-    /* the fill bar is a table column on a desktop; a phone has no room for it
-       beside the figures, so it sits under the row instead of squeezing it.
-       Its caption — "100% filled · what the layer is for" — stays folded away
-       as a goal's note does: the row keeps one height, and opening it shows
-       the layer's own words in "What it is for". */
+    /* Progress against Plan stays visible on a phone beneath the figures. */
     .wu-budget-layers .wu-budget-row:not(.wu-budget-row--plain) {
       grid-template-areas:
         "dot title got chev"
@@ -3601,6 +3601,10 @@
       min-width: 0;
     }
     .wu-budget-layers .wu-budget-row__fill small {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .wu-budget-layer-note {
       display: none;
     }
     .wu-budget-layers--ahead .wu-budget-row:not(.wu-budget-row--plain) {
