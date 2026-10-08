@@ -1,5 +1,123 @@
 # WealthUp — PROGRESS
 
+## GitHub授权已完成（2026-10-08）
+
+- **已推送并创建PR #163**：https://github.com/geebeng1013-m4/Personal-Wealth-OS/pull/163 ，base main / head fix/goals-current-review，等待用户审查和合并。AI未合并、未发布生产；旧的认证阻碍已解决。
+
+- GitHub CLI确认已登录 `geebeng1013-m4`，HTTPS Git可使用凭据；下方缺少认证的记录仅为历史。
+- 继续发布工作分支 `fix/goals-current-review` 并创建代码PR供用户审查；AI不自行合并或部署。Goals本地验证仍为1528/1528测试及typecheck/build通过。
+- Task2 Budget尚未开始。本轮不沿用前次一次性关机请求。
+
+## 恢复工作：GitHub登录待完成（2026-10-08）
+
+- 已核对本地 `d5c21d6` / `a0a9dbb` 和分支，Goals代码仍已保存；没有重做或开始Budget。
+- 再次push确认GitHub认证仍缺失。已从官方 `cli/cli` release 准备GitHub CLI v2.102.0，位置 `%TEMP%/wealthup-gh/bin/gh.exe`；auth status确认未登录。
+- 用户可在PowerShell执行 `& "$env:TEMP\wealthup-gh\bin\gh.exe" auth login --hostname github.com --git-protocol https --web`，本人在浏览器完成GitHub授权。无需向AI提供密码或token。
+- 登录完成后AI继续push当前分支、创建PR供用户审查；不得自行merge。使用临时Git运行时和gh凭据helper；正常源码和未相关本地改动保持原样。
+- 当前只等待登录，不部署、不关机。前次关机授权是一次性操作，已执行安排，不沿用到本轮。
+
+## 最新完成交接：Goals购买后补记完成（2026-10-08）
+
+- **已保存Git提交**：`d5c21d6`，分支 `fix/goals-current-review`，仅包含本任务5个文件。新机器未配置Git作者，提交用临时 `Codex <codex@localhost>` 身份，未修改用户全局设置。
+- **远端阻碍**：尝试push失败（本机尚无GitHub认证，禁止交互时无法取得密码），所以尚未push、开PR、合并或部署。恢复工作时先配置用户GitHub认证，再push此分支并开PR；不得直接合并。代码及记录已在本机保存，不需要重做。
+- 用户要求完成后关机：将停止本轮独立测试服务和独立测试Edge，保留其他程序，约30秒后调用 `shutdown.exe /s /t 0`，不使用强制关闭参数；未保存程序可能阻止关机。
+
+**本节优先于下方调查和旧计划。任务已在本地完成；未上线；不自动开始下一个Task。**
+
+### DONE / WHY
+
+用户的电脑目标曾存够3900，购买后关联MAE只剩28，原界面隐藏Mark as done，无法补记完成。现在余额未达目标也可点Already bought / used it，填写完成日期和使用金额，经明确确认保存。保留真实余额28，不制造交易、不改Ledger。已达标的Mark as done也通过同一表单确认。Undo保持可用。关联Current编辑展示实际heldAmount，避免Done历史金额伪装成当前账户余额。
+
+### 修改文件与验证
+
+- `src/pages/goalsPage.ts`：入口、完成表单、确认保存/取消/Undo、真实关联Current展示；复用现有响应式表单和按钮，不改CSS。
+- `src/goalCompletion.ts`：纯输入校验（金额、精度、日期），输出既有spentAt/spentAmount字段。
+- `tests/goalCompletion.test.ts`：非法金额/日期、购买后完成、账户流水不变、旧状态不变、迁移JSON往返、规则停止供款、Undo回到真实余额、Emergency Fund使用后继续追踪。
+- 持久化形状仍为schema31，复用v30历史完成字段，不重置或迁移真实用户数据。
+- `npm.cmd run typecheck`通过；`npm.cmd test`1528/1528通过；`npm.cmd run build`通过。
+- 按run-wealthup技能用独立demo端口5207及Edge CDP9229、临时独立profile完成真实浏览器验证：1400/390宽，亮/暗主题；余额28时补记3900；非法金额提示；取消确认与Cancel按钮不写入；确认后Done；关联Current仍28；Undo恢复1%；Emergency Fund仍3100；无横向溢出，console/exception错误为空。完成态和新表单截图均已查看。
+- 测试脚本/截图仅在node_modules/.cache中，不提交。未登录用户真实账号，生产云写入需用户验收。
+
+### CURRENT STATE / NEXT
+
+- 工作分支 `fix/goals-current-review`，基线main `eff14ef`。正常本地服务器http://localhost:5173/。
+- 正式站未发布。代码需走PR，用户审查与合并，合并后另核实生产资源。
+- 用户操作：退出目标普通编辑，展开详情 → Already bought / used it → 实际完成日期和金额 → Save completion → 确认。Emergency Fund保持追踪，若历史标Done可Undo。
+- 下一Task仍是Budget比例与got/plan关系，等用户决定，不在本轮推进。
+- 用户要求任务完成后关闭电脑；先保存代码与交接，再使用非强制关机。不关闭用户浏览器或其他工作进程来强迫关机。
+- 既有CLAUDE.md删除、readme.md.md以及根.pnpm-store等改动不纳入任务提交。
+
+### NEW IDEAS
+
+“持续储备 / 一次性目标”的类型区分仍仅记录，不实现。
+
+## 补充资料入口（2026-10-08）
+
+- 已完整阅读 `C:/Users/geebe/Documents/Personal Files/Projects/WealthUp/WealthUp-AI-Handoff.md`（更新至2026-09-30）。新会话应读取；它比旧 `WEALTHUP_CONTEXT.md` 完整，但当前用户指示、源码及最新 PLAN / PROGRESS 优先。
+- 已读迁移副本 `WealthUp/wu-live/personal-wealth-os/CLAUDE.md` 和 PROGRESS 首部，及 `WealthUp Additional Files/Requirements and Analysis/product-requirements-document.html` 的需求概览。PRD日期2026-08-30、schema v19，属于历史需求，不作为当前实现事实。PDF评审报告尚未读取。
+- 迁移原因得到印证：旧设备使用 `C:/Users/winso/wu-live/personal-wealth-os`，不是旧主工作区。迁移后的 `WealthUp/wu-live/.git` 仍指向不存在的旧设备路径 `C:/zhixue douyin/.git/worktrees/wu-live`；本次只查看，未重写这些worktree配置。
+- 正式站 `www.wealthup.cc` 是个人app；`demo.wealthup.cc` 是顾问演示，顾问功能仅限demo。成交后才做独立顾问系统，不自动把顾问功能加入正式站。
+- AI助手已经由OpenRouter换成DeepSeek；记录的额度是每账户每天Ask 30 + Record 30，登录后可用，demo不显示助手。具体运行行为以当前源码为准。
+- 不关闭用户的Vite或浏览器；测试用独立端口与独立浏览器profile，仅清理自己启动的进程。旧设备端口5174 / 5199是历史安排，不自动套到新机器。
+- UI偏好：极简整齐，改排版先给ASCII草图；玻璃用于外框和按钮，卡片内容用细线；用户信息放Me，Settings放隐私与数据工具；新工具不塞Overview。
+- 上线必须另核实生产部署与资源，不能仅凭合并或CSS一致宣称整个生产JS匹配。本轮只解决本地旧版本，未部署。
+- 后续任务仍按用户本次12项清单；交接文件中“接触顾问”的旧下一步不替换当前Goals任务。
+
+## 最新交接补充：新版已恢复（2026-10-08，先读此节）
+
+### DONE / WHY
+
+- localhost 旧版不是缓存猜测：实际 HEAD 是旧提交 `9f3ab6a`，比 main `eff14ef` 少268个提交。已创建 `fix/goals-current-review` 分支，以最新 main 为基线。main 被旧设备 worktree 占用，所以没有强行切换到 main。
+- 更新前限定路径保存 PLAN / PROGRESS 至 stash，更新后已无冲突合并。备份仍保留，名称 `wealthup task1 investigation notes before updating local version`。
+- npm.cmd ci 后启动 `npm.cmd run dev -- --port 5173 --strictPort`，正常模式地址 http://localhost:5173/，服务 session 1374。新会话需确认服务仍在运行。
+- Git 已恢复为官方 MinGit 临时运行时，位于系统临时目录 `wealthup-git-2.56/cmd/git.exe`。每次命令用 `-c safe.directory=C:/Users/geebe/Documents/Personal Files/Projects/WealthUp/Main` 限定信任本仓库，不改全局配置。
+- 已 HTTP 获取 https://www.wealthup.cc 的生产 HTML / JS。最新源码的 Goals 与线上同样有 Done / Undo / 手动关联编辑逻辑。构建 CSS `index-DrhFpycM.css` 与线上一致。
+- 验证：1523/1523测试通过，build（含typecheck）通过。无需因切换版本额外改PWA缓存版本，沿用新版源文件。
+
+### CURRENT STATE — Goals
+
+旧调查基于旧版本，结论需更正：新版已经区分手动 Current 与关联账户余额。Reached 表示当前达到目标；Mark as done 保存 spentAt/spentAmount，意为一次性目标已经完成使用，会固定历史完成金额。Done 仍能展开后 Edit，并可 Undo；编辑 Current 不自动清除 Done。
+
+合成复算用户情况：目标4000、账户4000、支出900 → 未标Done时显示3100、77.5%、未达成；标Done时显示4000、实际 heldAmount=3100、仍达成。撤销Done后恢复当前余额判断。手动模式改3100也为77.5%。这不是对用户真实账户的核验。
+
+### NEXT / 限制
+
+- 用户打开 Emergency Fund：若Done，先Undo；手动模式Edit Current=3100，关联模式在Ledger记录实际900支出。若只是Reached却仍未更新，继续查数据来源。
+- Emergency Fund建议保持持续跟踪，不Mark as done。是否新增“持续储备 / 一次性目标”区分，等待用户决定，未实现。
+- 本轮解决了本地版本问题，未新增应用功能代码，未发布生产，未读取或修改真实财务数据。
+- 浏览器控制工具 inventory 为空，未完成真实浏览器点击或登录保存验证；当前结论来自源代码、HTTP资源和合成复算。
+- 文档尚未commit。用户既有CLAUDE.md删除、readme.md.md及根.pnpm-store删除状态未处理，提交时不得纳入任务。
+- 下方旧调查及旧服务器session仅供历史参考；本节优先。保持一次一个Task，Task1核对后由用户决定是否推进Budget。
+
+## 最新交接（2026-10-08，恢复上下文先读这里）
+
+- **网站**：https://wealthup.cc；Vercel 托管。Firebase 提供 Auth / Firestore，AI 助手通过 Firebase Cloud Function。此信息来自项目文档，本次未核验生产部署。
+- **规则位置**：用户在会话中提供的 `CLAUDE.md` 工作约定已确认。本地本次未找到该文件，同内容出现在 `readme.md.md`；开发规范为仓库根 `agents.md`。先解释、一次一个 Task；`ok` 只继续当前 Task；新想法只记录。完成任务后更新 PLAN / PROGRESS，以文件恢复记忆。
+- **当前计划**：见 `PLAN.md` 顶部 12 项新清单。不要沿用下方历史 T-2 记录，用户说旧整理工作已经做过。
+- **本地启动**：已通过 `npm.cmd ci` 安装锁定依赖，`npm.cmd run dev -- --port 5173` 启动正常模式，地址 http://localhost:5173/。PowerShell 的 `npm.ps1` 被执行策略阻止，因此用 `npm.cmd`。浏览器自动打开失败；用户可自行进入网址。新会话需重新检查服务器是否仍运行。
+
+### DONE — Task 1 调查
+
+读取 `src/pages/goalsPage.ts`、`src/goalSummary.ts`、`src/financialHealth.ts`、`src/ledger.ts`、`src/pages/ledgerPage.ts` 及现有目标测试。
+
+**原因**：关联目标卡片读取 `linkedGoalCurrent()` 的账户余额，编辑表单却读取并保存 `goal.current`。关联存在时，保存手动 Current 不改变卡片显示。Ledger Edit 只改 openingBalance，没有直接编辑当前余额的入口。
+
+**复算**（合成数据，不是真实账户）：目标 RM1,000、关联账户 RM1,200 → 达成；手动 Current 改 RM300 → 仍显示 RM1,200；该账户支出 RM500 → 显示 RM700、未达成。未关联目标仍显示手动 RM1,200，因此不会自动反映账户支出。
+
+**验证**：`npm.cmd test` 1006/1006 通过；另用 esbuild 在内存打包现有 `buildGoalSnapshot` 并断言上述四种结果。未做真实登录账户或浏览器表单保存验证，不能据此宣称用户的实际问题全部复现或已修复。
+
+### CURRENT STATE / NEXT
+
+- 调查完成，应用代码未修改，问题未修复，未部署。
+- 推荐先修关联目标的 Current 编辑入口：展示关联余额和来源，避免让用户编辑一个不会生效的手动金额；明确切换到 Manual 的行为。
+- 仍需确认用户指的是 Goals Current 还是 Ledger 账户 Current，以及是否需要账户余额校准。校准会影响财务记录，先解释方案，不自动改 openingBalance 或制造支出。
+- 完成修复及验证后再推进 Task 2（Budget）；本轮不开始其他任务。
+- `git` 当前不在 PATH，无法核实分支或提交文档；本次仅保存本地文件，未 commit / PR。不要把历史 main hash 或 PR 状态当作当前事实。
+
+### NEW IDEAS
+
+本轮没有新增功能想法。当前账户余额校准属于用户现有问题的待澄清范围，尚未决定实现方式。
+
 > 打开项目先看这里：我们现在在哪、最近做了什么、当前在做什么、下一步。
 > 每完成一个 Task 更新。任务清单和优先级在 `PLAN.md`。
 

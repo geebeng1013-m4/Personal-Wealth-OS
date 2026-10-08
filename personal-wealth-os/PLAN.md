@@ -1,5 +1,68 @@
 # WealthUp — PLAN
 
+## 当前任务完成：购买后补记目标完成（2026-10-08）
+
+- **PR #163 已创建，待用户审查/合并**：https://github.com/geebeng1013-m4/Personal-Wealth-OS/pull/163 。分支已推送，尚未上线；不自动开始Task2。
+
+- [x] 用户明确批准在当前 Goals Task 内实现“先买了、余额下降后仍可记录完成”。
+- [x] 未标 Done 且目标金额大于零的目标始终有完成入口；已达标显示 Mark as done，余额不足显示 Already bought / used it。
+- [x] 记录完成日期与 Amount used MYR；校验真实日期、非未来、有限正金额及最多两位小数。保存前明确确认；取消不写状态。
+- [x] 复用既有 spentAt / spentAmount，不新增持久字段或改变已有历史完成记录；schema仍为31。账户余额、交易流水不受影响，Undo恢复余额追踪。
+- [x] 已完成目标编辑器的关联Current显示 heldAmount（真实剩余余额），不再把历史完成金额误称为账户余额。
+- [x] 1528/1528测试通过；typecheck及build通过。独立demo端口5207、独立无头Edge profile实际验证1400/390宽、明暗主题、保存确认/取消、金额错误、完成/Undo、账户流水保持、Emergency Fund持续追踪，无横向溢出或浏览器错误；已查看截图。
+
+**当前状态**：本地功能完成，正式网站尚未部署。分支 `fix/goals-current-review`。不自动开始Budget。
+
+**下一步**：用户在localhost:5173展开Gaming laptop，Cancel退出普通编辑 → Already bought / used it → 填实际日期与金额 → Save completion并确认。随后审查代码PR、由用户合并并核实上线；再决定Task2 Budget。
+
+**范围 / 风险**：Done仍是用户明确确认的一次性完成记录；Emergency Fund不会自动标Done。真实Google账号的保存/云同步未由AI验证，迁移及JSON往返已覆盖。测试和构建已有产物不作为源码提交。
+
+## Task 1 新版核对与本地版本修复（2026-10-08，优先于旧调查）
+
+- [x] 用户确认 Current 指 Goals：Emergency Fund 原 RM4,000，支出 RM900，实际 RM3,100。
+- [x] 旧版本原因确认：工作区 detached HEAD 为 `9f3ab6a`，落后最新 `main`（`eff14ef`）268 个提交。已创建 `fix/goals-current-review`，以最新 main 为基线；main 被旧设备的 `C:/Users/winso/wu-live` worktree 占用，没有强行切换。
+- [x] 本轮 PLAN / PROGRESS 先用限定路径 stash 保存，更新版本后成功合并回来。用户既有删除、未跟踪文件及其他项目改动未处理。
+- [x] `npm.cmd ci` 后重启正常模式 `http://localhost:5173/`，新版入口已通过 HTTP 核对。本地产出主 CSS `index-DrhFpycM.css` 与线上一致。
+- [x] 最新代码 `npm.cmd test`：1523/1523；`npm.cmd run build`（包含 typecheck）通过。
+- [x] 合成复算：未标 Done 的目标，关联账户支出900后为3100、77.5%、未达成；标了 Done（spentAt/spentAmount）则显示历史完成金额4000，实际 heldAmount 为3100。清除 Done 标记后恢复按当前金额判断。
+- [x] 新版源代码确认：Reached / Done 的目标都可展开后 Edit；Done 目标另有 Undo。不存在达成后禁用编辑的条件，但修改 Current 不会自动清除 Done。
+- [ ] 用户实际操作核对：打开 Emergency Fund，若显示 Done，先 Undo；手动模式 Edit Current=3100，关联模式在 Ledger 记录实际900支出。若只是 Reached 而未更新，继续检查其数据来源。
+
+**下一步**：用户核对现有 Undo / Edit 是否满足需求。Emergency Fund 建议持续跟踪余额，不按 Mark as done。是否进一步区分储备与一次性目标，需用户决定；不自动新增字段或功能。本轮没有新增应用代码改动、未部署、未改真实财务数据。
+
+**旧记录说明**：下面“Task 1 调查结果”针对旧提交，仅作为历史保留；新版已经有手动 / 关联输入区分。12项优先级继续有效，Task 1 未经用户核对前不推进 Task 2。
+
+## 当前计划（2026-10-08，优先于下方历史记录）
+
+用户提供的新清单按财务正确性 → 日常操作 → 使用引导 → 体验扩展排序。一次只推进一个 Task；`ok` 表示继续当前 Task，不是批准整个计划。完成后更新本文件及 `PROGRESS.md`，停止并汇报。
+
+| 优先级 | Task | 状态 |
+| --- | --- | --- |
+| 1 | Goals 达成状态与 Current 金额无法修改 | 调查已完成；修复方案待决定 |
+| 2 | Budget 的 got / plan / 收入与比例关系 | 未开始 |
+| 3 | Exchange history 格式与填写方式（含一次性填写需求） | 未开始，先澄清操作 |
+| 4 | Ledger 选择 Custom 自动显示 filter | 未开始 |
+| 5 | Review 小数显示 | 未开始，先确认字段与精度 |
+| 6 | Add transaction 金额输入移除上下箭头 | 未开始 |
+| 7 | 从哪里开始、下一步做什么：目的与基础引导 | 未开始 |
+| 8 | 久未回来时的回归引导 | 未开始 |
+| 9 | AI 登录要求与入口说明 | 未开始，先确认限制原因 |
+| 10 | Language / 多语言 | 未开始，先确定语言与范围 |
+| 11 | Depreciation of assets / 资产折旧 | 未开始，先定义业务规则 |
+| 12 | 页面切换动画 | 未开始 |
+
+### Task 1 — 调查结果与下一步
+
+- [x] 读取 Goals 表单、目标快照、账户余额算法与 Ledger 编辑事件。
+- [x] 用合成数据复算：目标 RM1,000、账户 RM1,200 时已达成；在关联目标中把手动 Current 改成 RM300，展示仍为 RM1,200；该账户记一笔 RM500 支出后，目标变为 RM700、未达成。未关联的手动目标不随账户支出变化。
+- [x] `npm.cmd test`：1006/1006 通过。
+- [ ] 用户确认修复方案后，修正关联目标的 Current 编辑入口。建议显示真实关联余额及来源说明，关联时不允许编辑无效的手动字段；切换到 Manual 时提供明确的手动编辑行为。
+- [ ] 确认用户所指的 Current 是 Goals 输入还是 Ledger 当前账户余额。Ledger 当前只允许编辑 openingBalance；若需要余额校准，单独明确如何保留交易历史，不擅自更改余额算法。
+
+**本次范围**：调查与文档记录，未修改应用代码、未部署、未读取或修改真实用户财务数据。合成复算不是对真实账户余额的核验。
+
+**历史状态说明**：用户指出此前整理任务已完成；下方 T 系列及 PR 状态仅保留为历史记录，未核对 Git / 远端前不要按旧 `Current Task` 自动执行。当前环境 `git` 不在 PATH，尚未核实分支或提交。
+
 > 当前目标：**把 V1 做到核心逻辑正确、真正可用。** V1 完成后才考虑
 > `COMMERCIALIZATION_PLAN.md` 里的大型功能（App 化、付费、AI 视频）。
 > 每完成一个 Task 更新这里的状态，并同步 `PROGRESS.md`。
