@@ -1,5 +1,19 @@
 # WealthUp — PROGRESS
 
+## GitHub授权已完成（2026-10-08）
+
+- GitHub CLI确认已登录 `geebeng1013-m4`，HTTPS Git可使用凭据；下方缺少认证的记录仅为历史。
+- 继续发布工作分支 `fix/goals-current-review` 并创建代码PR供用户审查；AI不自行合并或部署。Goals本地验证仍为1528/1528测试及typecheck/build通过。
+- Task2 Budget尚未开始。本轮不沿用前次一次性关机请求。
+
+## 恢复工作：GitHub登录待完成（2026-10-08）
+
+- 已核对本地 `d5c21d6` / `a0a9dbb` 和分支，Goals代码仍已保存；没有重做或开始Budget。
+- 再次push确认GitHub认证仍缺失。已从官方 `cli/cli` release 准备GitHub CLI v2.102.0，位置 `%TEMP%/wealthup-gh/bin/gh.exe`；auth status确认未登录。
+- 用户可在PowerShell执行 `& "$env:TEMP\wealthup-gh\bin\gh.exe" auth login --hostname github.com --git-protocol https --web`，本人在浏览器完成GitHub授权。无需向AI提供密码或token。
+- 登录完成后AI继续push当前分支、创建PR供用户审查；不得自行merge。使用临时Git运行时和gh凭据helper；正常源码和未相关本地改动保持原样。
+- 当前只等待登录，不部署、不关机。前次关机授权是一次性操作，已执行安排，不沿用到本轮。
+
 ## 最新完成交接：Goals购买后补记完成（2026-10-08）
 
 - **已保存Git提交**：`d5c21d6`，分支 `fix/goals-current-review`，仅包含本任务5个文件。新机器未配置Git作者，提交用临时 `Codex <codex@localhost>` 身份，未修改用户全局设置。
