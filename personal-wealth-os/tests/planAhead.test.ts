@@ -254,26 +254,26 @@ test("one card: the editor keeps the layer's note", () => {
   assert.match(html, /name="note" type="text" value="Japan trip"/);
 });
 
-test("one card: this month shows Plan beside Got, and how far each is off", () => {
+test("one card: this month shows Plan beside Allocated, and how far each is off", () => {
   const html = card(receivedThisMonth(2600));
   assert.doesNotMatch(html, /wu-budget-layers--ahead/);
-  assert.match(html, /<span>Filled<\/span><span>Plan<\/span><span>Got<\/span>/);
+  assert.match(html, /<span>Progress<\/span><span>Plan<\/span><span>Allocated<\/span>/);
   // Growth: planned 1,000 from 3,200; got 700 from 2,600.
   assert.match(html, /data-live="plan-1">[^<]*<span[^>]*>1,000<\/span>/);
-  assert.match(html, /data-live="got-1">[^<]*<span[^>]*>700<\/span>/);
+  assert.match(html, /data-live="got-1"><small>Allocated<\/small><span[^>]*>700<\/span>/);
   assert.match(html, /−300<\/span> vs plan/);
   assert.match(html, /Received .*2,600.* of the .*3,200.* you planned\./);
 });
 
-test("one card: next month shows the plan and each layer's note, with no Got yet", () => {
+test("one card: next month shows the plan and each layer's note, with no progress yet", () => {
   const noted: AllocationPlan = { ...plan, steps: plan.steps.map((step) => step.id === "freedom" ? { ...step, note: "Japan trip" } : step) };
   const state = receivedThisMonth(2600, { allocation: noted, monthPlans: { "2026-10": { expectedIncome: 2500 } } });
   const html = card(state, nextMonthView);
   assert.match(html, /wu-budget-layers wu-budget-layers--ahead/);
   assert.match(html, /<span>What it is for<\/span>/);
-  // The caption is the note alone: no "% filled" for a month nothing has reached.
+  // The caption is the note alone: no progress against this month's income.
   assert.match(html, /<small>Japan trip<\/small>/);
-  assert.doesNotMatch(html, /% filled/);
+  assert.doesNotMatch(html, /% of plan/);
   // 2,500 - 1,200 = 1,300: Growth 650.
   assert.match(html, /data-live="plan-1">[^<]*<span[^>]*>650<\/span>/);
   assert.doesNotMatch(html, /vs plan/, "next month is never compared with this month's money");
@@ -285,8 +285,104 @@ test("one card: the figures an income changes are all marked for the live swap",
   for (let index = 0; index < 4; index += 1) {
     assert.match(html, new RegExp(`data-live="plan-${index}"`));
     assert.match(html, new RegExp(`data-live="got-${index}"`));
+    assert.match(html, new RegExp(`data-live="progress-${index}"`));
+    assert.match(html, new RegExp(`data-live="status-${index}"`));
   }
   assert.match(html, /data-live="plan-notes"/);
+});
+
+// Task 2: the comparison uses planned allocations, even for percentage layers
+// whose rules have been satisfied by a smaller month. These render tests pin
+// the financial meaning visible to the reader, not just the engine's totals.
+function renderedLayer(html: string, index: number): string {
+  const row = html.match(new RegExp(`<button class="wu-budget-row layer-row"[^>]*data-index="${index}"[\\s\\S]*?</button>`));
+  assert.ok(row, `layer ${index} must exist`);
+  return row[0];
+}
+
+test("budget progress: a percentage layer in a thin month is below Plan, not filled", () => {
+  const row = renderedLayer(card(receivedThisMonth(2600)), 1);
+  assert.match(row, /width:70%/);
+  assert.match(row, /70% of plan/);
+  assert.match(row, /Below plan/);
+  assert.doesNotMatch(row, /Filled|100% of plan/);
+  assert.match(card(receivedThisMonth(2600)), /Allocated is calculated from recorded income, not confirmed transfers or account balances/);
+});
+
+test("budget progress: no income shows zero against a nonzero Plan, including on a phone", () => {
+  const row = renderedLayer(card(receivedThisMonth(0)), 1);
+  assert.match(row, /width:0%/);
+  assert.match(row, /0% of plan/);
+  assert.match(row, /Below plan/);
+  assert.match(row, /wu-budget-row__vs-plan">Plan .*1,000/);
+  assert.match(row, /−1,000<\/span> vs plan/);
+});
+
+test("budget progress: exact Plan is on plan, extra allocations cap the bar and retain the difference", () => {
+  const exact = renderedLayer(card(receivedThisMonth(3200)), 1);
+  assert.match(exact, /width:100%/);
+  assert.match(exact, /100% of plan/);
+  assert.match(exact, /On plan/);
+  const above = renderedLayer(card(receivedThisMonth(4200)), 1);
+  assert.match(above, /width:100%/);
+  assert.match(above, /150% of plan/);
+  assert.match(above, /Above plan/);
+  assert.match(above, /\+500<\/span> vs plan/);
+});
+
+test("budget progress: a zero plan has no invented percentage, with or without income", () => {
+  for (const amount of [0, 2600]) {
+    const row = renderedLayer(card(receivedThisMonth(amount, { monthPlans: { "2026-09": { expectedIncome: 0 } } })), 1);
+    assert.match(row, /width:0%/);
+    assert.match(row, /No planned amount/);
+    assert.doesNotMatch(row, /(?:NaN|Infinity|\d+)% of plan/);
+    if (amount > 0) {
+      assert.match(row, /Above plan/);
+      assert.match(row, /\+700<\/span> vs plan/);
+    }
+  }
+});
+
+test("budget progress: a plan that cannot cover a fixed rule still compares with its displayed Plan", () => {
+  const row = renderedLayer(card(receivedThisMonth(400, { monthPlans: { "2026-09": { expectedIncome: 800 } } })), 0);
+  // Fixed rule wants 1,200; Plan can allocate 800; received income allocates 400.
+  assert.match(row, /width:50%/);
+  assert.match(row, /50% of plan/);
+  assert.match(row, /Below plan/);
+  assert.match(row, /400<\/span> short/);
+});
+
+test("budget progress: overflow is compared with Plan, rather than automatically called extra", () => {
+  const fixed: AllocationPlan = {
+    incomeType: "fixed",
+    steps: [{ id: "survival", name: "Living", kind: "fill", value: 1200 }, { id: "growth", name: "Saving", kind: "fill", value: 500 }],
+    overflowStepId: "growth",
+  };
+  const row = renderedLayer(card(receivedThisMonth(2600, { allocation: fixed })), 1);
+  // Both months overflow into saving: Plan 2,000, Allocated 1,400.
+  assert.match(row, /width:70%/);
+  assert.match(row, /Below plan/);
+  assert.match(row, /−600<\/span> vs plan/);
+  assert.doesNotMatch(row, / extra/);
+});
+
+test("budget progress: an expected-income draft updates the bar, status and Plan together", () => {
+  const state = receivedThisMonth(2600);
+  const row = renderedLayer(card(state, { ...closed, openLayer: 1, aheadDraft: { monthKey: "2026-09", text: "2600" } }, 2600), 1);
+  assert.match(row, /data-live="progress-1"[\s\S]*width:100%/);
+  assert.match(row, /100% of plan/);
+  assert.match(row, /data-live="status-1"><span class="t-positive">On plan/);
+  assert.doesNotMatch(row, /Below plan/);
+  assert.match(card(state, nextMonthView), /What it is for/);
+  assert.doesNotMatch(card(state, nextMonthView), /% of plan/);
+});
+
+test("budget progress: rendering never changes rules, transactions or persisted state", () => {
+  const state = receivedThisMonth(2600);
+  const before = JSON.stringify(state);
+  card(state, closed, 4200);
+  card(state, nextMonthView, 0);
+  assert.equal(JSON.stringify(state), before);
 });
 
 test("one card: an unsaved figure is kept through a re-render, marked as not saved", () => {

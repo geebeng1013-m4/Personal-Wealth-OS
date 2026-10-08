@@ -49,7 +49,7 @@ export function bucketsTemplate(state: WealthState): string {
       ${pageHeader({
         eyebrow: "Capital Routing",
         title: "Budget",
-        sub: "Where this month's money went, and the rules that sent it.",
+        sub: "How your income is allocated by your rules, compared with your plan.",
         actions: `<button class="wu-btn wu-btn--secondary wu-btn--sm add-layer" type="button">+ Add layer</button>`,
       })}
       <div class="wu-dash">
