@@ -1,5 +1,87 @@
 # WealthUp — PLAN
 
+## 当前上下文核对（2026-10-10，优先于下方历史记录）
+
+- 本轮仅整理 Main-latest 项目上下文；未改应用代码、真实财务数据或部署配置，未开始 Task 4；本节记录整理阶段的状态，当时尚未提交或推送。
+- 本轮本地 Git 核对：main，HEAD af8cbe2d094ccabd0148ab8093c3e0d87a38f231；Task 1 / PR #163（9a376b4）、Task 2 / PR #164（3e7714f）、Task 3 / PR #165（af8cbe2）均已进入 main。整理前工作区干净，HEAD 与本地 origin/main 引用一致；本轮未 fetch。
+- **Task 3 已合并并部署生产**。部署结论来自旧 Main 于 2026-10-08 保存的 CI、正式/demo Vercel 成功和生产资源比对记录，本轮未重新访问线上或 GitHub。下方待合并、尚未上线等描述属于历史状态。
+- **真实登录账户的云端保存仍待用户验收**。历史 typecheck、1565/1565 测试、build 及桌面/手机明暗主题验证不等于真实云写入已验收；本轮未重跑应用验证。
+- 下一步由用户决定，可先验收真实登录后的保存与刷新持久化；不自动开始 Task 4，不重复实现 Task 3，不在真实财务资料中制造测试交易。
+- 新目录记忆入口为 PROJECT_MEMORY.md。下方保留历史；旧分支、服务 session、端口及下一步不代表当前运行状态或授权。
+
+## 补入旧 Main 的任务交接记录（2026-10-08，原文保留）
+
+## Task 3 已部署生产（2026-10-08）
+
+- 用户要求部署后核对：PR #165 已合并，main = af8cbe2d094ccabd0148ab8093c3e0d87a38f231；应用目录提交内容与本地 HEAD 一致。main CI verify、正式/demo Vercel 状态全部 success。
+- 正式站 https://www.wealthup.cc 已提供 index-DEpWBObp.js，与移除本地 assistant emulator override 后构建的文件名及完整 JS 内容一致；Demo https://demo.wealthup.cc 提供 index-6RvoX-75.js，与本地 demo 构建文件名一致。两个站均确认有 fxEntryForm、Save conversion、Save trade & exchange、pf-history-delete。
+- 普通本地 build / typecheck 通过。首轮正式包哈希差异来自 .env.local 中本地 assistant endpoint；只在隔离构建覆盖为生产默认值，未修改环境文件或部署配置。保留 localhost:5173；未改真实财务数据、未调用助手或云端写入。
+- Task 3 上线完成；用户刷新正式站即可验收，真实登录云端保存仍待用户验证。不自动开始下一 Task。
+
+
+## Task 3 Currency conversions 简约填写（2026-10-08）
+
+- 默认展示日期、方向、MYR 和 USD 实际金额表单；自动显示汇率，Save conversion 一次保存。批量粘贴保留为折叠入口。支持 MYR→USD / USD→MYR，反向标签同步切换。
+- 复用既有金额/日期校验和持久化结构；拒绝空值、非正数、超过两位小数、未来/非法日期、重复记录及超限。粘贴合并按方向和金额匹配，保留已有 tradeId，防止手动记录重复计入或反向记录覆盖。无 schema 或 Ledger 变更。
+- typecheck / build 通过，1565/1565 测试通过；1400/390px 明暗主题验证保存、重复保护、方向切换、刷新持久化、粘贴入口和错误状态，无页面溢出/控制台错误。真实登录云端写入未验证。
+- f2ca436 推送同一个 PR #165，尚未合并。修改 portfolioPage.ts、components.css、tradeExchangeEntry.ts、exchangeImport.ts 和对应测试；本轮只继续 Task 3。
+
+
+## Task 3 Contribution history 排版修正（2026-10-08）
+
+- Exchange 状态 / Add exchange 移到 FX 汇率下方；删除列只保留 ×，避免换汇文字把删除按钮推远。仅修改 portfolioPage.ts 和 components.css，无数据或计算变更。
+- typecheck 通过；独立 demo 中 24 条记录、1400/390px、明暗主题验证通过，补录入口和删除取消可用，无控制台错误。桌面表格从 1023px 缩至 980px，手机保持容器内横向滚动。
+- d9365d1 已推送至同一个 PR #165，尚未合并：https://github.com/geebeng1013-m4/Personal-Wealth-OS/pull/165 。本轮仍为 Task 3。
+
+
+## 当前状态：Task 3 一次保存买股与兑换完成，PR #165 待审查（2026-10-08）
+
+- [x] 用户批准合并表单：USD买股可选实际MYR→USD兑换日期及两边金额，自动算汇率，一次保存；未结算先记买股，之后Add exchange补记。
+- [x] 新关联保护本笔结算；混用已有USD及手续费分开计算；不制造Ledger流水或改变账户余额。非法/未来/成交前日期、金额精度、超本笔金额、重复关联与取消均处理。
+- [x] schema32向后兼容迁移，旧数据不自动关联；重复粘贴保留关联，复用已有兑换需确认；删除交易保留兑换历史并存快照。
+- [x] typecheck、1562/1562测试、build；独立demo真实浏览器1400/390、明暗主题、一次保存/后补/刷新/取消/错误/键盘/重复导入/复用/快照恢复/本地owner隔离及Ledger不变验证通过；无横向溢出或控制台错误，最终截图已查看。
+- [x] 推送bda2afb/dee0932，创建PR #165：https://github.com/geebeng1013-m4/Personal-Wealth-OS/pull/165 。交接文档保留本地，不把既有未提交改动一并提交。
+- [x] GitHub CI verify和正式/demo预览检查全部成功，尚未合并或生产发布。
+- [ ] 用户审查/合并；生产资源另核实。真实账户/cloud保存待用户验收。
+
+限制：多笔订单共用兑换继续使用历史入口；没有旧USD资金记录的部分仍为估算；旧客户端不保留新tradeId关联。Task 3本轮到此停止，不开始Task 4。
+
+## 最新状态：Task 2 已合并，本地正常模式已启动（2026-10-08）
+
+- [x] 用户合并PR #164，GitHub确认MERGED，merge commit 3e7714f；本地review/budget-merged运行该版本，原有未提交改动保留。
+- [x] 正常模式http://localhost:5173/#buckets已启动；HTTP200，Allocated新说明与非demo模式已核对。自动打开浏览器命令被工具策略拒绝，可点击链接进入；服务器新会话需重查。
+- [ ] 正式/demo生产部署另待核对；真实登录数据保存仍由用户验收。本轮未开始Task 3。
+
+## 当前状态：Task 2 已实现，PR #164 待用户审查（2026-10-08）
+
+- [x] 用户批准Task 2最小方案；只修改 Budget 显示，不改变分配规则、余额、流水或schema31。
+- [x] Got → Allocated，写清已记收入的规则计算；进度及状态统一对照Plan。零Plan、超计划、未收到收入、预计收入不足与overflow均覆盖；百分比继续明确总收入/剩余池。
+- [x] 预计收入草稿同时更新进度/状态，保留打开的规则编辑器输入；手机显示Plan、Allocated、差额及百分比，次月不显示本月进度。
+- [x] typecheck、1536/1536测试、build通过；独立demo/Edge验证1400/390、明暗主题、保存刷新、草稿、错误/空状态、键盘、导航及无溢出/控制台错误，四张最终截图已查看。
+- [x] 提交809a9a2，推送fix/budget-plan-progress，创建PR #164：https://github.com/geebeng1013-m4/Personal-Wealth-OS/pull/164 。仅4个代码/测试文件；交接文档更新保留本地，既有其他改动未提交。
+- [x] GitHub CI verify通过；demo预览成功，正式站项目预览检查仍pending（均不是生产上线确认）。
+- [ ] 用户审查/合并；合并后核实正式及demo生产资源，不能把PR或本地验证当作上线。
+
+风险：真实账号/cloud写入未验；合成验证不是用户实际财务资料。未改缓存规则、Firebase或持久结构。Task 2到此停止，不开始Task 3。
+
+## 当前状态：Task 2 Budget 调查完成，改法待决定（2026-10-08）
+
+- Task 1 Goals 已由用户合并 PR #163；最新 PROGRESS 既有上线检查已确认生产包含新完成入口。下方部署 pending 是历史，本轮未重新核对线上。
+- [x] Task 2 核对 Plan / Got / 百分比 / 进度条的数据来源，并执行现有分配函数的合成复算。
+- Plan 是预计收入的规则分配；Got 是已记录个人收入的规则分配，不是账户余额或实际转账；支出不减少 Got。
+- 示例：预计收入3000、实际2000、先生活费1000、余款各50%储蓄/投资 → 储蓄 Plan1000/Got500，但当前条按 Got/want 显示100%，相对Plan为50%。gross 用总收入，pct 用首个pct层时的剩余池。
+- [ ] 待用户决定最小改法：明确 Got 的计算含义，进度条及状态改成相对 Plan；维持现有分配算法。尚未授权/执行 Budget 功能实现。
+- 若实施：明确 Plan为0、超计划、预计收入不足与草稿时的显示，并验证桌面/手机、明暗主题。改 UI 前先给 ASCII 草图。
+- 本轮仅更新 PLAN/PROGRESS，未改应用代码或真实数据、未部署；合成断言通过，未运行完整测试/typecheck/build。不开始 Task 3。
+## 当前交接：PR已合并，下一项Budget（2026-10-08）
+
+- 用户已合并PR #163，merge commit `9a376b4`，main CI通过。
+- 本轮最后检查Vercel正式/demo部署仍pending；正式站仍返回旧index-DdSOhVXR.js，不得宣称新功能已上线。下次先确认生产包含goal-completion-form及Already bought / used it。
+- 下一项建议Task2：解释Budget的Plan、Got、规则百分比与进度条，再决定改法。已初读源码，没有修改Budget。
+- 关键发现：Plan来自预计收入分配；Got来自当月Ledger个人收入的规则分配，不是实际转账或账户已存金额；进度条用Got / want（当月规则需求，封顶100%），不直接用Got / Plan。需要让用户理解这三个不同概念，避免100%被误读为达成预计计划。
+
+## 原 main 文档历史（保留原文，不作为当前任务状态）
+
 ## 当前任务完成：购买后补记目标完成（2026-10-08）
 
 - **PR #163 已创建，待用户审查/合并**：https://github.com/geebeng1013-m4/Personal-Wealth-OS/pull/163 。分支已推送，尚未上线；不自动开始Task2。

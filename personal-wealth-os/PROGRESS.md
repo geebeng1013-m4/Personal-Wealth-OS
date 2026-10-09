@@ -1,5 +1,98 @@
 # WealthUp — PROGRESS
 
+## 当前上下文核对（2026-10-10，优先于下方历史记录）
+
+- 本轮仅整理 Main-latest 项目上下文；未改应用代码、真实财务数据或部署配置，未开始 Task 4；本节记录整理阶段的状态，当时尚未提交或推送。
+- 本轮本地 Git 核对：main，HEAD af8cbe2d094ccabd0148ab8093c3e0d87a38f231；Task 1 / PR #163（9a376b4）、Task 2 / PR #164（3e7714f）、Task 3 / PR #165（af8cbe2）均已进入 main。整理前工作区干净，HEAD 与本地 origin/main 引用一致；本轮未 fetch。
+- **Task 3 已合并并部署生产**。部署结论来自旧 Main 于 2026-10-08 保存的 CI、正式/demo Vercel 成功和生产资源比对记录，本轮未重新访问线上或 GitHub。下方待合并、尚未上线等描述属于历史状态。
+- **真实登录账户的云端保存仍待用户验收**。历史 typecheck、1565/1565 测试、build 及桌面/手机明暗主题验证不等于真实云写入已验收；本轮未重跑应用验证。
+- 下一步由用户决定，可先验收真实登录后的保存与刷新持久化；不自动开始 Task 4，不重复实现 Task 3，不在真实财务资料中制造测试交易。
+- 新目录记忆入口为 PROJECT_MEMORY.md。下方保留历史；旧分支、服务 session、端口及下一步不代表当前运行状态或授权。
+
+## 补入旧 Main 的任务交接记录（2026-10-08，原文保留）
+
+## Task 3 已部署生产（2026-10-08）
+
+- 用户要求部署后核对：PR #165 已合并，main = af8cbe2d094ccabd0148ab8093c3e0d87a38f231；应用目录提交内容与本地 HEAD 一致。main CI verify、正式/demo Vercel 状态全部 success。
+- 正式站 https://www.wealthup.cc 已提供 index-DEpWBObp.js，与移除本地 assistant emulator override 后构建的文件名及完整 JS 内容一致；Demo https://demo.wealthup.cc 提供 index-6RvoX-75.js，与本地 demo 构建文件名一致。两个站均确认有 fxEntryForm、Save conversion、Save trade & exchange、pf-history-delete。
+- 普通本地 build / typecheck 通过。首轮正式包哈希差异来自 .env.local 中本地 assistant endpoint；只在隔离构建覆盖为生产默认值，未修改环境文件或部署配置。保留 localhost:5173；未改真实财务数据、未调用助手或云端写入。
+- Task 3 上线完成；用户刷新正式站即可验收，真实登录云端保存仍待用户验证。不自动开始下一 Task。
+
+
+## Task 3 Currency conversions 简约填写（2026-10-08）
+
+- 默认展示日期、方向、MYR 和 USD 实际金额表单；自动显示汇率，Save conversion 一次保存。批量粘贴保留为折叠入口。支持 MYR→USD / USD→MYR，反向标签同步切换。
+- 复用既有金额/日期校验和持久化结构；拒绝空值、非正数、超过两位小数、未来/非法日期、重复记录及超限。粘贴合并按方向和金额匹配，保留已有 tradeId，防止手动记录重复计入或反向记录覆盖。无 schema 或 Ledger 变更。
+- typecheck / build 通过，1565/1565 测试通过；1400/390px 明暗主题验证保存、重复保护、方向切换、刷新持久化、粘贴入口和错误状态，无页面溢出/控制台错误。真实登录云端写入未验证。
+- f2ca436 推送同一个 PR #165，尚未合并。修改 portfolioPage.ts、components.css、tradeExchangeEntry.ts、exchangeImport.ts 和对应测试；本轮只继续 Task 3。
+
+
+## Task 3 Contribution history 排版修正（2026-10-08）
+
+- Exchange 状态 / Add exchange 移到 FX 汇率下方；删除列只保留 ×，避免换汇文字把删除按钮推远。仅修改 portfolioPage.ts 和 components.css，无数据或计算变更。
+- typecheck 通过；独立 demo 中 24 条记录、1400/390px、明暗主题验证通过，补录入口和删除取消可用，无控制台错误。桌面表格从 1023px 缩至 980px，手机保持容器内横向滚动。
+- d9365d1 已推送至同一个 PR #165，尚未合并：https://github.com/geebeng1013-m4/Personal-Wealth-OS/pull/165 。本轮仍为 Task 3。
+
+
+## Task 3 一次保存买股与实际换汇完成，PR #165 待审查（2026-10-08）
+
+本节优先于下方Task 2记录；只完成用户批准的合并记录功能，不开始Task 4。
+
+- DONE / WHY：Moomoo MY官方Currency Exchange说明确认MYR换外币限已成交买单的不足部分；不能把自由预先兑换当作当前流程。用户批准在Record trade增加可选实际MYR→USD区，一次Save trade & exchange保存买股和兑换；未结算先记买股，Recent activity/History的Add exchange可稍后补记。字段为实际兑换日期、MYR paid、USD received，自动显示汇率；混用已有USD只填新增兑换部分。
+- 实现：src/pages/portfolioPage.ts配对表单、补记入口、错误焦点/取消/复用确认；src/tradeExchangeEntry.ts纯校验和不可变原子更新；src/currencyExchange.ts把明确关联兑换留给本笔交易，不被更早未覆盖买单占用。旧USD和新兑换分别计成本，USD手续费单独处理，不重复耗用；Ledger余额和流水不修改。
+- schema31→32：models.ts的CurrencyExchange增加可选tradeId；state.ts保留旧兑换为未关联，不自动猜对应买股；坏/悬空引用只移除关联，不删兑换金额。实际派生成本也存回本笔trade供JSON及旧读者查看。exchangeImport.ts重复粘贴保留关联和记录数，兼容旧自定义id；已有相同兑换需明确确认复用。删除买股保留兑换为未关联历史，并先存快照。
+- 验证：npm.cmd run typecheck通过；npm.cmd test 1562/1562通过（新增26项）；最终npm.cmd run build（包含typecheck）通过，仅有既有构建警告。新增tests/tradeExchangeEntry.test.ts覆盖全额、部分USD、USD/MYR费用、后补结算、关联保护、重复/旧id、非法输入、v31迁移、JSON往返、删除保留、卖出再投资与不可变语义；monthPlansV31测试允许后续版本。tradeEntry.ts增加计算溢出保护。
+- run-wealthup：独立demo5209及Edge CDP9231/profile验证1400/390宽、明暗主题、键盘勾选、金额精度/日期/额度错误与焦点、取消不写入、一次保存、后补兑换、刷新、重复粘贴、复用确认/取消、删除确认/取消及快照恢复；本地其他owner无记录。使用合成Moomoo Cash/MMF/Invest（持仓标记）/Gold账户形态，Ledger保持不变，console/exception为空，无横向溢出。最终截图已查看，新区域标题对比度明6.76/暗6.61。脚本/截图仅node_modules/.cache；本轮独立测试服务与Edge已清理，用户正常localhost5173保留。
+- 文件：8个源码/样式文件及2个测试文件已提交bda2afb、dee0932，分支fix/trade-with-exchange；PR #165：https://github.com/geebeng1013-m4/Personal-Wealth-OS/pull/165 。未合并、未生产发布；PLAN/PROGRESS更新保存在本地，既有CLAUDE.md删除、readme.md.md和根目录其他改动未提交。
+- GitHub CI verify已成功（run37760714768，head dee0932），正式/demo项目预览检查均成功；这不是生产上线确认。
+- 范围/风险：配对入口用于可归属一笔USD买股的MYR→USD结算；一笔兑换覆盖多笔买股仍走历史导入。缺失旧USD资金记录的剩余部分仍标估算覆盖，不能当实际账户余额。真实认证账户/cloud写入未由AI验证；Firestore uid访问规则已复核、未改访问方式。旧客户端不保留新关联metadata，需新版本才能完整保留配对。SW缓存规则未改，继续使用哈希资源，不升缓存版本。
+- CURRENT STATE / NEXT：本地功能及验证完成，等待用户审查/合并PR #165；合并后另核实生产。无新增功能想法，不自动开始下一Task。
+
+## Task 2 已合并并重新启动 localhost（2026-10-08）
+
+- GitHub确认PR #164已MERGED，merge commit 3e7714f811078df7e2ff01b50876b001a540a392。已fetch并创建review/budget-merged分支运行该提交，保留既有文档和其他改动，没有强切被旧worktree占用的main。
+- 按用户请求启动正常模式npm.cmd run dev -- --port 5173 --strictPort，session44850；HTTP200，已通过本地HTTP核对Allocated新说明与VITE_DEMO_MODE=false。地址http://localhost:5173/#buckets。自动打开浏览器的Start-Process命令被工具策略拒绝，未自动打开；可点击链接进入。新会话需重新检查服务，不沿用旧session。
+- Task 2已合并；本轮未核对正式站部署或登录后的真实云写入，不能据此宣称生产上线。未开始Task 3。
+
+## Task 2 Budget 显示修复完成，PR #164 待审查（2026-10-08）
+
+本节优先于下方调查与待决定记录；本轮只完成 Task 2，不开始 Task 3。
+
+- 用户批准最小方案后，从最新 origin/main 9a376b4 创建 fix/budget-plan-progress。已有 PLAN/PROGRESS 先限定路径 stash，再成功恢复；备份保留。旧 CLAUDE.md 删除、readme.md.md 和根目录其他改动未纳入提交。
+- DONE / WHY：Got 改为 Allocated，说明它由已记收入按规则计算，不代表转账或账户余额。每层进度条及 Below plan / On plan / Above plan 状态统一对照显示的 Plan；预计3000、实际2000、生活费1000、余款各50%时，储蓄 Plan1000 / Allocated500 显示50%。不再因为满足实际收入下的百分比规则而误显示100%。
+- 零Plan没有百分比；有分配额时显示Above plan与差额。超计划的条封顶100%，百分比和差额保留。无收入时手机仍显示Plan、0%和差额。次月仍只规划；固定层的预计缺口提示保留。月收入卡片对照已保存的预计收入，避免少收时仍写On plan。
+- 预计收入草稿会同步更新Plan、进度、状态与差额；现有data-live机制保留打开的编辑器及其未保存输入。手机显示Allocated标签和百分比；新增关键说明使用现有text-muted色，测得明/暗对比度6.76/6.61，最终四张截图均已查看。
+- 修改源码：src/components/allocationPanel.ts、src/pages/budgetPage.ts、src/components.css；测试：tests/planAhead.test.ts（新增8项回归）。分配引擎、规则、账户、交易和schema31未改变；已检查public/sw.js使用哈希资源，不改缓存规则或版本。
+- 验证：npm.cmd run typecheck通过；npm.cmd test 1536/1536通过；最终npm.cmd run build（含typecheck）通过，仅有既有构建警告。
+- run-wealthup：独立demo端口5208、独立Edge CDP9230/profile。在1400/390宽及明暗主题下验证薄收入月、零/超计划、无收入、空层、键盘开编辑器、非法预计收入提示与焦点、草稿保持编辑输入、保存后刷新、月份切换、导航与主题切换；合成交易记录不变、无横向溢出、console/exception错误为空。测试脚本及截图只在node_modules/.cache，不提交；测试服务和浏览器只清理本轮自己启动的进程。
+- 已提交并推送809a9a2（仅本任务4个代码/测试文件），PR #164：https://github.com/geebeng1013-m4/Personal-Wealth-OS/pull/164 。GitHub CI verify成功（run37746478249）；demo预览成功，正式站项目预览检查仍pending。AI未合并、未发布生产；PLAN/PROGRESS交接更新保存在本地，未把既有未提交文档改动一并提交。
+- CURRENT STATE / NEXT：Task 2本地实现与验证完成，待用户审查/合并PR；合并后另核实正式与demo资源。真实登录账户/cloud写入未由AI验证，本轮未访问真实财务数据。新想法无；不自动推进Task 3。
+
+## 恢复进度与 Task 2 Budget 调查（2026-10-08）
+
+- 已读 PROGRESS 最新记录、PLAN 当前任务与相关历史、readme.md.md 工作约定及上层 WealthUp-AI-Handoff.md 全文。旧设备路径、旧 main hash 和旧部署 pending 不作为当前事实；最新既有记录已核对生产含 Goals 完成入口，本轮未重新检查生产。
+- 本轮只做 Task 2 的解释与调查，未修改应用代码、真实财务数据或部署。Task 1 Goals 已合并；真实账号保存仍需用户验收。
+- 核对 src/budgetSummary.ts、src/allocation.ts、src/components/allocationPanel.ts 及 ledgerSummary 收入口径：Plan = 当月预计收入按规则分配（没存月计划则用 Me 收入）；Got = 当月 Ledger personalIncome 按同一规则计算，排除 sponsored，不是已转账/已存余额，也不扣当月支出。
+- 进度条和 Filled 状态按实际收入下的 got/want，封顶100%，不是 Got/Plan。gross 基于总收入，pct 基于首个 pct 层执行时的剩余池，并共享这个基数；固定层按顺序优先填。
+- 用现有 allocateMonth 在内存打包复算并断言：预计3000、实际2000、固定生活费1000、储蓄与投资各50%剩余池 → Plan [1000,1000,1000]，Got [1000,500,500]；储蓄当前条100%，相对Plan实际50%。额外验证总收入10%先扣300、生活费1000后，各50%得到850。全部断言通过，属于合成数据，不是用户真实账户验证。
+- 最小建议（待用户决定，未实施）：Got 明确为按已记收入计算的分配额；进度条/状态统一相对 Plan；百分比继续写清总收入或剩余池。若实施需定义 Plan=0、超计划、预计收入不足、草稿预览与手机状态，不改变现有分配规则或增加转账记录。
+- 当前分支 fix/goals-current-review，HEAD 533fbf0；已有 PLAN/PROGRESS 修改、CLAUDE.md 删除、未跟踪 readme.md.md 及根目录其他改动均保留。未提交/推送；实现前再 fetch main 建新任务分支。
+- 下一步：用户理解并决定 Task 2 最小改法；不推进 Task 3。本轮无代码修改，未运行 typecheck/build 或完整测试，仅执行上述合成断言。
+## 启动与上线核对（2026-10-08）
+
+- 已按用户请求启动正常模式 `npm.cmd run dev -- --port 5173 --strictPort`，session4806；HTTP200，Goals源码含Already bought / used it。新会话请重新确认进程，不沿用旧session。
+- 正式站本轮返回新资源 `/assets/index-4Sk5YR4z.js`，HTTP获取JS确认含goal-completion-form和Already bought / used it。Goals新完成入口已进入生产包；下方“仍旧资源、部署pending”是旧检查，不再作为当前状态。真实登录账户写入仍待用户验收。
+- 当前用户要求解释Goals，不是开始Budget实现。说明范围：手动/关联余额、Reached随余额变化、Done保留一次性完成金额、Undo恢复追踪、Monthly只是计划非自动转账、Saved含历史完成不等于现在账户总余额。
+
+## 最新状态：Goals已合并，部署待确认（2026-10-08）
+
+- 用户合并PR #163，GitHub确认MERGED，merge commit `9a376b458ceb92928ffb38056324c45216417bb4`。main CI run37743167486成功。
+- 最近HTTP检查正式站仍为旧index-DdSOhVXR.js，不含新完成表单；GitHub部署状态正式/demo均pending。不要将已合并说成已上线。下次首先复核生产资源与新入口。
+- 下面“待用户合并”等描述已过时，仅为历史。当前本地仍在fix/goals-current-review分支；后续改动前fetch最新main并新建任务分支，保留本轮未提交文档。
+- 下一步提议Task2 Budget调查；用户只问whats next，没有批准Budget代码实现。初读budgetSummary.ts/allocation.ts/components/allocationPanel.ts确认：Plan用预计收入，Got用已记账个人收入分配，两者都不是银行实际转账记录；进度条用got/want（本次分配规则需求），不是got/planned.got。规则百分比又分gross（总收入）和pct（填固定层后剩余池）。需先说明与复算，再向用户给最小方案。
+
+## 原 main 文档历史（保留原文，不作为当前任务状态）
+
 ## GitHub授权已完成（2026-10-08）
 
 - **已推送并创建PR #163**：https://github.com/geebeng1013-m4/Personal-Wealth-OS/pull/163 ，base main / head fix/goals-current-review，等待用户审查和合并。AI未合并、未发布生产；旧的认证阻碍已解决。
