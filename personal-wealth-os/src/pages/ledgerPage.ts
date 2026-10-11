@@ -483,7 +483,7 @@ export function ledgerTemplate(state: WealthState): string {
       
       <!-- MANAGERS — history, categories and accounts stay, collapsed -->
       <div class="wu-dash__full wu-stack wu-stack--sm">
-        <details id="ledgerHistoryPanel" class="wu-details"${ledgerHistoryOpen ? " open" : ""}><summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-heading">History</strong><span class="t-caption t-faint">${filtered.length} records</span></span></summary><div class="wu-stack wu-stack--sm">${transactionRows || `<p class="wu-empty">No transactions match this view. Add your first record above.</p>`}</div></details>
+        <details id="ledgerHistoryPanel" class="wu-details"${ledgerHistoryOpen ? " open" : ""}><summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-heading">History</strong><span class="t-caption t-faint">${filtered.length} records</span></span></summary><div class="wu-stack wu-stack--sm"><div class="wu-row wu-row--between"><span class="t-caption t-faint">Clear deletes all transactions, including records outside this view.</span><button id="clearLedgerHistory" class="wu-btn wu-btn--danger wu-btn--sm" type="button" aria-label="Clear all ledger history"${state.ledgerTransactions.length === 0 ? " disabled" : ""}>Clear</button></div>${transactionRows || `<p class="wu-empty">No transactions match this view. Add your first record above.</p>`}</div></details>
         <details id="ledgerCategoriesPanel" class="wu-details"${ledgerCategoriesOpen ? " open" : ""}><summary class="wu-details__summary"><span class="wu-row wu-row--tight"><strong class="t-heading">Category Manager</strong><span class="t-caption t-faint">${state.ledgerCategories.length} categories</span></span></summary><div class="wu-stack">
           <form id="ledgerCategoryForm" class="wu-grid wu-grid--2">
             <label class="wu-field-row"><span class="wu-field-row__label">Icon</span><input class="wu-field" name="icon" maxlength="12" value="✨" required></label>
@@ -748,6 +748,12 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
   root.querySelector<HTMLButtonElement>("#ledgerSeeAll")?.addEventListener("click", () => {
     ledgerRecentExpanded = !ledgerRecentExpanded;
     refresh(state, undefined, true);
+  });
+  root.querySelector<HTMLButtonElement>("#clearLedgerHistory")?.addEventListener("click", () => {
+    if (state.ledgerTransactions.length === 0) return;
+    if (!confirm(`Clear all ${state.ledgerTransactions.length} ledger transactions, including records outside the current filters? Account balances and totals will be recalculated. A snapshot will be saved to Version History first.`)) return;
+    resetLedgerEntry();
+    refresh({ ...state, ledgerTransactions: [] }, "Clear ledger history");
   });
   root.querySelectorAll<HTMLButtonElement>(".delete-ledger").forEach((button) => button.addEventListener("click", () => {
     const id = button.dataset.id;
