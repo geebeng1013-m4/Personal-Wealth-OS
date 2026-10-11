@@ -78,7 +78,7 @@ test("csvImport: imported trades feed the existing cost-basis engine correctly",
   const cb = calculatePositionCostBasis(trades, "AAA");
   // Bought 0.1 units @ $100, sold 0.05 @ $102 (half the position, proportional cost removal).
   assert.equal(cb.units.toFixed(4), "0.0500");
-  assert.ok(cb.realizedPnlUsd > 0, "selling above cost should realise a gain");
+  assert.ok(Math.abs(cb.realizedPnlUsd - (-0.02)) < 1e-9, "fees can turn a small gross gain into a net loss");
 });
 
 test("csvImport: an unrecognised header falls back without throwing", () => {

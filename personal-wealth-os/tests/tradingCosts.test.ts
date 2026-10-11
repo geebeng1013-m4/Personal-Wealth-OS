@@ -108,12 +108,15 @@ test("costs: the fee drag is the same whatever the exchange rate turns out to be
   assert.ok(Math.abs(dragWithFx - dragPlain) < 0.01, `${dragWithFx} vs ${dragPlain}`);
 });
 
-test("costs: commission never touches the dollar figures", () => {
-  // The fee is charged in ringgit and the USD side is priced from units, so a
-  // fee-aware split must leave every dollar figure exactly as it was.
+test("costs: dollar cost and return include the equivalent trading fees", () => {
   const p = snapshot();
-  assert.ok(Math.abs(p.unrealizedPnlPercent! - 0.0524) < 0.0005);
-  assert.ok(Math.abs(p.totalInvestedUsd - 441.25) < 0.05);
+  const noFees = getPortfolioSnapshot({ ...realState(), trades: REAL_TRADES.map((trade) => ({ ...trade, feeMyr: 0 })) }, new Date(2026, 7, 28), {
+    prices: priceMapFrom([{ ticker: "VOO", priceUsd: 707.878 }, { ticker: "QQQM", priceUsd: 296.288 }]),
+    usdToMyr: 4.0294,
+  });
+  assert.ok(p.totalInvestedUsd > noFees.totalInvestedUsd);
+  assert.ok(p.unrealizedPnlPercent! < noFees.unrealizedPnlPercent!);
+  assert.equal(p.totalInvestmentValueUsd, noFees.totalInvestmentValueUsd, "fees never change the shares' market value");
 });
 
 // --- Fees follow the units -------------------------------------------------

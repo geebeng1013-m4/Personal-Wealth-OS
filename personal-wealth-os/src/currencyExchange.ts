@@ -139,8 +139,10 @@ export interface ResolvedTradeCost {
   uncovered: number;
   /** MYR per unit of `currency` for the covered part, or null when nothing was covered. */
   effectiveRate: number | null;
-  /** Linked settlements also price the USD fee separately from the shares. */
+  /** Fee cost in MYR, priced separately from the shares' funding. */
   feeMyr?: number;
+  /** Fee in the trade currency still awaiting recorded funding. */
+  feeUncovered?: number;
 }
 
 /** How well recorded conversions explain the buys in one currency. */
@@ -193,6 +195,7 @@ export interface ExchangeCoverage {
 interface Shortfall {
   tradeId: string;
   amount: number;
+  kind: "stock" | "fee";
 }
 
 /** One foreign currency's cash balance and everything tracked against it. */
@@ -308,9 +311,14 @@ export function resolveExchangeCoverage(
       const applied = Math.min(remaining, oldest.amount);
       const cost = costs.get(oldest.tradeId);
       if (cost) {
-        cost.costMyr += applied * rate;
-        cost.uncovered -= applied;
-        pool.covered += applied;
+        if (oldest.kind === "fee") {
+          cost.feeMyr = (cost.feeMyr ?? 0) + applied * rate;
+          cost.feeUncovered = Math.max(0, (cost.feeUncovered ?? 0) - applied);
+        } else {
+          cost.costMyr += applied * rate;
+          cost.uncovered -= applied;
+          pool.covered += applied;
+        }
       }
       oldest.amount -= applied;
       remaining -= applied;
@@ -372,6 +380,10 @@ export function resolveExchangeCoverage(
     const spent = Number.isFinite(trade.amount) ? Math.max(trade.amount as number, 0) : 0;
     if (spent <= 0) continue;
     const pool = poolFor(currency);
+    // Only a fee actually charged in this currency draws from this balance.
+    // Legacy MYR fees have no evidence that dollars left the account.
+    const feeNeed = trade.feeCurrency === currency && Number.isFinite(trade.fee)
+      ? Math.max(0, trade.fee ?? 0) : 0;
 
     if (trade.type === "Sell") {
       // Proceeds re-enter the balance carrying the ringgit cost that money
@@ -388,7 +400,7 @@ export function resolveExchangeCoverage(
         ?? (pool.recordedUnits > 0 ? pool.recordedMyr / pool.recordedUnits : null);
       if (rate !== null) {
         proceedsRates.set(trade.id, rate);
-        const surplus = settleShortfalls(pool, spent, rate);
+        const surplus = settleShortfalls(pool, Math.max(0, spent - feeNeed), rate);
         pool.units += surplus;
         pool.myr += surplus * rate;
       }
@@ -403,13 +415,14 @@ export function resolveExchangeCoverage(
     pool.units -= drawn;
     pool.myr -= rate === null ? 0 : drawn * rate;
     let feeMyr: number | undefined;
-    if (funding && trade.feeCurrency === currency) {
-      const remainingFee = Math.max(0, (trade.fee ?? 0) - funding.fee);
+    let feeUncovered = 0;
+    if (trade.feeCurrency === currency) {
+      const remainingFee = Math.max(0, feeNeed - (funding?.fee ?? 0));
       const feeDrawn = rate === null ? 0 : Math.min(remainingFee, pool.units);
       pool.units -= feeDrawn;
       pool.myr -= rate === null ? 0 : feeDrawn * rate;
-      const estimate = nearestConversionRate(trade.date, currency, exchanges) ?? trade.exchangeRate ?? 0;
-      feeMyr = funding.feeMyr + (rate ?? 0) * feeDrawn + estimate * (remainingFee - feeDrawn);
+      feeMyr = (funding?.feeMyr ?? 0) + (rate ?? 0) * feeDrawn;
+      feeUncovered = remainingFee - feeDrawn;
     }
 
     pool.totalBuy += spent;
@@ -420,12 +433,13 @@ export function resolveExchangeCoverage(
       spent,
       costMyr,
       uncovered: spent - drawn - assigned,
-      ...(feeMyr !== undefined ? { feeMyr } : {}),
+      ...(feeMyr !== undefined ? { feeMyr, feeUncovered } : {}),
       // Filled in once the walk is over: a conversion that settles this buy has
       // not necessarily happened yet.
       effectiveRate: null,
     });
-    if (spent - drawn - assigned > 1e-9) pool.shortfalls.push({ tradeId: trade.id, amount: spent - drawn - assigned });
+    if (spent - drawn - assigned > 1e-9) pool.shortfalls.push({ tradeId: trade.id, amount: spent - drawn - assigned, kind: "stock" });
+    if (feeUncovered > 1e-9) pool.shortfalls.push({ tradeId: trade.id, amount: feeUncovered, kind: "fee" });
   }
 
   // Only now is each buy's funding final, so the rate it actually paid can be
@@ -433,6 +447,17 @@ export function resolveExchangeCoverage(
   for (const cost of costs.values()) {
     const covered = cost.spent - cost.uncovered;
     cost.effectiveRate = covered > 1e-9 ? cost.costMyr / covered : null;
+    const feeUncovered = cost.feeUncovered ?? 0;
+    if (feeUncovered > 0) {
+      const trade = buys.get(cost.tradeId);
+      if (trade) {
+        const estimate = nearestConversionRate(trade.date, cost.currency, exchanges)
+          ?? (Number.isFinite(trade.exchangeRate) && Number(trade.exchangeRate) > 0 ? Number(trade.exchangeRate) : null);
+        const fee = trade.fee ?? 0;
+        const fallback = fee > 0 ? trade.feeMyr * feeUncovered / fee : 0;
+        cost.feeMyr = (cost.feeMyr ?? 0) + (estimate === null ? fallback : feeUncovered * estimate);
+      }
+    }
   }
 
   const byCurrency = new Map<string, CurrencyCoverage>();

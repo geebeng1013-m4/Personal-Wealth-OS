@@ -57,14 +57,13 @@ test("baseline: dashboard headline figures", () => {
 test("baseline: portfolio facts, with valuation still unknown", () => {
   // The ringgit figures below carry the demo's five currency conversions: the
   // dollars they cover are translated at the rate the user actually converted
-  // at, the rest at the rate each trade row implies. The dollar facts —
-  // totalInvestedUsd, units, average cost, fees — are identical either way,
-  // which is the point: a conversion record changes the translation, never the
-  // trade.
+  // at, the rest at the rate each trade row implies. Both currency costs include
+  // fees; a fee recorded in MYR uses that trade's rate for its dollar equivalent.
+  // Conversions never change the number of shares.
   const portfolio = getPortfolioSnapshot(demo());
   assert.equal(portfolio.totalUnits.toFixed(6), "4.006747");
   assert.equal(portfolio.totalInvestedMyr.toFixed(2), "4741.23");
-  assert.equal(portfolio.totalInvestedUsd.toFixed(2), "1066.93");
+  assert.equal(portfolio.totalInvestedUsd.toFixed(2), "1073.47");
   assert.equal(portfolio.maxAbsoluteDrift.toFixed(6), "0.096721");
   assert.equal(portfolio.realizedPnlMyr, 0);
   assert.equal(portfolio.totalFeesMyr.toFixed(2), "28.89");
@@ -73,9 +72,9 @@ test("baseline: portfolio facts, with valuation still unknown", () => {
   assert.equal(portfolio.unrealizedPnlMyr, null);
 
   const expected = [
-    { ticker: "VOO", units: "1.261434", avg: "547.12", target: 0.55, drift: "0.096721" },
-    { ticker: "QQQM", units: "1.295536", avg: "222.54", target: 0.25, drift: "0.020147" },
-    { ticker: "VXUS", units: "1.449778", avg: "61.02", target: 0.1, drift: "-0.016868" },
+    { ticker: "VOO", units: "1.261434", avg: "550.17", target: 0.55, drift: "0.096721" },
+    { ticker: "QQQM", units: "1.295536", avg: "223.94", target: 0.25, drift: "0.020147" },
+    { ticker: "VXUS", units: "1.449778", avg: "61.63", target: 0.1, drift: "-0.016868" },
   ];
   assert.equal(portfolio.holdings.length, expected.length);
   for (const want of expected) {

@@ -105,11 +105,19 @@ export function recordsFromCsv(text: string, fallbackPlatform = "moomoo"): Trade
         if (!ticker) return null;
 
         const side = get(row, ["side"]).toLowerCase();
-        const fillAmountUsd = Number(get(row, ["fill amount"])) || Number(get(row, ["order amount"])) || 0;
         const fillPrice = parseMoomooFillPrice(get(row, ["filled@avg price"]))
           || Number(get(row, ["order price"]))
           || 0;
-        const fillQty = Number(get(row, ["fill qty"])) || 0;
+        const combinedFill = get(row, ["filled@avg price"]);
+        const fillQty = Number(get(row, ["fill qty"]))
+          || (combinedFill.includes("@") ? Number(combinedFill.split("@")[0]) : 0);
+        // Order Amount can be the requested budget rather than the actual fill.
+        // Short exports omit Fill Qty/Amount but retain quantity@price.
+        const fillAmountUsd = Number(get(row, ["fill amount"]))
+          || (fillQty > 0 && fillPrice > 0 ? Math.round(fillQty * fillPrice * 100) / 100 : 0)
+          || Number(get(row, ["order amount"])) || 0;
+        if (![fillPrice, fillQty, fillAmountUsd].every(Number.isFinite)
+          || fillPrice <= 0 || fillQty < 0 || fillAmountUsd <= 0) return null;
         const totalFeesUsd = Number(get(row, ["total"]))
           || (Number(get(row, ["platform fees"])) || 0) + (Number(get(row, ["stamp duty"])) || 0);
 
@@ -130,6 +138,8 @@ export function recordsFromCsv(text: string, fallbackPlatform = "moomoo"): Trade
           priceUsd: Math.round(fillPrice * 100) / 100,
           ...(fillQty > 0 ? { units: fillQty } : {}),
           feeMyr: Math.round(totalFeesUsd * USD_TO_MYR * 100) / 100,
+          fee: totalFeesUsd,
+          feeCurrency: "USD",
           exchangeRate: USD_TO_MYR,
         };
       })

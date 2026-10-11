@@ -51,9 +51,9 @@ test("portfolio: a single buy produces one holding with the right cost basis", (
 
   assert.ok(voo);
   assert.equal(voo!.units, 10);
-  assert.equal(voo!.investedUsd, 1000);
+  assert.equal(voo!.investedUsd, 1000 + 5 / 4.2);
   assert.equal(voo!.investedMyr, 4205, "MYR cost basis includes the fee");
-  assert.equal(voo!.averageCostUsd, 100);
+  assert.equal(voo!.averageCostUsd, (1000 + 5 / 4.2) / 10);
   assert.equal(voo!.feesMyr, 5);
   assert.equal(snapshot.tradeCount, 1);
 });

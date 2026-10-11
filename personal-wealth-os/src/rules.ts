@@ -35,7 +35,7 @@ export interface PositionCostBasis {
 }
 
 export type CostBasisTrade = Pick<Trade, "ticker" | "date" | "type" | "amountUsd" | "amountMyr" | "priceUsd" | "units" | "feeMyr">
-  & Partial<Pick<Trade, "currency" | "amount" | "price">>;
+  & Partial<Pick<Trade, "currency" | "amount" | "price" | "fee" | "feeCurrency" | "exchangeRate">>;
 
 export function money(value: number, currency = "MYR"): string {
   const amount = Number(value || 0);
@@ -156,14 +156,22 @@ export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: str
 
   matchingTrades.forEach(({ trade }) => {
     const unitsTraded = tradeUnits(trade);
-    const { currency: tradeCurrency, price } = tradeAmounts(trade);
+    const { currency: tradeCurrency, amount } = tradeAmounts(trade);
     currency = tradeCurrency;
     feesMyr += trade.feeMyr;
     if (unitsTraded <= 0) return;
+    // Both currency views include trading fees. Preserve an explicitly recorded
+    // foreign fee; a MYR fee uses the same recorded rate as the trade's cost.
+    const rate = Number.isFinite(trade.exchangeRate) && Number(trade.exchangeRate) > 0
+      ? Number(trade.exchangeRate) : amount > 0 ? trade.amountMyr / amount : 0;
+    const feeLocal = tradeCurrency === "MYR" ? trade.feeMyr
+      : trade.feeCurrency === tradeCurrency && Number.isFinite(trade.fee)
+        ? Math.max(0, trade.fee ?? 0)
+        : rate > 0 ? trade.feeMyr / rate : 0;
 
     if (trade.type !== "Sell") {
       units += unitsTraded;
-      costBasisLocal += unitsTraded * price;
+      costBasisLocal += amount + feeLocal;
       costBasisMyr += trade.amountMyr + trade.feeMyr;
       feeBasisMyr += trade.feeMyr;
       return;
@@ -175,7 +183,7 @@ export function calculatePositionCostBasis(trades: CostBasisTrade[], ticker: str
     const removedCostLocal = costBasisLocal * soldFraction;
     const removedCostMyr = costBasisMyr * soldFraction;
     const proceedsFraction = unitsSold / unitsTraded;
-    const proceedsLocal = unitsSold * price;
+    const proceedsLocal = Math.max(amount - feeLocal, 0) * proceedsFraction;
     const proceedsMyr = Math.max(trade.amountMyr - trade.feeMyr, 0) * proceedsFraction;
 
     realizedPnlLocal += proceedsLocal - removedCostLocal;

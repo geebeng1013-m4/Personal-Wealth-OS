@@ -969,6 +969,7 @@ export function portfolioTemplate(state: WealthState): string {
 
       <section class="wu-card wu-dash__full wu-stack wu-stack--sm" id="pfPositionsPanel" aria-labelledby="pfPositionsLabel"${positionsOpen ? "" : " hidden"}>
         <div class="wu-tc__top"><span class="wu-label" id="pfPositionsLabel">Position detail</span></div>
+        <p class="wu-dash__note">Costs and returns include recorded trading fees. Market value covers these holdings; brokerage cash and money-market funds recorded in Ledger are separate.</p>
         <div class="wu-table-wrap">
           <table class="wu-table">
             <thead><tr><th>Ticker</th><th>Units</th><th>Avg Cost</th><th>Market Price</th><th>Invested</th><th>Value</th><th>Invested MYR</th><th>Value MYR</th><th>Unrealised P&amp;L</th><th>Actual / Target</th><th>Drift</th></tr></thead>

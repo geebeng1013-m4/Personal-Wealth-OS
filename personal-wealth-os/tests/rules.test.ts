@@ -34,10 +34,10 @@ test("calculatePositionCostBasis: accumulates units and cost basis across buys",
   ];
   const basis = calculatePositionCostBasis(trades, "VOO");
   assert.equal(basis.units, 15);
-  assert.equal(basis.costBasisUsd, 1550);
+  assert.equal(basis.costBasisUsd, 1550 + 10 / 4.25);
   assert.equal(basis.costBasisMyr, 4250 + 5 + 2337.5 + 5);
   assert.equal(basis.feesMyr, 10);
-  assert.equal(Math.round(basis.averageCostUsd * 100) / 100, Math.round((1550 / 15) * 100) / 100);
+  assert.equal(Math.round(basis.averageCostUsd * 100) / 100, Math.round(((1550 + 10 / 4.25) / 15) * 100) / 100);
 });
 
 test("calculatePositionCostBasis: a partial sell removes cost basis proportionally and books realized P&L", () => {
@@ -50,7 +50,7 @@ test("calculatePositionCostBasis: a partial sell removes cost basis proportional
   assert.equal(basis.units, 5);
   assert.equal(basis.costBasisUsd, 500); // half of the original 1000 cost basis remains
   assert.equal(basis.costBasisMyr, 2100); // half of the original 4200 MYR cost basis remains
-  assert.equal(basis.realizedPnlUsd, 600 - 500); // proceeds minus removed cost
+  assert.equal(basis.realizedPnlUsd, 600 - 10 / 4.2 - 500); // net proceeds minus removed cost
   assert.equal(basis.feesMyr, 10);
 });
 
