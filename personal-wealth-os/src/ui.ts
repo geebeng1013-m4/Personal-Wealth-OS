@@ -237,6 +237,7 @@ function shellTemplate(activePage: string, state: WealthState): string {
  */
 
 export function renderApp(root: HTMLElement, state: WealthState, setState: Setter, activePage = "dashboard", navigate?: Navigate, user?: AppUser, onLogout?: () => void): void {
+  const previousPage = root.querySelector<HTMLElement>("#pageMount")?.dataset.page;
   document.body.classList.toggle("mask-financial-amounts", state.privacy.maskAmounts);
   const currentSidebarScrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
   if (currentSidebarScrollArea) {
@@ -311,6 +312,10 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
     ...(isDemoMode() ? { clients: clientsTemplate() } : {}),
   };
   mount.innerHTML = templates[activePage] ?? templates.dashboard;
+  const renderedPage = Object.hasOwn(templates, activePage) ? activePage : "dashboard";
+  mount.dataset.page = renderedPage;
+  // Same-page saves and data refreshes must not restart the entrance animation.
+  if (previousPage && previousPage !== renderedPage) mount.classList.add("wu-page-enter");
 
   // On a phone, a page opened from the "More" list gets a back arrow to the
   // left of its title that returns to that list. Desktop opens the same pages
