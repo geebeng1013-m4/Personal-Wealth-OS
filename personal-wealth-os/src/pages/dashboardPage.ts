@@ -28,6 +28,7 @@ import { assetDrawdownBelow } from "../drawdowns";
 import { getPrice } from "../marketPrices";
 import { pageHeader } from "../components/pageHeader";
 import { detectMoneyLeaks } from "../advisor";
+import { dismissReturnReminder, returningVisitDays } from "../visitActivity";
 import { getAdvisorSnapshot } from "../advisor";
 import { isRecommendationCompleted, markRecommendationDone } from "../actionRecords";
 import {
@@ -109,6 +110,7 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
       badge: `<button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-home-guide-toggle aria-expanded="false" aria-controls="homeGuide">Usage guide ↗</button>`,
     })}
     ${stageLine(classifyStage(state))}
+    ${returnReminderTemplate(state)}
 
     <!-- The user's own goal sentence, in view every visit. Display only: it is
          written on the Goals page, so this stays a line, not a form. While a
@@ -390,6 +392,18 @@ function nextStepCard(next: NextSteps): string {
       </details>
     </div>${homeRoutineTemplate()}
     </section>`;
+}
+
+function returnReminderTemplate(state: WealthState): string {
+  const days = returningVisitDays(state);
+  if (days === null) return "";
+  return `<section class="wu-card wu-return-reminder" aria-labelledby="returnReminderTitle">
+    <button class="wu-home-action__dismiss" type="button" data-return-dismiss aria-label="Dismiss welcome back reminder" title="Dismiss reminder">×</button>
+    <span class="wu-label">Welcome back</span>
+    <h2 class="t-subheading" id="returnReminderTitle">It's been ${days} days since your last visit.</h2>
+    <p class="t-body-sm t-muted">Pick up at your own pace. Add any missing transactions or review your month.</p>
+    <div class="wu-row"><button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-return-ledger>Catch up on transactions →</button><button class="wu-btn wu-btn--ghost wu-btn--sm dashboard-nav" type="button" data-page="review">Monthly review</button></div>
+  </section>`;
 }
 
 function homeActionDismissButton(): string {
@@ -685,6 +699,13 @@ export function bindDashboard(
     go("dashboard", next);
     requestAnimationFrame(() => root.querySelector<HTMLButtonElement>("[data-home-guide-toggle]")?.focus({ preventScroll: true }));
   });
+  root.querySelector<HTMLButtonElement>("[data-return-dismiss]")?.addEventListener("click", () => {
+    const next = dismissReturnReminder(state);
+    setState(next);
+    go("dashboard", next);
+    requestAnimationFrame(() => root.querySelector<HTMLButtonElement>("[data-home-guide-toggle]")?.focus({ preventScroll: true }));
+  });
+  root.querySelector<HTMLButtonElement>("[data-return-ledger]")?.addEventListener("click", () => go(queueGuide("first-entry")));
   const guide = root.querySelector<HTMLElement>("#homeGuide");
   let guideOpener: HTMLButtonElement | null = null;
   const setGuideOpen = (open: boolean): void => {

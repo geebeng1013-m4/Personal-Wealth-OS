@@ -9,6 +9,7 @@ import { normalizeTradeMarket } from "./tradeCurrency";
 import { normalizeDividends } from "./dividends";
 import { normalizeOnboardingAnswers } from "./onboardingQuiz";
 import { EMPTY_CHECKIN_STATE, normalizeCheckinState } from "./checkins";
+import { EMPTY_VISIT_ACTIVITY, normalizeVisitActivity } from "./visitActivity";
 import {
   saveToFirestore,
   loadFromFirestore,
@@ -16,7 +17,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 33;
+export const CURRENT_VERSION = 34;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -301,6 +302,7 @@ export const defaultState: WealthState = {
   financialGoal: "",
   onboardingDone: false,
   homeActionDismissed: false,
+  visitActivity: { ...EMPTY_VISIT_ACTIVITY },
   onboardingAnswers: null,
   checkins: { ...EMPTY_CHECKIN_STATE },
 };
@@ -425,6 +427,7 @@ function emptyStateBase(): WealthState {
     financialGoal: "",
     onboardingDone: false,
     homeActionDismissed: false,
+    visitActivity: { ...EMPTY_VISIT_ACTIVITY },
     onboardingAnswers: null,
     checkins: { ...EMPTY_CHECKIN_STATE },
   };
@@ -799,6 +802,8 @@ export function migrateState(input: Partial<WealthState>): WealthState {
     || ((input.version ?? 0) < 25 && buildOnboardingChecklist(merged).doneCount > 0);
   // v33: hiding the daily action card is separate from completing onboarding.
   merged.homeActionDismissed = candidate.homeActionDismissed === true;
+  // v34: old accounts begin tracking visits without inventing a previous visit.
+  merged.visitActivity = normalizeVisitActivity(candidate.visitActivity);
   // v26: the first-run Q&A's answers. Purely additive — older data has none
   // (null), which only shows the quiz to an account that is still empty (see
   // shouldShowOnboardingQuiz); a stored answer set is tidied, never dropped.

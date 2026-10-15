@@ -5279,6 +5279,18 @@
     gap: var(--space-8);
     border-top: 3px solid var(--accent);
   }
+  .wu-return-reminder {
+    position: relative;
+    display: grid;
+    gap: var(--space-3);
+    padding-top: var(--space-10);
+    border-left: 3px solid var(--accent);
+  }
+  .wu-return-reminder h2,
+  .wu-return-reminder p {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
   .wu-home-action__dismiss {
     position: absolute;
     top: var(--space-1);
@@ -5305,7 +5317,8 @@
     outline-offset: 2px;
   }
   @media (pointer: coarse) {
-    .wu-home-action {
+    .wu-home-action,
+    .wu-return-reminder {
       padding-top: var(--space-12);
     }
     .wu-home-action__dismiss {

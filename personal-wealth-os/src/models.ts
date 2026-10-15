@@ -440,6 +440,13 @@ export type FinancialRule =
 /** Narrows a FinancialRule to the variant matching `kind`. */
 export type FinancialRuleOfKind<K extends FinancialRuleKind> = Extract<FinancialRule, { kind: K }>;
 
+export interface VisitActivity {
+  lastActiveOn: string;
+  previousActiveOn: string;
+  returnedOn: string;
+  dismissedOn: string;
+}
+
 export interface WealthState {
   version: number;
   profile: Profile;
@@ -506,6 +513,8 @@ export interface WealthState {
   onboardingDone: boolean;
   /** v33: user dismissed the Overview's daily action card. */
   homeActionDismissed: boolean;
+  /** v34: local calendar days used for the returning-user reminder. */
+  visitActivity: VisitActivity;
   /**
    * What the new user answered in the first-run Q&A, or null if they have not
    * taken or skipped it. Kept after "Start my plan" so the Overview can say

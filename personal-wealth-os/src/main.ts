@@ -29,6 +29,7 @@ import { applyOnboardingAnswers, shouldShowOnboardingQuiz, skipOnboardingQuiz } 
 import { renderOnboarding, resetOnboardingDraft } from "./pages/onboardingPage";
 import { mountPageScrollbar } from "./overlayScrollbar";
 import { startFigureFitting } from "./components/fitFigures";
+import { recordVisitActivity, returningVisitDays } from "./visitActivity";
 
 // Drop stale cached ticker data from previous sessions so localStorage doesn't grow unbounded.
 pruneMarketCache();
@@ -219,6 +220,8 @@ function rememberPage(page: string): void {
 
 let currentPage = pageFromLocation();
 let currentUser: User | null = null;
+// Do not let a bookkeeping write make stale local finances win the first cloud read.
+let activityReadyUid: string | null = null;
 let cloudSyncUnsub: (() => void) | null = null;
 let authRequestId = 0;
 /**
@@ -254,13 +257,28 @@ function setState(next: WealthState, changeLabel?: string): void {
 }
 
 function navigate(page: string): void {
+  recordCurrentVisit();
   currentPage = appPages.has(page) ? page : "dashboard";
   rememberPage(currentPage);
   renderApp(root!, state, setState, currentPage, navigate, currentUser ?? undefined, handleLogout);
 }
 
+function recordCurrentVisit(): boolean {
+  if (!currentUser || activityReadyUid !== currentUser.uid) return false;
+  const next = recordVisitActivity(state);
+  if (next === state) return false;
+  setState(next);
+  return true;
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (recordCurrentVisit() && currentPage === "dashboard" && currentUser) renderSignedIn(currentUser);
+});
+
 /** The signed-in screen: the first-run Q&A for an untouched new account, otherwise the app. */
 function renderSignedIn(user: User): void {
+  recordCurrentVisit();
   // Whatever brought us here, the screen is about to show the current `state`.
   screenIsStale = false;
   document.documentElement.classList.remove("is-login");
@@ -477,6 +495,7 @@ function renderLogin(): void {
 
 async function handleAuth(user: User | null): Promise<void> {
   const requestId = ++authRequestId;
+  activityReadyUid = null;
   rememberSignedIn(user !== null);
 
   if (user) {
@@ -541,6 +560,12 @@ async function handleAuth(user: User | null): Promise<void> {
         if (requestId !== authRequestId || currentUser?.uid !== user.uid) return;
         renderSignedIn(user);
       }
+      if (requestId === authRequestId && currentUser?.uid === user.uid) {
+        activityReadyUid = user.uid;
+        recordCurrentVisit();
+        // Only revisit the visible Overview when a return reminder is relevant.
+        if (currentPage === "dashboard" && returningVisitDays(state) !== null) renderSignedIn(user);
+      }
     } catch (err) {
       // A failed read is not the same as an empty cloud document. Keep the local
       // state and never overwrite cloud data when connectivity or permissions fail.
@@ -581,6 +606,7 @@ if (isDemoMode()) {
   } as unknown as User;
 
   currentUser = demoUser;
+  activityReadyUid = demoUser.uid;
   setAssistantOwner(demoUser.uid, { adoptUnowned: false });
 
   // Keep edits made in the preview deployment across rerenders and refreshes.

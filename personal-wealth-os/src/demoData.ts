@@ -288,6 +288,7 @@ export const demoState: WealthState = {
   financialGoal: "RM20,000 invested in ETFs by 25, with a full emergency fund first.",
   onboardingDone: false,
   homeActionDismissed: false,
+  visitActivity: { lastActiveOn: "", previousActiveOn: "", returnedOn: "", dismissedOn: "" },
   onboardingAnswers: null,
   checkins: { weeklyCheckedOn: "", payPromptAnswered: false },
   monthPlans: {},

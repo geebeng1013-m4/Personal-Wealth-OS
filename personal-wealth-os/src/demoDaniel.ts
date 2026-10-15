@@ -288,6 +288,7 @@ export const danielDemoState: WealthState = {
   // An established user: no new-user checklist or Q&A.
   onboardingDone: true,
   homeActionDismissed: false,
+  visitActivity: { lastActiveOn: "", previousActiveOn: "", returnedOn: "", dismissedOn: "" },
   onboardingAnswers: null,
   checkins: { weeklyCheckedOn: "", payPromptAnswered: false },
 };
