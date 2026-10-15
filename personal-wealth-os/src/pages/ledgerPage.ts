@@ -1,3 +1,5 @@
+import { displayLocale } from "../i18n";
+import { uiAlert, uiConfirm } from "../interfaceLanguage";
 /**
  * Ledger page — the transaction form, the filtered history, and the category
  * and account managers.
@@ -285,7 +287,7 @@ export function ledgerTemplate(state: WealthState): string {
       : transaction.note || category?.label || "Transaction";
     const facts = [
       transaction.type === "transfer" ? "Transfer" : category?.label ?? "Uncategorised",
-      new Date(transaction.date).toLocaleDateString("en-MY", { day: "numeric", month: "short" }),
+      new Date(transaction.date).toLocaleDateString(displayLocale(), { day: "numeric", month: "short" }),
       transaction.type === "transfer" ? "" : accountName(transaction.accountId),
       transaction.fundingSource === "sponsored" ? "Sponsored" : "",
     ].filter(Boolean).join(" · ");
@@ -312,7 +314,7 @@ export function ledgerTemplate(state: WealthState): string {
   const otherTotal = expenses.slice(4).reduce((sum, item) => sum + item.amount, 0);
   const categoryPalette = ["var(--accent)", "var(--highlight)", "var(--slate, #6f86a6)", "var(--negative)"];
   const thisMonthIndex = new Date().getMonth();
-  const monthLabel = (month: number): string => new Date(2000, month, 1).toLocaleDateString("en-MY", { month: "short" });
+  const monthLabel = (month: number): string => new Date(2000, month, 1).toLocaleDateString(displayLocale(), { month: "short" });
   const lastThree = monthly.slice(Math.max(0, thisMonthIndex - 2), thisMonthIndex + 1);
   const lastThreeMax = Math.max(...lastThree.flatMap((item) => [item.income, item.expense]), 1);
 
@@ -751,13 +753,13 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
   });
   root.querySelector<HTMLButtonElement>("#clearLedgerHistory")?.addEventListener("click", () => {
     if (state.ledgerTransactions.length === 0) return;
-    if (!confirm(`Clear all ${state.ledgerTransactions.length} ledger transactions, including records outside the current filters? Account balances and totals will be recalculated. A snapshot will be saved to Version History first.`)) return;
+    if (!uiConfirm(`Clear all ${state.ledgerTransactions.length} ledger transactions, including records outside the current filters? Account balances and totals will be recalculated. A snapshot will be saved to Version History first.`)) return;
     resetLedgerEntry();
     refresh({ ...state, ledgerTransactions: [] }, "Clear ledger history");
   });
   root.querySelectorAll<HTMLButtonElement>(".delete-ledger").forEach((button) => button.addEventListener("click", () => {
     const id = button.dataset.id;
-    if (!id || !confirm("Delete this transaction? A snapshot will be saved first.")) return;
+    if (!id || !uiConfirm("Delete this transaction? A snapshot will be saved first.")) return;
     refresh({ ...state, ledgerTransactions: state.ledgerTransactions.filter((item) => item.id !== id) }, "Delete ledger transaction");
   }));
 
@@ -842,8 +844,8 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
   root.querySelectorAll<HTMLButtonElement>(".delete-category").forEach((button) => button.addEventListener("click", () => {
     const id = button.dataset.id;
     if (!id) return;
-    if (state.ledgerTransactions.some((transaction) => transaction.categoryId === id)) { alert("This category is used by existing transactions. Reassign or delete those transactions first."); return; }
-    if (!confirm("Delete this unused category?")) return;
+    if (state.ledgerTransactions.some((transaction) => transaction.categoryId === id)) { uiAlert("This category is used by existing transactions. Reassign or delete those transactions first."); return; }
+    if (!uiConfirm("Delete this unused category?")) return;
     refresh({ ...state, ledgerCategories: state.ledgerCategories.filter((category) => category.id !== id) }, "Delete ledger category");
   }));
 
@@ -899,9 +901,9 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
     const id = button.dataset.id;
     if (!id) return;
     const referenced = state.ledgerTransactions.some((transaction) => transaction.accountId === id || transaction.fromAccountId === id || transaction.toAccountId === id);
-    if (referenced) { alert("This account is used by existing transactions. Reassign or delete those transactions first."); return; }
-    if (state.ledgerAccounts.length <= 1) { alert("Keep at least one account so income and expenses have a valid destination."); return; }
-    if (!confirm("Delete this unused account?")) return;
+    if (referenced) { uiAlert("This account is used by existing transactions. Reassign or delete those transactions first."); return; }
+    if (state.ledgerAccounts.length <= 1) { uiAlert("Keep at least one account so income and expenses have a valid destination."); return; }
+    if (!uiConfirm("Delete this unused account?")) return;
     refresh({ ...state, ledgerAccounts: state.ledgerAccounts.filter((account) => account.id !== id) }, "Delete ledger account");
   }));
 }

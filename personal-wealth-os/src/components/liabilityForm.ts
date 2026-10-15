@@ -1,3 +1,4 @@
+import { displayLocale } from "../i18n";
 /**
  * The debt form: Me's "Add liability" and the Overview's "Write down what
  * you owe" sheet (L-2, made into choices in L-6).
@@ -250,7 +251,7 @@ export function debtSummary(liability: Liability, today: string): string {
   const tier = debtTier(rate);
   if (tier === "unknown") return "Without a rate, WealthUp can't tell whether it should come first.";
   const end = liability.endMonth && monthsUntil(liability.endMonth, today) > 0
-    ? `, cleared around ${new Date(Number(liability.endMonth.slice(0, 4)), Number(liability.endMonth.slice(5, 7)) - 1, 1).toLocaleDateString("en-MY", { month: "long", year: "numeric" })}`
+    ? `, cleared around ${new Date(Number(liability.endMonth.slice(0, 4)), Number(liability.endMonth.slice(5, 7)) - 1, 1).toLocaleDateString(displayLocale(), { month: "long", year: "numeric" })}`
     : "";
   const payment = liability.minimumPayment > 0 ? ` About ${rm(liability.minimumPayment)} a month${end}.` : "";
   if (tier === "high") return `${pct(rate)} a year is about ${rm(monthlyInterest(liability.balance, rate))} of interest a month, so WealthUp puts this first.${payment}`;

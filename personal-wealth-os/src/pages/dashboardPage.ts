@@ -1,3 +1,5 @@
+import { displayLocale, t } from "../i18n";
+import { uiConfirm } from "../interfaceLanguage";
 /**
  * Overview page — the financial command centre.
  *
@@ -186,7 +188,7 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
       ${overview.priorityAction ? `
         <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ovPriorityTitle">
           <div class="wu-tc__top"><span class="wu-label">Priority</span><span class="wu-chip wu-chip--${statusTone(overview.priorityAction.severity)}">${overview.priorityAction.severity === "watch" ? "Watch" : "Needs action"}</span></div>
-          <h3 class="t-heading" id="ovPriorityTitle">${escapeHtml(overview.priorityAction.title)}</h3>
+          <h3 class="t-heading" id="ovPriorityTitle">${escapeHtml(t(overview.priorityAction.title))}</h3>
           <p class="t-body-sm t-muted">${escapeHtml(overview.priorityAction.actionLabel)}</p>
           ${isRecommendationCompleted(state, overview.priorityAction.recommendationId)
             ? `<p class="t-caption t-muted">You marked this done.</p>`
@@ -210,7 +212,7 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
       <section class="wu-card wu-dash__half wu-stack wu-stack--sm" aria-labelledby="ovHealthLabel">
         <div class="wu-tc__top"><span class="wu-label" id="ovHealthLabel">Health</span><span class="wu-chip${watchCount > 0 ? " wu-chip--warning" : ""}">${watchCount > 0 ? `${watchCount} to watch` : escapeHtml(overview.wealthHealth.label)}</span></div>
         <ul class="wu-facts">
-          ${overview.wealthHealth.factors.map((factor) => `<li><i class="${factorTone(factor.status)}" aria-hidden="true"></i><span>${escapeHtml(factor.label)}</span><span>${escapeHtml(factor.detail)}</span><span class="visually-hidden">Status: ${escapeHtml(factor.status)}</span></li>`).join("")}
+          ${overview.wealthHealth.factors.map((factor) => `<li><i class="${factorTone(factor.status)}" aria-hidden="true"></i><span>${escapeHtml(t(factor.label))}</span><span>${escapeHtml(factor.detail)}</span><span class="visually-hidden">Status: ${escapeHtml(factor.status)}</span></li>`).join("")}
           ${overview.planStatus.progress !== null
             ? `<li><i class="${overview.planStatus.onTrack ? "" : "is-watch"}" aria-hidden="true"></i><span>Monthly plan</span><span>${figure(overview.planStatus.actualAmount)} / ${figure(overview.planStatus.plannedAmount)}</span></li>`
             : ""}
@@ -273,7 +275,7 @@ function monthsFromNow(months: number): string {
   const date = new Date();
   date.setDate(1);
   date.setMonth(date.getMonth() + months);
-  return date.toLocaleDateString("en-MY", { month: "long", year: "numeric" });
+  return date.toLocaleDateString(displayLocale(), { month: "long", year: "numeric" });
 }
 
 function currentStep(next: NextSteps): NextStep | undefined {
@@ -798,7 +800,7 @@ export function bindDashboard(
     go("dashboard");
   }));
   root.querySelector<HTMLButtonElement>("#onboardHide")?.addEventListener("click", () => {
-    if (!confirm("Hide your next steps? They will not come back.")) return;
+    if (!uiConfirm("Hide your next steps? They will not come back.")) return;
     const next: WealthState = { ...state, onboardingDone: true };
     setState(next, "Hide next steps");
     go("dashboard", next);

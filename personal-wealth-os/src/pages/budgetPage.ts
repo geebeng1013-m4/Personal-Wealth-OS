@@ -1,3 +1,4 @@
+import { uiConfirm } from "../interfaceLanguage";
 /**
  * Budget page — where this month's money went, and the rules that sent it.
  *
@@ -233,7 +234,7 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
       const index = Number(button.dataset.index);
       const step = state.allocation.steps[index];
       if (!step) return;
-      if (!confirm(`Delete the ${step.name} layer? Money that reached it will flow to the layers below.`)) return;
+      if (!uiConfirm(`Delete the ${step.name} layer? Money that reached it will flow to the layers below.`)) return;
       view.openLayer = null;
       savePlan(state.allocation.steps.filter((_, i) => i !== index));
     });
@@ -288,7 +289,7 @@ export function bindBuckets(root: HTMLElement, state: WealthState, setState: Set
     button.addEventListener("click", () => {
       const index = Number(button.dataset.index);
       const bucket = state.buckets[index];
-      if (!bucket || !confirm(`Delete the ${bucket.label || bucket.name} bucket?`)) return;
+      if (!bucket || !uiConfirm(`Delete the ${bucket.label || bucket.name} bucket?`)) return;
       view.openBucket = null;
       repaint({ ...state, buckets: state.buckets.filter((_, i) => i !== index) });
     });

@@ -5291,6 +5291,19 @@
     gap: var(--space-8);
     border-top: 3px solid var(--accent);
   }
+  .wu-language-select {
+    width: auto;
+    max-width: 100%;
+    flex-shrink: 0;
+  }
+  .wu-language-row .wu-set__title small {
+    white-space: normal;
+  }
+  @media (max-width: 420px) {
+    .wu-language-row {
+      flex-wrap: wrap;
+    }
+  }
   .wu-tranche-editor {
     min-width: 0;
   }

@@ -15,6 +15,8 @@
  * so it cannot fall behind on a case the browser already handles. Every
  * interpolation of user-supplied text into a template must pass through here.
  */
+import { translateSystemText } from "./i18n";
+
 export function escapeHtml(value: string): string {
   const el = document.createElement("span");
   el.textContent = value;
@@ -72,5 +74,7 @@ const CURRENCY_FIGURE = /(?:MYR|RM|USD|HKD|SGD|GBP|EUR|JPY)\s?-?[\d,]+(?:\.\d+)?
  * percentages in the same sentence stay as they are.
  */
 export function amtIn(text: string): string {
-  return escapeHtml(text).replace(CURRENCY_FIGURE, (figure) => `<span class="t-amt">${figure}</span>`);
+  // Translate the whole sentence before amounts split it into separate DOM
+  // nodes; otherwise neither side can match an interpolated sentence key.
+  return escapeHtml(translateSystemText(text)).replace(CURRENCY_FIGURE, (figure) => `<span class="t-amt">${figure}</span>`);
 }

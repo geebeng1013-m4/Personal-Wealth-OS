@@ -1,3 +1,4 @@
+import { displayLocale } from "../i18n";
 /**
  * The new-user Q&A screen (PLAN.md O-2, rewritten as sentences in Q-4).
  *
@@ -203,7 +204,7 @@ function monthsFromNow(months: number): string {
   const date = new Date();
   date.setDate(1);
   date.setMonth(date.getMonth() + months);
-  return date.toLocaleDateString("en-MY", { month: "long", year: "numeric" });
+  return date.toLocaleDateString(displayLocale(), { month: "long", year: "numeric" });
 }
 
 /** A reply from WealthUp under an answer. `html` is trusted: callers escape what they interpolate. */

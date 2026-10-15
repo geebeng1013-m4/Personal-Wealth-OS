@@ -1,3 +1,4 @@
+import { uiAlert } from "./interfaceLanguage";
 // Fonts ship with the app instead of from Google Fonts: the stylesheet link in
 // index.html blocked the first paint, and where Google is unreachable the page
 // stayed blank until the request timed out. Bundled, they also get the
@@ -30,6 +31,7 @@ import { renderOnboarding, resetOnboardingDraft } from "./pages/onboardingPage";
 import { mountPageScrollbar } from "./overlayScrollbar";
 import { startFigureFitting } from "./components/fitFigures";
 import { recordVisitActivity, returningVisitDays } from "./visitActivity";
+import { startInterfaceLanguage } from "./interfaceLanguage";
 
 // Drop stale cached ticker data from previous sessions so localStorage doesn't grow unbounded.
 pruneMarketCache();
@@ -82,7 +84,7 @@ function showIOSInstructions(): void {
 
 async function handleInstall(): Promise<void> {
   if (isStandalone()) {
-    alert("Already installed!");
+    uiAlert("Already installed!");
     return;
   }
   if (isIOS()) {
@@ -97,7 +99,7 @@ async function handleInstall(): Promise<void> {
       console.log("[PWA] Installed");
     }
   } else {
-    alert("Install not available. Try opening in Chrome on Android, or use Safari on iOS.");
+    uiAlert("Install not available. Try opening in Chrome on Android, or use Safari on iOS.");
   }
 }
 
@@ -180,6 +182,7 @@ function applyTheme(theme: Theme): void {
 applyTheme(getStoredTheme());
 
 let state: WealthState = loadState(); // Initial load without UID (will be replaced on auth)
+startInterfaceLanguage(() => state);
 const appPages = new Set([
   "dashboard",
   "portfolio",
@@ -486,7 +489,7 @@ function renderLogin(): void {
       }
     } catch (err) {
       console.error("Sign-in failed:", err);
-      alert("Sign-in failed. Please try again.");
+      uiAlert("Sign-in failed. Please try again.");
       button.disabled = false;
       button.removeAttribute("aria-busy");
     }

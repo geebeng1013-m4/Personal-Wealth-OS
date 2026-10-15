@@ -1,3 +1,5 @@
+import { displayLocale } from "../i18n";
+import { uiConfirm } from "../interfaceLanguage";
 /**
  * Review page — the monthly close and its history.
  *
@@ -48,7 +50,7 @@ function amountOf(value: number): string {
 function monthName(monthKey: string, long = false): string {
   const [year, month] = monthKey.split("-").map(Number);
   if (!year || !month) return monthKey;
-  return new Date(year, month - 1, 1).toLocaleDateString("en-MY", { month: long ? "long" : "short", year: "numeric" });
+  return new Date(year, month - 1, 1).toLocaleDateString(displayLocale(), { month: long ? "long" : "short", year: "numeric" });
 }
 
 /*
@@ -83,7 +85,7 @@ function checkinsCard(board: CheckinBoard): string {
       <div class="wu-tc__top"><span class="wu-label" id="checkinsLabel">Check-ins</span>${due.length ? `<span class="wu-chip wu-chip--warning">${due.length} due</span>` : ""}</div>
       ${acknowledged ? `<p class="wu-checkins__done" role="status"><span aria-hidden="true">✓</span> ${escapeHtml(acknowledged)}</p>` : ""}
       ${prompt ? `<div class="wu-checkins__prompt">
-        <p>You recorded ${amt(money(prompt.amount))} on ${escapeHtml(new Date(prompt.date + "T00:00").toLocaleDateString("en-MY", { day: "numeric", month: "short" }))}. Is ${escapeHtml(prompt.label.toLowerCase())} paid around the ${prompt.dayOfMonth}${prompt.dayOfMonth % 10 === 1 && prompt.dayOfMonth !== 11 ? "st" : prompt.dayOfMonth % 10 === 2 && prompt.dayOfMonth !== 12 ? "nd" : prompt.dayOfMonth % 10 === 3 && prompt.dayOfMonth !== 13 ? "rd" : "th"} every month?</p>
+        <p>${amtIn(`You recorded ${money(prompt.amount)} on ${new Date(prompt.date + "T00:00").toLocaleDateString(displayLocale(), { day: "numeric", month: "short" })}. Is ${prompt.label.toLowerCase()} paid around the ${prompt.dayOfMonth}${prompt.dayOfMonth % 10 === 1 && prompt.dayOfMonth !== 11 ? "st" : prompt.dayOfMonth % 10 === 2 && prompt.dayOfMonth !== 12 ? "nd" : prompt.dayOfMonth % 10 === 3 && prompt.dayOfMonth !== 13 ? "rd" : "th"} every month?`)}</p>
         <div class="wu-row wu-row--tight"><button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-pay-prompt="yes">Yes, save as monthly income</button><button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-pay-prompt="no">It changes</button></div>
       </div>` : ""}
       ${due.length ? `<ul class="wu-checkins__list">
@@ -362,7 +364,7 @@ export function bindReview(root: HTMLElement, state: WealthState, setState: Sett
       return;
     }
     // A month already on record is replaced, after asking, rather than listed twice.
-    if (state.reviews.some((review) => review.month === month) && !confirm(`Replace the ${monthName(month, true)} review?`)) return;
+    if (state.reviews.some((review) => review.month === month) && !uiConfirm(`Replace the ${monthName(month, true)} review?`)) return;
     const { reviews } = upsertReview(state.reviews, {
       id: createId("review"),
       month,
@@ -381,7 +383,7 @@ export function bindReview(root: HTMLElement, state: WealthState, setState: Sett
   root.querySelectorAll<HTMLButtonElement>(".delete-review").forEach((button) => {
     button.addEventListener("click", () => {
       const id = button.dataset.id;
-      if (!id || !confirm("Delete this review?")) return;
+      if (!id || !uiConfirm("Delete this review?")) return;
       const next = { ...state, reviews: state.reviews.filter((r) => r.id !== id) };
       openReviewId = null;
       setState(next);

@@ -1,3 +1,4 @@
+import { displayLocale } from "../i18n";
 /**
  * The line under the Ledger's income form that says what the payment is for.
  *
@@ -16,7 +17,7 @@ import { amt, escapeHtml } from "../html";
 function monthName(monthKey: string): string {
   const [year, month] = monthKey.split("-").map(Number);
   if (!year || !month) return monthKey;
-  return new Date(year, month - 1, 1).toLocaleDateString("en-MY", { month: "long" });
+  return new Date(year, month - 1, 1).toLocaleDateString(displayLocale(), { month: "long" });
 }
 
 export function incomeRoutingHint(state: WealthState, input: IncomeRoutingInput): string {

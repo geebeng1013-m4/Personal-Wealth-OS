@@ -39,6 +39,7 @@
         try {
           var stored = localStorage.getItem('pwo-theme');
           if (stored === 'light' || stored === 'dark') theme = stored;
+          document.documentElement.lang = localStorage.getItem('pwo-language') === 'zh-CN' ? 'zh-CN' : 'en';
         } catch (e) {}
         document.documentElement.setAttribute('data-theme', theme);
       })();
@@ -80,6 +81,12 @@
     <div id="stuck" role="alert"><p>WealthUp could not finish loading.</p><button type="button" id="stuck-reload">Reload</button></div>
     <div id="app"></div>
     <script>
+      // Loading failures must also respect the preference when app code never runs.
+      if (document.documentElement.lang === 'zh-CN') {
+        document.querySelector('.skip-link').textContent = '跳到主要内容';
+        document.querySelector('#stuck p').textContent = 'WealthUp 未能完成加载。';
+        document.getElementById('stuck-reload').textContent = '重新加载';
+      }
       // The app is on screen as soon as main.ts has put anything in #app: the
       // sign-in page, the new-user Q&A or the app itself. Nothing covers the
       // wait any more — the logo launch screen was removed on request — so

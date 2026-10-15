@@ -9,6 +9,7 @@
 
 import type { AssistantMode } from "./assistantTypes";
 import { dailyLimitMessage } from "./quotaMessage";
+import { getLanguage } from "../../i18n";
 
 /**
  * The deployed function. Overridable so a local run can point at the Firebase
@@ -101,7 +102,7 @@ function messageForStatus(status: number, body: unknown, mode: AssistantMode): s
     // moment: it lasts until midnight, so say when it comes back instead of
     // "try again shortly".
     if ((body as { reason?: unknown } | null)?.reason === "daily-quota") {
-      return dailyLimitMessage((body as { retryAt?: unknown }).retryAt, new Date(), undefined, mode);
+      return dailyLimitMessage((body as { retryAt?: unknown }).retryAt, new Date(), getLanguage() === "zh-CN" ? "zh-CN" : undefined, mode);
     }
     return serverError || "Too many requests just now. Give it a moment and try again.";
   }

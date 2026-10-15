@@ -1,3 +1,4 @@
+import { displayLocale } from "../i18n";
 /**
  * The Budget page's content — this month's income routed through the plan, the
  * editor for the rules that route it, the months the user actually had, and the
@@ -60,14 +61,14 @@ function figure(value: number): string {
 function monthLabel(monthKey: string): string {
   const [year, month] = monthKey.split("-").map(Number);
   if (!year || !month) return monthKey;
-  return new Date(year, month - 1, 1).toLocaleDateString("en-MY", { month: "long", year: "numeric" });
+  return new Date(year, month - 1, 1).toLocaleDateString(displayLocale(), { month: "long", year: "numeric" });
 }
 
 /** "2026-08" → "Aug 2026". */
 function shortMonth(monthKey: string): string {
   const [year, month] = monthKey.split("-").map(Number);
   if (!year || !month) return monthKey;
-  return new Date(year, month - 1, 1).toLocaleDateString("en-MY", { month: "short", year: "numeric" });
+  return new Date(year, month - 1, 1).toLocaleDateString(displayLocale(), { month: "short", year: "numeric" });
 }
 
 function ruleText(row: AllocationRow): string {

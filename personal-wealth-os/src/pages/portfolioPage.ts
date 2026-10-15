@@ -1,3 +1,5 @@
+import { displayLocale, translateSystemText } from "../i18n";
+import { uiConfirm } from "../interfaceLanguage";
 /**
  * Portfolio page — four figures, the holdings against target, where the next
  * contribution goes and the latest trades. The trade form, the full history,
@@ -837,7 +839,7 @@ function nextContributionBody(state: WealthState, portfolio: PortfolioSnapshot):
 /** A trade's date the way the rest of the tidy pages write it: "1 Sep". */
 function shortDate(date: string): string {
   const parsed = new Date(date);
-  return Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString("en-MY", { day: "numeric", month: "short" });
+  return Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString(displayLocale(), { day: "numeric", month: "short" });
 }
 
 export function portfolioTemplate(state: WealthState): string {
@@ -916,7 +918,7 @@ export function portfolioTemplate(state: WealthState): string {
           <label class="wu-field-row"><span class="wu-field-row__label">Currency</span><select class="wu-field" name="currency" id="pfCurrency" disabled><option>USD</option></select></label>
           <label class="wu-field-row"><span class="wu-field-row__label">Ticker</span><select class="wu-field" name="ticker" id="tickerSelect"><option>VOO</option><option>QQQM</option>${state.customTickers.map((t) => "<option>" + escapeHtml(t) + "</option>").join("")}<option value="__custom__">+ Custom</option></select></label>
           <div id="customTickerWrap" class="wu-field-row--wide" style="display:none;"><label class="wu-field-row"><span class="wu-field-row__label">Custom Ticker</span><input class="wu-field" name="customTicker" id="customTickerInput" type="text" placeholder="e.g. AAPL" style="text-transform:uppercase"></label><small class="t-caption t-faint">The market's suffix is added for you: 1155 on Malaysia becomes 1155.KL.</small></div>
-          <label class="wu-field-row"><span class="wu-field-row__label">Type</span><select class="wu-field" name="type"><option>DCA</option><option>Dip Buy</option><option>Manual Buy</option><option>Sell</option></select></label>
+          <label class="wu-field-row"><span class="wu-field-row__label">Type</span><select class="wu-field" name="type"><option value="DCA">DCA</option><option value="Dip Buy">Dip Buy</option><option value="Manual Buy">Manual Buy</option><option value="Sell">Sell</option></select></label>
           <label class="wu-field-row"><span class="wu-field-row__label">Filled Quantity</span><input class="wu-field" name="units" type="number" min="0" step="0.0001"><small class="t-caption t-faint" id="pfLotsHint" hidden></small></label>
           <label class="wu-field-row"><span class="wu-field-row__label">Price / Unit <span class="pf-cur">USD</span></span><input class="wu-field" name="price" type="number" min="0" step="0.0001"></label>
           <label class="wu-field-row"><span class="wu-field-row__label">Amount <span class="pf-cur">USD</span></span><input class="wu-field" name="amount" type="number" min="0" step="0.01"><small class="t-caption t-faint">Blank = price × quantity</small></label>
@@ -1120,7 +1122,7 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
       // The figures on the statement win, but tax above gross is not a statement.
       if (!(gross > 0) || !(tax >= 0) || tax > gross) {
         const field = root.querySelector<HTMLInputElement>("#divTax");
-        field?.setCustomValidity("Tax cannot be more than the gross payout.");
+        field?.setCustomValidity(translateSystemText("Tax cannot be more than the gross payout."));
         field?.reportValidity();
         return;
       }
@@ -1134,7 +1136,7 @@ export function bindPortfolio(root: HTMLElement, state: WealthState, setState: S
     if (button.classList.contains("div-delete")) {
       const dividend = (state.dividends ?? []).find((item) => item.id === id);
       if (!dividend) return;
-      if (!confirm(`Remove the ${dividend.ticker} dividend with ex-date ${dividend.exDate}?
+      if (!uiConfirm(`Remove the ${dividend.ticker} dividend with ex-date ${dividend.exDate}?
 
 It will be suggested again if the feed still carries it.`)) return;
       const next = { ...state, dividends: (state.dividends ?? []).filter((item) => item.id !== id) };
@@ -1218,7 +1220,7 @@ It will be suggested again if the feed still carries it.`)) return;
       }
       exchange = result.exchange;
       if (state.currencyExchanges.some((record) => record.id === exchange?.id)
-        && !confirm("This exchange is already in your history. Link that existing record to this buy instead of adding a duplicate?")) return;
+        && !uiConfirm("This exchange is already in your history. Link that existing record to this buy instead of adding a duplicate?")) return;
     }
     const ticker = trade.ticker;
     // Save custom ticker to memory if new
@@ -1307,7 +1309,7 @@ It will be suggested again if the feed still carries it.`)) return;
       return;
     }
     if (state.currencyExchanges.some((record) => record.id === result.exchange.id)
-      && !confirm("This exchange is already in your history. Link that existing record to this buy instead of adding a duplicate?")) return;
+      && !uiConfirm("This exchange is already in your history. Link that existing record to this buy instead of adding a duplicate?")) return;
     const next = withExchangeForTrade(state, trade.id, result.exchange);
     settlementTradeId = null;
     setState(next, "Recorded actual trade settlement");
@@ -1366,7 +1368,7 @@ It will be suggested again if the feed still carries it.`)) return;
     const added = merged.length - existing.length;
     const back = parsed.length - intoUsd.length;
 
-    const confirmed = confirm(
+    const confirmed = uiConfirm(
       `Found ${parsed.length} conversions, ${parsed[0].date} to ${parsed[parsed.length - 1].date}.\n\n` +
       (intoUsd.length > 0
         ? `Into USD: ${money(myr)} → USD ${usd.toFixed(2)}, average ${rateText(usd > 0 ? myr / usd : 0)}\n`
@@ -1391,7 +1393,7 @@ It will be suggested again if the feed still carries it.`)) return;
       const sides = sidesOf(record);
       const leg = sides ? ringgitLeg(sides) : null;
       if (!leg) return;
-      const confirmed = confirm(
+      const confirmed = uiConfirm(
         `Delete the ${record.date} conversion of ${money(leg.myrAmount)} and ${leg.currency} ${leg.foreignAmount.toFixed(2)}?\n\n` +
         "The ringgit cost of any holding it funded will be recalculated from the remaining exchange records or the stored trade amounts.",
       );
@@ -1405,7 +1407,7 @@ It will be suggested again if the feed still carries it.`)) return;
   root.querySelector<HTMLButtonElement>(".clear-exchanges")?.addEventListener("click", () => {
     const count = (state.currencyExchanges ?? []).length;
     if (count === 0) return;
-    const confirmed = confirm(
+    const confirmed = uiConfirm(
       `Delete all ${count} currency ${count === 1 ? "conversion" : "conversions"}?\n\n` +
       "Ringgit costs will use the amounts saved on your trades, without exchange records to verify them. Your trades and all dollar figures are untouched. This cannot be undone.",
     );
@@ -1422,7 +1424,7 @@ It will be suggested again if the feed still carries it.`)) return;
   root.querySelector<HTMLButtonElement>(".clear-trades")?.addEventListener("click", () => {
     const count = state.trades.length;
     if (count === 0) return;
-    const confirmed = confirm(
+    const confirmed = uiConfirm(
       `Delete all ${count} contribution ${count === 1 ? "record" : "records"}?\n\n` +
       "This clears the entire cost-basis history behind your portfolio — units, average cost and realised P&L will all reset. This cannot be undone.",
     );
@@ -1436,7 +1438,7 @@ It will be suggested again if the feed still carries it.`)) return;
   root.querySelectorAll<HTMLButtonElement>(".delete-trade").forEach((button) => {
     button.addEventListener("click", () => {
       const id = button.dataset.id;
-      if (!id || !confirm("Delete this trade record? Any linked exchange will remain in exchange history, without the trade link.")) return;
+      if (!id || !uiConfirm("Delete this trade record? Any linked exchange will remain in exchange history, without the trade link.")) return;
       const scrollPosition = {
         x: window.scrollX,
         y: window.scrollY,

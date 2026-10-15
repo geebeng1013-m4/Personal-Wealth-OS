@@ -1,3 +1,4 @@
+import { uiConfirm } from "../interfaceLanguage";
 /**
  * Goals page — overall progress, one row per goal, and the editor under it.
  *
@@ -385,7 +386,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
     const data = new FormData(form);
     const result = validateGoalCompletion(String(data.get("spentAmount") ?? ""), String(data.get("spentAt") ?? ""), isoDate(new Date()));
     if (!result.ok) { showError(result.error); return; }
-    if (!confirm(`Record ${goal.label || goal.name} as done on ${result.values.spentAt}, using MYR ${result.values.spentAmount.toFixed(2)}? This keeps the goal done, but does not add a transaction or change account balances.`)) return;
+    if (!uiConfirm(`Record ${goal.label || goal.name} as done on ${result.values.spentAt}, using MYR ${result.values.spentAmount.toFixed(2)}? This keeps the goal done, but does not add a transaction or change account balances.`)) return;
     const goals = state.goals.map((item, position) => position === index ? { ...item, ...result.values } : item);
     const next = { ...state, goals };
     next.financialRules = syncGoalContributionRules(next);
@@ -478,7 +479,7 @@ export function bindGoals(root: HTMLElement, state: WealthState, setState: Sette
   root.querySelectorAll<HTMLButtonElement>(".delete-goal").forEach((button) => {
     button.addEventListener("click", () => {
       const index = Number(button.dataset.index);
-      if (!confirm("Delete this goal?")) return;
+      if (!uiConfirm("Delete this goal?")) return;
       const goals = state.goals.filter((_, i) => i !== index);
       // Re-pick the featured goal through the canonical model so completion
       // here matches what the Goals rows show.

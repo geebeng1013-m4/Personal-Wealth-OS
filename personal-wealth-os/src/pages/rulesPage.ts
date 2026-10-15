@@ -1,3 +1,4 @@
+import { uiConfirm } from "../interfaceLanguage";
 /**
  * Rules page — the rule list and the personal notes beside it, plus the
  * "How WealthUp works" guide.
@@ -332,7 +333,7 @@ export function bindRules(root: HTMLElement, state: WealthState, setState: Sette
   });
   root.querySelectorAll<HTMLButtonElement>(".hide-rule").forEach((button) => button.addEventListener("click", () => {
     const ruleId = button.dataset.ruleId as RuleCardId | undefined;
-    if (!ruleId || state.hiddenRuleIds.includes(ruleId) || !confirm("Hide this rule? You can show it again from the bottom of the list. A snapshot will be saved first.")) return;
+    if (!ruleId || state.hiddenRuleIds.includes(ruleId) || !uiConfirm("Hide this rule? You can show it again from the bottom of the list. A snapshot will be saved first.")) return;
     openRuleId = null;
     repaint({ ...state, hiddenRuleIds: [...state.hiddenRuleIds, ruleId] }, "Delete rule card");
   }));
@@ -364,7 +365,7 @@ export function bindRules(root: HTMLElement, state: WealthState, setState: Sette
   }));
   root.querySelectorAll<HTMLButtonElement>(".delete-rule-notes").forEach((button) => button.addEventListener("click", () => {
     const noteId = button.dataset.noteId;
-    if (!confirm("Delete this rule note? A snapshot will be saved first.")) return;
+    if (!uiConfirm("Delete this rule note? A snapshot will be saved first.")) return;
     editingNoteId = null;
     if (noteId && noteId !== LEGACY_NOTE_ID) {
       repaint({ ...state, ruleNotesList: state.ruleNotesList.filter((note) => note.id !== noteId) }, "Delete rule note");

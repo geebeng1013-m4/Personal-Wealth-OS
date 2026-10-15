@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getLanguage } from "../i18n";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, type TooltipContentProps } from "recharts";
 import {
   calculateInvestmentGrowth,
@@ -30,7 +31,7 @@ const whole = new Intl.NumberFormat("en-MY", { maximumFractionDigits: 0 });
 const amount = (value: number): string => whole.format(value);
 
 function compactMoney(value: number): string {
-  return new Intl.NumberFormat("en-MY", {
+  return new Intl.NumberFormat(getLanguage() === "zh-CN" ? "zh-CN" : "en-MY", {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
@@ -272,7 +273,7 @@ export function InvestmentGrowthCalculator() {
                   <linearGradient id="interestFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--accent)" stopOpacity={0.4} /><stop offset="100%" stopColor="var(--accent)" stopOpacity={0.08} /></linearGradient>
                 </defs>
                 <CartesianGrid stroke="var(--border-subtle)" vertical={false} />
-                <XAxis dataKey="month" type="number" domain={[0, years * 12]} ticks={yearTicks} stroke="var(--text-faint)" tickLine={false} axisLine={false} tickFormatter={(value: number) => value === 0 ? "0" : `${value / 12}Y`} fontSize={11} />
+                <XAxis dataKey="month" type="number" domain={[0, years * 12]} ticks={yearTicks} stroke="var(--text-faint)" tickLine={false} axisLine={false} tickFormatter={(value: number) => value === 0 ? "0" : `${value / 12}${getLanguage() === "zh-CN" ? "年" : "Y"}`} fontSize={11} />
                 <YAxis stroke="var(--text-faint)" tickLine={false} axisLine={false} tickFormatter={compactMoney} width={44} fontSize={11} />
                 <Tooltip content={GrowthTooltip} cursor={{ stroke: "var(--border-strong)", strokeWidth: 1, strokeDasharray: "4 4" }} />
                 <Area type="monotone" dataKey="principal" name="principal" stackId="growth" stroke="var(--highlight)" fill="url(#principalFill)" strokeWidth={2} activeDot={{ r: 4, strokeWidth: 2, fill: "var(--surface-bg)" }} />

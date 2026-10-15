@@ -1,3 +1,4 @@
+import { uiAlert, uiConfirm } from "./interfaceLanguage";
 import type { WealthState } from "./models";
 import { ALL_PAGES, PAGE_GROUPS, PHONE_TABS, type Page } from "./pageDirectory";
 import { emptyState, exportState, importStateFromFile, loadSnapshots, restoreSnapshot, clearSnapshots, forgetLocalState, IMPORT_SNAPSHOT_LABEL, type Snapshot } from "./state";
@@ -29,6 +30,8 @@ import { settleTabbarLens } from "./liquidGlass";
 import { mountSidebarScrollbar } from "./overlayScrollbar";
 import { buildCheckins } from "./checkins";
 import { mountTitleBar } from "./titleBar";
+import { checkinsDueText, getLanguage, setLanguage, t } from "./i18n";
+import { localizeInterface, syncDocumentLanguage, userDisplayValues } from "./interfaceLanguage";
 
 // Created on the first render that has a shell, then reused by every later
 // one (see createSideRays): rebuilding it made the light jump on each click.
@@ -83,14 +86,14 @@ const BACK_TO_MORE_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>';
 
 function backToMoreButton(): string {
-  return `<button class="wu-page-back" data-page="more" type="button" aria-label="Back to More"><span aria-hidden="true">${BACK_TO_MORE_ICON}</span></button>`;
+  return `<button class="wu-page-back" data-page="more" type="button" aria-label="${t("Back to More")}"><span aria-hidden="true">${BACK_TO_MORE_ICON}</span></button>`;
 }
 
 function tabbarTemplate(activePage: string, checkinsDue: number): string {
   const items = primaryTabs
     .map(([id, label, icon]) => {
       const on = id === activePage;
-      return `<button class="tabbar__btn${on ? " is-active" : ""}" data-page="${id}" type="button"${on ? ' aria-current="page"' : ""}><span class="tabbar__icon" aria-hidden="true">${icon}</span><span class="tabbar__label">${label}</span></button>`;
+      return `<button class="tabbar__btn${on ? " is-active" : ""}" data-page="${id}" type="button"${on ? ' aria-current="page"' : ""}><span class="tabbar__icon" aria-hidden="true">${icon}</span><span class="tabbar__label">${t(label)}</span></button>`;
     })
     .join("");
   // "More" is a real page (moreTemplate) listing everything that is not one of
@@ -98,11 +101,11 @@ function tabbarTemplate(activePage: string, checkinsDue: number): string {
   // from it, so the bar never shows nothing selected.
   const moreActive = !primaryTabs.some(([id]) => id === activePage);
   // Review lives under More on a phone, so due check-ins mark More (P-6a).
-  const more = `<button class="tabbar__btn tabbar__btn--more${moreActive ? " is-active" : ""}${checkinsDue ? " has-due" : ""}" data-page="more" type="button"${checkinsDue ? ` aria-label="More, ${checkinsDue} check-in${checkinsDue > 1 ? "s" : ""} due"` : ""}><span class="tabbar__icon" aria-hidden="true">${TAB_ICONS.more}</span><span class="tabbar__label">More</span></button>`;
+  const more = `<button class="tabbar__btn tabbar__btn--more${moreActive ? " is-active" : ""}${checkinsDue ? " has-due" : ""}" data-page="more" type="button"${checkinsDue ? ` aria-label="${t("More")}, ${checkinsDueText(checkinsDue)}"` : ""}><span class="tabbar__icon" aria-hidden="true">${TAB_ICONS.more}</span><span class="tabbar__label">${t("More")}</span></button>`;
   // The lens is the liquid-glass pill under the active tab; liquidGlass.ts
   // slides it over from the previous tab after each render.
   const tabCount = primaryTabs.length + 1;
-  return `<nav class="tabbar wu-glass wu-glass--press" aria-label="Primary" style="--tab-count:${tabCount}"><span class="tabbar__lens" aria-hidden="true"></span>${items}${more}</nav>`;
+  return `<nav class="tabbar wu-glass wu-glass--press" aria-label="${t("Primary")}" style="--tab-count:${tabCount}"><span class="tabbar__lens" aria-hidden="true"></span>${items}${more}</nav>`;
 }
 
 /*
@@ -128,7 +131,7 @@ const MORE_ICONS: Record<string, string> = {
 function moreRow(id: string, label: string, sub: string, due = false): string {
   return `<button class="more-row" data-page="${id}" type="button">`
     + `<span class="more-row__icon" aria-hidden="true">${MORE_ICONS[id] ?? ""}</span>`
-    + `<span class="more-row__text"><span class="more-row__label">${escapeHtml(label)}</span>`
+    + `<span class="more-row__text"><span class="more-row__label">${escapeHtml(t(label))}</span>`
     + (sub ? `<span class="more-row__sub${due ? " is-due" : ""}">${escapeHtml(sub)}</span>` : "")
     + `</span><span class="more-row__chev" aria-hidden="true">›</span></button>`;
 }
@@ -142,19 +145,19 @@ function moreTemplate(checkinsDue: number): string {
         .map(([id, english, sub]) => moreRow(id, english, navSubtitle(id, sub, checkinsDue), id === "review" && checkinsDue > 0))
         .join("");
       return rows
-        ? `<section class="more-group"><p class="more-group__title t-overline">${escapeHtml(title)}</p><div class="more-group__rows">${rows}</div></section>`
+        ? `<section class="more-group"><p class="more-group__title t-overline">${escapeHtml(t(title))}</p><div class="more-group__rows">${rows}</div></section>`
         : "";
     })
     .join("");
   return `<div class="wu">
-    ${pageHeader({ title: "More", sub: "Everything else WealthUp does." })}
+    ${pageHeader({ title: t("More"), sub: t("Everything else WealthUp does.") })}
     <div class="more-list">${groups}</div>
   </div>`;
 }
 
 /** A page's subtitle, except Review's while check-ins are due (P-6a, sidebar option A). */
 function navSubtitle(id: string, subtitle: string, checkinsDue: number): string {
-  return id === "review" && checkinsDue > 0 ? `${checkinsDue} check-in${checkinsDue > 1 ? "s" : ""} due` : subtitle;
+  return id === "review" && checkinsDue > 0 ? checkinsDueText(checkinsDue) : t(subtitle);
 }
 
 function navTemplate(activePage: string, checkinsDue: number): string {
@@ -163,9 +166,9 @@ function navTemplate(activePage: string, checkinsDue: number): string {
     .map(([groupTitle, groupPages]) => {
       const items = groupPages.map(([id, english, chinese]) => {
         const index = pageIndex++;
-        return `<button class="nav-item ${id === activePage ? "active" : ""}" data-page="${id}" type="button" style="--nav-index:${index}"${id === activePage ? ' aria-current="page"' : ""}><i class="nav-node" aria-hidden="true"></i><span class="nav-label"><strong>${english}</strong><small${id === "review" && checkinsDue > 0 ? ' class="nav-due"' : ""}>${navSubtitle(id, chinese, checkinsDue)}</small></span></button>`;
+        return `<button class="nav-item ${id === activePage ? "active" : ""}" data-page="${id}" type="button" style="--nav-index:${index}"${id === activePage ? ' aria-current="page"' : ""}><i class="nav-node" aria-hidden="true"></i><span class="nav-label"><strong>${escapeHtml(t(english))}</strong><small${id === "review" && checkinsDue > 0 ? ' class="nav-due"' : ""}>${escapeHtml(navSubtitle(id, chinese, checkinsDue))}</small></span></button>`;
       }).join("");
-      return `<div class="nav-group"><div class="nav-group-title">${groupTitle}</div><div class="nav-group-items">${items}</div></div>`;
+      return `<div class="nav-group"><div class="nav-group-title">${t(groupTitle)}</div><div class="nav-group-items">${items}</div></div>`;
     })
     .join("");
 }
@@ -175,7 +178,7 @@ function shellTemplate(activePage: string, state: WealthState): string {
   const checkinsDue = buildCheckins(state).dueCount;
   const active = pages.find(([id]) => id === activePage);
   return `
-    <button class="hamburger" id="sidebarToggle" type="button" aria-label="Open navigation" aria-expanded="false">☰</button>
+    <button class="hamburger" id="sidebarToggle" type="button" aria-label="${t("Open navigation")}" aria-expanded="false">☰</button>
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-scroll">
@@ -187,11 +190,11 @@ function shellTemplate(activePage: string, state: WealthState): string {
             <p>Personal Wealth OS</p>
           </span>
         </div>
-        <nav class="nav line-sidebar" aria-label="Primary navigation">
+        <nav class="nav line-sidebar" aria-label="${t("Primary navigation")}">
           ${navTemplate(activePage, checkinsDue)}
         </nav>
-        <button class="profile-card" data-page="me" type="button" aria-label="Wealth Mandate: open Me">
-          <span class="eyebrow">Wealth Mandate</span>
+        <button class="profile-card" data-page="me" type="button" aria-label="${t("Wealth Mandate: open Me")}">
+          <span class="eyebrow">${t("Wealth Mandate")}</span>
           <strong>${escapeHtml(state.profile.riskTolerance)} risk · ${state.profile.investmentHorizonYears}+ years</strong>
           <small>${escapeHtml(state.profile.stage)} · MYR base currency</small>
         </button>
@@ -199,7 +202,7 @@ function shellTemplate(activePage: string, state: WealthState): string {
       <div class="sidebar-scrollbar" aria-hidden="true" hidden></div>
       </div>
       <div class="sidebar-actions">
-        <p class="sidebar-disclaimer">${DISCLAIMER_SHORT}</p>
+        <p class="sidebar-disclaimer">${t(DISCLAIMER_SHORT)}</p>
       </div>
     </aside>
     <main id="main-content" class="main">
@@ -211,8 +214,8 @@ function shellTemplate(activePage: string, state: WealthState): string {
         <span class="mobile-brandbar__name">WealthUp</span>
       </header>
       <div class="titlebar wu-glass wu-glass--bar" aria-hidden="true">
-        <strong class="titlebar__title">${active?.[1] ?? "Overview"}</strong>
-        <span class="titlebar__sub">${active?.[2] ?? "Dashboard"}</span>
+        <strong class="titlebar__title">${t(active?.[1] ?? "Overview")}</strong>
+        <span class="titlebar__sub">${t(active?.[2] ?? "Financial command centre")}</span>
       </div>
       ${isDemoMode() ? demoBannerTemplate(activePage) : ""}
       <section id="pageMount"></section>
@@ -237,6 +240,7 @@ function shellTemplate(activePage: string, state: WealthState): string {
  */
 
 export function renderApp(root: HTMLElement, state: WealthState, setState: Setter, activePage = "dashboard", navigate?: Navigate, user?: AppUser, onLogout?: () => void): void {
+  syncDocumentLanguage();
   const previousPage = root.querySelector<HTMLElement>("#pageMount")?.dataset.page;
   document.body.classList.toggle("mask-financial-amounts", state.privacy.maskAmounts);
   const currentSidebarScrollArea = root.querySelector<HTMLElement>(".sidebar-scroll-area");
@@ -347,6 +351,7 @@ export function renderApp(root: HTMLElement, state: WealthState, setState: Sette
   // A "Get started" step picked on the Dashboard points at its field here,
   // once this page is fully wired (F-7).
   runQueuedGuide(root, activePage);
+  localizeInterface(root, userDisplayValues(state));
 }
 
 function keepActiveNavigationVisible(root: HTMLElement): void {
@@ -389,7 +394,7 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
 
   root.querySelector<HTMLButtonElement>("#demoReset")?.addEventListener("click", () => {
     const uid = user?.uid;
-    if (!uid || !confirm("Reset the demo? Changes made here are cleared and the sample data comes back.")) return;
+    if (!uid || !uiConfirm("Reset the demo? Changes made here are cleared and the sample data comes back.")) return;
     forgetLocalState(uid);
     window.location.reload();
   });
@@ -422,6 +427,20 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     w.__pwo?.toggleTheme();
     renderApp(root, state, setState, activePageFromNav(root) ?? "dashboard", navigate, user);
   });
+  bindAll("[data-language]", "change", (event) => {
+    const select = event.currentTarget as HTMLSelectElement;
+    if (!setLanguage(select.value)) {
+      select.value = getLanguage();
+      const error = root.querySelector<HTMLElement>("#languageError");
+      if (error) {
+        error.textContent = t("Could not save the language preference. Check this browser's storage settings and try again.");
+        error.hidden = false;
+      }
+      return;
+    }
+    renderApp(root, state, setState, "settings", navigate, user, onLogout);
+    root.querySelector<HTMLSelectElement>("[data-language]")?.focus({ preventScroll: true });
+  });
 
   bindAll(".logout-btn", "click", () => {
     onLogout?.();
@@ -440,7 +459,7 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
   bindSidebar(root);
 
   bindAll("[data-tool='export']", "click", () => {
-    if (state.privacy.requireExportConfirmation && !confirm("Export a file containing your financial data? Store it securely.")) return;
+    if (state.privacy.requireExportConfirmation && !uiConfirm(t("Export a file containing your financial data? Store it securely."))) return;
     exportState(state);
   });
   bindAll("[data-tool='import']", "change", async (event) => {
@@ -449,7 +468,7 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     if (!file) return;
     // Settings no longer spells out that Import replaces everything, so the
     // confirmation does. Clearing the input lets the same file be picked again.
-    if (!confirm("Replace all your data with this file? Your current data will be saved to Version History first.")) {
+    if (!uiConfirm(t("Replace all your data with this file? Your current data will be saved to Version History first."))) {
       input.value = "";
       return;
     }
@@ -470,7 +489,7 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
   });
 
   bindAll("[data-tool='reset']", "click", () => {
-    if (!confirm("Reset to a blank Personal Wealth OS? Your current data will be saved to Version History first, and can be restored from there.")) return;
+    if (!uiConfirm(t("Reset to a blank Personal Wealth OS? Your current data will be saved to Version History first, and can be restored from there."))) return;
     // A blank state, as the dialog says — not the sample "Student Investor"
     // template (sample goals, a MYR 400 bear-market reserve) it used to load.
     const next = emptyState();
@@ -567,7 +586,7 @@ function renderVersionHistoryModal(root: HTMLElement, setState: Setter, snapshot
 
   // Clear all
   modal.querySelector("#clearAllSnapshots")?.addEventListener("click", () => {
-    if (!confirm("Clear all version history? This cannot be undone.")) return;
+    if (!uiConfirm("Clear all version history? This cannot be undone.")) return;
     clearSnapshots(uid);
     modal.remove();
   });
@@ -577,9 +596,9 @@ function renderVersionHistoryModal(root: HTMLElement, setState: Setter, snapshot
     btn.addEventListener("click", () => {
       const snapId = btn.dataset.id;
       if (!snapId) return;
-      if (!confirm("Restore this version? Your current state will be saved as a snapshot first.")) return;
+      if (!uiConfirm("Restore this version? Your current state will be saved as a snapshot first.")) return;
       const restored = restoreSnapshot(snapId, uid);
-      if (!restored) { alert("Snapshot not found."); return; }
+      if (!restored) { uiAlert("Snapshot not found."); return; }
       // The dialog above promises the current state is saved first; the label is
       // what does that (saveState snapshots the data on disk before overwriting).
       setState(restored, "Before restore");

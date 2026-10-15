@@ -10,6 +10,7 @@
 
 import type { WealthState } from "../models";
 import { money } from "../rules";
+import { t } from "../i18n";
 import type { Navigate, RenderApp, SessionUser, Setter } from "./pageTypes";
 
 let openEditor: string | null = null;
@@ -52,7 +53,7 @@ export function row(key: string, title: string, value: string, sub: string, edit
   const open = openEditor === key;
   return `<li class="wu-set__item${only ? ` wu-set__item--${only}` : ""}${open ? " is-open" : ""}">
       <button class="wu-set__row" type="button" data-edit="${key}" aria-expanded="${open}">
-        <span class="wu-set__title">${title}${sub ? `<small>${sub}</small>` : ""}</span>
+        <span class="wu-set__title">${t(title)}${sub ? `<small>${sub}</small>` : ""}</span>
         <span class="wu-set__value">${value}<span class="wu-set__chev" aria-hidden="true">›</span></span>
       </button>
       ${open ? `<div class="wu-set__editor">${editor()}</div>` : ""}
@@ -65,7 +66,7 @@ export function row(key: string, title: string, value: string, sub: string, edit
  * without it the column jogs right on the one row that cannot be tapped.
  */
 export function staticRow(title: string, value: string, only: "" | "phone" | "desk" = ""): string {
-  return `<li class="wu-set__item${only ? ` wu-set__item--${only}` : ""}"><div class="wu-set__row wu-set__row--static"><span class="wu-set__title">${title}</span><span class="wu-set__value">${value}<span class="wu-set__chev wu-set__chev--ghost" aria-hidden="true">›</span></span></div></li>`;
+  return `<li class="wu-set__item${only ? ` wu-set__item--${only}` : ""}"><div class="wu-set__row wu-set__row--static"><span class="wu-set__title">${t(title)}</span><span class="wu-set__value">${value}<span class="wu-set__chev wu-set__chev--ghost" aria-hidden="true">›</span></span></div></li>`;
 }
 
 /** A group: its name above the list on a phone, inside the card's top-left on a desktop. */

@@ -14,6 +14,7 @@
  */
 
 import type { WealthState } from "../models";
+import { getLanguage } from "../i18n";
 import { amt, escapeHtml, getTheme } from "../html";
 import { pageHeader } from "../components/pageHeader";
 import { UNKNOWN } from "./valuationFormat";
@@ -602,7 +603,7 @@ export function bindMarket(root: HTMLElement, state: WealthState, setState: Sett
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       theme: isDark ? "dark" : "light",
       style: "1",
-      locale: "en",
+      locale: getLanguage() === "zh-CN" ? "zh_CN" : "en",
       hide_volume: true,
       allow_symbol_change: !isPhone,
       hide_top_toolbar: isPhone,

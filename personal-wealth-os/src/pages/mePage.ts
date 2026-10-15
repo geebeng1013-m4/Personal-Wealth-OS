@@ -151,7 +151,7 @@ function accountCard(state: WealthState, user?: SessionUser): string {
 }
 
 export function meTemplate(state: WealthState, user?: SessionUser): string {
-  const opt = (v: string, sel: boolean) => `<option${sel ? " selected" : ""}>${escapeHtml(v)}</option>`;
+  const opt = (v: string, sel: boolean) => `<option value="${escapeHtml(v)}"${sel ? " selected" : ""}>${escapeHtml(v)}</option>`;
   const profile = state.profile;
   // A stage saved outside the four presets (the demo's "18-22 / University
   // Year 3") is offered as its own option, so saving never swaps it for Student.

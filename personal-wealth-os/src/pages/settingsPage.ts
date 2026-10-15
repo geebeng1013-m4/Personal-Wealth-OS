@@ -13,6 +13,7 @@ import { pageHeader } from "../components/pageHeader";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 import { bindRowPage, group } from "./settingsRows";
 import { isDemoMode } from "../demo";
+import { getLanguage, t } from "../i18n";
 
 /** A switch row: flipping it saves straight away. */
 function toggleRow(name: "maskAmounts" | "requireExportConfirmation", title: string, checked: boolean): string {
@@ -25,37 +26,38 @@ function toggleRow(name: "maskAmounts" | "requireExportConfirmation", title: str
 /** A data-tool row; ui.ts binds the behaviour. */
 function toolRow(tool: string, title: string, value = ""): string {
   if (tool === "import") {
-    return `<li class="wu-set__item"><label class="wu-set__row file-button"><span class="wu-set__title">${title}</span><span class="wu-set__value">${value}<span class="wu-set__chev" aria-hidden="true">›</span></span><input data-tool="import" type="file" accept="application/json" aria-label="Import data"></label></li>`;
+    return `<li class="wu-set__item"><label class="wu-set__row file-button"><span class="wu-set__title">${title}</span><span class="wu-set__value">${value}<span class="wu-set__chev" aria-hidden="true">›</span></span><input data-tool="import" type="file" accept="application/json" aria-label="${t("Import data")}"></label></li>`;
   }
   return `<li class="wu-set__item"><button class="wu-set__row" data-tool="${tool}" type="button"><span class="wu-set__title">${title}</span><span class="wu-set__value">${value}<span class="wu-set__chev" aria-hidden="true">›</span></span></button></li>`;
 }
 
 export function settingsTemplate(state: WealthState): string {
-  const theme = typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "light" ? "Light" : "Dark";
+  const theme = t(typeof document !== "undefined" && document.documentElement.getAttribute("data-theme") === "light" ? "Light" : "Dark");
 
   const privacyRows = [
-    toggleRow("maskAmounts", "Mask amounts on screen", state.privacy.maskAmounts),
-    toggleRow("requireExportConfirmation", "Confirm before exporting", state.privacy.requireExportConfirmation),
+    toggleRow("maskAmounts", t("Mask amounts on screen"), state.privacy.maskAmounts),
+    toggleRow("requireExportConfirmation", t("Confirm before exporting"), state.privacy.requireExportConfirmation),
   ].join("");
 
   const dataRows = [
-    toolRow("theme", "Theme", theme),
-    toolRow("export", "Export data"),
-    toolRow("import", "Import data"),
-    toolRow("version", "Version history"),
-    toolRow("install", "Add to Home Screen"),
+    `<li class="wu-set__item"><label class="wu-set__row wu-language-row" for="appLanguage"><span class="wu-set__title">${t("Language")}<small>${t("Applies to this browser.")}</small></span><select class="wu-field wu-language-select" id="appLanguage" data-language><option value="en" lang="en"${getLanguage() === "en" ? " selected" : ""}>English</option><option value="zh-CN" lang="zh-CN"${getLanguage() === "zh-CN" ? " selected" : ""}>简体中文</option></select></label><p class="t-caption t-negative" id="languageError" role="alert" hidden></p></li>`,
+    toolRow("theme", t("Theme"), theme),
+    toolRow("export", t("Export data")),
+    toolRow("import", t("Import data")),
+    toolRow("version", t("Version history")),
+    toolRow("install", t("Add to Home Screen")),
   ].join("");
 
   return `
     <div class="wu wu-settings-page">
       ${pageHeader({
-        eyebrow: "Configuration",
-        title: "Settings",
-        sub: "Privacy, your data and how the app looks.",
+        eyebrow: t("Configuration"),
+        title: t("Settings"),
+        sub: t("Privacy, your data and how the app looks."),
       })}
       <div class="wu-dash wu-settings">
-        ${group("setPrivacyLabel", "Privacy", privacyRows, "wu-set--privacy")}
-        ${group("setDataLabel", "Data", dataRows, "wu-set--data")}
+        ${group("setPrivacyLabel", t("Privacy"), privacyRows, "wu-set--privacy")}
+        ${group("setDataLabel", t("Data"), dataRows, "wu-set--data")}
         ${isDemoMode() ? "" : dangerZone()}
       </div>
     </div>
@@ -66,10 +68,10 @@ export function settingsTemplate(state: WealthState): string {
 function dangerZone(): string {
   return `
         <section class="wu-card wu-dash__half wu-set wu-set--danger" aria-labelledby="setDangerLabel">
-          <div class="wu-tc__top wu-set__head"><span class="wu-label" id="setDangerLabel">Danger zone</span></div>
-          <p class="wu-dash__note wu-set__danger-note">Reset clears every record on this device and in the cloud. A copy is saved to Version History first.</p>
-          <div class="wu-dash__actions wu-set__danger-desk"><button class="wu-btn wu-btn--danger wu-btn--sm" data-tool="reset" type="button">Reset all data</button></div>
-          <ul class="wu-set__list wu-set__danger-phone"><li class="wu-set__item"><button class="wu-set__row" data-tool="reset" type="button"><span class="wu-set__title t-negative">Reset all data</span></button></li></ul>
+          <div class="wu-tc__top wu-set__head"><span class="wu-label" id="setDangerLabel">${t("Danger zone")}</span></div>
+          <p class="wu-dash__note wu-set__danger-note">${t("Reset clears every record on this device and in the cloud. A copy is saved to Version History first.")}</p>
+          <div class="wu-dash__actions wu-set__danger-desk"><button class="wu-btn wu-btn--danger wu-btn--sm" data-tool="reset" type="button">${t("Reset all data")}</button></div>
+          <ul class="wu-set__list wu-set__danger-phone"><li class="wu-set__item"><button class="wu-set__row" data-tool="reset" type="button"><span class="wu-set__title t-negative">${t("Reset all data")}</span></button></li></ul>
         </section>`;
 }
 

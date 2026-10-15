@@ -69,6 +69,8 @@ const result = await build({
   format: "esm",
   platform: "node",
   target: "node22",
+  // Page coverage runs outside Vite; keep these fixtures in normal app mode.
+  define: { "import.meta.env": "{}" },
   write: false,
   plugins: [firebaseStubPlugin],
 });

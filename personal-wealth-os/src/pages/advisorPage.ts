@@ -21,6 +21,7 @@
  */
 
 import type { WealthState, OpportunityTranche } from "../models";
+import { t } from "../i18n";
 import type { AdvisorRecommendation } from "../models";
 import { createId } from "../state";
 import { money } from "../rules";
@@ -109,7 +110,7 @@ function guidanceRow(state: WealthState, recommendation: AdvisorRecommendation):
   return `<li class="wu-advice${open ? " is-open" : ""}${done ? " is-done" : ""}" data-recommendation-id="${escapeHtml(recommendation.id)}">
       <button class="wu-advice__row advice-row" type="button" data-advice-id="${escapeHtml(recommendation.id)}" aria-expanded="${open}">
         <i class="wu-advice__dot ${severityDot(recommendation.severity)}" aria-hidden="true"></i>
-        <span class="wu-advice__title">${amtIn(recommendation.title)}<small>${amtIn(recommendation.fact)}</small></span>
+        <span class="wu-advice__title">${amtIn(t(recommendation.title))}<small>${amtIn(recommendation.fact)}</small></span>
         <span class="wu-advice__value">${amtIn(value)}${done ? `<small class="t-positive">Done</small>` : ""}</span>
         <span class="wu-advice__chev" aria-hidden="true">›</span>
       </button>
