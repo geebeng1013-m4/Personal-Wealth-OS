@@ -495,7 +495,7 @@ async function handleAuth(user: User | null): Promise<void> {
     // Every assistant request now says whose it is: the server counts this
     // account's daily allowance and refuses a request with no token. Firebase
     // refreshes the token itself when it is close to expiring.
-    setAssistantTokenProvider(() => user.getIdToken());
+    setAssistantTokenProvider((forceRefresh) => user.getIdToken(forceRefresh));
 
     const userStorageKey = `personal-wealth-os-state-${user.uid}`;
     const hasLocalData = localStorage.getItem(userStorageKey) !== null;

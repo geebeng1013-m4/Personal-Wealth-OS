@@ -16,7 +16,7 @@ import {
 } from "./firebase";
 
 export const STORAGE_KEY = "personal-wealth-os-state";
-export const CURRENT_VERSION = 32;
+export const CURRENT_VERSION = 33;
 
 function deviceId(): string {
   const key = "personal-wealth-os-device-id";
@@ -300,6 +300,7 @@ export const defaultState: WealthState = {
   dividends: [],
   financialGoal: "",
   onboardingDone: false,
+  homeActionDismissed: false,
   onboardingAnswers: null,
   checkins: { ...EMPTY_CHECKIN_STATE },
 };
@@ -423,6 +424,7 @@ function emptyStateBase(): WealthState {
     dividends: [],
     financialGoal: "",
     onboardingDone: false,
+    homeActionDismissed: false,
     onboardingAnswers: null,
     checkins: { ...EMPTY_CHECKIN_STATE },
   };
@@ -795,6 +797,8 @@ export function migrateState(input: Partial<WealthState>): WealthState {
   // older accounts start false and get the checklist like any new user.
   merged.onboardingDone = candidate.onboardingDone === true
     || ((input.version ?? 0) < 25 && buildOnboardingChecklist(merged).doneCount > 0);
+  // v33: hiding the daily action card is separate from completing onboarding.
+  merged.homeActionDismissed = candidate.homeActionDismissed === true;
   // v26: the first-run Q&A's answers. Purely additive — older data has none
   // (null), which only shows the quiz to an account that is still empty (see
   // shouldShowOnboardingQuiz); a stored answer set is tidied, never dropped.

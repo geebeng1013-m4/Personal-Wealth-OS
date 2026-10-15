@@ -287,6 +287,7 @@ export const danielDemoState: WealthState = {
   financialGoal: "Own our first home and fully fund Sophia's university, with six months of safety first.",
   // An established user: no new-user checklist or Q&A.
   onboardingDone: true,
+  homeActionDismissed: false,
   onboardingAnswers: null,
   checkins: { weeklyCheckedOn: "", payPromptAnswered: false },
 };

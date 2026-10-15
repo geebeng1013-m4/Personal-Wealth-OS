@@ -504,6 +504,8 @@ export interface WealthState {
    * the state so it stays gone on every device. (v25)
    */
   onboardingDone: boolean;
+  /** v33: user dismissed the Overview's daily action card. */
+  homeActionDismissed: boolean;
   /**
    * What the new user answered in the first-run Q&A, or null if they have not
    * taken or skipped it. Kept after "Start my plan" so the Overview can say

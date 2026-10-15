@@ -199,11 +199,12 @@ export function reviewTemplate(state: WealthState): string {
           <form id="reviewForm" class="wu-grid wu-grid--2">
             <label class="wu-field-row"><span class="wu-field-row__label">Month</span><input class="wu-field" name="month" type="month" required value="${month}"></label>
             <label class="wu-field-row"><span class="wu-field-row__label">DCA done?</span><select class="wu-field" name="dcaDone"><option value="true"${close.dcaDone ? " selected" : ""}>Yes</option><option value="false"${!close.dcaDone ? " selected" : ""}>No</option></select></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Income MYR</span><input class="wu-field" name="income" type="number" min="0" step="1" value="${snapshot.currentMonthIncome}"></label>
-            <label class="wu-field-row"><span class="wu-field-row__label">Spending MYR</span><input class="wu-field" name="spending" type="number" min="0" step="1" value="${snapshot.currentMonthExpenses}"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Income MYR</span><input class="wu-field" name="income" type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" title="Enter zero or a positive amount with up to two decimal places, e.g. 123.45" required value="${snapshot.currentMonthIncome.toFixed(2)}"></label>
+            <label class="wu-field-row"><span class="wu-field-row__label">Spending MYR</span><input class="wu-field" name="spending" type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" title="Enter zero or a positive amount with up to two decimal places, e.g. 123.45" required value="${snapshot.currentMonthExpenses.toFixed(2)}"></label>
             <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Discipline score (out of 10)</span><input class="wu-field" name="disciplineScore" type="number" min="0" max="10" step="0.1" value="${scoreOutOfTen(close.disciplineScore)}"></label>
             <p class="wu-field-row--wide t-caption t-faint" id="reviewCalcNote">${calcNoteHtml(snapshot.currentMonthIncome, snapshot.currentMonthExpenses, close.dcaInvested)}</p>
             <label class="wu-field-row wu-field-row--wide"><span class="wu-field-row__label">Notes</span><textarea class="wu-field" name="notes" rows="4" placeholder="This month's cash flow, investment discipline, and next month's actions"></textarea></label>
+            <p class="wu-field-row--wide t-negative" id="reviewFormError" role="alert" hidden></p>
             <div class="wu-row wu-field-row--wide"><button class="wu-btn wu-btn--primary wu-btn--sm" type="submit">Save review</button></div>
           </form>
         </section>
@@ -314,6 +315,14 @@ export function bindReview(root: HTMLElement, state: WealthState, setState: Sett
   });
 
   const form = root.querySelector<HTMLFormElement>("#reviewForm");
+  const showFormError = (message: string): void => {
+    const error = root.querySelector<HTMLElement>("#reviewFormError");
+    if (error) {
+      error.textContent = message;
+      error.hidden = !message;
+    }
+  };
+  form?.addEventListener("input", () => showFormError(""));
 
   // Re-seed Income / Spending / Discipline / DCA from the ledger for whatever
   // month is now selected, so switching months shows that month's recorded
@@ -327,8 +336,10 @@ export function bindReview(root: HTMLElement, state: WealthState, setState: Sett
       const field = form.querySelector<HTMLInputElement>(`input[name="${name}"]`);
       if (field) field.value = String(value);
     };
-    setNum("income", Math.round(totals.income));
-    setNum("spending", Math.round(totals.expenses));
+    const incomeField = form.querySelector<HTMLInputElement>('input[name="income"]');
+    const spendingField = form.querySelector<HTMLInputElement>('input[name="spending"]');
+    if (incomeField) incomeField.value = totals.income.toFixed(2);
+    if (spendingField) spendingField.value = totals.expenses.toFixed(2);
     setNum("disciplineScore", scoreOutOfTen(close.disciplineScore));
     const dcaSelect = form.querySelector<HTMLSelectElement>('select[name="dcaDone"]');
     if (dcaSelect) dcaSelect.value = close.dcaDone ? "true" : "false";
@@ -340,13 +351,23 @@ export function bindReview(root: HTMLElement, state: WealthState, setState: Sett
     event.preventDefault();
     const data = new FormData(event.currentTarget as HTMLFormElement);
     const month = String(data.get("month") ?? "");
+    const rawIncome = String(data.get("income") ?? "");
+    const rawSpending = String(data.get("spending") ?? "");
+    const income = Number(rawIncome);
+    const spending = Number(rawSpending);
+    const amountPattern = /^[0-9]+([.][0-9]{1,2})?$/;
+    if (!amountPattern.test(rawIncome) || !amountPattern.test(rawSpending)
+      || !Number.isFinite(income) || !Number.isFinite(spending) || income < 0 || spending < 0) {
+      showFormError("Income and spending must be zero or positive amounts with up to two decimal places.");
+      return;
+    }
     // A month already on record is replaced, after asking, rather than listed twice.
     if (state.reviews.some((review) => review.month === month) && !confirm(`Replace the ${monthName(month, true)} review?`)) return;
     const { reviews } = upsertReview(state.reviews, {
       id: createId("review"),
       month,
-      income: Number(data.get("income")) || 0,
-      spending: Number(data.get("spending")) || 0,
+      income,
+      spending,
       dcaDone: String(data.get("dcaDone")) === "true",
       disciplineScore: scoreOutOfTen(Number(data.get("disciplineScore")) || 0),
       notes: String(data.get("notes") ?? ""),

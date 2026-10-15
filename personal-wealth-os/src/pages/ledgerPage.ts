@@ -344,7 +344,7 @@ export function ledgerTemplate(state: WealthState): string {
           ${entryType === "transfer"
             ? `<div class="wu-grid wu-grid--2"><label class="wu-field-row"><span class="wu-field-row__label">From account</span><select class="wu-field" name="fromAccountId" required>${accountOptions(selectedFromAccountId)}</select></label><label class="wu-field-row"><span class="wu-field-row__label">To account</span><select class="wu-field" name="toAccountId" required>${accountOptions(selectedToAccountId)}</select></label></div>`
             : `<fieldset class="wu-choice wu-choice--glass"><legend class="wu-field-row__label">Category</legend><div class="wu-choice__opts">${entryCategories.map((category) => `<label class="wu-choice__opt"><input name="categoryId" type="radio" value="${escapeHtml(category.id)}"${category.id === selectedCategoryId ? " checked" : ""}><span>${escapeHtml(category.icon)} ${escapeHtml(category.label)}</span></label>`).join("")}</div></fieldset>`}
-          <label class="wu-field-row"><span class="wu-field-row__label">Amount (MYR)</span><input id="ledgerAmount" class="wu-field" name="amount" type="number" min="0.01" step="0.01" inputmode="decimal" required value="${escapeHtml(entryAmount)}" placeholder="0.00"></label>
+          <label class="wu-field-row"><span class="wu-field-row__label">Amount (MYR)</span><input id="ledgerAmount" class="wu-field" name="amount" type="text" inputmode="decimal" pattern="[0-9]+([.][0-9]{1,2})?" title="Enter a positive amount with up to two decimal places, e.g. 12.50" required value="${escapeHtml(entryAmount)}" placeholder="0.00"></label>
           ${entryType === "transfer"
             ? ""
             : `<label class="wu-field-row"><span class="wu-field-row__label">Account</span><select class="wu-field" name="accountId" required>${accountOptions(selectedAccountId)}</select></label>`}
@@ -768,7 +768,22 @@ export function bindLedger(root: HTMLElement, state: WealthState, setState: Sett
     ledgerFilters = { ...ledgerFilters, startDate: String(data.get("startDate") ?? ""), endDate: String(data.get("endDate") ?? ""), type: String(data.get("type")) as LedgerFilters["type"], categoryId: String(data.get("categoryId") ?? ""), query: String(data.get("query") ?? ""), fundingSource: String(data.get("fundingSource") ?? "all") as LedgerFilters["fundingSource"] };
     refresh(state, undefined, true);
   };
-  root.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((button) => button.addEventListener("click", () => { ledgerFilters.preset = button.dataset.preset as LedgerFilters["preset"]; applyFilters(); }));
+  root.querySelectorAll<HTMLButtonElement>("[data-preset]").forEach((button) => button.addEventListener("click", () => {
+    ledgerFilters.preset = button.dataset.preset as LedgerFilters["preset"];
+    if (ledgerFilters.preset === "custom") ledgerFilterOpen = true;
+    applyFilters();
+    if (ledgerFilters.preset === "custom") {
+      // refresh restores scroll across two frames. Focus afterwards so the
+      // restore cannot pull the revealed dates off screen on a phone.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const form = root.querySelector<HTMLFormElement>("#ledgerFilterForm");
+        const start = form?.querySelector<HTMLInputElement>('input[name="startDate"]');
+        if (ledgerFilters.preset !== "custom" || form?.hidden || !start) return;
+        start.focus({ preventScroll: true });
+        start.scrollIntoView({ block: "nearest", behavior: "auto" });
+      }));
+    }
+  }));
   root.querySelectorAll<HTMLInputElement | HTMLSelectElement>("#ledgerFilterForm input, #ledgerFilterForm select").forEach((field) => field.addEventListener("change", applyFilters));
   root.querySelector<HTMLInputElement>('#ledgerFilterForm input[name="query"]')?.addEventListener("search", applyFilters);
   root.querySelector<HTMLButtonElement>("#resetLedgerFilters")?.addEventListener("click", () => { ledgerFilters = { preset: "month", startDate: "", endDate: "", type: "all", categoryId: "", query: "", fundingSource: "all" }; refresh(state, undefined, true); });

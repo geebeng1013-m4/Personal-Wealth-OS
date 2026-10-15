@@ -17,7 +17,7 @@ import { dailyLimitMessage } from "./quotaMessage";
 const DEFAULT_ENDPOINT = "https://us-central1-personal-wealth-os-1deac.cloudfunctions.net/assistant";
 
 export function assistantEndpoint(): string {
-  const configured = import.meta.env.VITE_ASSISTANT_ENDPOINT;
+  const configured = import.meta.env?.VITE_ASSISTANT_ENDPOINT;
   return typeof configured === "string" && configured.trim().length > 0
     ? configured.trim()
     : DEFAULT_ENDPOINT;
@@ -43,14 +43,17 @@ export interface AssistantRequest {
  * assistantSync takes its cloud as an argument: this module stays testable
  * without it, and the demo account simply never sets one.
  *
- * Returning null means "nobody is signed in" — the request is still sent, and
- * the server answers 401. Deciding here would only duplicate that rule badly.
+ * Returning null means there is no usable session. Never send private context
+ * without a token; the server independently verifies every authenticated request.
  */
-export type AssistantTokenProvider = () => Promise<string | null>;
+export type AssistantTokenProvider = (forceRefresh?: boolean) => Promise<string | null>;
 
 let tokenProvider: AssistantTokenProvider | null = null;
+let sessionController = new AbortController();
 
 export function setAssistantTokenProvider(provider: AssistantTokenProvider | null): void {
+  sessionController.abort();
+  sessionController = new AbortController();
   tokenProvider = provider;
 }
 
@@ -66,15 +69,18 @@ export function assistantSignedIn(): boolean {
   return tokenProvider !== null;
 }
 
-async function authHeader(): Promise<Record<string, string>> {
-  if (!tokenProvider) return {};
+/** Bound token acquisition by the same cancellation and timeout as the request. */
+async function requestToken(provider: AssistantTokenProvider, refresh: boolean, signal: AbortSignal): Promise<string | null> {
+  let onAbort: () => void = () => {};
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(new DOMException("Cancelled", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
   try {
-    const token = await tokenProvider();
-    return typeof token === "string" && token.length > 0 ? { Authorization: `Bearer ${token}` } : {};
-  } catch {
-    // A token refresh can fail offline. Send the request without it and let
-    // the server's 401 be the single place that says "sign in".
-    return {};
+    if (signal.aborted) throw new DOMException("Cancelled", "AbortError");
+    return await Promise.race([provider(refresh), aborted]);
+  } finally {
+    signal.removeEventListener("abort", onAbort);
   }
 }
 
@@ -100,6 +106,7 @@ function messageForStatus(status: number, body: unknown, mode: AssistantMode): s
     return serverError || "Too many requests just now. Give it a moment and try again.";
   }
   if (status === 403) return "This page is not allowed to reach the assistant.";
+  if (status === 401) return "Your session could not be verified. Sign in again to use the assistant.";
   if (status === 400) return serverError || "That request could not be sent.";
   if (status === 504) return "The assistant took too long to answer. Try again.";
   if (status >= 500) return serverError || "The assistant is unavailable right now.";
@@ -107,55 +114,72 @@ function messageForStatus(status: number, body: unknown, mode: AssistantMode): s
 }
 
 export async function askAssistant(request: AssistantRequest, signal?: AbortSignal): Promise<AssistantResponse> {
+  const provider = tokenProvider;
+  if (!provider) return { ok: false, error: "Sign in to use the assistant." };
+  const session = sessionController.signal;
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-  // Either the caller cancelling or the timeout should stop the request.
-  // AbortSignal.any is recent enough to be worth a guard: without it the
-  // caller's cancel is simply not wired in, which is a far smaller loss than
-  // the whole panel throwing on an older browser.
-  // The timeout is the one that must always be wired in — a stale reply is
-  // already discarded by the caller's isCurrent() check, but a hung request
-  // would leave the panel showing a typing indicator forever.
-  const combined = signal && typeof AbortSignal.any === "function"
-    ? AbortSignal.any([signal, timeout])
-    : timeout;
-
-  const auth = await authHeader();
-
-  let response: Response;
+  const controller = new AbortController();
+  const sources = [session, timeout, ...(signal ? [signal] : [])];
+  const abort = (): void => controller.abort();
+  sources.forEach((source) => {
+    if (source.aborted) abort();
+    else source.addEventListener("abort", abort, { once: true });
+  });
+  const cancelled = (): boolean => session.aborted || signal?.aborted === true;
+  const abortedResult = (): AssistantResponse => ({
+    ok: false,
+    error: cancelled() ? "Cancelled." : "The assistant took too long to answer. Try again.",
+  });
   try {
-    response = await fetch(assistantEndpoint(), {
-      method: "POST",
-      signal: combined,
-      headers: { "Content-Type": "application/json", ...auth },
-      body: JSON.stringify({
-        messages: request.messages,
-        mode: request.mode,
-        ...(request.context.length > 0 ? { context: request.context } : {}),
-      }),
-    });
-  } catch (error) {
-    if (signal?.aborted) return { ok: false, error: "Cancelled." };
-    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
-    return {
-      ok: false,
-      error: timedOut
-        ? "The assistant took too long to answer. Try again."
-        : "Could not reach the assistant. Check your connection.",
-    };
+    // Only a 401 is retried: token verification happens before quota charging
+    // or calling the model, so this cannot spend the daily allowance twice.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (controller.signal.aborted) return abortedResult();
+      let token: string | null;
+      try {
+        token = await requestToken(provider, attempt === 1, controller.signal);
+      } catch {
+        if (controller.signal.aborted) return abortedResult();
+        return { ok: false, error: "Could not verify your session. Check your connection and try again." };
+      }
+      if (controller.signal.aborted) return abortedResult();
+      if (typeof token !== "string" || !token.trim()) {
+        return { ok: false, error: "Your session is unavailable. Sign in again to use the assistant." };
+      }
+      let response: Response;
+      try {
+        response = await fetch(assistantEndpoint(), {
+          method: "POST",
+          signal: controller.signal,
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            messages: request.messages,
+            mode: request.mode,
+            ...(request.context.length > 0 ? { context: request.context } : {}),
+          }),
+        });
+      } catch {
+        if (controller.signal.aborted) return abortedResult();
+        return { ok: false, error: "Could not reach the assistant. Check your connection." };
+      }
+      if (controller.signal.aborted) return abortedResult();
+      if (response.status === 401 && attempt === 0) continue;
+      let body: unknown = null;
+      try {
+        body = await response.json();
+      } catch {
+        // Non-JSON errors still have a status that can be explained.
+      }
+      if (controller.signal.aborted) return abortedResult();
+      if (!response.ok) return { ok: false, error: messageForStatus(response.status, body, request.mode) };
+      const reply = (body as { reply?: unknown } | null)?.reply;
+      if (typeof reply !== "string" || !reply.trim()) {
+        return { ok: false, error: "The assistant returned an empty answer." };
+      }
+      return { ok: true, reply: reply.trim() };
+    }
+    return { ok: false, error: "Your session could not be verified. Sign in again to use the assistant." };
+  } finally {
+    sources.forEach((source) => source.removeEventListener("abort", abort));
   }
-
-  let body: unknown = null;
-  try {
-    body = await response.json();
-  } catch {
-    // Leave body null; the status still decides the message.
-  }
-
-  if (!response.ok) return { ok: false, error: messageForStatus(response.status, body, request.mode) };
-
-  const reply = (body as { reply?: unknown } | null)?.reply;
-  if (typeof reply !== "string" || reply.trim().length === 0) {
-    return { ok: false, error: "The assistant returned an empty answer." };
-  }
-  return { ok: true, reply: reply.trim() };
 }

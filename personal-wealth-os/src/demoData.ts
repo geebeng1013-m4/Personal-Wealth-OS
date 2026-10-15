@@ -287,6 +287,7 @@ export const demoState: WealthState = {
   actionRecords: [],
   financialGoal: "RM20,000 invested in ETFs by 25, with a full emergency fund first.",
   onboardingDone: false,
+  homeActionDismissed: false,
   onboardingAnswers: null,
   checkins: { weeklyCheckedOn: "", payPromptAnswered: false },
   monthPlans: {},

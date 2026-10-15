@@ -105,6 +105,8 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
     ${pageHeader({
       eyebrow: `Good ${getGreeting()}, ${greetingName(state.profile.name, signedInName)}`,
       title: "Overview",
+      sub: "See where you stand. Start with one small step.",
+      badge: `<button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-home-guide-toggle aria-expanded="false" aria-controls="homeGuide">Usage guide ↗</button>`,
     })}
     ${stageLine(classifyStage(state))}
 
@@ -116,8 +118,9 @@ export function dashboardTemplate(state: WealthState, signedInName = ""): string
       ? `<button class="wu-goal-line dashboard-nav" data-page="goals" type="button" aria-label="My financial goal: ${escapeHtml(state.financialGoal)}. Edit on the Goals page"><span class="wu-goal-line__label">Financial goal</span><span class="wu-goal-line__text">${escapeHtml(state.financialGoal)}</span></button>`
       : `<button class="wu-goal-line wu-goal-line--empty dashboard-nav" data-page="goals" type="button"><span class="wu-goal-line__text">Write down your financial goal</span><span aria-hidden="true">→</span></button>`}
 
+    ${state.homeActionDismissed ? "" : nextStepCard(nextSteps)}
+    ${homeGuideTemplate()}
     ${planCard(nextSteps)}
-    ${nextStepCard(nextSteps)}
 
     ${checkinsLine(buildCheckins(state).dueCount)}
 
@@ -347,22 +350,32 @@ function planCard(next: NextSteps): string {
 }
 
 function nextStepCard(next: NextSteps): string {
-  if (!next.visible) return "";
-  const step = currentStep(next);
-  if (!step) return "";
+  const step = next.visible ? currentStep(next) : undefined;
+  if (!step) return `<section class="wu-card wu-home-action" aria-labelledby="ovNextTitle">
+    ${homeActionDismissButton()}
+    <div class="wu-home-action__copy">
+      <span class="wu-label wu-home-action__label">Start here today</span>
+      <h2 class="wu-home-action__title" id="ovNextTitle">Give today's money a record.</h2>
+      <p class="t-body-sm t-muted">Record an income or expense so your monthly budget and cash flow reflect what happened.</p>
+      <div class="wu-row wu-dash__actions"><button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-home-record>Record a transaction →</button><button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-home-guide-toggle aria-expanded="false" aria-controls="homeGuide">See how it works</button></div>
+    </div>${homeRoutineTemplate()}
+  </section>`;
   const position = next.steps.indexOf(step) + 1;
   const openCount = next.steps.filter((item) => !item.done).length;
   const dots = next.steps.map((item) => `<i class="${item.done ? "is-done" : item === step ? "is-now" : ""}"></i>`).join("");
-  return `<section class="wu-card wu-onboard wu-next wu-stack wu-stack--sm" aria-labelledby="ovNextTitle">
-      <div class="wu-tc__top"><span class="wu-label" id="ovNextTitle">Your next step</span>
+  return `<section class="wu-card wu-onboard wu-next wu-home-action" aria-labelledby="ovNextTitle">
+    ${homeActionDismissButton()}
+    <div class="wu-home-action__copy wu-stack wu-stack--sm">
+    <div class="wu-tc__top"><span class="wu-label wu-home-action__label">Start here today</span>
         <span class="wu-next__dots" role="img" aria-label="Step ${position} of ${next.steps.length}, ${next.doneCount} done">${dots}<span aria-hidden="true">${position} of ${next.steps.length}</span></span></div>
       <div class="wu-next__step">
-        <h3 class="wu-next__title">${escapeHtml(step.title)}${step.optional ? ` <small class="wu-onboard__optional">Optional</small>` : ""}</h3>
+        <h2 class="wu-home-action__title" id="ovNextTitle">${escapeHtml(step.title)}${step.optional ? ` <small class="wu-onboard__optional">Optional</small>` : ""}</h2>
         <p class="wu-next__because"><span class="visually-hidden">Because: </span>${escapeHtml(step.because)}</p>
         ${step.detail ? `<p class="t-body-sm t-muted">${escapeHtml(step.detail)}</p>` : ""}
         <div class="wu-row wu-dash__actions">
           <button class="wu-btn wu-btn--primary wu-btn--sm" type="button" data-next-step="${step.id}">${escapeHtml(step.cta)}</button>
           ${openCount > 1 ? `<button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-next-later="${step.id}">Later</button>` : ""}
+          <button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-home-guide-toggle aria-expanded="false" aria-controls="homeGuide">See how it works</button>
         </div>
       </div>
       <details class="wu-next__all">
@@ -375,7 +388,33 @@ function nextStepCard(next: NextSteps): string {
         </ol>
         <button class="wu-btn wu-btn--ghost wu-btn--sm" id="onboardHide" type="button">Hide this for good</button>
       </details>
+    </div>${homeRoutineTemplate()}
     </section>`;
+}
+
+function homeActionDismissButton(): string {
+  return `<button class="wu-home-action__dismiss" type="button" data-home-action-dismiss aria-label="Hide Start here today" title="Hide Start here today">×</button>`;
+}
+
+function homeRoutineTemplate(): string {
+  return `<ol class="wu-home-routine" aria-label="Your WealthUp routine">
+    <li><span class="wu-home-routine__mark" aria-hidden="true">1</span><div><small>Daily · Ledger</small><strong>Record real income and spending</strong></div></li>
+    <li><span class="wu-home-routine__mark" aria-hidden="true">2</span><div><small>Next · Budget</small><strong>See how your money is allocated</strong></div></li>
+    <li><span class="wu-home-routine__mark" aria-hidden="true">3</span><div><small>Monthly · Review</small><strong>Reflect and adjust your next step</strong></div></li>
+  </ol>`;
+}
+
+function homeGuideTemplate(): string {
+  const steps = [
+    { page: "ledger", when: "Daily", title: "Ledger · Record your cash flow", text: "Add an income or expense with its amount, category and account." },
+    { page: "buckets", when: "When planning", title: "Budget · Plan your spending", text: "Check how your money is allocated across your budget buckets." },
+    { page: "portfolio", when: "When you invest", title: "Portfolio · Track your investments", text: "Record completed trades and review your holdings and returns." },
+    { page: "review", when: "Each month", title: "Review · Reflect and adjust", text: "Confirm the month's income and spending, then note what to change." },
+  ];
+  return `<section class="wu-card wu-home-guide" id="homeGuide" aria-labelledby="homeGuideTitle" hidden>
+    <div class="wu-tc__top"><h2 class="t-subheading" id="homeGuideTitle">Use WealthUp at your own pace</h2><button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-home-guide-close aria-label="Close usage guide">Close</button></div>
+    <div class="wu-home-guide__grid">${steps.map((step, index) => `<button class="wu-home-guide__item" type="button" data-home-guide-page="${step.page}"><span class="t-caption t-muted">0${index + 1} / ${step.when}</span><strong>${step.title} ↗</strong><span class="t-body-sm t-muted">${step.text}</span></button>`).join("")}</div>
+  </section>`;
 }
 
 /** What the notice says once a step is done, wherever it was done. */
@@ -640,6 +679,40 @@ export function bindDashboard(
     if (navigate) navigate(page);
     else rerender(root, next, setState, page);
   };
+  root.querySelector<HTMLButtonElement>("[data-home-action-dismiss]")?.addEventListener("click", () => {
+    const next = { ...state, homeActionDismissed: true };
+    setState(next, "Hide Start here today");
+    go("dashboard", next);
+    requestAnimationFrame(() => root.querySelector<HTMLButtonElement>("[data-home-guide-toggle]")?.focus({ preventScroll: true }));
+  });
+  const guide = root.querySelector<HTMLElement>("#homeGuide");
+  let guideOpener: HTMLButtonElement | null = null;
+  const setGuideOpen = (open: boolean): void => {
+    if (!guide) return;
+    guide.hidden = !open;
+    root.querySelectorAll<HTMLButtonElement>("[data-home-guide-toggle]").forEach((button) => button.setAttribute("aria-expanded", String(open)));
+  };
+  root.querySelectorAll<HTMLButtonElement>("[data-home-guide-toggle]").forEach((button) => button.addEventListener("click", () => {
+    if (!guide) return;
+    const open = guide.hidden;
+    setGuideOpen(open);
+    if (open) {
+      guideOpener = button;
+      guide.querySelector<HTMLButtonElement>("[data-home-guide-close]")?.focus({ preventScroll: true });
+      guide.scrollIntoView({ block: "nearest", behavior: "auto" });
+    }
+  }));
+  const closeGuide = (): void => {
+    setGuideOpen(false);
+    guideOpener?.focus({ preventScroll: true });
+  };
+  root.querySelector<HTMLButtonElement>("[data-home-guide-close]")?.addEventListener("click", closeGuide);
+  guide?.addEventListener("keydown", (event) => { if (event.key === "Escape") closeGuide(); });
+  root.querySelectorAll<HTMLButtonElement>("[data-home-guide-page]").forEach((button) => button.addEventListener("click", () => {
+    const page = button.dataset.homeGuidePage;
+    if (page && ["ledger", "buckets", "portfolio", "review"].includes(page)) go(page);
+  }));
+  root.querySelector<HTMLButtonElement>("[data-home-record]")?.addEventListener("click", () => go(queueGuide("first-entry")));
   live = { state, setState, refresh: (next) => go("dashboard", next) };
 
   // A step finished since the last visit — on the sheet, on its page, or by

@@ -248,11 +248,11 @@ test("trade settlement: sale proceeds after settlement can be reinvested without
 });
 
 test("v32: v31 records keep their money and get no inferred trade links", () => {
-  assert.equal(CURRENT_VERSION, 32);
+  assert.ok(CURRENT_VERSION >= 32);
   const legacy = migrateState({ ...emptyState(), version: 31, trades: [buy()], currencyExchanges: [
     { id: "old", date: "2026-10-01", direction: "myr-to-usd", myrAmount: 400, usdAmount: 100 },
   ] });
-  assert.equal(legacy.version, 32);
+  assert.equal(legacy.version, CURRENT_VERSION);
   assert.equal(legacy.trades[0].amountMyr, 425);
   assert.equal(legacy.currencyExchanges[0].tradeId, undefined);
   assert.equal(legacy.currencyExchanges[0].myrAmount, 400);
