@@ -31,6 +31,7 @@ import { assetDrawdownBelow } from "../drawdowns";
 import { getPrice } from "../marketPrices";
 import { livePriceInputs, refreshLivePrices } from "../livePrices";
 import { pageHeader } from "../components/pageHeader";
+import { openTrancheEditor } from "../components/trancheEditor";
 import { DISCLAIMER_TEXT } from "../components/disclaimer";
 import type { Navigate, RenderApp, Setter } from "./pageTypes";
 
@@ -147,7 +148,7 @@ function ladderCard(state: WealthState): string {
     .map(([ticker, amount]) => `${escapeHtml(ticker)} ${amt(amountOf(amount))}`)
     .join(" · ");
   return `<section class="wu-card wu-dash__half wu-stack wu-stack--sm wu-advisor-ladder" aria-labelledby="advLadderLabel">
-      <div class="wu-tc__top"><span class="wu-label" id="advLadderLabel">Dip-buy ladder</span><span class="wu-chip wu-chip--muted">${deployed} / ${opportunity.tranches.length} deployed</span></div>
+      <div class="wu-tc__top"><span class="wu-label" id="advLadderLabel">Dip-buy ladder</span><div class="wu-row wu-row--tight"><span class="wu-chip wu-chip--muted">${deployed} / ${opportunity.tranches.length} deployed</span><button class="wu-btn wu-btn--ghost wu-btn--sm" type="button" data-edit-tranches>Edit</button></div></div>
       <p class="wu-money wu-money--md"><span class="wu-money__cur">MYR</span><span class="t-amt">${amountOf(opportunity.total - opportunity.used)}</span><span class="wu-money__of">left of ${amt(amountOf(opportunity.total))}</span></p>
       ${opportunity.tranches.length
         ? `<ul class="wu-steps">${opportunity.tranches.map((tranche, index) => trancheRow(tranche, index)).join("")}</ul>`
@@ -196,6 +197,11 @@ export function bindAdvisor(root: HTMLElement, state: WealthState, setState: Set
     requestAnimationFrame(restore);
   };
 
+  root.querySelector<HTMLButtonElement>("[data-edit-tranches]")?.addEventListener("click", () => openTrancheEditor(state, (next) => {
+    openTranche = null;
+    setState(next, "Edit dip-buy ladder");
+    repaint(next);
+  }));
   root.querySelectorAll<HTMLButtonElement>(".advice-row").forEach((button) => button.addEventListener("click", () => {
     const id = button.dataset.adviceId ?? null;
     openAdviceId = openAdviceId === id ? null : id;

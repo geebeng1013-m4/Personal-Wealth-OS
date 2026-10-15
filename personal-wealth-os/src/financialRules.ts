@@ -273,14 +273,15 @@ export function getFinancialRulesOfKind<K extends FinancialRuleKind>(
 // saving a setting updates the rule it corresponds to. Two things are never
 // overwritten, because the rules are meant to be the user's configuration:
 //   - a rule's `enabled` flag, unless it is still an untouched placeholder;
-//   - any rule a Settings form does not own (drift tolerance, deployment steps).
+//   - any rule the form does not own (for example, drift tolerance).
 
-/** Rule kinds that mirror one planning setting a Settings form saves. */
+/** Rule kinds that mirror an editable planning setting. */
 export type PlanningRuleKind =
   | "emergency-fund-minimum"
   | "monthly-spending-limit"
   | "dca-monthly-amount"
-  | "target-allocation";
+  | "target-allocation"
+  | "opportunity-reserve-deployment";
 
 type RulePlanningSource = Pick<WealthState, "emergency" | "cashflow" | "dca" | "opportunity" | "goals" | "financialRules">;
 

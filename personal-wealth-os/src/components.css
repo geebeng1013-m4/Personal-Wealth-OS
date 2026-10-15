@@ -5291,6 +5291,18 @@
     gap: var(--space-8);
     border-top: 3px solid var(--accent);
   }
+  .wu-tranche-editor {
+    min-width: 0;
+  }
+  .wu-tranche-editor > legend {
+    margin-bottom: var(--space-3);
+    font-size: var(--text-body-sm);
+    color: var(--text-muted);
+  }
+  .wu-tranche-editor input[readonly] {
+    background: var(--surface-hover);
+    color: var(--text-muted);
+  }
   .wu-return-reminder {
     position: relative;
     display: grid;

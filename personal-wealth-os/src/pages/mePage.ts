@@ -17,8 +17,9 @@ import { DEFAULT_EMERGENCY_MONTHS, money, suggestedEmergencyTarget } from "../ru
 import { isDemoMode } from "../demo";
 import { amt, escapeHtml } from "../html";
 import { pageHeader } from "../components/pageHeader";
+import { openTrancheEditor } from "../components/trancheEditor";
 import { planTickers, tradedTickers, withPlannedCustomTickers } from "../planTickers";
-import { amountOf, bindRowPage, editorForm, field, group, num, pct, row, staticRow } from "./settingsRows";
+import { amountOf, bindRowPage, editorForm, field, group, num, pct, row } from "./settingsRows";
 import type { Navigate, RenderApp, SessionUser, Setter } from "./pageTypes";
 
 const STAGES = ["Student", "Early Career", "Mid Career", "Pre-Retirement"];
@@ -195,7 +196,7 @@ export function meTemplate(state: WealthState, user?: SessionUser): string {
       num("annualYield", "Annual yield %", pct(state.emergency.annualYield), "0.01") +
       emergencySuggestion(state))),
     row("opportunity", "Opportunity reserve", amt(amountOf(state.opportunity.total)), "", () => opportunityEditor(state)),
-    staticRow("Dip-buy tranches", tranches.length ? `${tranches.map((tranche) => `−${tranche.drawdown}`).join(" / ")}%` : "Not set"),
+    `<li class="wu-set__item"><button class="wu-set__row" type="button" data-edit-tranches><span class="wu-set__title">Dip-buy tranches</span><span class="wu-set__value">${tranches.length ? `${tranches.map((tranche) => `−${escapeHtml(String(tranche.drawdown))}`).join(" / ")}%` : "Not set"}<span class="wu-set__chev" aria-hidden="true">›</span></span></button></li>`,
     cashflowRow("desk"),
   ].join("");
 
@@ -222,6 +223,7 @@ export function meTemplate(state: WealthState, user?: SessionUser): string {
 
 export function bindMe(root: HTMLElement, state: WealthState, setState: Setter, navigate: Navigate | undefined, rerender: RenderApp, user?: SessionUser, onLogout?: () => void): void {
   const { save, saveOpen, onSubmit } = bindRowPage(root, state, setState, navigate, rerender, "me", user, onLogout);
+  root.querySelector<HTMLButtonElement>("[data-edit-tranches]")?.addEventListener("click", () => openTrancheEditor(state, (next) => save(next, "Edit dip-buy ladder")));
 
   // A photo that will not load leaves the initials underneath showing.
   root.querySelector<HTMLImageElement>("[data-me-photo]")?.addEventListener("error", (event) => (event.currentTarget as HTMLImageElement).remove());
