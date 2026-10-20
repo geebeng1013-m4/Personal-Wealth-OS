@@ -1,5 +1,5 @@
 import { displayLocale, translateSystemText } from "../i18n";
-import { uiConfirm } from "../interfaceLanguage";
+import { uiAlert, uiConfirm } from "../interfaceLanguage";
 /**
  * Portfolio page — four figures, the holdings against target, where the next
  * contribution goes and the latest trades. The trade form, the full history,
@@ -44,6 +44,8 @@ import { exchangesFromText, mergeExchanges } from "../exchangeImport";
 import { exchangeFromEntry, exchangeFromTrade, isCalendarDay, withExchangeForTrade, withRecordedExchange, withTradeAndExchange, withoutExchangeLinks, type TradeExchangeInput } from "../tradeExchangeEntry";
 import { rebalanceContributions, tradeExchangeRate } from "../financialHealth";
 import { recordsFromCsv } from "../csvImport";
+import { currentImportState } from "../importFlow";
+import { openCsvImportSheet } from "../components/csvImportSheet";
 import { fetchRatesToMyr, getUsdToMyr, loadDividendSuggestions } from "../market";
 import {
   dismissedFromSuggestion,
@@ -1240,10 +1242,18 @@ It will be suggested again if the feed still carries it.`)) return;
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    const records = recordsFromCsv(await file.text(), lastUsedPlatform(state));
-    const next = { ...state, trades: [...state.trades, ...records] };
-    setState(next);
-    rerender(root, next, setState, "portfolio", navigate);
+    try {
+      const raw = await file.text();
+      if (!input.isConnected || input.files?.[0] !== file) return;
+      const base = currentImportState(state);
+      const records = recordsFromCsv(raw, lastUsedPlatform(base), true);
+      if (!records.length) { uiAlert("No completed trades were found. Nothing was imported."); return; }
+      openCsvImportSheet(base, records, setState, (next) => rerender(root, next, setState, "portfolio", navigate));
+    } catch (error: unknown) {
+      uiAlert(error instanceof Error ? error.message : "Could not read the import file. Your data is unchanged.");
+    } finally {
+      if (input.files?.[0] === file) input.value = "";
+    }
   }));
 
   // T-3: the form, the full history and the two detail panels each open behind

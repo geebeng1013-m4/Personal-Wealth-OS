@@ -14,7 +14,7 @@ import "./shell.css";
 import "./components/assistant/assistant.css";
 import "./legacy-tail.css";
 import type { WealthState } from "./models";
-import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint, adoptRemoteState, createId, cloudLoadNeedsRender } from "./state";
+import { loadState, saveState, loadStateFromCloud, syncLocalToCloud, emptyState, migrateState, reconcileCloudSnapshot, recordCloudSyncPoint, adoptRemoteState, createId, cloudLoadNeedsRender, isImportChange } from "./state";
 import { renderApp } from "./ui";
 import { onAuth, preloadFirestore, signInWithGoogle, handleRedirectResult, logOut, subscribeToFirestore, loadAssistantHistory, saveAssistantHistory, type CloudSnapshot } from "./firebase";
 import { setAssistantOwner } from "./components/assistant/assistantStore";
@@ -32,6 +32,7 @@ import { mountPageScrollbar } from "./overlayScrollbar";
 import { startFigureFitting } from "./components/fitFigures";
 import { recordVisitActivity, returningVisitDays } from "./visitActivity";
 import { startInterfaceLanguage } from "./interfaceLanguage";
+import { setImportStateSource } from "./importFlow";
 
 // Drop stale cached ticker data from previous sessions so localStorage doesn't grow unbounded.
 pruneMarketCache();
@@ -182,6 +183,7 @@ function applyTheme(theme: Theme): void {
 applyTheme(getStoredTheme());
 
 let state: WealthState = loadState(); // Initial load without UID (will be replaced on auth)
+setImportStateSource(() => state);
 startInterfaceLanguage(() => state);
 const appPages = new Set([
   "dashboard",
@@ -245,7 +247,14 @@ let quizAllowed = false;
   },
 };
 
-function setState(next: WealthState, changeLabel?: string): void {
+function setState(next: WealthState, changeLabel?: string): boolean {
+  if (isImportChange(changeLabel)) {
+    if (!currentUser) return false;
+    const saved = saveState(next, currentUser.uid, changeLabel);
+    if (!saved) return false;
+    state = saved;
+    return true;
+  }
   state = next;
   // Only persist if a user is logged in (prevent saving to global key)
   const user = currentUser;
@@ -257,6 +266,7 @@ function setState(next: WealthState, changeLabel?: string): void {
     // recognised and the device stays "dirty" forever (see saveState).
     state = saveState(next, user.uid, changeLabel) ?? next;
   }
+  return true;
 }
 
 function navigate(page: string): void {

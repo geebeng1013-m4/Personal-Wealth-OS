@@ -32,6 +32,7 @@ import { buildCheckins } from "./checkins";
 import { mountTitleBar } from "./titleBar";
 import { checkinsDueText, getLanguage, setLanguage, t } from "./i18n";
 import { localizeInterface, syncDocumentLanguage, userDisplayValues } from "./interfaceLanguage";
+import { commitImportedState, currentImportState } from "./importFlow";
 
 // Created on the first render that has a shell, then reused by every later
 // one (see createSideRays): rebuilding it made the light jump on each click.
@@ -466,17 +467,18 @@ function bindCommon(root: HTMLElement, state: WealthState, setState: Setter, nav
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    // Settings no longer spells out that Import replaces everything, so the
-    // confirmation does. Clearing the input lets the same file be picked again.
-    if (!uiConfirm(t("Replace all your data with this file? Your current data will be saved to Version History first."))) {
-      input.value = "";
-      return;
+    try {
+      const imported = await importStateFromFile(file);
+      if (!input.isConnected || input.files?.[0] !== file) return;
+      const base = currentImportState(state);
+      if (!uiConfirm(t("Replace all your data with this file? Your current data will be saved to Version History first."))) return;
+      commitImportedState(base, imported, IMPORT_SNAPSHOT_LABEL, setState);
+      doNavigate("dashboard");
+    } catch (error: unknown) {
+      uiAlert(error instanceof Error ? error.message : "Could not read the import file. Your data is unchanged.");
+    } finally {
+      if (input.files?.[0] === file) input.value = "";
     }
-    const imported = await importStateFromFile(file);
-    // The label is what makes this recoverable: saveState snapshots the data
-    // still on disk before overwriting it, the same path Reset uses.
-    setState(imported, IMPORT_SNAPSHOT_LABEL);
-    doNavigate("dashboard");
   });
 
   bindAll("[data-tool='version']", "click", () => {

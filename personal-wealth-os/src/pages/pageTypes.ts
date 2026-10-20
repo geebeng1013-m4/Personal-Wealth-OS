@@ -10,7 +10,7 @@
 
 import type { WealthState } from "../models";
 
-export type Setter = (state: WealthState, changeLabel?: string) => void;
+export type Setter = (state: WealthState, changeLabel?: string) => void | boolean;
 export type Navigate = (page: string) => void;
 
 export interface SessionUser {

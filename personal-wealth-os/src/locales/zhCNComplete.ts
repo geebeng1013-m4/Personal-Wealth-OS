@@ -584,6 +584,46 @@ pm|下午
 WealthUp could not finish loading.|WealthUp 未能完成加载。
 Reload|重新加载
 PTPTN|高等教育贷款
+Review CSV import|检查 CSV 导入
+Import trades|导入交易
+Possible duplicates are excluded unless you select the checkbox below. Matching executions can be separate orders; check your broker statement.|疑似重复交易默认不导入。若确实是不同订单，请对照券商结单后勾选下方选项。
+These are separate executions. Include possible duplicates.|这些是不同的成交，仍要导入疑似重复交易。
+Showing the first 10 trades. The counts above include the entire file.|仅显示前 10 笔交易；上方数量已包含整个文件。
+Nothing changes until you import. A snapshot of your current data must be saved to Version History first.|确认导入前不会修改数据。导入前必须先将当前数据保存至版本历史。
+All trades are already recorded. Nothing was imported.|所有交易均已记录，本次没有导入任何交易。
+No completed trades were found. Nothing was imported.|没有找到已完成的成交，本次未导入。
+Your data changed while the import was open. Please select the file again.|导入期间数据已更新，请重新选择文件。
+Import was not saved. Your original data is unchanged. Check browser storage and try again.|导入未能保存，原有数据保持不变。请检查浏览器存储后重试。
+Could not read the import file. Your data is unchanged.|无法读取导入文件，原有数据保持不变。
+Before CSV import|CSV 导入前
+Expected an object.|数据格式应为对象。
+Expected a finite non-negative number.|应填写有效的非负数值。
+Expected text.|应填写文字。
+Expected true or false.|应填写布尔值。
+Unsupported value.|不支持此数值或选项。
+Invalid ticker.|证券代码无效。
+Value is out of range.|数值超出范围。
+Invalid calendar date.|日期无效。
+Unsupported trade type.|不支持此交易类型。
+Expected a positive exchange rate.|汇率必须大于零。
+Unsupported market.|不支持此市场。
+Invalid currency code.|货币代码无效。
+A trade needs a positive amount and a quantity or price.|交易金额必须大于零，并提供有效的数量或价格。
+Missing or unsupported backup version.|备份版本缺失或不受支持。
+This is not a WealthUp backup.|此文件不是 WealthUp 备份。
+The backup is nested too deeply.|备份的数据嵌套层数过多。
+Unsupported property.|包含不支持的数据字段。
+Expected a list.|数据格式应为列表。
+Expected a list of text values.|应填写文字列表。
+Duplicate record ID.|记录编号重复。
+Invalid currency conversion.|货币兑换记录无效。
+Invalid dividend amounts or currency.|股息金额或货币无效。
+Invalid financial rule.|财务规则无效。
+Invalid ledger transaction.|账本记录无效。
+Some records could not be restored. Nothing was imported.|部分记录无法完整恢复，本次未导入。
+The file is not valid JSON.|文件不是有效的 JSON 格式。
+Unclosed quoted field.|CSV 中的引号未闭合。
+No supported trade rows were found.|未找到支持的交易数据行。
 `.trim().split("\n").map((line) => {
   const separator = line.indexOf("|");
   return [line.slice(0, separator), line.slice(separator + 1)];

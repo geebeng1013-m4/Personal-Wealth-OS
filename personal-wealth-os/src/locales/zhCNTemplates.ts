@@ -1,5 +1,7 @@
 /** Numbered substitutions keep recorded values outside translated system copy. */
 export const ZH_CN_TEMPLATES: ReadonlyArray<readonly [string, string]> = `
+{0} new trades. {1} possible duplicates.|新增 {0} 笔交易，疑似重复 {1} 笔。
+Import rejected at {0}: {1}|导入被拒绝，字段 {0}：{1}
 Emergency Fund reached {0}! You're safe.|应急储备已达到 {0}，安全储备已到位。
 Hold at least {0} in the emergency fund.|应急储备至少保留 {0}。
 Keep MYR {0}/month; estimated completion in {1} months.|每月保持投入 MYR {0}，预计 {1} 个月后达标。

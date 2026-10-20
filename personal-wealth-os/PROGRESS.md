@@ -1,5 +1,33 @@
 # WealthUp — PROGRESS
 
+## Task 1 发布（2026-10-21，用户已授权）
+
+- 本次仅发布导入安全修复。近期 VOO / 自动兑换对账只读取截图和导出文件，未修改真实财务数据，未将其加入仓库。
+- 发布前复查：1677/1677 测试通过，`npm.cmd run build`（含 typecheck）通过，`git diff --check` 通过；既有构建体积和 Tailwind 提示不变。
+- 正在提交、推送并等待 CI / Vercel 验证；线上结论须以实际生产资源检查为准。未开始 Task 2–5。
+
+
+## 暂停交接（2026-10-20）
+
+- 用户要求停止并保存后续安排；已写入根目录 PROJECT_MEMORY.md 及 PLAN.md。
+- Task 1 本地完成，仍未提交/部署，等待用户检查；Task 2–5 尚未实施。
+- 本轮仅核对 Git 与文档并更新暂停记录，没有修改应用代码或财务数据，没有重跑测试，也未确认预览服务是否仍在运行。以下测试结果属于上轮验证。
+
+
+## MVP 收尾 Task 1：导入安全（2026-10-16，本地待用户验收）
+
+- 授权范围：用户批准五项收尾计划中的 Task 1；本次仅处理 CSV/JSON 导入。未部署，未开始 Task 2–5。
+- CSV：导入前预览新增/疑似重复交易；疑似重复默认排除，用户必须勾选才能作为独立成交加入；按成交原币、数量、价格、日期、平台、方向匹配，避免真实汇率或费用修正破坏重复检测；按出现次数匹配，保留同文件内独立的相同成交。
+- JSON：先以 unknown 校验，再迁移；拒绝无关文件、未来版本、无效日期、非数值/负数金额、重复编号和会在迁移中被丢弃的记录。保留受支持旧版迁移及合法的已忽略股息标记。没有修改持久化结构或版本。
+- 保存：JSON 和 CSV 批量导入均必须先成功写入版本历史；快照或本地写入失败时停止，不更新应用内状态、不发起云写入。读取期间切换页面/文件会弃用过时结果，确认期间状态改变会要求重选文件。
+- QA：自动化新增 28 项导入回归；最终命令与结果见下方本次验收记录。桌面浅色英文、390×844 手机深色中文已通过隔离 demo 手动检查；首次导入、重复默认禁用、勾选启用、取消不增加、无效 JSON 中文提示、同文件重试已验证。浏览器错误日志为空。未写入真实账户。
+- 待用户检查：启动的隔离演示 http://localhost:5174/#portfolio；使用 tests/fixtures/import-safety.csv 重复导入，疑似重复默认不勾选；设置导入 tests/fixtures/import-invalid.json 应报错且保留数据。快照及云写入失败路径由本地测试桩覆盖，真实 Firebase 网络失败仍属 Task 2/最终验收。
+- 新发现但未扩展修复：投资组合原有页面仍有部分动态中文残留，如 Put this month's、est. sell fees、covered，以及股息 ex/tax；归入 Task 4。
+- 边界：重复判断基于成交内容而非券商唯一订单号；日期/成交价格被手动修改后可能无法匹配。Moomoo CSV 的历史 MYR 换算仍沿用现有估算逻辑，本次未重算真实财务记录。
+- 最终验证：`npm.cmd test` 1677/1677 通过（新增 28 项）；`npm.cmd run typecheck` 通过；`npm.cmd run build` 通过（构建内也执行类型检查）；`git diff --check` 通过。构建仍提示既有大分包及 Tailwind 无 utility class 警告。检查过 `public/sw.js`：现有哈希资源/app-shell 更新策略适用，本次未改缓存规则或直接编辑 dist。
+- 修改清单：`src/importValidation.ts`、`src/importFlow.ts`、`src/components/csvImportSheet.ts`（新增）；`src/csvImport.ts`、`src/state.ts`、`src/main.ts`、`src/ui.ts`、`src/pages/pageTypes.ts`、`src/pages/portfolioPage.ts`、`src/locales/zhCNComplete.ts`、`src/locales/zhCNTemplates.ts`；新增 `tests/importSafety.test.ts`、`tests/fixtures/import-safety.csv`、`tests/fixtures/import-invalid.json`；更新 `PLAN.md`、`PROGRESS.md`。没有更新依赖、锁文件或财务数据。
+
+
 ## 最新验收：真实登录云端记录可恢复（2026-10-10）
 
 - 用户在 Edge InPrivate 独立窗口用同一个 Google 账户登录 WealthUp 正式站；Portfolio 中已有的 Exchange recorded 交易出现，刷新后仍保留。用户亲自操作并回报结果，AI 未直接查看该独立窗口或 Firestore。

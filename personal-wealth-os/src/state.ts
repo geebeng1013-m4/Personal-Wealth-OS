@@ -10,6 +10,7 @@ import { normalizeDividends } from "./dividends";
 import { normalizeOnboardingAnswers } from "./onboardingQuiz";
 import { EMPTY_CHECKIN_STATE, normalizeCheckinState } from "./checkins";
 import { EMPTY_VISIT_ACTIVITY, normalizeVisitActivity } from "./visitActivity";
+import { ImportValidationError, validateBackup, validateMigratedBackup } from "./importValidation";
 import {
   saveToFirestore,
   loadFromFirestore,
@@ -905,8 +906,14 @@ export function saveState(state: WealthState, uid?: string, changeLabel?: string
     if (raw) {
       try {
         const prevState = JSON.parse(raw) as WealthState;
-        saveSnapshot(prevState, changeLabel, uid);
-      } catch { /* ignore snapshot parse errors */ }
+        if (!saveSnapshot(prevState, changeLabel, uid) && isImportChange(changeLabel)) return null;
+      } catch {
+        if (isImportChange(changeLabel)) return null;
+      }
+    } else if (isImportChange(changeLabel)) {
+      // Even a first import has a restore point. Do not silently promise a
+      // snapshot when the browser cannot store one.
+      if (!saveSnapshot(emptyState(), changeLabel, uid)) return null;
     }
   }
 
@@ -1223,7 +1230,7 @@ export function trimToByteBudget(snapshots: Snapshot[], budgetBytes = MAX_SNAPSH
   return trimmed;
 }
 
-export function saveSnapshot(prevState: WealthState, label: string, uid?: string): void {
+export function saveSnapshot(prevState: WealthState, label: string, uid?: string): boolean {
   const key = getSnapshotsKey(uid);
   let snapshots: Snapshot[] = [];
   try {
@@ -1261,11 +1268,13 @@ export function saveSnapshot(prevState: WealthState, label: string, uid?: string
   // over a snapshot failure that had nothing to do with it.
   try {
     localStorage.setItem(key, JSON.stringify(snapshots));
+    return true;
   } catch (err) {
     console.error("[saveSnapshot] localStorage write failed:", err);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("pwo-save-error", { detail: { message: "Could not save a version-history snapshot. Your current data is unaffected." } }));
     }
+    return false;
   }
 }
 
@@ -1317,8 +1326,19 @@ export function exportState(state: WealthState): void {
  * from the wrong day) was a one-click loss with no way back.
  */
 export const IMPORT_SNAPSHOT_LABEL = "Before import";
+export const CSV_IMPORT_SNAPSHOT_LABEL = "Before CSV import";
+
+export function isImportChange(label?: string): boolean {
+  return label === IMPORT_SNAPSHOT_LABEL || label === CSV_IMPORT_SNAPSHOT_LABEL;
+}
 
 export async function importStateFromFile(file: File): Promise<WealthState> {
   const raw = await file.text();
-  return migrateState(JSON.parse(raw) as Partial<WealthState>);
+  let input: unknown;
+  try { input = JSON.parse(raw.replace(/^\uFEFF/, "")); }
+  catch { throw new ImportValidationError("file", "The file is not valid JSON."); }
+  validateBackup(input, CURRENT_VERSION);
+  const migrated = migrateState(input);
+  validateMigratedBackup(input, migrated);
+  return migrated;
 }
